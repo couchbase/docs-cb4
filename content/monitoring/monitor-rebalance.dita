@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_rnp_cyf_q4">
+  <title>Monitoring a rebalance operation</title>
+  <shortdesc>Monitoring of the system during and immediately after rebalancing is needed until
+    replication is successfully completed.</shortdesc>
+  <body>
+    <p>As Couchbase Server moves vBuckets within the cluster, the Couchbase Web Console provides a
+      detailed rebalancing report. You can view the same statistics via a REST API call. If you
+      click on the drop-down list next to each node, you can view the detailed rebalance status:</p>
+  
+          <fig>
+      <image href="../images/rebalance_detail_report.png" width="720" align="left"/>
+    </fig>
+
+    
+    <p>The section <wintitle>Data being transferred out</wintitle> shows that a
+          node sends data to other nodes during rebalance.</p>
+         <p>The section <wintitle>Data being transferred in</wintitle> shows that a node receives data from other nodes during rebalance.</p>
+      <p>A node can be a source, a destination, or both the source and the destination for data. The progress report
+          displays the following information:</p>
+    
+    <ul>
+            <li><itemgroup><b>Bucket</b>:</itemgroup> Name of bucket undergoing rebalance. Number of buckets transferred during
+              rebalancing out of total buckets in a cluster.</li>
+            <li><itemgroup><b>Total number of keys</b>:</itemgroup> Total number of keys to be transferred during 
+              rebalancing.</li>
+            <li><itemgroup><b>Estimated number of keys</b>:</itemgroup> Number of keys transferred during rebalancing.</li>
+            <li><itemgroup><b>Number of Active# vBuckets and Replica# vBuckets</b>:</itemgroup> Number of active vBuckets and
+              replica vBuckets to be transferred as part of rebalancing.</li>
+          </ul>
+    
+    <p>You can also use <codeph>cbstats</codeph> to see underlying rebalance statistics.</p>
+    
+    <section><title>Backfilling</title>
+      <p>The first stage of replication reads all data for a given active vBucket and sends it to
+        the server that is responsible for the replica. This process can put increased load on the
+        disk as well as network bandwidth, but it is not designed to impact any client activity. You
+        can monitor the progress of this task by watching for ongoing TAP disk fetches. You can also
+        watch <codeph>cbstats tap</codeph>, for example:</p>
+      
+      <codeblock>cbstats &lt;node_IP&gt;:11210 -b bucket_name -p bucket_password tap | grep backfill</codeblock>
+      
+      <p>This command returns a list of TAP backfill processes and whether they are still running
+          (<codeph>true</codeph>) or done (<codeph>false</codeph>). During the backfill process for
+        a particular TAP stream, the output is as follows:</p><codeblock><codeph>eq_tapq:replication_building_485_'n_1@127.0.0.1':backfill_completed: false
+ eq_tapq:replication_building_485_'n_1@127.0.0.1':backfill_start_timestamp: 1371675343
+ eq_tapq:replication_building_485_'n_1@127.0.0.1':flags: 85 (ack,backfill,vblist,checkpoints)
+ eq_tapq:replication_building_485_'n_1@127.0.0.1':pending_backfill: true
+ eq_tapq:replication_building_485_'n_1@127.0.0.1':pending_disk_backfill: true
+ eq_tapq:replication_building_485_'n_1@127.0.0.1':queue_backfillremaining: 202</codeph></codeblock><p>When all have completed, you should see the total item count ( <codeph>curr_items_tot</codeph> )
+        be equal to the number of active items multiplied by replica count. The output you see for a
+        TAP stream after backfill completes is as follows:</p><codeblock><codeph>eq_tapq:replication_building_485_'n_1@127.0.0.1':backfill_completed: true
+ eq_tapq:replication_building_485_'n_1@127.0.0.1':backfill_start_timestamp: 1371675343
+ eq_tapq:replication_building_485_'n_1@127.0.0.1':flags: 85 (ack,backfill,vblist,checkpoints)
+ eq_tapq:replication_building_485_'n_1@127.0.0.1':pending_backfill: false
+ eq_tapq:replication_building_485_'n_1@127.0.0.1':pending_disk_backfill: false
+ eq_tapq:replication_building_485_'n_1@127.0.0.1':queue_backfillremaining: 0</codeph></codeblock><p>If you are continuously adding data to the system, these values may not correspond exactly at a
+        given instant in time. However, you should be able to determine whether there is a
+        significant difference between the two figures.</p></section>
+   
+    <section><title>Draining</title> <p>After the backfill process is complete, all nodes that had replicas materialized on them have to
+        persist these items to disk. Continue monitoring the disk write queue and memory usage until
+        the rebalancing operation has been completed to ensure that the cluster can keep up with the
+        write load and required disk I/O.</p></section>
+ 
+  </body>
+  
+  <related-links>
+    <linklist>
+      <link href="../REST/rest-cluster-rebalance.dita"></link>
+    </linklist>
+  </related-links>
+</topic>

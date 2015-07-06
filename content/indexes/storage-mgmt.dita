@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="storage-management">
+ <title>Index storage</title>
+ <shortdesc>The index storage management environment provides snapshot management, ensures
+  consistent query results, and provides timestamp coordination.</shortdesc>
+ <conbody>
+  <p>The indexer requires that the storage engine to be able to perform the following:</p>
+  
+  <ul>
+  <li>Manage snapshots.
+   <p>Upon receiving a timestamp, each indexer creates a snapshot once it has received all the
+    mutations that are equal or smaller than the timestamp. Once all the indexers have created a
+    snapshot, the coordinator promotes the timestamp such that it can be used for query. </p></li>
+  <li>For querying processing, ensure consistent query results. <p>For example, if four (4)
+          secondary keys are emitted from the same key-value mutation and a query uses all these
+          four (4)indexes, then it is important that the query result sees these four (4) keys even
+          if these keys are stored in different shards.</p>
+      </li>
+  <li>For secondary index, provides a coordinator that emits timestamps periodically to the indexer
+        nodes. <p>A timestamp is a array of vbucket sequence numbers. A timestamp is an arbitrary,
+          discrete point in time.</p></li>
+  </ul>
+ 
+  
+  <section><title>Consistency vs Latency</title>
+  <p>Stable read provides consistency in the expense of latency. Query engine can only read the keys
+        until all the keys have been applied to their corresponding indexes. In some cases, the
+        application may want a low latency option when they only have to scan a single index. In
+        addition, if the Query service provides the partition key, then the indexer knows that it
+        only needs to scan on a single node. Therefore, scan results are consistent within a single
+        node. </p>
+  <p>In this case, the storage engine may need to allow the indexer to create a snapshot header in
+    memory before the mutations are committed to the disk. This enables the query engine to scan for
+    the data in-memory as soon as it is available, without incurring synchronization overhead.</p>
+  </section>
+   
+  <section><title>Collation</title>
+  <p>Secondary indexes support only binary collation. </p>
+  </section>
+   
+  <section><title>Performance</title>
+  <p>For secondary indexes, storage management is optimized for write throughput. For write traffic,
+        25K mutations per second are expected. With a 1Gb network card, the indexer can roughly
+        handle 500K mutations across all the KV nodes. </p>
+  <p>Latency is secondary to write throughput. Latency is particularly important for
+    read-your-own-write. Read Traffic (index scan) requires much less throughput. </p>
+  </section>
+  
+  <section><title>Transactionality</title>
+  <p>An index is comprised of two b-trees/tries. The forward index is used for mapping secondary key
+        to the document ID. The backward or reverse index maps document IDs to secondary keys. The
+        backward or reverse index is used to locate the old secondary key for deletion. </p>
+  <p>The storage engine to provides transactionality across different trees/tries for reliability.
+    This simplifies the recovery code for the client to restore to a consistent state.</p>
+  </section>
+ </conbody>
+</concept>

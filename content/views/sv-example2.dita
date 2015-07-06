@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE reference PUBLIC "-//OASIS//DTD DITA Reference//EN" "reference.dtd">
+<reference id="sv-example2">
+  <title>Example: non-geographic</title>
+  <shortdesc>This example shows a general spatial view implementation with non-geographic
+    data.</shortdesc>
+  <refbody>
+    
+    <section><title>Description</title>
+    <p>Since spatial views use a general implementation of a multidimensional view file, they can
+				also be used for non-geographic data. This example uses a two-dimensional index, but
+				additional dimensions can be implemented.</p>
+    
+    <p>The scenario is querying log messages. In this example the log files have the format of the <xref
+          href="https://httpd.apache.org/docs/2.2/logs.html" format="html">Apache 2.2 Error
+          Log</xref>. Each line of the log is a document and is stored as a single string.</p>
+    
+    <codeblock>"[Mon Feb 02 12:53:35 2015] [info] Server built: Feb  1 2015 02:04:51"
+"[Thu Feb 19 16:02:40 2015] [error] [client 199.193.192.229] File does not exist: /var/www/example.com/favicon.ico"
+"[Thu Feb 19 20:33:23 2015] [debug] mod_deflate.c(615): [client 199.193.192.229] Zlib: Compressed 264 to 202 : URL /robots.txt"
+"[Fri Feb 20 04:05:19 2015] [debug] mod_alias.c(482): [client 199.193.192.229] incomplete redirection target of '/cgi-bin/blog/index.cgi' for URI '/index.html' modified to 'http://example.com/cgi-bin/blog/index.cgi'"
+"[Fri Feb 20 07:40:42 2015] [alert] No active workers found... Apache is exiting!"
+"[Tue Feb 24 06:52:21 2015] [warn] NameVirtualHost *:80 has no VirtualHosts"
+"[Tue Feb 24 18:12:05 2015] [error] [client 199.193.192.229] client denied by server configuration: /var/www/example.com"</codeblock>
+    </section>
+    
+    <section><title>Creating a spatial view</title>
+    
+    <p>A spatial view and view file is created containing the time and severity level. The spatial
+        view function could be:</p>
+    
+<codeblock>function(doc, meta) {
+    var severityToInt = {
+        emerg: 7,
+        alert: 6,
+        crit: 5,
+        error: 4,
+        warn: 3,
+        notic: 2,
+        info: 1,
+        debug: 0
+    }
+
+    var parts = doc.match(/\[.*?\]/g);
+    // Remove the brackets
+    parts = parts.map(function(part) {return part.slice(1, -1)});
+    // Parse the date as timestamp in milliseconds since 1970-01-01
+    var date = Date.parse(parts[0]);
+    // The emitted key needs to have numeric values only
+    var severity = severityToInt[parts[1]];
+    // The part of the log message that isn't date or severity
+    var rest = doc.split(/(] )/).slice(4).join('')
+
+    emit([date, severity], rest);
+}</codeblock>
+      
+    </section>
+    
+    <section><title>Query: log messages from date</title>
+    
+    <p>Below are some sample queries on the data set. For brevity only the resulting values are
+				mentioned.</p>
+    
+    <p>Get all log messages from Feb 20 or newer:</p>
+    
+    <codeblock>start_range=[1424386800000,null]&amp;end_range=[null,null]</codeblock>
+
+    <codeblock>"value":"NameVirtualHost *:80 has no VirtualHosts"},
+...
+"value":"[client 199.193.192.229] client denied by server configuration: /var/www/example.com"},
+...
+"value":"No active workers found... Apache is exiting!"},
+...
+"value":"mod_alias.c(482): [client 199.193.192.229] incomplete redirection target of '/cgi-bin/blog/index.cgi' for URI '/index.html' modified to 'http://example.com/cgi-bin/blog/index.cgi'"}
+...</codeblock>
+    
+    </section>
+    
+    <section><title>Query: log messages with severity</title>
+    <p>Get all log messages with severity <codeph>error</codeph>:</p>
+    
+    <codeblock>start_range=[null,4]&amp;end_range=[null,4]</codeblock>
+
+    <codeblock>    ...
+"value":"[client 199.193.192.229] client denied by server configuration: /var/www/example.com"},
+...
+"value":"[client 199.193.192.229] File does not exist: /var/www/example.com/favicon.ico"}
+...</codeblock>
+    
+    
+      <p>Get all log messages with severity <codeph>warn</codeph> or less (<codeph>warn</codeph>,
+          <codeph>notic</codeph>, <codeph>info</codeph>, <codeph>debug</codeph>):</p>
+    
+    <codeblock>start_range=[null,0]&amp;end_range=[null,3]</codeblock>
+
+    <codeblock>....
+"value":"Server built: Feb  1 2015 02:04:51"},
+...
+"value":"NameVirtualHost *:80 has no VirtualHosts"},
+...
+"value":"mod_alias.c(482): [client 199.193.192.229] incomplete redirection target of '/cgi-bin/blog/index.cgi' for URI '/index.html' modified to 'http://example.com/cgi-bin/blog/index.cgi'"},
+...
+"value":"mod_deflate.c(615): [client 199.193.192.229] Zlib: Compressed 264 to 202 : URL /robots.txt"}
+...</codeblock>
+    </section>
+    
+    <section><title>Query: log messages from date and with severity</title>
+      <p>Get all log messages between Jan 1 and Feb 22 with severity between <codeph>error</codeph> and <codeph>alert</codeph> (<codeph>error</codeph>, <codeph>crit</codeph>, <codeph>alert</codeph>):</p>
+    
+    <codeblock>start_range=[1420066800000,4]&amp;end_range=[1424645999000,6]</codeblock>
+
+    <codeblock>...
+"value":"No active workers found... Apache is exiting!"},
+...
+"value":"[client 199.193.192.229] File does not exist: /var/www/example.com/favicon.ico"}
+...</codeblock>
+    
+    </section>
+    
+    
+  </refbody>
+</reference>

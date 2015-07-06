@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="views-writing-map">
+ <title>Map function</title>
+ <shortdesc>Map functions create a mapping between input data (JSON
+  objects) and  data displayed in the view results (output).</shortdesc>
+ <conbody>
+
+   <p>Every document in the Couchbase bucket for the view is submitted to
+    the <codeph>map()</codeph> function in each view once, and it is the output from the
+    <codeph>map()</codeph> function that is used as the result of the view.</p>
+   <p>The <codeph>map()</codeph> function is supplied two arguments by the views processor. The
+    first argument is the JSON document data. The optional second argument is the associated
+    metadata for the document, such as the expiration, flags, and revision information.</p>
+   <p>The map function outputs zero or more ‘rows’ of information using an
+    <codeph>emit()</codeph> function. Each call to the <codeph>emit()</codeph> function is
+    equivalent to a row of data in the view result. The <codeph>emit()</codeph> function can be
+    called multiple times within the single pass of the <codeph>map()</codeph> function. This
+    functionality enables you to create views that may expose information stored in a compound
+    format within a single stored JSON record, for example generating a row for each item in an
+    array.</p>
+   
+   
+   <p>The map function is the most critical part of any view as it provides the logical
+    mapping between the input fields of the individual objects stored within Couchbase to
+    the information output when the view is accessed.</p>
+   <p>Through this mapping process, the map function and the view provide:</p>
+   <ul>
+    <li>The output format and structure of the view on the bucket.</li>
+    <li>Structure and information used to query and select individual documents using the
+     view information.</li>
+    <li>Sorting of the view results.</li>
+    <li>Input information for summarizing and reducing the view content.</li>
+   </ul>
+   
+   <p>Applications access views through the REST API, or through a Couchbase client library.
+    All client libraries provide a method for submitting a query into the view system and
+    obtaining and processing the results.</p>
+   
+   <p>The following diagram shows the name, salary and city fields of the stored
+    JSON documents translated into a table (an array of fields) in the generated view
+    content.</p>
+   
+   <fig>
+    <image href="images/views-basic-overview.png" width="480">
+     <alt/>
+    </image>
+   </fig>
+   <p>In this example, a map function is taking the Name, City, and Salary fields from the
+    JSON documents stored in the Couchbase bucket and mapping them to a table of these
+    fields. The map function which produces this output might look like this:</p>
+   <codeblock><codeph>function(doc, meta)
+{
+  emit(doc.name, [doc.city, doc.salary]);
+}
+</codeph></codeblock>
+   <p>When the view is generated the <codeph>map()</codeph> function is supplied two arguments
+    for each stored document, <codeph>doc</codeph> and <codeph>meta</codeph> :</p>
+   <ul>
+    <li><codeph>doc</codeph>
+     <p>The stored document from the Couchbase bucket, either the JSON or binary content.
+      Content type can be identified by accessing the <codeph>type</codeph> field of the
+      <codeph>meta</codeph> argument object.</p></li>
+    <li><codeph>meta</codeph>
+     <p>The metadata for the stored document, containing expiry time, document ID, revision and
+      other information.</p>
+     <p>Every document in the Couchbase bucket is submitted to the <codeph>map()</codeph>
+      function in turn. After the view is created, only the documents created or changed since
+      the last update need to be processed by the view. View indexes and updates are
+      materialized when the view is accessed. Any documents added or changed since the last
+      access of the view will be submitted to the <codeph>map()</codeph> function again so
+      that the view is updated to reflect the current state of the data bucket.</p>
+     <p>Within the <codeph>map()</codeph> function itself you can perform any formatting,
+      calculation or other detail. To generate the view information, you use calls to the
+      <codeph>emit()</codeph> function. Each call to the <codeph>emit()</codeph> function
+      outputs a single row or record in the generated view content.</p>
+     <p>The <codeph>emit()</codeph> function accepts two arguments, the key and the value for
+      each record in the generated view:</p></li>
+    <li><codeph>key</codeph>
+     <p>The emitted key is used by Couchbase Server both for sorting and querying the content in
+      the database.</p>
+     <p>The key can be formatted in a variety of ways, including as a string or compound value
+      (such as an array or JSON object). The content and structure of the key is important,
+      because it is through the emitted key structure that information is selected within the
+      view.</p>
+     <p>All views are output in a sorted order according to the content and structure of the
+      key. Keys using a numeric value are sorted numerically, for strings, UTF–8 is used. Keys
+      can also support compound values such as arrays and hashes. </p>
+     <p>The key content is used for querying by using a combination of this sorting process and
+      the specification of either an explicit key or key range within the query specification.
+      For example, if a view outputs the <codeph>RECIPE TITLE</codeph> field as a key, you
+      could obtain all the records matching ‘Lasagne’ by specifying that only the keys
+      matching ‘Lasagne’ are returned.</p></li>
+    <li><codeph>value</codeph>
+     <p>The value is the information that you want to output in each view row. The value can be
+      anything, including both static data, fields from your JSON objects, and calculated
+      values or strings based on the content of your JSON objects.</p></li>
+   </ul>
+   
+   <p>The content of the value is important when performing a reduction, since it is the value
+    that is used during reduction, particularly with the built-in reduction functions. For
+    example, when outputting sales data, you might put the <codeph>SALESMAN</codeph> into
+    the emitted key, and put the sales amounts into the value. The built-in
+    <codeph>_sum</codeph> function will then total up the content of the corresponding
+    value for each unique key.</p>
+   <p>The format of both key and value is up to you. You can format these as single values,
+    strings, or compound values such as arrays or JSON. The structure of the key is
+    important because you must specify keys in the same format as they were generated in the
+    view specification.</p>
+   <p>The <codeph>emit()</codeph> function can be called multiple times in a single map
+    function, with each call outputting a single row in the generated view. This can be
+    useful when you want to supporting querying information in the database based on a
+    compound field. For a sample view definition and selection criteria.</p>
+   <p>Views and map generation are also very forgiving. If you elect to output fields in from
+    the source JSON objects that do not exist, they are replaced with a
+    <codeph>null</codeph> value, rather than generating an error.</p>
+   <p>For example, in the view below, some of the source records do contain all of the fields
+    in the specified view. The result in the view result is just the <codeph>null</codeph>
+    entry for that field in the value output.</p>
+   <fig>
+    <image href="images/views-basic-overview-missing.png" width="480">
+     <alt/>
+    </image>
+   </fig>
+   <p>You should check that the field or data source exists during the map processing before
+    emitting the data.</p>
+   <p>To better understand how the map function works to output different types of information
+    and retrieve it, see View and Query Pattern Samples. </p>
+   
+   
+ </conbody>
+</concept>
