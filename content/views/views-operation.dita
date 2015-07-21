@@ -3,393 +3,377 @@
   PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic xml:lang="en-us" id="topic22896">
  <title>Views operations</title>
-  <shortdesc>This section describes how Views operate and how various functions impact views and
-    data.</shortdesc>
+  <shortdesc>Views create indexes on your information that enable search and select operations on the data.</shortdesc>
  <body>
-  <p>All views within Couchbase operate as follows:</p>
-  <ul>
-    <li>View are updated as the document data is updated in memory. 
-      There may be a delay between the document being created or updated and the document being updated within the view 
-      depending on the client-side query parameters.</li>
-   <li>Documents that are stored with an expiry are not automatically removed until the
-     background expiry process removes them from the database. This means that expired documents may
-     still exist within the index.</li>
-   <li>Views are scoped within a design document, with each design document part of a single
-     bucket. A view can only access the information within the corresponding bucket.</li>
-   <li>View names must be specified using one or more UTF–8 characters. You cannot have a blank
-     view name. View names cannot have leading or trailing white space characters (space, tab,
-     newline, or carriage-return).</li>
-   <li>Document IDs that are not UTF–8 encodable are automatically filtered and not included in any
-    view. The filtered documents are logged so that they can be identified.</li>
-   <li>If you have a long view request, use POST instead of GET.</li>
-   <li>Views can only access documents defined within their corresponding bucket. You cannot
-     access or aggregate data from multiple buckets within a given view.</li>
-   <li>Views are created as part of a design document and each design document exists within the
+    <p>All views within Couchbase operate as follows:</p>
+    <ul>
+      <li>View are updated as the document data is updated in memory. There may be a delay between
+        the document being created or updated and the document being updated within the view
+        depending on the client-side query parameters.</li>
+      <li>Documents that are stored with an expiry are not automatically removed until the
+        background expiry process removes them from the database. This means that expired documents
+        may still exist within the index.</li>
+      <li>Views are scoped within a design document, with each design document part of a single
+        bucket. A view can only access the information within the corresponding bucket.</li>
+      <li>View names must be specified using one or more UTF–8 characters. You cannot have a blank
+        view name. View names cannot have leading or trailing white-space characters (space, tab,
+        newline, or carriage-return).</li>
+      <li>Document IDs that are not UTF–8 encodable are automatically filtered and not included in
+        any view. The filtered documents are logged so that they can be identified.</li>
+      <li>If you have a long view request, use POST instead of GET.</li>
+      <li>Views can only access documents defined within their corresponding bucket. You cannot
+        access or aggregate data from multiple buckets within a given view.</li>
+      <li>Views are created as part of a design document, and each design document exists within the
         corresponding named bucket. <ul>
           <li>Each design document can have 0-n views.</li>
           <li>Each bucket can contain 0-n design documents.</li>
         </ul></li>
-   <li>All the views within a single design document are updated when the update to a single view is
-        triggered. For example, a design document with three views updates all three views
+      <li>All the views within a single design document are updated when the update to a single view
+        is triggered. For example, a design document with three views updates all three views
         simultaneously when one view is updated.</li>
-   <li>Updates can be triggered in two ways: <ul>
-     <li>
-      <p>At the point of access or query by using the <codeph>stale</codeph> parameter..</p>
-     </li>
-     <li>
-      <p>Automatically by Couchbase Server based on the number of updated documents, or the period
-       since the last update. Automatic updates can be controlled either globally, or individually
-       on each design document.</p>
-     </li>
-    </ul></li>
-   <li><p>Views are updated incrementally. The first time the view is accessed, all the documents
-     within the bucket are processed through the map/reduce functions. Each new access to the view
-     only processes the documents that have been added, updated, or deleted, since the last time the
-     view index was updated.</p></li>
-  </ul>
-  <p>In practice, this means that views are entirely incremental in nature. Updates to views are
+      <li>Updates can be triggered in two ways: <ul>
+          <li>
+            <p>At the point of access or query by using the <codeph>stale</codeph> parameter.</p>
+          </li>
+          <li>
+            <p>Automatically by Couchbase Server based on the number of updated documents, or the
+              period since the last update. Automatic updates can be controlled either globally, or
+              individually on each design document.</p>
+          </li>
+        </ul></li>
+      <li>
+        <p>Views are updated incrementally. The first time the view is accessed, all the documents
+          within the bucket are processed through the map/reduce functions. Each new access to the
+          view only processes the documents that have been added, updated, or deleted, since the
+          last time the view index was updated.</p>
+      </li>
+    </ul>
+    <p>In practice, this means that views are entirely incremental in nature. Updates to views are
       typically quick as they only update changed documents. Ensure that views are updated by using
       either the built-in automatic update system, through client-side triggering, or explicit
       updates within your application framework.</p>
-  <ul>
-   <li><p>Because of the incremental nature of the view update process, information is only ever
-     appended to the index stored on disk. This helps ensure that the index is updated efficiently.
-     Compaction (including auto-compaction) will optimize the index size on disk and optimize the
-     index structure. An optimized index is more efficient to update and query.</p></li>
-   <li><p>The entire view is recreated if the view definition has changed. Because this would have a
-     detrimental effect on live data, only development views can be modified.</p></li>
-  </ul>
-  <p>Views are organized by design document, and indexes are created according to the design
-   document. Changing a single view in a design document with multiple views invalidates all the
-   views (and stored indexes) within the design document, and all the corresponding views defined in
-   that design document will need to be rebuilt. This will increase the I/O across the cluster while
-   the index is rebuilt, in addition to the I/O required for any active production views.</p>
-  <ul>
-   <li><p>You can choose to update the result set from a view before you query it or after you
-     query. Or you can choose to retrieve the existing result set from a view when you query the
-     view. In this case the results are possibly out of date, or stale. </p></li>
-   <li><p>The views engine creates an index is for each design document; this index contains the
-     results for all the views within that design document.</p></li>
-   <li><p>The index information stored on disk consists of the combination of both the key and value
-     information defined within your view. The key and value data is stored in the index so that the
-     information can be returned as quickly as possible, and so that views that include a reduce
-     function can return the reduced information by extracting that data from the index.</p></li>
-  </ul>
-  <p>Because the value and key information from the defined map function are stored in the index,
-   the overall size of the index can be larger than the stored data if the emitted key/value
-   information is larger than the original source document data.</p>
-   
-  <section><title>How expiration impacts views</title><p>Be aware that Couchbase Server does lazy expiration, that is, expired items are flagged as
+    <ul>
+      <li>
+        <p>The view update process is incremental by nature. The information is only appended to the
+          index stored on the disk making sure that the index gets updated efficiently. Compaction
+          (including auto-compaction) will optimize the index size on disk and optimize the index
+          structure. An optimized index is more efficient to be updated and queried.</p>
+      </li>
+      <li>
+        <p>The entire view is recreated if the view definition has changed. Because this would have
+          a detrimental effect on live data, only development views can be modified.</p>
+      </li>
+    </ul>
+    <p>Design documents organize views, and indexes are created according to the design document. If
+      you change a single view in a design document that contains multiple views, you will
+      invalidate all the views and stored indexes within the design document.  You will then have to
+      rebuild all corresponding views defined in that design document. Rebuilding of the index will
+      increase the I/O across the cluster, in addition to the I/O required for any active production
+      views.</p>
+    <ul>
+      <li>
+        <p>You can choose to update the result set from a view before you query it or after you
+          query. Or you can choose to retrieve the existing result set from a view when you query
+          the view. In this case, the results are possibly out of date, or stale. </p>
+      </li>
+      <li>
+        <p>The views engine creates an index is for each design document; this index contains the
+          results for all the views within that design document.</p>
+      </li>
+      <li>
+        <p>The index information stored on disk consists of the combination of both the key and
+          value information defined within your view. The key and value data is stored in the index
+          so that the information can be returned as quickly as possible.  Views can then include a
+          reduce function and return the reduced information by extracting that data from the
+          index.</p>
+      </li>
+    </ul>
+    <p>The value and key information from the defined map function are stored in the index. The
+      overall index size can be larger than the stored data if the emitted key/value information is
+      larger than the original source document data.</p>
+    <section>
+      <title>How expiration impacts views</title>
+      <p>Be aware that Couchbase Server does lazy expiration, that is, expired items are flagged as
         deleted rather than being immediately erased. Couchbase Server has a maintenance process,
         called <i>expiry pager</i> that periodically looks through all information and erase expired
-        items. This maintenance process runs every 60 minutes, by default, unless configured to run
+        items. The maintenance process runs every 60 minutes, by default, unless configured to run
         at a different interval. When an item is requested, Couchbase Server removes the item
-        flagged for deletion and provides a response that the item does not exist.</p><p>The result set from a
-    view <i>will contain</i> any items stored on disk that meet the requirements of your views
-    function. Therefore information that has not yet been removed from disk may appear as part of a
-    result set when you query a view.</p><p>Using Couchbase views, you can also perform <i>reduce functions</i> on data, which perform
+        flagged for deletion and provides a response that the item does not exist.</p>
+      <p>The result set from a view <i>will contain</i> any items stored on disk that meet the
+        requirements of your views function. Therefore, the information not removed from the disk
+        may appear as part of a result set when you query a view.</p>
+      <p>Using Couchbase views, you can also perform the <term>reduce</term> functions on data, which perform
         calculations or other aggregations of data. For instance, if you want to count the instances
         of a type of object, use a reduce function. Once again, if an item is on disk, it will be
         included in any calculation performed by your reduce functions. Based on this behavior due
         to disk persistence, here are guidelines on handling expiration with views:</p>
-    
-    <ul>
-    <li><p><b>Detecting Expired Documents in Result Sets</b> : If you are using views for indexing items
-            from Couchbase Server, items that have not yet been removed as part of the expiry pager
-            maintenance process are part of a result set returned by querying the view. </p></li>
-      <li><b>Reduces and Expired Documents</b> : In some cases, you may want to perform a <i>reduce
-      function</i> to perform aggregations and calculations on data in Couchbase Server. In this
-     case, Couchbase Server takes precalculated values which are stored for an index and derives a
-     final result. This also means that any expired items still on disk will be part of the
-     reduction. This may not be an issue for your final result if the ratio of expired items is
-     proportionately low compared to other items. For instance, if you have 10 expired scores still
-     on disk for an average performed over 1 million players, there may be only a minimal level of
-     difference in the final result. However, if you have 10 expired scores on disk for an average
-     performed over 20 players, you would get very different result than the average you would
-     expect.</li>
-   </ul>
-    
-    <p>In this case, you may want to run the expiry pager process more frequently to ensure that
-    items that have expired are not included in calculations used in the reduce function. We
-    recommend an interval of 10 minutes for the expiry pager on each node of a cluster. Do note that
-    this interval will have some slight impact on node performance as it will be performing cleanup
-    more frequently on the node.</p><p>For more information about setting intervals for the
-    maintenance process, refer to the Couchbase command line tool and review the examples on
-     <codeph>exp_pager_stime</codeph>.</p>
-  </section>
-  
-  
-  <section><title>How views function in a cluster</title><p><b>Distributing data</b>. If you
-    familiar working with Couchbase Server you know that the server distributes data across
-    different nodes in a cluster. This means that if you have four nodes in a cluster, on average
-    each node will contain about 25% of active data. If you use views with Couchbase Server, the
-    indexing process runs on all four nodes and the four nodes will contain roughly 25% of the
-    results from indexing on disk. We refer to this index as a <term>partial index</term>, since it is an
-    index based on a subset of data within a cluster. We show this in this partial index in the
-    illustration below.</p><p><b>Replicating data and indexes</b>. Couchbase Server also provides data replication; this means
-        that the server will replicate data from one node onto another node. In case the first node
-        fails the second node can still handle requests for the data. To handle possible node
+      <ul>
+        <li>
+          <p><b>Detect expired documents in result sets</b>: The items not removed as part of the
+            expiry pager maintenance process are part of a result set returned by querying the view. </p>
+        </li>
+        <li><b>Perform aggregations and calculations on data</b>: In some cases, you can perform the
+            <codeph>reduce</codeph> function to aggregate and calculate data in Couchbase Server. In
+          this case, Couchbase Server takes pre-calculated values stored for an index and derives a
+          final result. Any expired items still on disk will be part of the reduction, which might
+          not be an issue for your final result if the ratio of expired items is proportionately low
+          compared to other items. For instance, if you have ten expired scores still on disk for an
+          average performed over 1 million players, there may be only a minimal level of difference
+          in the final result. However, if you have ten expired scores on disk for an average
+          performed over 20 players, you would get very different result than the average you would
+            expect.<p>Run the expiry pager process more frequently to ensure that items that have
+            expired are not included in calculations used in the reduce function. We recommend an
+            interval of 10 minutes for the expiry pager on each node of a cluster. Do note that this
+            interval will have some slight impact on node performance as it will be performing
+            cleanup more frequently on the node.</p></li>
+      </ul>
+      
+      <p>For more information about setting intervals for the maintenance process, refer to the
+        Couchbase command-line tool and review the examples on <codeph>exp_pager_stime</codeph>.</p>
+    </section>
+    <section>
+      <title>How views function in a cluster</title>
+      <p><b>Distributing data</b>. If you familiar working with Couchbase Server, you know that the
+        server distributes data across different nodes in a cluster. If you have four nodes in a
+        cluster, on average, each node will contain about 25% of active data. If you use views with
+        Couchbase Server, the indexing process runs on all four nodes, and the four nodes will
+        contain roughly 25% of the results from indexing on disk. This index is called a <i>partial
+          index</i> since it is based on a subset of data within a cluster (shown in the
+        illustration). </p>
+      <p><b>Replicating data and Indexes</b>. Couchbase Server also provides data replication; this
+        means that the server will replicate data from one node to another node. In case the first
+        node fails the second node can still handle requests for the data. To handle possible node
         failure, you can specify that Couchbase Server also replicate a partial index for replicated
-        data. By default each node in a cluster will have a copy of each design document and view
+        data. By default, each node in a cluster will have a copy of each design document and view
         functions. If you make any changes to a views function, Couchbase Server will replicate this
-        change to all nodes in the cluster. The server generates indexes from views within a single
-        design document and store the indexes in a single file on each node in the cluster:</p>
-   
-   <fig><image href="images/views_replica.png" width="720"></image></fig>
-   
-   <p>Couchbase Server can optionally create replica indexes on nodes that
-    are contain replicated data; this is to prepare your cluster for a failover scenario. The server
-    does not replicate index information from another node, instead each node creates an index for
-    the replicated data it stores. The server recreates indexes using the replicated data on a node
-    for each defined design document and view. By providing replica indexes the server enables you
-    to still perform queries even in the event of node failure. You can specify whether Couchbase
-    Server creates replica indexes or not when you create a data bucket.</p>
-   
-   <p><b>Query Time within a Cluster</b></p>
-   
-   <p>When you query a
-    view and thereby trigger the indexing process, you send that request to a single node in the
-    cluster. This node then distributes the request to all other nodes in the cluster. Depending on
-    the parameter you send in your query, each node will either send the most current partial index
-    at that node, will update the partial index and send it, or send the partial index and update it
-    on disk. Couchbase Server will collect and collate these partial indexes and sent this aggregate
-    result to a client.</p><p>To handle errors when you perform a query, you can configure how the
-    cluster behaves when errors occur.</p>
-   
-   <p><b>Queries During Rebalance or Failover</b></p><p>You can query an index
-    during cluster rebalance and node failover operations. If you perform queries during rebalance
-    or node failure, Couchbase Server will ensure that you receive the query results that you would
-    expect from a node as if there were no rebalance or node failure.</p><p>During node rebalance,
-    you will get the same results you would get as if the data were active data on a node and as if
-    data were not being moved from one node to another. In other words, this feature ensures you get
-    query results from a node during rebalance that are consistent with the query results you would
-    have received from the node before rebalance started. This functionality operates by default in
-    Couchbase Server, however you can optionally choose to disable it. Be aware that while this
-    functionality, when enabled, will cause cluster rebalance to take more time; however we do not
-    recommend you disable this functionality in production without thorough testing otherwise you
-    may observe inconsistent query
-    results.</p></section>
-  
-  <section><title>View performance</title><p>View performance includes the time taken to update the
-    view, the time required for the view update to be accessed, and the time for the updated
-    information to be returned, depend on different factors. Your file system cache, frequency of
-    updates, and the time between updating document data and accessing (or updating) a view will all
-    impact performance.</p>
-   <p>Some key notes and points are provided below:</p>
-   <ul>
-    <li>Index queries are always accessed from disk; indexes are not kept in RAM by Couchbase
-     Server. However, frequently used indexes are likely to be stored in the file system cache used
-     for caching information on disk. Increasing your file system cache, and reducing the RAM
-     allocated to Couchbase Server from the total RAM available will increase the RAM available for
-     the OS.</li>
-    <li>The file-system cache will play a role in the update of the index information process.
-     Recently updated documents are likely to be stored in the file-system cache. Requesting a view
-     update immediately after an update operation will likely use information from the file system
-     cache. The eventual persistence nature implies a small delay between updating a document, it
-     being persisted, and then being updated within the index.</li>
-   </ul>Keeping some RAM reserved for your operating system to allocate file-system cache, or
-   increasing the RAM allocated to file-system cache, will help keep space available for index file caching.<ul>
-    <li>View indexes are stored, accessed, and updated, entirely independently of the document
-     updating system. This means that index updates and retrieval is not dependent on having
-     documents in memory to build the index information. Separate systems also mean that the
-     performance when retrieving and accessing the cluster is not dependent on the document
-     store.</li>
-   </ul>
-  </section>
-  
-  
-  <section id="index-stale"><title>Index updates and the stale parameter</title>
-   
-   <p>Indexes are created by Couchbase
-    Server based on the view definition, but updating of these indexes can be controlled at the
-    point of data querying, rather than each time data is inserted. Whether the index is updated
-    when queried can be controlled through the <codeph>stale</codeph> parameter.</p><p>Irrespective
-    of the <codeph>stale</codeph> parameter, documents can only be indexed by the system once the
-    document has been persisted to disk. If the document has not been persisted to disk, use of the
-     <codeph>stale</codeph> will not force this process. You can use the <codeph>observe</codeph>
-    operation to monitor when documents are persisted to disk and/or updated in the
-    index.</p><p>Views can also be updated automatically according to a document change, or interval
-    count.</p>
-   
-   <p>Three values for <codeph>stale</codeph> are supported:</p><ul>
-    <li><b>stale=ok</b></li>
-   </ul><p>The index is not updated. If an index exists for the given view, then the information in
-    the current index is used as the basis for the query and the results are returned
-    accordingly.</p>
-   
-   <fig><image href="images/views-stale-sequence-stale.png" width="720"></image></fig>
-   
-   <p>This setting results in the fastest response times to a given query, since the
-    existing index will be used without being updated. However, this risks returning incomplete
-    information if changes have been made to the database and these documents would otherwise be
-    included in the given view.</p><ul>
-    <li><b>stale=false</b></li>
-   </ul>
-   
-   <p>The index is updated before the query is executed. This ensures that any documents
-    updated (and persisted to disk) are included in the view. The client will wait until the index
-    has been updated before the query has executed, and therefore the response will be delayed until
-    the updated index is available.</p>
-   
-   <fig><image
-    href="images/views-stale-sequence-updatebefore.png" width="720"></image></fig>
-   
-   <ul>
-    <li><b>stale=update_after</b></li>
-   </ul><p>This is the default setting if no <codeph>stale</codeph> parameter is specified. The
-    existing index is used as the basis of the query, but the index is marked for updating once the
-    results have been returned to the client.</p>
-   
-   
-   <fig><image href="images/views-stale-sequence-updateafter.png" width="720"></image></fig>
-   
-   
-   <p>The indexing engine is an asynchronous process; this means querying an index may
-    produce results you may not expect. For example, if you update a document, and then immediately
-    run a query on that document you may not get the new information in the emitted view data. This
-    is because the document updates have not yet been committed to disk, which is the point when the
-    updates are indexed.</p><p>This also means that deleted documents may still appear in the index
-    even after deletion because the deleted document has not yet been removed from the
-    index.</p><p>For both scenarios, you should use an <codeph>observe</codeph> command from a
-    client with the <codeph>persistto</codeph> argument to verify the persistent state for the
-    document, then force an update of the view using <codeph>stale=false</codeph>. This will ensure
-    that the document is correctly updated in the view index. </p><p>When you have multiple clients
-    accessing an index, the index update process and results returned to clients depend on the
-    parameters passed by each client and the sequence that the clients interact with the server.</p><ul>
-    <li><p>Situation 1</p>
+        change to all nodes in the cluster. The sever will generate indexes from views within a
+        single design document and store the indexes in a single file on each node in the
+        cluster:</p>
+      <fig>
+        <image href="../images/views_replica.png" width="720"/>
+      </fig>
+      <p>Couchbase Server can optionally create replica indexes on nodes that contain replicated
+        data; this is to prepare your cluster for a failover scenario. The server does not replicate
+        index information from another node. Instead, each node creates an index for the replicated
+        data it stores. The server recreates indexes using the replicated data on a node for each
+        defined design document and view. By providing replica indexes, the server enables you to
+        perform queries even in the event of node failure. You can specify whether Couchbase Server
+        creates replica indexes or not when you create a data bucket.</p>
+      <p><b>Query Time within a Cluster</b></p>
+      <p>When you query a view and thereby trigger the indexing process, you send that request to a
+        single node in the cluster. This node then distributes the request to all other nodes in the
+        cluster. Depending on the parameter sent in your query, each node will either send the most
+        current partial index at that node, will update the partial index and send it, or send the
+        partial index and update it on disk. Couchbase Server will collect and collate these partial
+        indexes and send this aggregate result to a client.</p>
+      <p>To handle errors when you perform a query, you can configure how the cluster behaves when
+        errors occur.</p>
+      <p><b>Queries During Rebalance or Failover</b></p>
+      <p>You can query an index during cluster rebalance and node failover operations. If you
+        perform queries during rebalancing or node failure, Couchbase Server will ensure that you
+        receive the query results that you would expect from a node as if there were no rebalance or
+        node failure.</p>
+      <p>During node rebalancing, you will get the same results you would get as if the data were
+        active data on a node and as if data were not being moved from one node to another. In other
+        words, this feature ensures you get query results from a node during rebalancing that are
+        consistent with the query results you would have received from the node before rebalance
+        started. This functionality operates by default in Couchbase Server. However,  you can
+        optionally choose to disable it. </p>
+      <p>If querying of indexes during cluster rebalancing and node failover is enabled, cluster
+        rebalancing will take more time. However, it is not recommended that you disable this
+        functionality in production without thorough testing or you might observe inconsistent query
+        results.</p>
+    </section>
+    <section><title>View performance</title><p>View performance includes the time taken to update
+        the view, the time required for the view update to be accessed, and the time for the updated
+        information to be returned, depend on different factors. Your file system cache, frequency
+        of updates, and the time between updating document data and accessing (or updating) a view
+        will all impact performance.</p> Some key notes and points are provided below: <ul>
+        <li>Index queries are always accessed from disk; indexes are not kept in RAM by Couchbase
+          Server. However, frequently used indexes are likely to be stored in the filesystem cache
+          used for caching information on disk. Increasing your filesystem cache, and reducing the
+          RAM allocated to Couchbase Server from the total RAM available will increase the RAM
+          available for the OS.</li>
+        <li>The filesystem cache will play a role in the update of the index information process.
+          Recently updated documents are likely to be stored in the filesystem cache. Requesting a
+          view update immediately after an update operation will likely use information from the
+          filesystem cache. The eventual persistence nature implies a small delay between updating a
+          document, it being persisted, and then being updated within the index.</li>
+      </ul>Keeping some RAM reserved for your operating system to allocate filesystem cache, or
+      increasing the RAM allocated to filesystem cache, will help keep space available for index
+      file caching.<ul>
+        <li>View indexes are stored, accessed, and updated, entirely independently of the document
+          updating system. The index update and retrieval are not dependent on documents in memory
+          to build the index information. Separate systems also mean that the performance, when
+          retrieving and accessing the cluster, is not dependent on the document store.</li>
+      </ul></section>
+    <section id="index-stale"><title>Index updates and the stale parameter</title><p>Indexes are
+        created by Couchbase Server based on the view definition, but updating of these indexes can
+        be controlled at the point of data querying, rather than each time data is inserted. Whether
+        the index is updated when queried can be controlled through the <codeph>stale</codeph>
+        parameter.</p><p>Irrespective of the <codeph>stale</codeph> parameter, documents can only be
+        indexed by the system once the document is persisted to the disk. If the document is not
+        persisted to the disk, use of <codeph>stale</codeph> will not force this process. You can
+        use the <codeph>observe</codeph> operation to monitor when documents are persisted to the
+        disk or updated in the index.</p><p>Views can also be updated automatically according to a
+        document change, or interval count.</p><p>Three values for <codeph>stale</codeph> are
+        supported:</p><ul>
+        <li><b>stale=ok</b></li>
+      </ul><p>The index is not updated. If an index exists for the given view, then the information
+        in the current index is used as the basis for the query and the results are returned
+        accordingly.</p><fig>
+        <image href="../images/views-stale-sequence-stale.png" width="360"/>
+      </fig><p>This setting results in the fastest response times to a given query since the
+        existing index is used without being updated. However, this might return incomplete
+        information if changes have been made to the database, and these documents would otherwise
+        be included in the given view.</p><ul>
+        <li><b>stale=false</b></li>
+      </ul><p>The index is updated before you execute the query, making sure that any documents
+        updated and persisted to disk are included in the view. The client will wait until the index
+        has been updated before the query has executed and, therefore, the response will be delayed
+        until the updated index is available.</p><fig>
+        <image href="../images/views-stale-sequence-updatebefore.png" width="600"/>
+      </fig><ul>
+        <li><b>stale=update_after</b></li>
+      </ul><p>This is the default setting if no <codeph>stale</codeph> parameter is specified. The
+        existing index is used as the basis of the query, but the index is marked for updating once
+        the results have been returned to the client.</p><fig>
+        <image href="../images/views-stale-sequence-updateafter.png" width="600"/>
+      </fig><p>The indexing engine is an asynchronous process; this means querying an index may
+        produce results you may not expect. For example, if you update a document, and then
+        immediately run a query on that document you may not get the new information in the emitted
+        view data. The document updates have not yet been committed to the disk, at which point the
+        updates are indexed.</p><p>The deleted documents may appear in the index even after deletion
+        because the deleted document is still not removed from the index.</p>
+      
+      
+     <!-- <p>For both scenarios,
+        use an <codeph>observe</codeph> command from a client with the <codeph>persistto</codeph>
+        argument to verify the persistent state for the document and then force an update of the
+        view using <codeph>stale=false</codeph>. This will ensure that the document is correctly
+        updated in the view index. </p>-->
+      
+      
+      <p>When you have multiple clients accessing an index, the
+        index update process and results returned to clients depend on the parameters passed by each
+        client and the sequence that the clients interact with the server.</p><ul>
+        <li>
+          <p><b>Situation 1</b></p>
+          <ol>
+            <li>Client 1 queries view with <codeph>stale=false</codeph></li>
+            <li>Client 1 waits until server updates the index</li>
+            <li>Client 2 queries view with <codeph>stale=false</codeph> while re-indexing from
+              Client 1 still in progress</li>
+            <li>Client 2 will wait until existing index process triggered by Client 1 completes.
+              Client 2 gets updated index.</li>
+          </ol>
+        </li>
+        <li>
+          <p><b>Situation 2</b></p>
+          <ol>
+            <li>Client 1 queries view with <codeph>stale=false</codeph></li>
+            <li>Client 1 waits until server updates the index</li>
+            <li>Client 2 queries view with <codeph>stale=ok</codeph> while re-indexing from Client 1
+              in progress</li>
+            <li>Client 2 will get the existing index</li>
+          </ol>
+        </li>
+        <li>
+          <p><b>Situation 3</b></p>
+          <ol>
+            <li>Client 1 queries view with <codeph>stale=false</codeph></li>
+            <li>Client 1 waits until server updates the index</li>
+            <li>Client 2 queries view with <codeph>stale=update_after</codeph></li>
+            <li>If re-indexing from Client 1 not done, Client 2 gets the existing index. If
+              re-indexing from Client 1 is done, Client 2 gets this updated index and triggers
+              re-indexing.</li>
+          </ol>
+        </li>
+      </ul>Index updates may be stacked if multiple clients request the view be updated before the
+      information is returned ( <codeph>stale=false</codeph> ). Multiple clients updating and
+      querying the index data can then get the updated document and version of the view each time.
+      For <codeph>stale=update_after</codeph> queries, there is no stacking, since all updates occur
+      after the query has been accessed.<p>Sequential accesses</p><ol>
+        <li>Client 1 queries view with stale=ok</li>
+        <li>Client 2 queries view with stale=false</li>
+        <li>View gets updated</li>
+        <li>Client 1 queries a second time view with stale=ok</li>
+        <li>Client 1 gets the updated view version</li>
+      </ol><p>The above scenario can cause problems when paginating over a number of records as the
+        record sequence might change between individual queries.</p></section>
+    <section>
+      <title>Automated index updates</title>
+      <p>In addition to a configurable update interval, you can also update all indexes
+        automatically in the background. You configure automated update through two parameters, the
+        update time interval in seconds and the number of document changes that occur before the
+        views engine updates an index. These two parameters are <codeph>updateInterval</codeph> and
+          <codeph>updateMinChanges</codeph>.</p>
      
-     
-     <ol>
-      <li>Client 1 queries view with <codeph>stale=false</codeph></li>
-      <li>Client 1 waits until server updates the index</li>
-      <li>Client 2 queries view with <codeph>stale=false</codeph> while re-indexing from Client 1
-        still in progress</li>
-      <li>Client 2 will wait until existing index process triggered by Client 1 completes. Client
-        2 gets updated index.</li>
-     </ol></li>
-    <li><p>Situation 2</p>
-     <ol>
-      <li>Client 1 queries view with <codeph>stale=false</codeph></li>
-      <li>Client 1 waits until server updates the index</li>
-      <li>Client 2 queries view with <codeph>stale=ok</codeph> while re-indexing from Client 1 in
-       progress</li>
-      <li>Client 2 will get the existing index</li>
-     </ol></li>
-    <li><p>Situation 3</p>
-     <ol>
-      <li>Client 1 queries view with <codeph>stale=false</codeph></li>
-      <li>Client 1 waits until server updates the index</li>
-      <li>Client 2 queries view with <codeph>stale=update_after</codeph></li>
-      <li>If re-indexing from Client 1 not done, Client 2 gets the existing index. If re-indexing
-       from Client 1 done, Client 2 gets this updated index and triggers re-indexing.</li>
-     </ol></li>
-   </ul>
-   
-   <p>Index updates may be stacked if multiple clients request that the view is updated before
-    the information is returned ( <codeph>stale=false</codeph> ). This ensures that multiple clients
-    updating and querying the index data get the updated document and version of the view each time.
-    For <codeph>stale=update_after</codeph> queries, no stacking is performed, since all updates
-    occur after the query has been accessed.</p>
-   
-   <p>Sequential accesses</p>
-   
-   <ol>
-    <li>Client 1 queries view with stale=ok</li>
-    <li>Client 2 queries view with stale=false</li>
-    <li>View gets updated</li>
-    <li>Client 1 queries a second time view with stale=ok</li>
-    <li>Client 1 gets the updated view version</li>
-   </ol><p>The above scenario can cause problems when paginating over a number of records as the
-    record sequence may change between individual
-    queries.</p>
-  
-  </section>
-  
-  
-  <section><title>Automated index updates</title>
-   
-   <p>In addition to a configurable update interval,
-    you can also update all indexes automatically in the background. You configure automated update
-    through two parameters, the update time interval in seconds and the number of document changes
-    that occur before the views engine updates an index. These two parameters are
-     <codeph>updateInterval</codeph> and <codeph>updateMinChanges</codeph>:</p>
-   
-   <ul>
-    <li><p><codeph>updateInterval</codeph>: the time interval in milliseconds, default is 5000
-      milliseconds. At every <codeph>updateInterval</codeph> the views engine checks if the number
-      of document mutations on disk is greater than <codeph>updateMinChanges</codeph>. If true, it
-      triggers view update. The documents stored on disk potentially lag documents that are
-      in-memory for tens of seconds.</p></li>
-    <li><p><codeph>updateMinChanges</codeph>: the number of document changes that occur before
-      re-indexing occurs, default is 5000 changes.</p></li>
-   </ul>
-   
-   <p>The auto-update process only operates on full-set development and production indexes.
-    Auto-update does not operate on partial set development indexes.</p><p>Irrespective of the
-    automated update process, documents can only be indexed by the system once the document has been
-    persisted to disk. If the document has not been persisted to disk, the automated update process
-    will not force the unwritten data to be written to disk. You can use the
-     <codeph>observe</codeph> operation to monitor when documents have been persisted to disk and/or
-    updated in the index.</p>
-   
-   <p>The updates are applied as follows:</p><ul>
-    <li>Active indexes, Production views</li>
-   </ul>
-   
-   <p>For all active, production views, indexes are automatically updated according to the
-    update interval <codeph>updateInterval</codeph> and the number of document changes
-     <codeph>updateMinChanges</codeph>.</p>
-   
-   <p>If <codeph>updateMinChanges</codeph> is set to 0
-    (zero), then automatic updates are disabled for main indexes.</p>
-   
-   
-   <ul>
-    <li>Replica indexes</li>
-   </ul>
-   
-   <p>If replica indexes have been configured for a bucket, the index is automatically updated
-    according to the document changes ( <codeph>replicaUpdateMinChanges</codeph> ; default 5000)
-    settings.</p>
-   
-   <p>If <codeph>replicaUpdateMinChanges</codeph> is set to 0 (zero), then automatic
-    updates are disabled for replica indexes.</p><p>The trigger level can be configured both
-    globally and for individual design documents for all indexes using the REST API.</p>
-   
-   <p>To obtain
-    the current view update daemon settings, access a node within the cluster on the administration
-    port using the URL <codeph>http://nodename:8091/settings/viewUpdateDaemon</codeph>
-    :</p>
-   
-   <codeblock>GET http://Administrator:Password@nodename:8091/settings/viewUpdateDaemon
-</codeblock><p>The
-    request returns the JSON of the current update
-    settings:</p>
-   
-   <codeblock>{
+      <ul>
+        <li>
+          <p><codeph>updateInterval</codeph>: the time interval in milliseconds, the default is 5000
+            milliseconds. At every <codeph>updateInterval</codeph> the views engine checks if the
+            number of document mutations on disk is greater than <codeph>updateMinChanges</codeph>.
+            If true, it triggers the view update. The documents stored on disk potentially lag
+            documents that are in-memory for tens of seconds.</p>
+        </li>
+        <li>
+          <p><codeph>updateMinChanges</codeph>: the number of document changes that occur before
+            re-indexing occurs, the default is 5000 changes.</p>
+        </li>
+      </ul>
+      <p>The auto-update process only operates on the full-set development and production indexes.
+        Auto-update does not operate on partial set development indexes.</p>
+      <p>Irrespective of the automated update process, documents can only be indexed by the system
+        once the document has been persisted to disk. If the document has not been persisted to
+        disk, the automated update process will not force the unwritten data to be written to disk.
+        You can use the <codeph>observe</codeph> operation to monitor when documents have been
+        persisted to disk or updated in the index.</p>
+      <p>The updates are applied as follows:</p>
+      <ul>
+        <li>Active indexes, Production views</li>
+      </ul>
+      <p>For all active, production views, indexes are automatically updated according to the update
+        interval <codeph>updateInterval</codeph> and the number of document changes
+          <codeph>updateMinChanges</codeph>.</p>
+      <p>If <codeph>updateMinChanges</codeph> is set to 0 (zero), then automatic updates are
+        disabled for main indexes.</p>
+      <ul>
+        <li>Replica indexes</li>
+      </ul>
+      <p>If replica indexes have been configured for a bucket, the index is automatically updated
+        according to the document changes ( <codeph>replicaUpdateMinChanges</codeph> ; default 5000)
+        settings.</p>
+      <p>If <codeph>replicaUpdateMinChanges</codeph> is set to 0 (zero), then automatic updates are
+        disabled for replica indexes.</p>
+      <p>The trigger level can be configured both globally and for individual design documents for
+        all indexes using the REST API.</p>
+      <note type="note">The <codeph>ddocs</codeph> allow you to set
+        <codeph>updateMinChanges</codeph> or <codeph>replicaUpdateMinChanges</codeph> only via
+        options. The <codeph>updateInterval</codeph> can only be set for the whole cluster.</note>
+      
+    
+      <p>To obtain the current view update daemon settings, access a node within the cluster on the
+        administration port using the URL
+          <codeph>http://nodename:8091/settings/viewUpdateDaemon</codeph> :</p>
+      <codeblock>GET http://Administrator:Password@nodename:8091/settings/viewUpdateDaemon</codeblock>
+      <p>The request returns the JSON of the current update settings:</p>
+      <codeblock>{
     "updateInterval":5000,
     "updateMinChanges":5000,
     "replicaUpdateMinChanges":5000
-}
-</codeblock>
-   
-   <p>To
-    update the settings, use <codeph>POST</codeph> with a data payload that includes the updated
-    values. For example, to update the time interval to 10 seconds, and document changes to 7000
-    each:</p>
-   
-   <codeblock>POST http://nodename:8091/settings/viewUpdateDaemon
-updateInterval=10000&amp;updateMinChanges=7000
-</codeblock>
-   
-   <p>If
-    successful, the return value is the JSON of the updated configuration.</p>
-   <p>To configure the <codeph>updateMinChanges</codeph> or <codeph>replicaUpdateMinChanges</codeph>
-    values explicitly on individual design documents, specify the parameters within the
-     <codeph>options</codeph> section of the design document. For
-    example:</p>
-   
-   <codeblock>{
+}</codeblock>
+      <p>To update the settings, use <codeph>POST</codeph> with a data payload that includes the
+        updated values. For example, to update the time interval to 10 seconds, and document changes
+        to 7000 each:</p>
+      <codeblock>POST http://nodename:8091/settings/viewUpdateDaemon
+updateInterval=10000&amp;updateMinChanges=7000</codeblock>
+      <p>If successful, the return value is the JSON of the updated configuration.</p>
+      <p>To configure the <codeph>updateMinChanges</codeph> or
+          <codeph>replicaUpdateMinChanges</codeph> values explicitly on individual design documents,
+        specify the parameters within the <codeph>options</codeph> section of the design document.
+        For example:</p>
+      <codeblock>{
    "_id": "_design/myddoc",
    "views": {
       "view1": {
@@ -400,25 +384,17 @@ updateInterval=10000&amp;updateMinChanges=7000
        "updateMinChanges": 1000,
        "replicaUpdateMinChanges": 20000
    }
-}
-</codeblock><p>You
-    can set this information when creating and updating design documents through the design document
-    REST API. To perform this operation using the
-     <codeph>curl</codeph>
-    tool:</p>
-   
-   <codeblock>&gt; curl -X POST -v -d 'updateInterval=7000&amp;updateMinChanges=7000' \
+}</codeblock>
+      <p>You can set this information when creating and updating design documents through the design
+        document REST API. To perform this operation using the <codeph>curl</codeph> tool:</p>
+      <codeblock>&gt; curl -X POST -v -d 'updateInterval=7000&amp;updateMinChanges=7000' \
     'http://Administrator:Password@192.168.0.72:8091/settings/viewUpdateDaemon'
 </codeblock>
-   
-   <p>Partial-set development views are not automatically rebuilt, and during a rebalance operation,
-				development views are not updated, even when consistent views are enabled, as this
-				relies on the automated update mechanism. Updating development views in this way would
-				waste system resources.</p>
-  
-  </section>
-  
-  
- </body>
- 
+      <p>Partial-set development views are not automatically rebuilt. During rebalancing development
+        views are not updated, even when consistent views are enabled, as this relies on the
+        automated update mechanism. Updating development views in this way would waste system
+        resources.</p>
+    </section>
+  </body>
+
 </topic>
