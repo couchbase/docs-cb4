@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept xml:lang="en-us" id="concept2677">
+	<title>Working with N1QL</title>
+	<shortdesc>You can query a bucket using the N1QL query language.</shortdesc>
+	<conbody>
+		<p><note>N1QL is currently experimental and may change in subsequent versions.</note></p>
+
+		<p>To query via N1QL, you need to make sure to have the query engine downloaded, started and
+			pointed to your cluster. For more information about using N1QL, see <xref
+				href="http://query.couchbase.com" format="html" scope="external" />.</p>
+
+		<p>Next, you need to enable N1QL either through a system property or through the environment
+			builder. This step will go away once N1QL is fully integrated into the server:</p>
+		<p>To enable N1QL by using a system property:</p>
+
+<codeblock outputclass="language-java"><![CDATA[// Through a system property
+System.setProperty("com.couchbase.queryEnabled", "true");
+
+Cluster cluster = CouchbaseCluster.create();
+Bucket bucket = cluster.openBucket("beer-sample");]]></codeblock>
+
+<p>To enable N1QL by using  the builder:</p>
+<codeblock outputclass="language-java"><![CDATA[// Through the builder
+Cluster cluster = CouchbaseCluster.create(DefaultCouchbaseEnvironment
+    .builder()
+    .queryEnabled(true)
+    .build());
+
+Bucket bucket = cluster.openBucket("beer-sample");]]></codeblock>
+
+		<p>Finally, you are ready to run the various kinds of queries. All queries are composed at a
+			minimum of a statement and optionally of N1QL additional parameters. The simplest form of
+			query is just a raw string statement, or a domain-specific language (DSL) statement:</p>
+
+<codeblock outputclass="language-java"><![CDATA[// raw string query
+QueryResult queryResult =
+   bucket.query(Query.simple("SELECT * FROM beer-sample LIMIT 10"));
+
+// using the DSL
+QueryResult query = bucket.query(select("*").from("beer-sample").limit(10));]]></codeblock>
+
+		<p>The DSL provides a type-safe and intuitive way to perform queries. The
+				<apiname>select()</apiname> method is a static import that kicks off a  BNF-aware DSL
+			for N1QL. (BNF stands for Backus–Naur Form.) </p>
+
+		<p>The query always returns a <apiname>QueryResult</apiname>, which aside from the actual
+            <apiname>QueryRow</apiname>s also contains debug or error information if supplied.</p>
+
+		<p><ul>
+            <li><b>parseSuccess</b>: Returns true if the query could correctly be parsed. This
+					information is available immediately even if the actual list of results takes more
+					time to be computed and streamed to the client.</li>
+            <li><b>finalSuccess</b>: Returns true if the whole query could be executed successfully, including
+                retrieving all the results and streaming them to the client.</li>
+			<li><b>allRows</b>: Contains all rows returned by the query, can be an empty list.</li>
+            <li><b>rows</b>: Same as allRows but in an iterator form (the <apiname>QueryResult</apiname> itself is
+                iterable).</li>
+            <li><b>requestId</b>: The server-generated unique ID for this query (useful to find associated logs
+                on the N1QL server).</li>
+            <li><b>clientContextId</b>: User-provided identifier reflected in the server's response. This can be
+                useful to group several queries (eg. in a kind of in-house transaction) and find all associated
+                queries.</li>
+			<li><b>info</b>: Returns a <apiname>JsonObject</apiname> containing metrics for the query (like number
+                of results, processing time, etc...).</li>
+			<li><b>errors</b>: Returns a list of <apiname>JsonObject</apiname> describing errors or warnings
+					(if any occurred during execution).</li>
+		</ul></p>
+
+        <section><title>Querying Asynchronously</title>
+            <p>Querying asynchronously is done through the <apiname>AsyncBucket</apiname> interface, obtained
+                by calling <apiname>bucket.async()</apiname>. The API is pretty similar except everything is
+                returned as an <apiname>Observable</apiname>. Some of the components of the query result (an
+                <apiname>AsyncQueryResult</apiname>) can also be delayed and so returned as Observables. Only
+                <apiname>requestId</apiname>, <apiname>clientContextId</apiname> and <apiname>parseSuccess</apiname>
+                return immediately.</p>
+		    <p>The following Java 8 code prints the found documents or errors as they come:</p>
+
+<codeblock outputclass="language-java"><![CDATA[bucket.async()
+.query(select("*").from("beer-sample").limit(10))
+.subscribe(result -> {
+    result.errors()
+        .subscribe(
+            e -> System.err.println("N1QL Error/Warning: " + e),
+            runtimeError -> runtimeError.printStackTrace()
+        );
+    result.rows()
+        .map(row -> row.value())
+        .subscribe(
+            rowContent -> System.out.println(rowContent),
+            runtimeError -> runtimeError.printStackTrace()
+        )
+    }
+);]]></codeblock>
+        <p>First, we see that we work on asynchronous mode. Second line issues a <apiname>Statement</apiname>
+            using the DSL. Then we subscribe a first time to trigger the query and obtain the result.</p>
+        <p>On receiving the result (there will be only one), we subscribe to its components to be notified
+            respectively of n1ql errors and n1ql results. Results (as rows) are first mapped into their
+            JSON values.</p>
+        <p>Notice we also define an <apiname>onError</apiname> behavior for both n1ql errors stream and results
+            stream, that just prints the stack trace.</p>
+        <p><i>Note: All this is done asynchronously so it's not suitable for a simple test (where the main
+            thread would exit potentially before any result could have been displayed)</i></p>
+        </section>
+
+        <section><title>Different Kinds of Queries</title>
+        <p>Queries are represented by the <apiname>Query</apiname> interface, which also provides factory
+            methods to create all variants of queries. Each variant can be constructed from a <apiname>
+            Statement</apiname>, even in <codeph>String</codeph> form, but also additionally can define
+            a <apiname>QueryParams</apiname>. This represents additional N1QL parameters, like setting a
+            <codeph>clientContextId</codeph>.</p>
+        <p>Variants of queries are:
+                <ul>
+                    <li><b>simple</b>: The basic query used so far in this tutorial.</li>
+                    <li><b>parameterized</b>: A variant to use with statements containing
+						placeholders (like <apiname>$1</apiname> or <apiname>$placeholder</apiname>). The
+						user must provide the values for the placeholders as well, either as a
+							<apiname>JsonArray</apiname> (for positional parameters) or
+							<apiname>JsonObject</apiname> (for named parameters).</li>
+                    <li><b>prepared</b>: This is very much like the idea of an SQL prepared
+						statement. First the <codeph>bucket.prepare(statement)</codeph> method must be
+						called to obtain a <apiname>QueryPlan</apiname>. This plan can then be cached and
+						replayed using <codeph>Query.prepared(plan)</codeph>, skipping the query parsing
+						and preparation on the server side. Prepared statements can also use
+						placeholders.</li>
+                    </ul>
+        </p>
+        </section>
+        <section><title>Reading Your Own Writes (RYOW)</title>
+        <p>Often you will want to insert or update some data into Couchbase and immediately read this data back using a N1QL query. This is referred to as RYOW (Read Your Own Write).</p>
+        <p>This can be achieved by using the <codeph>QueryParams</codeph>, and more precisely the <codeph>consistency</codeph> parameter:</p>
+
+<codeblock outputclass="language-java"><![CDATA[
+JsonDocument doc = JsonDocument.create("test", JsonObject.create().put("test", true));
+bucket.insert(doc);
+
+Statement select = select("*").from("beer-sample")
+    .where(x("test").eq(true));
+QueryParams ryow = QueryParams.build().consistency(ScanConsistency.REQUEST_PLUS);
+
+bucket.async()
+    .query(Query.simple(select, ryow))
+    .subscribe(result -> {
+    result.errors()
+        .subscribe(
+            e -> System.err.println("N1QL Error/Warning: " + e),
+            runtimeError -> runtimeError.printStackTrace()
+        );
+    result.rows()
+        .map(row -> row.value())
+        .subscribe(
+            rowContent -> System.out.println(rowContent),
+            runtimeError -> runtimeError.printStackTrace()
+        )
+    }
+);]]></codeblock>
+    </section>
+
+	</conbody>
+</concept>
