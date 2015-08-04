@@ -1,8 +1,182 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_dhn_jlg_xs">
-  <title>Nodes running data service</title>
+  <title>Nodes running the data service</title> <shortdesc>When sizing the data nodes, it is important to keep in mind the use cases and application workload.</shortdesc>
   <body>
-    <p></p>
+    <p>Data nodes handle core data service operation such as CRUD (create/read/update/delete). When
+      sizing data nodes, keep in mind the use cases and application workload. For example, start
+      sizing by asking the following questions: </p>
+    <ol>
+      <li>Does your application primarily (or even exclusively) amounts  to individual document
+        access? </li>
+      <li>Do you plan to use views? </li>
+      <li>Do you plan to use XDCR? </li>
+      <li>What’s your working set size and what are your data operation throughput/latency
+        requirements? </li>
+    </ol>
+    
+    <p>Answers to the above questions can help you better understand the capacity requirement of
+      your cluster and provide a better estimation for sizing. </p>
+    <p>Couchbase Server takes into consideration performance data and customer use cases to provide
+      a sizing calculator to for each of these areas: CPU, memory, disk, and network. </p>
+    <table><title>Input variables for sizing RAM</title>
+      <tgroup cols="2">
+        <colspec colname="col1" colwidth="1*"/>
+        <colspec colname="col2" colwidth="3*"/>
+        <thead>
+          <row>
+            <entry>Input Variable</entry>
+            <entry>value</entry>
+          </row>
+        </thead>
+        <tbody>
+          <row>
+            <entry><varname>documents_num</varname></entry>
+            <entry>1,000,000</entry>
+          </row>
+          <row>
+            <entry><varname>ID_size</varname></entry>
+            <entry>100</entry>
+          </row>
+          <row>
+            <entry><varname>value_size</varname></entry>
+            <entry>10,000</entry>
+          </row>
+          <row>
+            <entry><varname>number_of_replicas</varname></entry>
+            <entry>1</entry>
+          </row>
+          <row>
+            <entry><varname>working_set_percentage</varname></entry>
+            <entry>20% </entry>
+          </row>
+        </tbody>
+      </tgroup>
+    </table>
+    
+    
+    <table><title>Constants for sizing RAM</title>
+      <tgroup cols="2">
+        <colspec colname="col1" colwidth="1*"/>
+        <colspec colname="col2" colwidth="3*"/>
+        <thead>
+          <row>
+            <entry>Constants</entry>
+            <entry>value</entry>
+          </row>
+        </thead>
+        <tbody>
+          <row>
+            <entry>Type of Storage</entry>
+            <entry>SSD</entry>
+          </row>
+          <row>
+            <entry><codeph>overhead_percentage</codeph></entry>
+            <entry>25%</entry>
+          </row>
+          <row>
+            <entry><codeph>metadata_per_document</codeph></entry>
+            <entry>56 for 2.1 and higher, 64 for 2.0.x</entry>
+          </row>
+          <row>
+            <entry><codeph>high_water_mark</codeph></entry>
+            <entry>85% </entry>
+          </row>
+        </tbody>
+      </tgroup>
+    </table>
+    <p>Based on the provided data, the rough sizing guideline formula for the cluster is as
+      follows:</p>
+    
+    <table><title>Guideline formula for sizing a cluster</title>
+      <tgroup cols="2">
+        <colspec colname="col1" colwidth="1*"/>
+        <colspec colname="col2" colwidth="2*"/>
+        <thead>
+          <row>
+            <entry>Variable</entry>
+            <entry>Calculation</entry>
+          </row>
+        </thead>
+        <tbody>
+          <row>
+            <entry><varname>no_of_copies</varname></entry>
+            <entry><codeph>1 + number_of_replicas</codeph></entry>
+          </row>
+          <row>
+            <entry><varname>total_metadata</varname>. All the documents need to live in the memory.</entry>
+            <entry><codeph>(documents_num) * (metadata_per_document + ID_size) *
+              (no_of_copies)</codeph></entry>
+          </row>
+          <row>
+            <entry><varname>total_dataset</varname></entry>
+            <entry><codeph>(documents_num) * (value_size) *
+              (no_of_copies)</codeph></entry>
+          </row>
+          <row>
+            <entry><varname>working_set</varname></entry>
+            <entry><codeph>total_dataset * (working_set_percentage)</codeph></entry>
+          </row>
+          <row>
+            <entry>Cluster RAM quota required</entry>
+            <entry><codeph>(total_metadata + working_set) * (1 + headroom) /
+              (high_water_mark)</codeph></entry>
+          </row>
+          <row>
+            <entry>number of nodes</entry>
+            <entry><codeph>Cluster RAM quota required / per_node_ram_quota</codeph>
+            </entry>
+          </row>
+        </tbody>
+      </tgroup>
+    </table>
+    <p>Based on the above formula, these are the suggested sizing guidelines:</p>  
+    
+    
+    <table><title>Suggested sizing guideline</title>
+      <tgroup cols="2">
+        <colspec colname="col1" colwidth="1*"/>
+        <colspec colname="col2" colwidth="3*"/>
+        <thead>
+          <row>
+            
+            <entry>Variable</entry>
+            <entry>Calculation</entry>
+          </row>
+        </thead>
+        <tbody>
+          <row>
+            <entry><varname>no_of_copies</varname></entry>
+            <entry>= 1 for original and 1 for replica</entry>
+          </row>
+          <row>
+            <entry><varname>total_metadata</varname></entry>
+            <entry>= 1,000,000 * (100 + 56) * (2) = 312,000,000</entry>
+          </row>
+          <row>
+            <entry><varname>total_dataset</varname></entry>
+            <entry>= 1,000,000 * (10,000) * (2) = 20,000,000,000</entry>
+          </row>
+          <row>
+            <entry><varname>working_set</varname></entry>
+            <entry>= 20,000,000,000 * (0.2) = 4,000,000,000</entry>
+          </row>
+          <row>
+            <entry>Cluster RAM quota required</entry>
+            <entry>= (440,000,000 + 4,000,000,000) * (1+0.25)/(0.7) =
+              7,928,000,000</entry>
+          </row>
+        </tbody>
+      </tgroup>
+    </table>
+    
+    <p>Therefore, the suggested RAM requirement for the whole cluster is <codeph>8GB</codeph>.</p>
+    <p>To learn more, contact Couchbase Support for sizing help. You can also read about sizing in
+      this <xref
+        href="http://blog.couchbase.com/how-many-nodes-part-1-introduction-sizing-couchbase-server-20-cluster"
+        format="html" scope="external">blog</xref>. </p>
+    
+   
+ 
   </body>
 </topic>
