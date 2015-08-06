@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_lgg_sjt_xs">
+  <title>Docker Hub</title> <shortdesc>There are several Docker configuration scenarios for Couchbase Server
+    deployments.</shortdesc>
+  <body>
+    <p>Couchbase Server communicates on a number of <xref href="install-networkports.dita#topic2659"
+        >different ports</xref>. In addition, it is not supported for nodes in a cluster that are
+      behind any kind of NAT. </p>
+    <p>For these reasons, Docker's default networking configuration is not ideally suited to
+      Couchbase Server deployments. There are several deployment scenarios that Docker can easily
+      support, and that are described along with recommended network arrangements for each. </p>
+    <section> <title>Volumes</title>
+      <p>A Couchbase Server Docker container will write all persistent and node-specific data under
+        the directory <filepath>/opt/couchbase/var</filepath>. It is recommended to  map this
+        directory to a directory on the host file system using the<codeph> -v</codeph> option to
+        docker run and for the following reasons:</p>
+      <dl>
+        <dlentry>
+          <dt>Persistence</dt>
+          <dd>Storing <filepath>/opt/couchbase/var</filepath> outside the container allows you to
+            delete the container and recreate it later. You can even update to a container running a
+            later point release of Couchbase Server without losing your data.</dd>
+        </dlentry>
+      </dl>
+    <dl>
+      <dlentry>
+        <dt>Performance</dt>
+        <dd>In a standard Docker environment using a union file system, leaving<filepath>
+              /opt/couchbase/var</filepath> inside the container will result in some amount of
+            performance degradation.</dd>
+      </dlentry>
+    </dl>
+      <p>All of the sample commands below assume that you are using volumes mapped to host
+        directories.</p>
+      <dl>
+        <dlentry>
+          <dt>SELinux workaround</dt>
+          <dd>If you have <codeph>SELinux</codeph> enabled, mounting the host volumes in a container
+            requires an extra step. Assuming you are mounting the <filepath>~/couchbase</filepath>
+            directory on the host file system, you need to run the following command once before
+            running your first container on that host:
+            <codeblock> mkdir ~/couchbase &amp;&amp; chcon -Rt svirt_sandbox_file_t ~/couchbase</codeblock></dd>
+        </dlentry>
+      </dl>       
+    </section>
+   <section><title>Ulimits</title>
+     <p>Couchbase normally expects the following changes to ulimits:
+        <codeblock>ulimit -n 40960        # nofile: max number of open files
+ulimit -c unlimited    # core: max core file size
+ulimit -l unlimited    # memlock: maximum locked-in-memory address space</codeblock>These
+        ulimit settings are necessary when running under heavy load. If you are just doing light
+        testing and development, you can omit these settings, and everything will still work. </p>
+      <p>To set the ulimits in your container, you will need to run Couchbase Docker containers with
+        the following additional <codeph>--ulimit</codeph> flags:
+        <codeblock>docker run -d --ulimit nofile=40960:40960 --ulimit core=100000000:100000000 --ulimit memlock=100000000:100000000 couchbase/server</codeblock>Since
+          <codeph>unlimited</codeph> is not supported as a value, it sets the core and memlock
+        values to 100 GB. If your system has more than 100 GB RAM, you will want to increase this
+        value to match the available RAM on the system. <note type="note">The
+            <codeph>--ulimit</codeph> flags only work on Docker 1.6 or later.</note>
+      </p>
+   </section> 
+  </body>
+</topic>
