@@ -2,41 +2,199 @@
 <!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
 <concept id="concept_b5n_bwn_vs">
  <title>Database engine architecture</title>
- <shortdesc></shortdesc>
+ <shortdesc>The memory-first architecture of the Couchbase Server enables it to maintain sub-millisecond latencies with core data access. </shortdesc>
  <conbody>
-  <p></p>
+  <p>The Couchbase Server depends on the following key components: <ul>
+    <li>A highly efficient <b>listener</b> that manages networking and authentication. </li>
+    <li>A <b>bucket engine</b> that stores and retrieves information at the speed of memory access.
+    </li>
+   </ul>With Couchbase buckets, data is stored on disk eventually through the storage engine. The
+   storage engine enables the server to efficiently hold data much larger than the size of memory.
+    <fig id="fig_bpn_3ft_xs">
+    <title>Database engine architecture</title>
+    <image placement="break" href="images/db-engine-architecture.png" width="400"
+     id="image_cpn_3ft_xs"/>
+   </fig></p>
+  <section><title>Listeners</title>
+  <p>When client connection requests arrive at the database engine, the listener service receives the requests and authenticates the client. Upon successful authentication, the listener service assigns a worker thread to the connection to service its request. A single worker thread can handle multiple client connections using a non-blocking event loop.
+</p>
+   <p>The number of worker threads that can be created is automatically determined based on the number of CPU threads present on the node. By default the number of worker threads is 0.75 x number of CPU threads.</p></section>
+  <section><title>vBucket manager and managed cache</title>
+  <p>After executing mutation and read requests, the server uses the managed cache to hold updated and newly created values. However, with a high flow of incoming operations, the system can run out of memory quickly. In order to reuse the memory, mutations are also queued for disk persistency.  Once the mutated items are persisted, the server frees up the memory consumed by these items, making space for newer operations. This operation is called <i>cache eviction</i>. With a highly concurrent set of operations consuming memory and a high throughput disk subsystem persisting data to disk, there can be many pages eligible for reuse. The server uses the Least Recently Used (LRU) algorithm to identify the memory pages that can be reused. </p>
+   <p>It is important to size the RAM capacity appropriately for your working set: the portion of data that your application is working with at any given point in time and needs very low latency and high throughput access. In some applications, the working set is the entire data set, while in others it is a smaller subset.</p>
+  </section>
+  <section><title>Initialization and warmup</title>
+   <p>Whenever you restart the Couchbase Server or restore the data, the node goes through a warmup process before it starts handling data requests again. During warmup, the Couchbase Server loads data  persisted on disk into RAM. </p>
+   <p>Couchbase Server provides an optimized warmup process that loads data sequentially from disk into RAM. It divides the data to be loaded and handles it in multiple phases.<draft-comment author="amarantha"> Does it start serving data after the first phase is loaded?</draft-comment> 
+After the warmup process completes, the data is available for clients to read and write. The time needed for a node warmup depends on the system size, system configuration, the amount of data persisted in the node, and the ejection policy configured for the buckets. 
+    <note>The Couchbase Server is capable of serving data before it actually loads all the keys and data from the vBuckets. </note></p>
+   <p>Couchbase Server identifies items that are frequently used, prioritizes them, and loads them before sequentially loading the remaining data. The frequently-used items are prioritized in an access log. The server pre-fetches a list of the most frequently accessed keys and then fetches these keys before fetching any other items from disk. </p>
+   <p>The server runs a configurable scanner process that determines the keys that are most frequently used. The scanner process is pre-set and is configurable. You can use the command-line tool,<cmdname>cbepctl flush_param</cmdname>, to change the initial time and interval for the scanner process. For example, you can configure the scanner process to run during a specific time period when a given list of keys need to be identified and made available sooner.</p>
+   <p>The server can also switch into a <i>ready mode</i> before it has actually retrieved all documents for keys into RAM, thereby enabling data to be served before all the stored items are loaded. Switching into ready mode is a configurable setting that enables you to adjust the server warmup time.</p>
+   <p></p>
+  </section>
+  <section><title>Tunable memory with ejection policy</title>
+   <p>Tunable memory enables you to configure the ejection policy for a bucket as one of the following: <ul>
+    <li>Value-only ejection (default) removes data from the cache but keeps all keys and metadata fields for non-resident items. When a value bucket ejection occurs, the value of the item is reset. Value-only ejection, also referred to as value ejection, is well suited for cases where low latency access is critical to the application and the total item keys for the bucket can easily fit in the allocated Data RAM quota. </li>
+    <li>Full metadata ejection removes all data including keys, metadata, and key-value pairs from the cache for non-resident items. Full ejection is well suited for cases where the application has cold data that is not accessed frequently or the total data size is too large to fit in memory plys higher latency access to the data is accepted. <note spectitle="Important">Full ejection may involve additional disk I/O per operation. For example, when the request <i>get_miss</i> which requests a key that does not exist is received, Couchbase Server will check for the key on the disk even if the bucket is 100% resident. </note></li>
+   </ul></p>
+  </section>
+  <section><title>Working set management and ejection</title>
+   <p>Couchbase Server actively manages the data stored in a caching layer; this includes the information which is frequently accessed by clients and which needs to be available for rapid reads and writes. When there are too many items in RAM, Couchbase Server removes certain data to create free space and to maintain system performance. This process is called “working set management” and the set of data in RAM is referred to as the “working set”. In general, the working set consists of all the keys, metadata, and associated documents which are frequently used require fast access. The process the server performs to remove data from RAM is known as ejection.</p>
+   <p>Couchbase Server performs ejections automatically. When ejecting information, it works in conjunction with the disk persistence system to ensure that data in RAM is persisted to disk and can be safely retrieved back into RAM whenever the item is requested. </p>
+   <p>In addition to the Data RAM quota for the caching layer, the engine uses two watermarks, mem_low_wat and mem_high_wat, to determine when it needs to start persisting more data to disk.</p>
+   <p>As more and more data is held in the caching layer, at some point in time it passes the
+    mem_low_wat value. At this point, no action is taken. As data continues to load, it eventually
+    reaches the mem_high_wat value. At this point, the Couchbase Server schedules a background job
+    called item pager which ensures that items are migrated to disk and memory is freed up for other
+    Couchbase Server items. This job runs until measured memory reaches mem_low_wat. If the rate of
+    incoming items is faster than the migration of items to disk, the system returns errors
+    indicating there is not enough space until there is sufficient memory available. The process of
+    migrating data from the cache to make way for actively used information is called ejection and
+    is controlled automatically through thresholds set on each configured bucket in the Couchbase
+    Server cluster. <fig id="fig_cr5_jk5_xs">
+     <title>Working set management and ejection</title>
+     <image placement="break" href="images/tunable-memory-bucket-config.png" width="250"
+      id="image_dr5_jk5_xs"/>
+    </fig></p> 
+   <p>Depending on the ejection policy set for the bucket, the vBucket Manager removes just the document or both the document, key and the metadata for the item being ejected. Keeping an active working set with keys and metadata in RAM serves three important purposes in a system:<ul>
+    <li>Couchbase Server uses the remaining key and metadata in RAM if a client requests for that key. Otherwise, the node tries to fetch the item from disk and return it into RAM.</li>
+    <li>The node can also use the keys and metadata in RAM for <i>miss access</i>. This means that it can quickly determine whether an item is missing and if so, perform some action, such as add it.</li>
+    <li>The expiration process in Couchbase Server uses the metadata in RAM to quickly scan for items that have expired and later removes them from disk. This process is known as <i>expiry pager</i> and runs every 60 minutes by default.</li>
+   </ul>
+   </p>
+  </section>
+  <section><title>Not Recently Used (NRU) items</title>
+   <p>All items in the server contain metadata indicating whether the item has been recently accessed or not. This metadata is known as not-recently-used (NRU). If an item has not been recently used, then the item is a candidate for ejection. When data in the cache exceeds the high water mark (mem_high_wat), the server evicts items from RAM.</p>
+    <p>Couchbase Server provides two NRU bits per item and also provides a replication protocol that can propagate items that are frequently read, but not mutated often.</p>
+   <p><draft-comment author="amarantha">The earlier versions of Couchbase Server provided only a single bit for NRU and a different replication protocol which resulted in two issues: <ul>
+    <li>metadata could not reflect how frequently or recently an item had been changed</li>
+    <li>the replication protocol only propagated NRUs for mutation items from an active vBucket to a replica vBucket</li>
+   </ul>The second behavior implied that the working set on an active vBucket could be quite different than the set on a replica vBucket. By changing the replication protocol, Couchbase Server ensures that the working set in replica vBuckets is now closer to the working set in the active vBucket.</draft-comment></p>
+   <p>NRUs are decremented or incremented by server processes to indicate an item that is more
+    frequently or less frequently used. The following table lists the bit values with the
+    corresponding scores and statuses: <table frame="all" rowsep="1" colsep="1"
+     id="table_ekt_2yz_xs">
+     <title>Scoring for NRU bit values</title>
+     <tgroup cols="4" align="left">
+      <colspec colname="c1" colnum="1"/>
+      <colspec colname="c2" colnum="2"/>
+      <colspec colname="c3" colnum="3"/>
+      <colspec colname="c4" colnum="4"/>
+      <thead>
+       <row>
+        <entry>Binary NRU</entry>
+        <entry>Score</entry>
+        <entry>Access pattern</entry>
+        <entry>Description</entry>
+       </row>
+      </thead>
+      <tbody>
+       <row>
+        <entry>00</entry>
+        <entry>0</entry>
+        <entry>Set by write access to 00. Decremented by read access or no access.</entry>
+        <entry>Most heavily used item.</entry>
+       </row>
+       <row>
+        <entry>01</entry>
+        <entry>1</entry>
+        <entry>Decremented by read access.</entry>
+        <entry>Frequently accessed item.</entry>
+       </row>
+       <row>
+        <entry>10</entry>
+        <entry>2</entry>
+        <entry>Initial value or decremented by read access.</entry>
+        <entry>Default value for new items.</entry>
+       </row>
+       <row>
+        <entry>11</entry>
+        <entry>3</entry>
+        <entry>Incremented by item pager for eviction.</entry>
+        <entry>Less frequently used item.</entry>
+       </row>
+      </tbody>
+     </tgroup>
+    </table></p>
+   <p>There are two processes that change the NRU for an item:
+   <ul>
+    <li>When a client reads or writes an item, the server decrements NRU and lowers the item's score.</li>
+    <li>A daily process which creates a list of frequently-used items in RAM. After the completion of this process, the server increments one of the NRU bits. </li>
+   </ul>
+   Because these two processes change NRUs, they play an important role in identifying the candidate items for ejection. </p>
+   <p>You can configure the Couchbase Server settings to change the behavior during ejection. For example, you can specify the percentage of RAM to be consumed before items are ejected, or specify whether ejection should occur more frequently on replicated data than on original data. Couchbase recommends that the default settings be used.</p>
+  </section>
+  <section><title>Understanding the item pager</title>
+   <p>The item pager process runs periodically to remove documents from RAM while retaining the item's key and metadata. When the amount of RAM used by items reaches the high water mark (upper threshold), both active and replica data are ejected until the amount of RAM consumed (memory usage) reaches the low water mark (lower threshold). Evictions of active and replica data occur with the ratio probability of 40% (active data) to 60% (replica data) until the memory usage reaches the low watermark. Both the high water mark and low water mark are expressed as a percentage amount of RAM, such as 80%.</p>
+   <p>You can change the high water mark and low water mark settings for a node by specifying a
+    percentage amount of RAM, for example, 80%. Couchbase recommends that you use the following
+    default settings: <table frame="all" rowsep="1" colsep="1" id="table_pnj_x21_ys">
+     <title>Default setting for RAM water marks</title>
+     <tgroup cols="3" align="left">
+      <colspec colname="c1" colnum="1"/>
+      <colspec colname="c2" colnum="2"/>
+      <colspec colname="c3" colnum="3"/>
+      <thead>
+       <row>
+        <entry>Version</entry>
+        <entry>High water mark</entry>
+        <entry>Low water mark</entry>
+       </row>
+      </thead>
+      <tbody>
+       <row>
+        <entry>2.0</entry>
+        <entry>75%</entry>
+        <entry>60%</entry>
+       </row>
+       <row>
+        <entry>2.0.1 and higher</entry>
+        <entry>85%</entry>
+        <entry>75%</entry>
+       </row>
+      </tbody>
+     </tgroup>
+    </table></p>
+   <p>The item pager ejects items from RAM in two phases: 
+   <ol>
+    <li>Eject items based on NRU: The item pager scans NRU for items, creates a list of items with a NRU score 3, and ejects all the identified items. It then checks the RAM usage and repeats the process if the usage is still above the low water mark. </li>
+    <li>Eject items based on algorithm: The item pager increments the NRU of all items by 1. For
+      every item whose NRU is equal to 3, it generates a random number. If the random number for an
+      item is greater than a specified probability, it ejects the item from RAM. The probability is
+      based on the current memory usage, low water mark, and whether a vBucket is in an active or
+      replica state. If a vBucket is in an active state, the probability of ejection is lower than
+      if the vBucket is in a replica state. <table frame="all" rowsep="1" colsep="1"
+       id="table_qpb_hg1_ys">
+       <title>Probability of ejection based on active vBuckets versus replica vBuckets</title>
+       <tgroup cols="2" align="left">
+        <colspec colname="c1" colnum="1"/>
+        <colspec colname="c2" colnum="2"/>
+        <thead>
+         <row>
+          <entry>Active vBucket</entry>
+          <entry>Replica vBucket</entry>
+         </row>
+        </thead>
+        <tbody>
+         <row>
+          <entry>60%</entry>
+          <entry>40%</entry>
+         </row>
+        </tbody>
+       </tgroup>
+      </table></li>
+   </ol></p>
+  </section>
+  <section><title>Active memory defragmenter</title>
+   <p>Over time, the memory used by the managed cache of a running Couchbase Server can become fragmented. The storage engine now includes an <i>Active Defragmenter</i> task to defragment cache memory.</p>
+<p></p>   
+  </section>
+  <section><title>High performance storage</title>
+  </section>
+  <section><title>Disk I/O priority</title>
+  </section>
+  <section><title>Monitoring scheduler</title>
+  </section>
  </conbody>
- <concept id="concept_b5n_bwn_vs1">
-  <title>Listeners</title>
- </concept>
- <concept id="concept_b5n_bwn_vs2">
-  <title>vBucket manager and managed cache</title>
- </concept>
- <concept id="concept_b5n_bwn_vs3">
-  <title>Initialization and warmup</title>
- </concept>
- <concept id="concept_b5n_bwn_vs4">
-  <title>Tunable memory with ejection policy</title>
- </concept>
- <concept id="concept_b5n_bwn_vs5">
-  <title>Working set management and ejection</title>
- </concept>
- <concept id="concept_b5n_bwn_vs6">
-  <title>Working set management process</title>
- </concept>
- <concept id="concept_b5n_bwn_vs7">
-  <title>Not Recently Used (NRU) items</title>
- </concept>
- <concept id="concept_b5n_bwn_vs8">
-  <title> Understanding the item pager</title>
- </concept>
- <concept id="concept_b5n_bwn_vs9">
-  <title>High performance storage</title>
- </concept>
- <concept id="concept_b5n_bwn_vs10">
-  <title>Disk I/O priority</title>
- </concept>
- <concept id="concept_b5n_bwn_vs11">
-  <title>Monitoring scheduler</title>
- </concept>
 </concept>
