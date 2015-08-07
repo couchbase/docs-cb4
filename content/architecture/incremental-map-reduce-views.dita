@@ -2,11 +2,25 @@
 <!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
 <concept id="concept_jtd_z24_vs">
  <title>Incremental Map-Reduce views</title>
- <shortdesc></shortdesc>
+ <shortdesc>Map-reduce views (also called views) uses a user defined map and reduce function that can define arbitrarily complex logic for indexing. This makes views a powerful solution for interactive reporting queries that require powerful reshaping of data that can provide responses at low latencies. </shortdesc>
  <conbody>
-  <section><title>Indexing with incremental Map-Reduce views</title></section>
-  <section><title>View storage </title></section>
-  <section><title>Views and high availability </title></section>
-  <section><title>Views and view partitioning </title></section>
+  <p>Views process the map and reduce functions to precalculate and store the answer, hence reducing the need for just-in-time calculations to answer the queries. As a result, you can define a complex logic in the index without paying a penalty of a large latency at query time.</p>
+  <p>Views can only process data from a single bucket. Views are also grouped into <i>design documents</i> for optimized processing of mutations on the bucket. There can be one or many views in the design document.</p>
+  <section><title>Indexing with incremental Map-Reduce views</title>
+   <p>Incremental map-reduce views take in a user defined map and reduce function. The map function of a view is called for each mutation on the bucket. Map function can call the <cmdname>emit()</cmdname> function to generate an index item for the mutation being processed. One unique aspect of map-reduce views is that it can generate zero or more items for the mutation processed.</p>
+   <p>The <cmdname>emit()</cmdname> function generates both a view key and a view value, and preserves the document key. The view value specified in the emit() function enables you to include attributes from the document directly in the view. You can set the view value to null in emit() function to return just the view keys and document keys. When using views without values with queries,  the query output can use the document keys to look up an individual document. Views that emit values can include enough data to support queries without having to look up each document in the bucket.</p>
+   <p>For example, create a view on contact information that outputs the JSON items by the contact's first and last name, and with a value containing the contact's address. If the view does not contain the information you need, you can use the returned key with the memcached protocol to obtain the complete record. </p>
+   <p>When a mutation arrives at the bucket, the mutation is processed in memory by the vBucket manager that is responsible for the document key. The mutation is then queued for replication with DCP to propagate the mutation to replica vBuckets and to the design documents that contain the views on the bucket. Automated view updates or incoming queries that use staleness parameters such as <codeph>stale=false</codeph> can trigger updates to the view. The indexer for each design document picks up the mutation from DCP and processes the map and reduce functions defined by the user for the views inside the design document. Indexers then queue the view writes for disk I/O to persist the changes to the view.<draft-comment author="amarantha">Get image source</draft-comment></p>
+  </section>
+  <section><title>View storage </title>
+  <p>Views store data using Couchstore. Many characteristics of the Couchstore storage engine described in the <xref href="core-data-access-bucket-disk-storage.dita">Bucket disk storage</xref> are applicable to view storage as well. However, tombstone maintenance is different. </p>
+   <p>Views are distributed and aligned with the data distribution. That means if the vBuckets for a given document key is on node A, the view partition that indexes the document key is also on node A.  However, unlike the vBuckets that partition data to many files on a single node, there is one unified view file per design document on each node. This optimization is done to quicken index scans.</p>
+  </section>
+  <section><title>Views and high availability </title>
+   <p>Views have replicas, just like buckets do and the replica count is adjusted to be aligned with the bucket replica count. The placement of replicas have the same characteristics as the buckets. If a node fails, automatic failover kicks in where a new replica view vBucket is promoted to an active view vBucket to continue servicing view queries.</p>
+  </section>
+  <section><title>Views and view partitioning </title>
+   <p>Views are automatically partitioned and aligned with data. Just like buckets data where the server initiates a rebalance operation when new nodes are added to the data service, views are redistributed to balance the load across all nodes.</p>
+  </section>
  </conbody>
 </concept>
