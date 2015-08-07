@@ -20,7 +20,7 @@
 </p>
    <p>The number of worker threads that can be created is automatically determined based on the number of CPU threads present on the node. By default the number of worker threads is 0.75 x number of CPU threads.</p></section>
   <section><title>vBucket manager and managed cache</title>
-  <p>After executing mutation and read requests, the server uses the managed cache to hold updated and newly created values. However, with a high flow of incoming operations, the system can run out of memory quickly. In order to reuse the memory, mutations are also queued for disk persistency.  Once the mutated items are persisted, the server frees up the memory consumed by these items, making space for newer operations. This operation is called <i>cache eviction</i>. With a highly concurrent set of operations consuming memory and a high throughput disk subsystem persisting data to disk, there can be many pages eligible for reuse. The server uses the Least Recently Used (LRU) algorithm to identify the memory pages that can be reused. </p>
+  <p>After executing mutation and read requests, the server uses the managed cache to hold updated and newly created values. However, with a high flow of incoming operations, the system can run out of memory quickly. In order to reuse the memory, mutations are also queued for disk persistence.  Once the mutated items are persisted, the server frees up the memory consumed by these items, making space for newer operations. This operation is called <i>cache eviction</i>. With a highly concurrent set of operations consuming memory and a high throughput disk subsystem persisting data to disk, there can be many pages eligible for reuse. The server uses the Least Recently Used (LRU) algorithm to identify the memory pages that can be reused. </p>
    <p>It is important to size the RAM capacity appropriately for your working set: the portion of data that your application is working with at any given point in time and needs very low latency and high throughput access. In some applications, the working set is the entire data set, while in others it is a smaller subset.</p>
   </section>
   <section><title>Initialization and warmup</title>
@@ -28,8 +28,8 @@
    <p>Couchbase Server provides an optimized warmup process that loads data sequentially from disk into RAM. It divides the data to be loaded and handles it in multiple phases.<draft-comment author="amarantha"> Does it start serving data after the first phase is loaded?</draft-comment> 
 After the warmup process completes, the data is available for clients to read and write. The time needed for a node warmup depends on the system size, system configuration, the amount of data persisted in the node, and the ejection policy configured for the buckets. 
     <note>The Couchbase Server is capable of serving data before it actually loads all the keys and data from the vBuckets. </note></p>
-   <p>Couchbase Server identifies items that are frequently used, prioritizes them, and loads them before sequentially loading the remaining data. The frequently-used items are prioritized in an access log. The server pre-fetches a list of the most frequently accessed keys and then fetches these keys before fetching any other items from disk. </p>
-   <p>The server runs a configurable scanner process that determines the keys that are most frequently used. The scanner process is pre-set and is configurable. You can use the command-line tool,<cmdname>cbepctl flush_param</cmdname>, to change the initial time and interval for the scanner process. For example, you can configure the scanner process to run during a specific time period when a given list of keys need to be identified and made available sooner.</p>
+   <p>Couchbase Server identifies items that are frequently used, prioritizes them, and loads them before sequentially loading the remaining data. The frequently-used items are prioritized in an access log. The server prefetches a list of the most frequently accessed keys and then fetches these keys before fetching any other items from disk. </p>
+   <p>The server runs a configurable scanner process that determines the keys that are most frequently used. The scanner process is preset and is configurable. You can use the command-line tool,<cmdname>cbepctl flush_param</cmdname>, to change the initial time and interval for the scanner process. For example, you can configure the scanner process to run during a specific time period when a given list of keys need to be identified and made available sooner.</p>
    <p>The server can also switch into a <i>ready mode</i> before it has actually retrieved all documents for keys into RAM, thereby enabling data to be served before all the stored items are loaded. Switching into ready mode is a configurable setting that enables you to adjust the server warmup time.</p>
    <p></p>
   </section>
@@ -188,13 +188,67 @@ After the warmup process completes, the data is available for clients to read an
   </section>
   <section><title>Active memory defragmenter</title>
    <p>Over time, the memory used by the managed cache of a running Couchbase Server can become fragmented. The storage engine now includes an <i>Active Defragmenter</i> task to defragment cache memory.</p>
-<p></p>   
+   <p>Cache fragmentation is a side-effect of how Couchbase Server organizes cache memory to maximize performance. Each page in the cache is typically responsible for holding documents of a specific size range. Over time, if memory pages assigned to a specific size range become sparsely populated (due to documents of that size being ejected or items changing in size), then the unused space in those pages cannot be used for documents of other sizes until a complete page is free and that page is re-assigned to a new size. Such effects are highly workload dependent and can result in memory that cannot be used efficiently by the managed cache. </p> 
+   <p>The Active Memory Defragmenter attempts to address any fragmentation by periodically scanning the cache to identify pages which are sparsely used, and repacking the items stored on those pages to free up <i>whole</i> pages.</p>
   </section>
   <section><title>High performance storage</title>
+<p>The scheduler and the shared thread pool provide high performance storage to the Couchbase Server.</p>
+   <dl>
+    <dlentry>
+     <dt>Scheduler</dt>
+     <dd>The scheduler is responsible for managing a shared thread-pool and providing a fair allocation of resources to the jobs waiting to execute in the vBucket engine. Shared thread pool services requests across all buckets.
+       <p>As an administrator, you can govern the allocation of resources by configuring a bucket’s disk I/O prioritization setting to be either high or low.</p> </dd>
+    </dlentry>
+    <dlentry>
+     <dt>Shared thread pool</dt>
+     <dd>A shared thread pool is a collection of threads which are shared across multiple buckets for long running operations such as disk I/O. Each node in the cluster has a thread pool that is shared across multiple vBuckets on the node. Based on the number of CPU cores on a node, the database engine spawns and allocates threads when a node instance starts up.
+      <p>Using a shared thread pool provides the following benefits: <ul>
+       <li>Better parallelism for worker threads with more efficient I/O resource management. </li>
+       <li>Better system scalability with more buckets being serviced with fewer worker threads.</li>
+       <li>Availability of task priority if the disk bucket I/O priority setting is used.</li>
+      </ul></p>
+     </dd>
+    </dlentry>
+   </dl>
   </section>
   <section><title>Disk I/O priority</title>
+   <p>Disk I/O priority enables workload priorities to be set at the bucket level.</p>
+   <p>You can configure the bucket priority settings at the bucket level and set the value to be either high or low. Bucket priority settings determine whether I/O tasks for a bucket must be queued in the low or high priority task queues. Threads in the global pool poll the high priority task queues more often than the low priority task queues. When a bucket has a high priority, its I/O tasks are picked up at a higher frequency and thus, processed faster than the I/O tasks belonging to a low priority bucket.</p>
+   <p>You can configure the bucket I/O priority settings during initial setup and change the settings later, if needed. However, changing a bucket I/O priority after the initial setup results in a restart of the bucket and the client connections are reset. </p>
+   <p><draft-comment author="amarantha">Get screenshot of Create Default Bucket wizard</draft-comment>
+    The previous versions of Couchbase Server, version 3.0 or earlier, required the I/O thread allocation per bucket to be configured manually. However, when you upgrade from a 2.x version to a 3.x or higher version, Couchbase Server converts an existing thread value to either a high or low priority based on the following criteria: <ul>
+    <li>Buckets allocated six to eight (6-8) threads in Couchbase Server 2.x are marked high priority in bucket setting after the upgrade to 3.x or later.</li>
+    <li>Buckets allocated three to five (3-5) threads in Couchbase Server 2.x are marked low priority in bucket settings after the upgrade to 3.x or later.</li>
+   </ul> </p>
+   
   </section>
   <section><title>Monitoring scheduler</title>
+   <p>You can use the <cmdname>cbstats</cmdname> command with the <parmname>raw workload</parmname> option to view the status of the threads as shown in the following example.
+    <codeblock># cbstats 10.5.2.54:11210 -b default raw workload
+     
+     ep_workload:LowPrioQ_AuxIO:InQsize:   3
+     ep_workload:LowPrioQ_AuxIO:OutQsize:  0
+     ep_workload:LowPrioQ_NonIO:InQsize:   33
+     ep_workload:LowPrioQ_NonIO:OutQsize:  0
+     ep_workload:LowPrioQ_Reader:InQsize:  12
+     ep_workload:LowPrioQ_Reader:OutQsize: 0
+     ep_workload:LowPrioQ_Writer:InQsize:  15
+     ep_workload:LowPrioQ_Writer:OutQsize: 0
+     ep_workload:num_auxio:                1
+     ep_workload:num_nonio:                1
+     ep_workload:num_readers:              1
+     ep_workload:num_shards:               4
+     ep_workload:num_sleepers:             4
+     ep_workload:num_writers:              1
+     ep_workload:ready_tasks:              0
+     ep_workload:shard0_locked:            false
+     ep_workload:shard0_pendingTasks:      0
+     ep_workload:shard1_locked:            false
+     ep_workload:shard1_pendingTasks:      0
+     ep_workload:shard2_locked:            false
+     ep_workload:shard2_pendingTasks:      0
+     ep_workload:shard3_locked:            false
+     ep_workload:shard3_pendingTasks:      0 </codeblock> </p>
   </section>
  </conbody>
 </concept>
