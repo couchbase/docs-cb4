@@ -1,8 +1,71 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_xsx_1mn_vs">
-  <title>Rebalance</title><shortdesc>tba</shortdesc>
+  <title>Rebalancing a cluster</title><shortdesc>Rebalancing represents a process of re-distributing information among the available nodes and 
+    updating the corresponding vBucket map to reflect the new structure.</shortdesc>
   <body>
-    <p></p>
+    <p>As you operate your Couchbase Server cluster, you might need to alter the number of nodes in the cluster 
+      to cope with changes in application load, RAM, disk I/O and network performance requirements.</p>
+      
+      <p>Data is stored and distributed within a cluster through the vBucket structure. 
+      When your Couchbase Server cluster expands or shrinks, the information stored in the vBuckets 
+      is redistributed among the available nodes, and the corresponding vBucket map is updated to reflect the new structure. 
+      This process is called <term>rebalancing</term>.</p>
+      
+      <p>The rebalancing process can take place while the cluster is running and servicing requests.
+      Clients using the cluster read and write to the existing structure while the data is moving in
+      the background among nodes. Once the moving process is completed, the vBucket map is updated
+      and communicated to the smart clients and the proxy service (Moxi).</p>
+    <p>For more information about rebalancing, see <xref
+        href="https://github.com/couchbase/ns_server/blob/master/doc/rebalance-flow.txt"
+        format="html" scope="external">How Rebalance Works</xref>.</p>
+
+
+    <section><title>Rebalance Operation</title>
+      <p>A new inactive vBucket is created on the intended destination node.  The data is copied from the current active vBucket to the new vBucket.  
+        New replica copies are made from the original vBucket if necessary.</p>
+        <p>Rebalancing exchanges the data held on each node across the cluster and has two effects:</p>
+        <ul>
+          <li>Removes the data from the nodes that are removed from the cluster. 
+            By totally removing the storage of data on these nodes, the nodes can be taken out 
+            of the cluster without affecting the cluster operation.</li>
+          <li>Adds the data and enables new nodes so that they can serve information to clients. 
+            By moving active data to the new nodes, these nodes become responsible for the moved 
+            vBuckets and for servicing client requests.</li>
+        </ul>
+        
+        
+        <p>Rebalancing moves both the data stored in RAM and on disk, 1 vBucket at a time by default, 
+        which applies to each Bucket and each node within the cluster. The time taken for the move 
+        depends on the level of cluster activity, network congestion, disk speed and the size of each vBucket.</p>
+        <p>During rebalance, the cluster remains up and continues to service and handle client requests. 
+        Updates and changes to the stored data during the migration process are tracked and will be 
+        updated and migrated with the data that existed when the rebalance was requested.</p>
+       <p>When the vBucket has moved, and the new one is up-to-date, there is an atomic takeover by
+        the node that now owns the vBucket. This is also the moment in time when the cluster map is
+        updated and pushed to each client SDK. If a client SDK attempts an operation in that
+        millisecond after the atomic takeover but before receiving the new cluster map, the SDK will
+        receive an error <codeph>NOT_MY_VBUCKET</codeph> as well as a new copy of the cluster map.
+        The SDK will then reconnect to retry the operation to the new node automatically, with no
+        extra code from the developer. This process happens while each vBucket has moved during a
+        rebalance. </p>
+      <p>The updated vBucket map is communicated to the Couchbase SDK client libraries and the
+        enabled smart clients (such as Moxi) and allows clients to use the updated structure as the
+        rebalance completes. The new structure is used as soon as possible to help spread and even
+        out the load during the rebalance operation. </p>
+      <p>Because the cluster stays up and active throughout the entire rebalancing process, 
+        clients can continue to store and retrieve information and do not need to be aware that 
+        a rebalance operation is taking place.
+      </p>
+      <p>There are four common reasons to perform a rebalance operation:</p>
+  <ul>
+    <li>Adding nodes to expand the cluster size.</li>
+    <li>Removing nodes to reduce the cluster size.</li>
+    <li>Reacting to a failover situation, where you need to bring the cluster back to a healthy state. See Recovering failed over nodes.</li>
+    <li>Temporarily removing one or more nodes to perform a software, operating system, or hardware
+          maintenance.</li>
+  </ul>
+  
+</section>
   </body>
 </topic>

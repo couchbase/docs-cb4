@@ -1,9 +1,70 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
 <concept id="concept_d5r_vdp_ts">
- <title>Client server deployment strategies</title>
- <shortdesc>TBA</shortdesc>
+ <title>Client deployment strategies</title> <shortdesc>Couchbase client SDKs are the preferred deployment option.</shortdesc>
+
  <conbody>
-<p>tba</p>
+  <p> If your language and development environment supports a smart client library, <xref
+    href="../sdks/intro.dita#concept_yqn_tjg_ps">Couchbase client SDKs</xref> are the preferred
+   deployment option. If this is not the case, use the Couchbase client-side Moxi (Memcached Proxy)
+   configuration for the best performance and functionality. If your existing application supports
+   Memcached, Moxi can be deployed and facilitate use of a Couchbase Server cluster with all the
+   power and functionality that Couchbase is known for. </p>
+  <section><title>Using a Couchbase Client SDK</title>
+   <p>When using an SDK, your application gains the ability to communicate directly to the Couchbase
+    cluster nodes that are needed to perform the operation. Your application requires no  knowledge
+    of the cluster topology as the SDK takes care of this on your behalf. </p>
+   <p>The SDK communicates with the cluster using a custom Couchbase binary protocol. The protocol
+    enables the SDK to receive a cluster topology map, locate the necessary service (Data, Index,
+    Query) and node required for the operation, and then read/write information from there. For the
+    Data service specifically, the SDK communicates directly to the vBucket (shard) that contains
+    the data to perform the operation. When constructing the connection string on the client
+    application for the SDK, it is the best practice to include at least three nodes from the
+    cluster from which the initial cluster map originates. Any future changes to the cluster map
+    following the initial bootstrap happen any time the cluster topology changes, for example during
+    the cluster rebalance. </p>
+   <p>In releases prior to Couchbase Server 2.5, the SDK would make an HTTP connection to port 8091
+    to get the initial cluster map and any updates. With Couchbase Server 2.5 or later, the SDK gets
+    the cluster map via the memcached protocol on port 11210 of a node (rather than via persistent
+    HTTP connections to port 8091). Getting the map through the memcached protocol significantly
+    improves connection scaling capabilities and reduces the number of open ports. </p>
+    
+   <note type="note">This change is only applicable to Couchbase-type buckets
+    (not memcached buckets). An error is returned if a configuration request is received on port
+    8091.
+   </note>
+   
+   
+  </section>
+  <section>
+   <title>Client-side (standalone) proxy</title>
+   <p>You can deploy a standalone Memcached to Couchbase proxy called Moxi in these cases:</p>
+    <ul>
+     <li>If a client SDK is not available for your chosen platform.</li>
+     <li>If your application is already using Memcached and you are not ready for an application
+     redesign.</li>
+    </ul>
+    <p>Moxi is deployed on your application servers and appears to your application as a Memcached
+    server, but provides the same functionality as the client SDK. </p>
+   <p>Moxi gives your application all of the power, high availability, and scalability of Couchbase
+    Server, but your application has to speak like it would to Memcached. The diagram below shows
+    the flow with a standalone proxy installed on the application server. We configured the
+    memcached client to have just one server in its server list (localhost), so all operations are
+    forwarded to localhost:11211 — a port serviced by the proxy. The proxy hashes the document ID to
+    a vBucket, looks up the host server in the vBucket table and then sends the operation to the
+    appropriate Couchbase Server on port 11210. </p>
+  </section>
+  
+  <section><title>Using server-side (Couchbase-embedded) proxy</title><note type="attention"
+    >Server-side proxy configuration is not recommended for production use. Use either a smart
+    client or the client-side proxy configuration unless your platform and environment do not
+    support that deployment type.</note><p>The server-side (embedded) proxy exists within Couchbase
+    Server using port 11211. It supports the memcached protocol and enables an existing application
+    to communicate with Couchbase Cluster without installing another piece of proxy software. The
+    downside to this approach is performance. </p>In this deployment option versus a typical
+   memcached deployment, server mapping (in a worse-case scenario) happens twice. This is a case
+   when using Ketama hashing to a server list on the client, then using vBucket hashing and server
+   mapping on the proxy, and with an additional round trip network hop introduced.<p><image
+     href="picts/deploy-serverside-proxy.png" id="image_mqw_sgl_zs"/></p></section>
  </conbody>
 </concept>
