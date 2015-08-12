@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_bjc_nhq_44">
+ <title>Updating documents</title>
+ <shortdesc>Update documents by adding or replacing its content.</shortdesc>
+ <conbody>
+   <p>Documents can be modified in numerous ways. Here are the things you can do with libcouchbase:<ul>
+				<li>Add a new document</li>
+				<li>Replace an existing document</li>
+				<li>Add a new document (or replacing its value if it already exists)</li>
+				<li>Append data to the end of a document</li>
+				<li>Prepend data to the beginning of a document</li>
+			</ul>All these modifications can be done in the same manner as described in <xref
+				href="retrieving.dita#concept_yny_mhq_44" />. How a document is modified is dependent on
+			what was specified in the operation field: <ul id="ul_rvr_pp5_44">
+				<li><option>LCB_ADD</option> only creates the document if it does not already exist. It
+					fails if the document is already present.</li>
+				<li><option>LCB_REPLACE</option> only replaces the document if it already exists. It
+					fails unless the document is already present.</li>
+				<li><option>LCB_SET</option> unconditionally stores the document to the cluster,
+					regardless of whether it already exists or not.</li>
+			</ul></p>
+   <section>
+     <title>Conditional Updates based on State</title>
+     <p>You can choose to only update a document conditionally based on it being in some known
+				state.</p>
+      <p>Modifying a document based on its state helps resolve race conditions where two concurrent
+				threads of control attempt to modify the same document. This feature, known as compare
+				and swap (CAS), allows you to specify an opaque 64-bit identifier representing the
+				current state of the document to the server. If the <ph>CAS</ph> identifier at the
+				server matches the one specified in the request then the operation is performed
+				successfully. Otherwise, it indicates that another modification has been performed on
+				the document. The <ph>CAS</ph> of the document is modified during each modification to
+				the document.</p>
+      <p>An example use case of <ph>CAS</ph> is when adding to a list of items. Assume the following
+				states: <codeblock>Key: numbers Value: "[ 1, 2, 3 ]"
+CAS=0</codeblock> Now assume your
+				application adds numbers to this
+				list:<codeblock>to_add = rand();
+item = parse_json(get("numbers"));
+item += to_add store("numbers", item);</codeblock>If
+				both applications run this piece of code at the same time, there’s a good chance one of
+				the modifications will be lost, because the document might have changed between the
+				original <codeph>get()</codeph> and the subsequent <codeph>store()</codeph>.
+					Consider:<ol id="ol_lzv_kr5_44">
+					<li>App1 gets the <codeph>numbers</codeph> key with a value of <codeph>"[1, 2, 3
+							]"</codeph>. The item’s <ph>CAS</ph> is now 100, and this is the CAS that App1
+						has.</li>
+					<li>App2 sets the <codeph>numbers</codeph> key with a value of <codeph>"[1, 2, 3,
+							99]"</codeph>. The item’s CAS is now 200</li>
+					<li>App1 sets the <codeph>numbers</codeph> key with a value of "<codeph>[1, 2, 3,
+							76]</codeph>".</li>
+				</ol>If each application instance used the <codeph>cas</codeph> field to specify the
+					<ph>CAS</ph> of the document known to it, this scenario would be averted because App1
+				would pass 100 as the <ph>CAS</ph> value, and the server would reject the modification
+				because the <ph>CAS</ph> has since changed (via App2) to 200. To use the <ph>CAS</ph> in
+				libcouchbase, set the <ph>cas</ph> field in the operation
+				structure.<codeblock outputclass="language-c">cmd.v.v0.cas = cas_value;</codeblock> The
+				CAS itself can be obtained in the response structure within the callbacks for storage
+				and retrieval
+				operations:<codeblock outputclass="language-c">cas_value = resp->v.v0.cas;</codeblock></p>
+   </section>
+ </conbody>
+</concept>

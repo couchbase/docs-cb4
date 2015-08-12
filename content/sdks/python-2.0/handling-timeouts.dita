@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_g5j_djq_44">
+	<title>Handling timeouts</title>
+	<shortdesc >Timeouts occur when an operation that was performed is not able to be processed fast
+		enough due to connection issues to the appropriate Couchbase Server node, or due to high
+		server loads. Internally, the SDK attempts to retry an operation internally upon
+		recoverable failures such as timeouts. However, if there is a persistent issue, a timeout
+		is emitted to the client. When this occurs, you should push this error back upon the
+		request initiator (the front end) to be attempted at some later date.</shortdesc>
+	<conbody>
+        <note>Due to nature
+				of the Couchbase system, performing manual retries upon receiving a timeout is not
+				suggested because it will likely simply aggravate whatever issue caused the initial
+				error.</note>
+        	<note>While timeouts are usually caused by slow networks, they may also be
+				caused by increased load on the system (either client or server). Current system load
+				should be taken into consideration when diagnosing any timeout issues. If using the
+					<i>twisted</i> API, ensure that blocking calls are not invoked in the reactor itself
+				(see Twisted's <i>deferToThread()</i> for a way to issue blocking I/O calls within
+				Twisted). Additionally, ensure the timeout limit is not set too low. While Couchbase
+				Server may be able to deliver responses in sub-millisecond latencies, some clock
+				implementations may not provide resolutions higher than 10 milliseconds.</note>
+        	<p>The
+			client library provides several timeout settings, which may be controlled in various ways.
+			All timeouts <i>must</i> be specified as Python floats, indicating the number of seconds
+			(which may be fractional) in which the operation must complete.</p>
+        <p>Note that when using the <i>synchronous</i> API, the timeout for any operation will also
+            control the maximum amount of time the library will block the controlling thread.</p>
+        <section><title>Initial connection timeouts</title>The initial connection timeouts control
+            how long the client will wait to obtain an initial connection to the cluster. There are
+            two timeouts in this category:<ul id="ul_rrn_czp_3q">
+                <li>The total amount of time the client will wait to obtain an initial connection.
+                    This may be specified as the <codeph>config_total_timeout</codeph> option in the
+                    connection string</li>
+                <li>The amount of time the client will wait to connect to a given node before
+                    proceeding to the next node. This may be specified as
+                        <codeph>config_node_timeout</codeph> in the connection string.</li>
+            </ul>The example below will attempt to connect to the cluster, provided with a list of
+            four nodes. It will try each node in sequence for up to 2.5 seconds, and will fail to
+            connect if it could not establish a connection to any of the nodes within 7
+            seconds.<codeblock>from couchbase.bucket import Bucket
+
+bucket = Bucket('couchbase://10.1.1.1,10.2.2.2,10.3.3.3,10.4.4.4/default?config_total_timeout=7.0&amp;config_node_timeout=2.5')</codeblock>The
+            default <codeph>config_total_timeout</codeph> is 5.0 seconds, while the default
+                <codeph>config_node_timeout</codeph> is 2.5</section>
+        <section><title>CRUD operation timeouts</title>CRUD (e.g. <codeph>upsert</codeph>,
+                <codeph>get</codeph>) method timeouts may be adjusted using the
+                <codeph>timeout</codeph> property on the <apiname>Bucket</apiname> object. The
+            following sets the timeout to 3 seconds for CRUD
+            operations<codeblock>bucket.timeout = 3.0</codeblock></section>
+        <section><title>View timeouts</title>View queries operate over a different protocol and
+            depending on the parameters passed, may take longer to complete than simple <b>CRUD</b>
+            operations. This is especially true if forcing the view query to refresh the index using
+            the <codeph>stale=False</codeph> parameter. To adjust the view timeout, employ the
+                <codeph>views_timeout</codeph> property on the <apiname>Bucket</apiname>
+                object.<p>Also note that view queries may also specify a server-side timeout - if
+                this interval is exceeded, the server will reply with an error code. This timeout is
+                specified in seconds and may be passed directly to the <apiname>query()</apiname>
+                method.</p><p>The default <codeph>views_timeout</codeph> setting is 75.0, on both
+                client and server. If setting the timeout greater than this value, ensure to also
+                specify the higher timeout to the <apiname>query()</apiname> method
+            itself.</p></section>
+    </conbody>
+</concept>

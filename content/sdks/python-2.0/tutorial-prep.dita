@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_j1n_4pz_2q">
+  <title>Setting up the project</title>
+  <body>
+    <p>In this section we’ll talk a bit about setting up your directory layout and adding some views
+            in the server before we start dealing with the Python SDK and Flask itself.</p>
+        <section><title>Directory Setup</title>Create a project directory named
+				<codeph>beer</codeph>:<screen outputclass="language-bash">$ mkdir beer
+$ cd beer
+$ mkdir templates
+$ mkdir templates/beer
+$ mkdir templates/brewery
+$ mkdir static
+$ mkdir static/js
+$ mkdir static/css</screen><p>Showing
+				your directory contents displays something like
+				this:</p><codeblock outputclass="language-bash">$ find . -type d
+./static
+./static/js
+./static/css
+./templates
+./templates/brewery
+./templates/beer</codeblock><p>To
+				make the application look pretty, we’re incorporating jQuery and Twitter Bootstrap. You
+				can either download the libraries and put them in their appropriate
+					<filepath>css</filepath> and <filepath>js</filepath> directories (under
+					<filepath>static</filepath> ), or clone the project repository and use it from there.
+				If you followed the quick start steps, you already have the files in your
+					<filepath>beersample-python</filepath> directory. Either way, make sure you have the
+				following files in place: </p><ul id="ul_f2v_fqz_2q">
+				<li>
+					<filepath>static/css/beersample.css</filepath>
+				</li>
+				<li>
+					<filepath>static/css/bootstrap.min.css</filepath> (the minified twitter bootstrap
+					library) </li>
+				<li>
+					<filepath>static/css/bootstrap-responsive.min.css</filepath> (the minified responsive
+					layout classes from bootstrap) </li>
+				<li>
+					<filepath>static/js/beersample.js</filepath>
+				</li>
+				<li>
+					<filepath>static/js/jquery.min.js</filepath> (the jQuery javascript library) </li>
+			</ul><p>From here on, you should have a bare-bones web application configured that has all
+				the dependencies included. We’ll now move on and configure the
+					<codeph>beer-sample</codeph> bucket the way we need it. </p></section>
+        <section>
+            <title>Setting up the views</title>
+            <p>The <codeph>beer-sample</codeph> bucket comes with a small set of predefined views,
+                but to make our application function correctly we need some more. This is also a
+                good chance to explore the view management possibilities inside the Web-UI. </p>
+            <p>Because we want to list beers and breweries by name, we need to define one view for
+                each. Head over to the Web-UI and click on the <userinput>Views</userinput> menu.
+                Select <userinput>beer-sample</userinput> from the drop-down list to switch to the
+                correct bucket. Now click on <userinput>Development Views</userinput> and then
+                    <userinput>Create Development View</userinput> to define your first view. You
+                need to give it the name of both the design document and the actual view. Insert the
+                following names: </p>
+            <ul id="ul_z4l_gld_fq">
+                <li>Design Document Name: <userinput>_design/dev_beer</userinput></li>
+                <li>View Name: <userinput>by_name</userinput></li>
+            </ul>
+            <p>The next step is to define the <codeph>map</codeph> and (optional)
+                    <codeph>reduce</codeph> functions. In our examples, we won’t use the reduce
+                functions at all but you can play around and see what happens. Insert the following
+                map function (that’s JavaScript) and click <codeph>Save</codeph>. </p>
+            <codeblock outputclass="language-javascript">function (doc, meta) {
+  if(doc.type &amp;&amp; doc.type == "beer") {
+    emit(doc.name, null);
+  }
+}</codeblock>
+            <p>Every map function takes the full document ( <codeph>doc</codeph> ) and its
+                associated metadata ( <codeph>meta</codeph> ) as the arguments. You are then free to
+                inspect this data and emit a result when you want to have it in your index. In our
+                case, we emit the name of the beer ( <codeph>doc.name</codeph> ) when the document
+                both has a <codeph>type</codeph> field and the <codeph>type</codeph> is
+                    <codeph>beer</codeph>. We don’t need to emit a value — that’s why we are using
+                    <codeph>null</codeph> here. It’s always advisable to keep the index as small as
+                possible. Resist the urge to include the full document through <codeph>emit(meta.id,
+                    doc)</codeph>, because it will increase the size of your view indexes. If you
+                need to access the full document (or large parts), then use
+                    <codeph>include_docs</codeph> in the <codeph>query</codeph> method, which
+                returns <codeph>ViewRow</codeph> objects together with their documents. You can also
+                call <codeph>cb.get(row.docid)</codeph> to get the individual doc for a single row.
+                The resulting retrieval of the document might be slightly out of sync with your
+                view, but it will be fast and efficient. </p>
+            <p>Now we need to define a view for our breweries. You already know how to do this —
+                here is all the information you need to create a brewery view:</p>
+            <ul id="ul_sql_gld_fq">
+                <li>Design Document Name: _<userinput>design/dev_brewery</userinput>
+                </li>
+                <li>View Name: <userinput>by_name</userinput></li>
+                <li>Map Function:
+                    <codeblock outputclass="language-javascript">function (doc, meta) {
+    if(doc.type &amp;&amp; doc.type == "brewery") {
+        emit(doc.name, null);
+    }
+}</codeblock>The
+                    final step is to push the design documents in production. While the design
+                    documents are in development, the index is applied only on the local node.
+                    Because we want to have the index on the whole dataset, click the
+                        <userinput>Publish</userinput> button on both design documents (and accept
+                    any pop-up windows that warn you about overriding the old design
+                    documents).</li>
+            </ul>
+        </section>
+        <section><title>Flask application skeleton</title> We’ll be showing bits and pieces of the
+            web app as it pertains to specific sections. The entire file is less than 300 lines
+            long, and you can inspect it by looking into the <codeph>beer.py</codeph> file in the
+            repository.  First, our imports. We need some extra imports to be able to handle
+            exceptions properly and let us build better view queries.
+            <codeblock outputclass="language-python" spectitle="beer.py (imports)">from collections import namedtuple
+import json
+
+from Flask import Flask, request, redirect, abort, render_template
+
+from couchbase.bucket import Bucket
+from couchbase.exceptions import KeyExistsError, NotFoundError
+from couchbase.views.iterator import RowProcessor
+from couchbase.views.params import UNSPEC, Query</codeblock>
+            Then, we want to set some constants for our
+            application:<codeblock outputclass="language-python" spectitle="beer.py (configuration)">CONNSTR = 'couchbase://localhost/beer-sample'
+ENTRIES_PER_PAGE = 30</codeblock>The
+                <codeph>ENTRIES_PER_PAGE</codeph> variable is used later on to configure how many
+            beers and breweries to show in the search results.  Now, we’re ready to create our Flask
+            application
+            instance:<codeblock spectitle="beer.py (creating the application)" outputclass="language-python">app = Flask(__name__, static_url_path='')
+app.config.from_object(__name__)</codeblock></section>
+        <section>The first line creates a new Flask application. The first argument is the module in
+            which the application is defined. Because we’re using only a single file as our
+            application, we can use <codeph>__name__</codeph>, which expands to the name of the
+            current file being executed (minus the .py suffix). The second argument instructs Flask
+            to treat unrouted URLs as being requests for files located in the static directory we
+            created earlier. This allows our templates to load the required <codeph>.js</codeph> and
+                <codeph>.css</codeph> files. The second line creates a configuration object for our
+            app. The argument is the name of the module to scan for configuration directives. Flask
+            scans this module for variable names in <codeph><i>UPPER_CASE</i></codeph> and places
+            them in the <codeph>app.config</codeph> dictionary.</section>
+        <section>Finally, let's define a function to give us a database connection</section>
+        <section><codeblock outputclass="language-python" spectitle="beer.py (creating the connection)">def connect_db():
+    return Bucket(app.config['CONNSTR'])
+
+# Declare a global
+db = connect_db()</codeblock>You
+            already know how to connect to a Couchbase cluster, so we’ll skip the explanation
+            here.The module-level db variable is set to be the Connection object. In larger
+            applications this is not a good idea, but we can get away with it here because this is a
+            simple app. </section>
+  </body>
+</topic>

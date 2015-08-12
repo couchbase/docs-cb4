@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_zhc_crm_pp">
+	<title>C SDK 2.4/2.5</title>
+	<shortdesc />
+	<conbody>
+		<p>The Couchbase C SDK provides a fast, callback-based API for interacting with your
+			Couchbase cluster. It operates as a single threaded asynchronous I/O library that can be
+			optionally integrated with an existing asynchronous application. It can also run standalone
+			within a traditional synchronous or threaded application as well.</p>
+		<p>The SDK is cross-platform and can be used on Linux, Mac OS X, or Windows. </p>
+		<p>Here's a sampling of what you can do with the Couchbase C SDK:</p>
+
+		<section>
+			<title>Operations</title>
+			<p>Interacting with your cluster involves populating a command structure and receiving a
+				related response structure in the callback. The response contains an optional pointer
+				that can be set to application-level data, so that you may have your application context
+				within the callback.</p>
+			<p>Callbacks are installed as handlers for specific command types, so retrieving objects
+				will have one callback while saving them will have another. Response structures also
+				vary depending on the operation performed; for example a response for a <i>get</i>
+				request will contain the value retrieved from the server, while a response for a
+					<i>store</i> request will only contain status information.</p>
+			<p>A callback model is employed so that response data does not need to be copied to a
+				temporary buffer, but is rather passed to your callback <i>as it is received off the
+					network</i>, making functionality very fast.</p>
+		</section>
+		<section>
+			<title>Commands</title>
+			<p>A command structure describes the various inputs for the operation that is to be
+				performed on the server. For example, a command for a <i>get</i> request will contain a
+				pointer to the buffer of the key to
+				retrieve:<codeblock outputclass="language-c">lcb_get_cmd_t gcmd = { 0 };
+gcmd.v.v0.key = "id_key";
+gcmd.v.v0.nkey = strlen(gcmd.v.v0.key);</codeblock>The
+				length, or <codeph>nkey</codeph>, field must be provided to tell the library how many
+				bytes to read from the buffer.</p>
+		</section>
+		<section>
+			<title>Operation Functions</title>
+			<p>After an operation structure has been populated, you can pass it to the appropriate
+				operation API. The operation APIs all take an array of command pointers (so as to enable
+				passing multiple commands to a single API). In addition to the command structure itself,
+				the APIs also allow for a pointer (named <codeph>cookie</codeph>) that is passed to the
+				callback handler to allow you to associate application data within the
+				callback.<codeblock outputclass="language-c">lcb_get_cmd_t *cmdlist[] = { &amp;gcmd };
+lcb_get(instance, "cookie_pointer", 1, cmdlist);</codeblock></p>In
+			the above snippet, <codeph>instance</codeph> is a library object that represents the
+			connection to your cluster (see <xref href="managing-connections.dita#concept_ppz_lhq_44"
+			 />). The <apiname>lcb_get</apiname> API is described in more detail in <xref
+				href="retrieving.dita#concept_yny_mhq_44" />. </section>
+		<section>
+			<title>Operation Responses</title>
+			<p>To receive a response for the operation, the library must first be instructed to send
+				the request to the cluster and await its response. In order for the response to be
+				delivered to the application, the application will have needed to install a callback for
+				the specific operation type.</p>
+			<p>The callback is passed the <i>cookie</i> pointer (the application data), a status code
+				(to check if the operation failed or not), and a response structure containing the
+				details of the
+				result.<codeblock outputclass="language-c">static void
+get_handler(lcb_t instance,
+            const void *cookie,
+            lcb_error_t err,
+            const lcb_get_resp_t *resp)
+{
+  printf("Got response for key: %.*s\n", (int)resp->v.v0.nkey, resp->v.v0.key);
+  printf("Value: %.*s\n", (int)resp->v.v0.nbytes, resp->v.v0.bytes);
+  printf("My cookie is: %s\n", cookie);
+}</codeblock>For
+					<codeph>get</codeph> operations, the response contains the key passed to the command and the
+				value of the item retrieved from the server. Note that the <codeph>cookie</codeph> passed along
+				here is the same pointer passed to the <codeph>lcb_get</codeph> operation (and in this example,
+				will print <codeph>"cookie"</codeph>. Note that your context need not be a string or
+				even be a valid pointer in memory because it is not dereferenced by the library at all.</p>
+			<p>To associate the callback with <codeph>get</codeph> operations, 
+				call:<codeblock outputclass="language-c">lcb_set_get_callback(instance, get_callback)</codeblock>Note
+				that the callback is invoked for all get operations performed on the specific
+					<codeph>instance</codeph> object, and thus need only be installed once per
+				instance.</p>
+			<p>To actually wait for the response to arrive,
+					call:<codeblock outputclass="language-c">lcb_wait(instance);</codeblock>l<codeph>cb_wait()</codeph>
+				waits for the operation to complete. When the operation is complete, the callback is
+				invoked (in other words, the callback is always invoked with the
+					<apiname>lcb_wait</apiname> function at the bottom of the call stack).</p>
+		</section>
+		<section>
+			<title>Storing Items</title>
+			<p>Storing items follows the same semantics as above, save for differences in API calls and
+				command structures. When storing an item to the cluster, the value must be provided to
+				the command structure as
+				well:<codeblock outputclass="language-c">lcb_store_cmd_t scmd = { 0 };
+scmd.v.v0.key = "id_key";
+scmd.v.v0.bytes = "{\"json\":\"value\"}";
+scmd.v.v0.nkey = strlen(scmd.v.v0.key);
+scmd.v.v0.nbytes = strlen(scmd.v.v0.bytes);
+scmd.v.v0.operation = LCB_ADD; /* Fail if the item already exists */
+
+/* Create the command array */
+lcb_store_cmd_t *cmdlist[] = { &amp;scmd };
+lcb_store(instance, "some cookie", 1, cmdlist);
+lcb_wait(instance);</codeblock>Normally
+				you would also want to install a callback to inspect the status of the storage
+				operation. More details about the <apiname>lcb_store()</apiname> function can be found
+				in <xref href="storing.dita#concept_az5_mhq_44" />.</p>
+			<p>You are not limited to storing JSON. You can store any sequence of bytes into the
+				cluster. However, JSON is easiest to work with if you want to query the data using
+				views.</p>
+		</section>
+	</conbody>
+</concept>

@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+
+<concept xml:lang="en-us" id="concept12604">
+	<title>Managing Beers</title>
+	<conbody>
+		<p>The first thing we’re going to implement is to show a list of beers in a table. The table
+			itself will contain the name of the beer and links to the brewery as well as buttons to
+			edit or delete the beer. We’ll implement interactive filtering on the table later as well.
+			The following code should be inserted after the <codeph>/</codeph> action to keep
+			everything in order.</p>
+		<codeblock outputclass="language-markup">$app->get('/beers', function() use ($app, $cb) {
+    // Load all beers from the beer/by_name view
+    $results = $cb->query(
+        CouchbaseViewQuery::from("beer", "by_name")
+            ->limit(INDEX_DISPLAY_LIMIT)
+    ));
+
+    $beers = array();
+    // Iterate over the returned rows
+    foreach($results['rows'] as $row) {
+        // Load the full document by the ID
+        $doc = $cb->get($row['id']);
+        if($doc) {
+            // Decode the JSON string into a PHP array
+            $doc = json_decode($doc, true);
+            $beers[] = array(
+                'name' => $doc['name'],
+                'brewery' => $doc['brewery_id'],
+                'id' => $row['id']
+            );
+        }
+
+    }
+
+    // Render the template and pass on the beers array
+    return $app['twig']->render('beers/index.twig.html', compact('beers'));
+});</codeblock>
+		<p>We’re making use of our previously defined view <codeph>beer/by_name</codeph>. We also pass
+			in a <codeph>limit</codeph> option to make sure we don’t load all documents returned by the
+			view. The <codeph>results</codeph> variable stores the view response and contains the
+			actual data inside the <codeph>rows</codeph> element. We can then iterate over the data set,
+			but since the view only returns the document ID and we need more information, we fetch the
+			full document through the <codeph>get()</codeph> method. If it actually finds a document by
+			the given ID, we convert the JSON string to a PHP array and add it to the list of beers.
+			The list is then passed on to the template to display it.</p>
+		<p>The corresponding template <codeph>beers/index.twig.html</codeph> looks like this:</p>
+		<codeblock outputclass="language-markup">{% extends "layout.twig.html" %}
+
+{% block content %}
+&lt;h3>Browse Beers&lt;/h3>
+
+&lt;form class="navbar-search pull-left">
+  &lt;input id="beer-search" type="text" class="search-query" placeholder="Search for Beers">
+&lt;/form>
+
+&lt;table id="beer-table" class="table table-striped">
+  &lt;thead>
+    &lt;tr>
+      &lt;th>Name&lt;/th>
+      &lt;th>Brewery&lt;/th>
+      &lt;th>&lt;/th>
+    &lt;/tr>
+  &lt;/thead>
+  &lt;tbody>
+      {% for beer in beers %}
+        &lt;tr>
+          &lt;td>&lt;a href="/beersample-php/beers/show/{{beer.id}}">{{beer.name}}&lt;/a>&lt;/td>
+          &lt;td>&lt;a href="/beersample-php/breweries/show/{{beer.brewery}}">To Brewery&lt;/a>&lt;/td>
+          &lt;td>
+            &lt;a class="btn btn-small btn-warning" href="/beersample-php/beers/edit/{{beer.id}}">Edit&lt;/a>
+            &lt;a class="btn btn-small btn-danger" href="/beersample-php/beers/delete/{{beer.id}}">Delete&lt;/a>
+          &lt;/td>
+        &lt;/tr>
+      {% endfor %}
+    &lt;/tbody>
+  &lt;/table>
+{% endblock %}</codeblock>
+		<p>Aside from normal HTML table markup, we make use of the <codeph>{% for beer in beers
+				%}</codeph> block to loop over the beers array. We then print out each row and show the
+			name of the beer, the link to the brewery and also buttons to edit and delete the beer.
+			We’ll implement these methods in a minute.</p>
+		<p>The next action we’re going to implement is the <codeph>show</codeph> action. When you
+			click on a beer, it should display all attributes from the JSON document in a table so we
+			can inspect them properly. Since everything is stored in one document, we just need to
+			fetch it by the given ID, decode it from the JSON string and pass it on to the view. Very
+			straightforward and performant:</p>
+		<codeblock><codeph outputclass="language-markup">$app->get('/beers/show/{id}', function($id) use ($app, $cb) {
+    // Get the beer by its ID
+    $beer = $cb->get($id);
+    if($beer) {
+       // If a document was found, decode it
+       $beer = json_decode($beer, true);
+       $beer['id'] = $id;
+    } else {
+       // Redirect if no document was found
+       return $app->redirect('/beers');
+    }
+
+    // Render the template and pass the beer to it
+    return $app['twig']->render(
+        'beers/show.twig.html',
+        compact('beer')
+    );
+});
+</codeph></codeblock>
+		<p>The template iterates over the JSON attributes and prints their name and value accordingly.
+			Note that some documents can contain nested values which is not covered here.</p>
+		<codeblock outputclass="langugage-markup">{% extends "layout.twig.html" %}
+
+{% block content %}
+&lt;h3>Show Details for Beer "{{beer.name}}"&lt;/h3>
+&lt;table class="table table-striped">
+    &lt;tbody>
+       {% for key,attribute in beer %}
+        &lt;c:forEach items="${beer}" var="item">
+            &lt;tr>
+                &lt;td>&lt;strong>{{key}}&lt;/strong>&lt;/td>
+                &lt;td>{{attribute}}&lt;/td>
+            &lt;/tr>
+          &lt;/c:forEach>
+          {% endfor %}
+    &lt;/tbody>
+&lt;/table>
+{% endblock %}</codeblock>
+		<p>The next action we’re going to implement is the <codeph>delete</codeph> action.</p>
+		<codeblock outputclass="language-php">$app->get('/beers/delete/{id}', function($id) use ($app, $cb) {
+    // Delete the Document by its ID
+    $cb->delete($id);
+    // Redirect to the Index action
+    return $app->redirect('/beersample-php/beers');
+});</codeblock>
+		<p>As you can see, the <codeph>delete</codeph> call is very similar to the previous
+				<codeph>get</codeph> method. After the document has been deleted, we redirect to the
+			index action. If we’d like to, we could get more sophisticated in here. For example, good
+			practice would be to fetch the document first and check if the document type is
+				<codeph>beer</codeph> to make sure only beers are deleted here. Also, it would be
+			appropriate to return a error message if the document didn’t exist previously. Note that
+			there is no template needed because we redirect immediately after deleting the
+			document.</p>
+		<p>Since we can now show and delete beers, its about time to make them editable as well. We now
+			need to implement two different actions here. One to load the data set and one to actually
+			handle the <codeph>POST</codeph> response. Take note that this demo code is not really
+			suited for production, but it should give you a solid idea on how to implement the basics
+			with Couchbase. In a production app, you need to add validation here to make sure only
+			valid data is stored.</p>
+		<codeblock outputclass="language-php">// Show the beer form
+$app->get('/beers/edit/{id}', function($id) use ($app, $cb) {
+    // Fetch the document
+    $beer = $cb->get($id);
+    if($beer) {
+        // Decode the document
+       $beer = json_decode($beer, true);
+       $beer['id'] = $id;
+    } else {
+        // Redirect if no document was found
+       return $app->redirect('/beers');
+    }
+
+    // Pass the document on to the template
+    return $app['twig']->render(
+        'beers/edit.twig.html',
+        compact('beer')
+    );
+});
+
+// Store submitted Beer Data (POST /beers/edit/&lt;ID>)
+$app->post('/beers/edit/{id}', function(Request $request, $id) use ($app, $cb) {
+    // Extract the POST form data out of the request
+    $data = $request->request;
+
+    $newbeer = array();
+    // Iterate over the POSTed fields and extract their content.
+    foreach($data as $name => $value) {
+        $name = str_replace('beer_', '', $name);
+        $newbeer[$name] = $value;
+    }
+
+    // Add the type field
+    $newbeer['type'] = 'beer';
+
+    // Encode it to a JSON string and save it back
+    $cb->set($id, json_encode($newbeer));
+
+    // Redirect to show the beers details
+    return $app->redirect('/beersample-php/beers/show/' . $id);
+});</codeblock>
+		<p>The missing link between the <codeph>GET</codeph> and <codeph>POST</codeph> handlers is the
+			form itself. The template is called <codeph>edit.twig.html</codeph> and looks like
+			this:</p>
+		<codeblock outputclass="language-markup">{% extends "layout.twig.html" %}
+
+{% block content %}
+&lt;h3>Edit Beer&lt;/h3>
+
+&lt;form method="post" action="/beersample-php/beers/edit/{{beer.id}}">
+    &lt;fieldset>
+      &lt;legend>General Info&lt;/legend>
+      &lt;div class="span12">
+        &lt;div class="span6">
+          &lt;label>Name&lt;/label>
+          &lt;input type="text" name="beer_name" placeholder="The name of the beer." value="{{beer.name}}">
+
+          &lt;label>Description&lt;/label>
+          &lt;input type="text" name="beer_description" placeholder="A short description." value="{{beer.description}}">
+        &lt;/div>
+        &lt;div class="span6">
+          &lt;label>Style&lt;/label>
+          &lt;input type="text" name="beer_style" placeholder="Bitter? Sweet? Hoppy?" value="{{beer.style}}">
+
+          &lt;label>Category&lt;/label>
+          &lt;input type="text" name="beer_category" placeholder="Ale? Stout? Lager?" value="{{beer.category}}">
+        &lt;/div>
+      &lt;/div>
+    &lt;/fieldset>
+    &lt;fieldset>
+        &lt;legend>Details&lt;/legend>
+        &lt;div class="span12">
+            &lt;div class="span6">
+              &lt;label>Alcohol (ABV)&lt;/label>
+              &lt;input type="text" name="beer_abv" placeholder="The beer's ABV" value="{{beer.abv}}">
+
+              &lt;label>Biterness (IBU)&lt;/label>
+              &lt;input type="text" name="beer_ibu" placeholder="The beer's IBU" value="{{beer.ibu}}">
+            &lt;/div>
+            &lt;div class="span6">
+              &lt;label>Beer Color (SRM)&lt;/label>
+              &lt;input type="text" name="beer_srm" placeholder="The beer's SRM" value="{{beer.srm}}">
+
+              &lt;label>Universal Product Code (UPC)&lt;/label>
+              &lt;input type="text" name="beer_upc" placeholder="The beer's UPC" value="{{beer.upc}}">
+            &lt;/div>
+        &lt;/div>
+    &lt;/fieldset>
+    &lt;fieldset>
+        &lt;legend>Brewery&lt;/legend>
+        &lt;div class="span12">
+            &lt;div class="span6">
+              &lt;label>Brewery&lt;/label>
+              &lt;input type="text" name="beer_brewery_id" placeholder="The brewery" value="{{beer.brewery_id}}">
+            &lt;/div>
+        &lt;/div>
+    &lt;/fieldset>
+    &lt;div class="form-actions">
+        &lt;button type="submit" class="btn btn-primary">Save changes&lt;/button>
+    &lt;/div>
+&lt;/form>
+{% endblock %}</codeblock>
+		<p>The only special part in the form are the Twig blocks like
+				<codeph>{{beer.brewery_id}}</codeph>. They allow us to easily include the actual value
+			from the field (when there is one). You can now change the values in the input fields, hit
+				<codeph>Save changes</codeph> and see the updated document either in the web application
+			or through the Couchbase Admin UI.</p>
+		<p>There is one last thing we want to implement here. You may have noticed that the
+				<codeph>index</codeph> page lists all beers but also has a search box on the top.
+			Currently, it won’t work because the back end is not yet implemented. The JavaScript is
+			already in place in the <codeph>assets/js/beersample.js</codeph> file, so look through it
+			if you are interested. It just does an AJAX request against the server with the given
+			search value, expects a JSON response and iterates over it while replacing the original
+			table rows with the new ones.</p>
+		<p>We need to implement nearly the same view code as in the <codeph>index</codeph> action, but
+			this time we make use of two more view query parameters that allow us to only return the range
+			of documents we need:</p>
+		<codeblock outputclass="language-php">$app->get('/beers/search', function(Request $request) use ($app, $cb) {
+    // Extract the search value
+    $input = strtolower($request->query->get('value'));
+
+    // Define the Query options
+    $options = array(
+      'limit' => INDEX_DISPLAY_LIMIT, // Limit the number of returned documents
+      'startkey' => $input, // Start the search at the given search input
+      'endkey' => $input . '\uefff' // End the search with a special character (see explanation below)
+    );
+
+    // Query the view
+    $q = CouchbaseViewQuery::from('beer', 'by_name')
+        ->limit(INDEX_DISPLAY_LIMIT)
+        ->range($input, $input . '\uefff');
+    $results = $cb->query($q);
+
+    $beers = array();
+    // Iterate over the resulting rows
+    foreach($results['rows'] as $row) {
+        // Load the corresponding document
+        $doc = $cb->get($row['id']);
+        if($doc) {
+            // If the doc is found, decode it.
+            $doc = json_decode($doc, true);
+            $beers[] = array(
+                'name' => $doc['name'],
+                'brewery' => $doc['brewery_id'],
+                'id' => $row['id']
+            );
+        }
+
+    }
+    // Return a JSON formatted response of all beers for the JavaScript code.
+    return $app->json($beers, 200);
+});</codeblock>
+		<p>The two new query parameters we make use of are: <codeph>startkey</codeph> and
+				<codeph>endkey</codeph>. They allow us to define the key where the search should begin
+			and the key where the search should end. We use the special character
+				<codeph>'\uefff'</codeph> here, which means “end.” That way, we only get results that
+			correctly begin with the given search string. This is a little trick that comes in very
+			handy from time to time.</p>
+		<p>The rest is very similar to the <codeph>index</codeph> action so we’ll skip the discussion for
+			that. Also, we don’t need a template here because we can return the JSON response
+			directly.</p>
+		
+	</conbody>
+</concept>
