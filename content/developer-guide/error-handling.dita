@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_ybj_tqs_zs">
+ <title>Error Handling</title>
+ <shortdesc>Failure conditions in Couchbase and how to deal with them.</shortdesc>
+ <conbody>
+  <p>Errors are returned by the SDK if a specific operation could not be executed. Sometimes errors
+            are received directly from the server while other times they are generated internally by
+            the SDK.</p>
+        <p>Errors are divided into several categories based on their cause and the ways to handle
+            them.</p>
+ </conbody>
+    <concept id="concept_fbh_wqs_zs">
+        <title>Data Errors</title>
+        <conbody>
+            <p>Data errors are errors returned by the data store because a certain data condition
+                was not met. Data errors typically have very clear corrective paths.</p>
+            <section>
+                <title>Item not found</title>
+                <p>If an item is not found, then it has either not yet been created or has since
+                    been deleted. It is received on retrieval (<apiname>get</apiname>) operations
+                    (get an item), <apiname>replace</apiname> operations (replace an item that
+                    already exists), and <apiname>remove</apiname> operations (delete an existing
+                    item).</p>
+                <p>If this error is received when attempting to retrieve an item, then the item
+                    should either be created (if possible) or return an error to the user.</p>
+                <p>If this error is received when replacing an item, then it indicates an issue in
+                    the application state (perhaps you can raise an exception up the stack). If you
+                    do not care that the item exists, the <apiname>upsert()</apiname> method may be
+                    used instead.</p>
+                <p>If receiving this error when removing an item, it may safely be ignored:
+                    not-found on remove essentially means the item is already removed.</p>
+                <p>The Not Found error is returned by the server.</p>
+            </section>
+            <section><title>Item already exists</title>The <apiname>insert</apiname> operation
+                require that the item not yet exist; it is intended to create a new unique record
+                (think about inserting a “new user ID”). This error is returned by the server when
+                an item already exists. Applications at this point should probably return an error
+                up the stack to the user (when applicable); for example indicating that a new
+                account could not be registered with the given username, since it already
+                exists.</section>
+            <section><title>CAS mismatch</title>A CAS mismatch error is returned when an operation
+                was executed with a CAS value (supplied by the application) and the CAS value passed
+                differs from the CAS value on the server. The corrective course of action in this
+                case is for the application to re-try the read-update cycle as explained in detail
+                in the [CAS] documentation.</section>
+        </conbody>
+    </concept>
+    <concept id="concept_zs5_jrs_zs">
+        <title>Transient and resource errors</title>
+        <conbody>
+            <p>These errors may be received because of resource starvation.</p>
+            <section>
+                <title>Temporary failure</title>
+                <p>This item is received during mutations when the cluster node has run out of
+                    memory. Its disk and replication queues are full and must wait until items in
+                    those queues are stored and replicated before it can begin receiving new
+                    operations.</p>
+                <p>While this condition is rare, it may happen under massively concurrent writes
+                    from clients and a limited memory allocation on the server.</p>
+                <p>The short-term corrective action for this error is to throttle and slow down the
+                    application, giving Couchbase some time for pending operations to complete
+                    before issuing new operations. The long term corrective action is to increase
+                    memory capacity on the cluster, either by adding more RAM to each node, or by
+                    adding more nodes.</p>
+                <p>The temporary failure error is returned from the server.</p>
+            </section>
+            <section>
+                <title>Timeouts</title>
+                <p>While technically a transient error, discussion of timeouts and their handling
+                    warrants a special section.</p>
+                <p>Timeouts are returned by the client when an operation is waiting too long for an
+                    acknowledgment from the server. The length of time a client waits for an a
+                    response from the server is configurable (see your language’s Couchbase SDK
+                    reference for how to configure it).</p>
+                <p>Timeouts are caused by an unresponsive network or software system. Possible
+                    causes may be:<ol id="ol_smt_4rs_zs">
+                        <li>Congested network.</li>
+                        <li>Heavy CPU load on the server.</li>
+                        <li>Heavy CPU load on the client.</li>
+                        <li>Physical disruption between client and server</li>
+                    </ol>Applications should generally <b>not</b> retry an operation if it resulted
+                    in a timeout before performing corrective action and/or analysis to determine
+                    the cause of these timeouts.</p>
+                <p>If your application cannot simply return an error but must ensure that the
+                    operation completes, it is suggested that you wait a while until retrying
+                    (similar to the mechanism used when receiving a Temporary Failure).<hazardstatement>
+                        <messagepanel id="messagepanel_kbb_trs_zs">
+                            <typeofhazard>Timeout does not mean the operation failed.</typeofhazard>
+                            <howtoavoid>It is important to note that receipt of a timeout error does
+                                not mean the operation did not complete. It means the server did not
+                                respond in a timely fashion. It is possible that the operation
+                                completed on the server, but the acknowledgement response was not
+                                received by the client. If the CAS of the item is known, you may use
+                                it to guard against performing the same operation
+                                twice.</howtoavoid>
+                        </messagepanel>
+                    </hazardstatement></p>
+            </section>
+            <section>
+                <title>Network errors</title>
+                <p>Network errors are returned by the client if it cannot establish a network
+                    connection to the server, or if an existing network connection was terminated.
+                    The cause of a network error may be included in the error object itself (e.g.
+                    couldn’t resolve hostname, connection refused, no route to host).</p>
+                <p>Like [Timeout Errors], network errors may be transient (indicative of a bad
+                    network connection). They may also be a result of a node being failed over.</p>
+                <p>Applications may retry operations which failed with network errors after waiting
+                    for a while (as in [Timeout Errors]. Retrying operations too soon may result in
+                    creating massive amounts of <codeph>TIME_WAIT</codeph> connections on the
+                    client, and in extreme cases, even cause system crashes or rendering it
+                    inaccessible via the network.<hazardstatement>
+                        <messagepanel id="messagepanel_sbr_zrs_zs">
+                            <typeofhazard>Network error does not indicate the failure of the
+                                operation</typeofhazard>
+                            <howtoavoid>As in [Timeout Errors], it is not possible to determine if
+                                an operation was actually completed if it resulted in a network
+                                error.</howtoavoid>
+                        </messagepanel>
+                    </hazardstatement>For cases where it is of the utmost importance to retrieve the
+                    item, a [read from a replica] can be performed. This will retrieve a potentially
+                    stale item.</p>
+            </section>
+            <section>
+                <title>Missing nodes</title>
+                <p>If a cluster is in a <i>degraded</i> state where one or more nodes are <i>failed
+                        over</i>, and no replicas remain to be promoted, then access to some items
+                    will be unavailable because there is no online cluster node which can offer
+                    access to them.</p>
+                <p>Operations which have failed with a Missing Node error will only succeed once the
+                    failed-over node is re-added to the cluster, or the cluster is rebalanced.</p>
+            </section>
+            <section>
+                <title>Pre-empting network errors and missing nodes</title>
+                <p>Some SDKs offer access to internal vBucket APIs which can be used by your
+                    application to determine the node that the SDK will contact to perform a given
+                    operation on a document. If your application contains an existing monitoring
+                    infrastructure, you may check to see if the node is detected as being
+                    unavailable, and take pre-emptive action avoiding potential timeouts.</p>
+            </section>
+        </conbody>
+    </concept>
+    <concept id="concept_hrw_gss_zs">
+        <title>Reading from replicas</title>
+        <shortdesc>High-availability applications can read documents from replicas, exchanging
+            consistency for availability</shortdesc>
+        <conbody>
+            <p>If your bucket is configured for replication, then multiple replicas of each item
+                exists within the cluster. By default the client will attempt to access an item
+                using its computed master or active node. This returns the current and authoritative
+                version of the item as it is stored within Couchbase.</p>
+            <p>In conditions where access to the active node is unavailable (for example, it is
+                disconnected from the network), an application may be able to access a replica
+                version of the item using the <apiname>getFromReplica</apiname> API. This operation
+                queries a replica node for a copy of the item. The item returned by be an older
+                version: it is possible a newer version exists in the active node, but did not
+                manage to get replicated before the active node went offline.</p>
+            <p>The <apiname>getFromReplica</apiname> operation is available in SDKs, either as a
+                discreet API call, or as an option to a get
+                command.<codeblock>try:
+  result = cb.get("docid")
+except CouchbaseNetworkError as e:
+  print "Got error. Fetching from replica!"
+  result = cb.get(‘docid’, replica=True)</codeblock></p>
+        </conbody>
+    </concept>
+</concept>
