@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_oml_lpm_zs">
+ <title>Advanced - Connection details, tips, and best practices</title>
+ <shortdesc>How Couchbase SDKs connect to the cluster, and what an application developer or
+        administration should be aware of.</shortdesc>
+ <conbody>
+        <section><title>Basic connection overview</title>Couchbase is a distributed network system
+            with many services. Couchbase SDKs simplify the connection process to the system by
+            providing a convenient and unified access point which allows applications to use these
+            services across one or more nodes without knowing which services are on which nodes and
+            without needing to know the precise details of the cluster topology or membership. </section>
+        <section><title>How Couchbase SDKs connect to the cluster</title>Couchbase SDKs connect to
+            the cluster using a two step process. The first step is the initial connection to the
+            cluster known as bootstrapping, and the second step is connecting to individual
+                services.<note>The term <i>connection</i> is used loosely here to indicate a logical
+                connection. It is often the case that the SDK will use the same physical (TCP)
+                connection for both initial bootstrapping and subsequent service
+            access.</note></section>
+        <section>
+            <title>Bootstrapping</title>
+            <p>Initially the SDK connects to a single node within the cluster (the location of the
+                node is provided as input by the application). Once connected to a cluster node, the
+                SDK will retrieve the cluster map containing a list of all nodes in the cluster and
+                all the services they provide. It is during this step that the SDK also performs
+                authentication and other forms of negotiation.</p>
+            <p> Bootstrapping is done at the bucket level, as each bucket contains its own set of
+                services and authentication parameters. Connecting to multiple buckets thus requires
+                multiple SDK handles or instances.</p>
+        </section>
+        <section>
+            <title>Service (data) access</title>
+            <p>Once the SDK has been successfully bootstrapped it may now interact with cluster
+                services. These cluster services provide access points for data access (such as
+                key-value, query, and MapReduce).</p>
+            <p>As Couchbase is a distributed service, the SDK will connect to all cluster nodes and
+                access services on each node of the cluster, balancing the load between cluster
+                nodes. For key-value operations, the SDK will know which node is appropriate for a
+                given item (see [vBucket algorithm]). For Query and MapReduce services, the SDK will
+                evenly select nodes to be used as targets for queries.</p>
+        </section>
+        <section>
+            <title>How SDKs handle node additions and removals</title>
+            <p>Over the lifetime of a Couchbase cluster, individual cluster nodes may be added or
+                removed.</p>
+            <p>Couchbase SDKs will detect when a node has been added or removed and will internally
+                (and transparently) re-bootstrap themselves to learn the new cluster topology.</p>
+        </section>
+        <section>
+            <title>How SDKs handle node failures</title>
+            <p>If a node has failed, the Couchbase SDK will not detect this until the node has been
+                [Failed Over]. Once a node has been failed over, a new cluster map is generated and
+                the SDK will no longer attempt to access that node.</p>
+            <p>Failing over a node causes the node to be removed from the cluster map and promoting
+                a replica node to be used in its stead if the bucket has replicas configured. If no
+                replicas are configured then the data located on the failed-over node will remain
+                inaccessible until the node is added back to the cluster, or the cluster is
+                rebalanced (and the data lost).</p>
+            <p>If a failed node is not failed over, the SDK and the rest of the system will treat
+                this as a temporary failure. Data operations directed to the failed node will fail
+                with various errors or exceptions (depending on how the node failed) until the node
+                is either failed over or fixed.</p>
+        </section>
+        <section>
+            <title>Bootstrapping from multiple nodes for redundancy</title>
+            <p>While an SDK only needs to know the location of a single node in the cluster in order
+                to be able to bootstrap, it is considered best practice to specify multiple nodes
+                when connecting.</p>
+            <p>Specifying multiple nodes reduces the chance of bootstrap failure in case the cluster
+                topology changes or one of the nodes have failed. When specifying multiple nodes,
+                the SDK will attempt to successfully bootstrap from each node, in sequence.</p>
+            <p>To graphically demonstrate the benefit of using multiple nodes for bootstrap,
+                consider a 4 node cluster with the following nodes:<ul id="ul_mwc_jqm_zs">
+                    <li>192.168.1.101</li>
+                    <li>192.168.1.102</li>
+                    <li>192.168.1.103</li>
+                    <li>192.168.1.104 </li>
+                </ul></p>
+            <p>Currently, the the application only specifies 192.168.1.101 to the SDK when
+                connecting. If the node 192.168.1.101 fails, any future instantiations of the SDK
+                will fail to connect since the node specified is down, and thus can no longer be
+                used to determine cluster topology.</p>
+            <p>If the application specifies all nodes (i.e. 192.168.1.101, 192.168.1.102,
+                192.168.1.103, 192.168.1.104), then in the event that the first node (192.168.1.101)
+                is unavailable, the SDK will proceed to bootstrap from the next node.<note>It is not
+                        <i>required</i> (though recommended for redundancy purposes) to specify all
+                    nodes in the cluster.</note><note>Once the SDK instance has been bootstrapped,
+                    it discards the initial bootstrap list (received as input from the application)
+                    and replaces it with the list of nodes it has discovered by processing the
+                    cluster map. For this reason, already-running instances of an SDK which were
+                    bootstrapped using the now-failed node will continue to function
+                    properly.</note></p>
+        </section>
+        <section>
+            <title>Connection performance and resource considerations</title>
+            <p>Each SDK instance (“Bucket”) within an application consumes several TCP connections.
+                Administrators and applications should be mindful of the network capacity when
+                sizing their application deployments. Having too many open TCP connections will
+                result in negative performance both at the cluster and application level.</p>
+            <p>Currently there is a hard limit of 10,000 concurrent key-value connections to any
+                cluster node. This effectively means a limit of 10,000 SDK “Bucket” objects.</p>
+            <p>Each SDK instance creates connections to the following services, on each node. All
+                connections are considered <i>long-lived</i>, meaning they are open for the lifetime
+                of the SDK instance:<ul id="ul_obj_sqm_zs">
+                    <li>Key-Value service (Typically on port 11210)</li>
+                    <li>Bootstrapping (usually performed in-band with key-value service. Port
+                        11210)</li>
+                    <li>MapReduce (typically on port 8092)</li>
+                    <li>Query (typically port 8093)</li>
+                </ul>Depending on the version of Couchbase server and SDK being used, and depending
+                on the bucket type, an additional connection to port 8091 (for bootstrapping) may be
+                used.</p>
+            <p>Some SDK implementations will immediately open connections to all the above ports as
+                soon as an instance is bootstrapped. Other implementations may “lazily” connect
+                (i.e. only when the service is actually needed). In general however, the total
+                number of TCP connections created by an application can be calculated by multiplying
+                the services it uses by the number of nodes.</p>
+            <p>For example, an SDK instance in a four-node cluster will consume the following number
+                of connections:<ul id="ul_js2_vqm_zs">
+                    <li>KV access (4)</li>
+                    <li>Query access (4)</li>
+                    <li>MapReduce access (4)</li>
+                </ul></p>
+            <p>If only key-value APIs are used, the instance will consume 4 connections. If
+                key-value and query are used, the instance will consume 8 connections. If key value
+                and query and MapReduce are used, the instance will consume 12 connections.</p>
+        </section>
+    </conbody>
+</concept>

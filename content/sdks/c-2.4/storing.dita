@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_az5_mhq_44">
+	<title>Creating documents</title>
+	<shortdesc>Documents are created by using the <apiname>lcb_store()</apiname>
+		function.</shortdesc>
+	<conbody>
+		<p>The <apiname>lcb_store()</apiname> function accepts an array of 
+				<apiname>lcb_store_cmd_t</apiname> structure pointers containing the specifics of the
+			item to store and various modifiers controlling its value and metadata: </p>
+		<codeblock outputclass="language-c">
+static void on_stored_status (lcb_t instance, const void *cookie, lcb_storage_t op, 
+    lcb_error_t err, const lcb_store_resp_t *resp)
+{
+  if (err != LCB_SUCCESS) {
+    fprintf(“Couldn’t store item to cluster: %s\n”, lcb_strerror(instance, err));
+  }
+}
+
+// Error checking for initialization left out for brevity
+static void storeDoc() {
+  // ...
+  lcb_set_store_callback(instance, on_stored_status);
+  struct lcb_store_cmd_st cmd = { 0 };
+  const struct lcb_store_cmd_t *cmdlist = &amp;cmd;
+  
+  const char *doc = "{ \"json\" : \"data\" }";
+  const char *key = "a_simple_key";
+  cmd.v.v0.key = key;
+  cmd.v.v0.nkey = strlen(key);
+  cmd.v.v0.bytes = doc;
+  cmd.v.v0.nbytes = strlen(doc);
+  cmd.v.v0.operation = LCB_ADD;
+  
+  lcb_error_t err = lcb_store(instance, NULL, 1, &amp;cmdlist);
+  if (err == LCB_SUCCESS) {
+    lcb_wait(instance);
+  } else {
+    fprintf(stderr, “Couldn’t schedule operation: %s\n”, lcb_strerror(instance, err));
+  }
+}</codeblock>
+
+		<p>Before talking about the <codeph><i>on_stored_status</i></codeph> function, let’s talk
+			about the <codeph><i>init_and_store()</i></codeph> functions. The first few lines create
+			and initialize a new libcouchbase instance as shown above. After that’s done we initialize
+			an <apiname>lcb_store_cmd_t</apiname> structure that contains information about what we
+			want to store. </p>
+		<p>The <codeph>key</codeph> and <codeph>nkey</codeph> fields contain buffer and length of the
+				<i>key</i> itself, while the <codeph>bytes</codeph> and <codeph>nbytes</codeph> fields
+			contain the buffer and the length of the <i>document</i>. The operation field describes how
+			to store the document. In this case <codeph>LCB_ADD</codeph> means to only create the
+			document if it does not already exist. </p>
+		<p>If the operation was successfully scheduled, the <apiname>lcb_store()</apiname> function
+			will return <codeph>LCB_SUCCESS</codeph>, in this case you can call
+				<apiname>lcb_wait()</apiname> for the operation to be performed on the cluster. While
+				<apiname>lcb_wait()</apiname> is being called, the callback (in this case,
+				<codeph>on_stored_status()</codeph> will be invoked with information about the document
+			just stored. This also carries an error code if the document could not be stored to the
+			cluster. A common error code for the <codeph>LCB_ADD</codeph> operation is
+				<codeph>LCB_KEY_EEXISTS</codeph>, which means the cluster did not store the document
+			because it already exists. </p>
+	</conbody>
+</concept>

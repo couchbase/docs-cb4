@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_a12_d3t_zs">
+ <title>Querying documents</title>
+ <shortdesc>Use the N1QL query language to search and query documents</shortdesc>
+ <conbody>
+  <p>
+            <note>This section discusses querying documents based on their content using N1QL.
+                Documents can also be retrieved by their IDs (primary keys); see <xref
+                    href="retrieving.dita#concept_bpv_xmm_zs"/></note>
+        </p>
+        <p>Documents may be queried using the N1QL language. N1QL will seem familiar if you’ve used
+            SQL before.</p>
+        <section>
+            <title>Prerequisites for querying</title>
+            <p>In order to be able to use N1QL queries, your cluster must have at least one node
+                with the Query and Index services enabled [Provisioning].</p>
+        </section>
+        <section>
+            <title>Executing queries</title>
+            <p>Couchbase queries may be issued by one of the following mechanisms:<ul
+                    id="ul_pn5_l3t_zs">
+                    <li>Couchbase SDK.</li>
+                    <li><i>cbq</i> shell.</li>
+                    <li>Query REST API.</li>
+                </ul></p>
+            <p>As a N1QL query is essentially a string parsed by the query server, and as the result
+                for each query is essentially JSON, queries will function the same regardless of
+                whether they are executed using the cbq shell, an SDK, or using the REST API
+                directly. Nevertheless, the result format received using an SDK may be a bit
+                different than that received using cbq or the REST API.</p>
+            <p>To demonstrate the query language and functionality, we will be querying the
+                travel-sample bucket which can be installed during installation. If you didn’t
+                install it during install-time, you can install it using the Couchbase Admin Console
+                [Loading Sample Buckets].</p>
+            <p>When issuing N1QL queries using an SDK, ensure the SDK is connected to the bucket you
+                are issuing queries against.</p>
+        </section>
+        <section>
+            <title>Running cbq</title>
+            <p>cbq is an interactive shell for executing N1QL queries. It is shipped with Couchbase
+                Server.</p>
+            <p>It is not in the system-wide path by default. To run it, invoke the full path to cbq.
+                Copy/paste the following into your terminal:<ul id="ul_gst_r3t_zs">
+                    <li><b>Linux</b><codeblock>/opt/couchbase/bin/</codeblock></li>
+                    <li><b>Mac OS
+                        X</b><codeblock>"/Applications/Couchbase Server.app/Contents/Resources/couchbase-core/bin/cbq"</codeblock></li>
+                </ul><hazardstatement type="important">
+                    <messagepanel id="messagepanel_pmk_53t_zs">
+                        <typeofhazard/>
+                        <howtoavoid><i>cbq</i> by default will try to connect to the query service
+                            running locally on the current node. If no query service is running on
+                            the current node, a connection refused error will be returned whenever
+                            you attempt to execute a query. See [XXX] for information on how to
+                            direct cbq to connect to a remote node.</howtoavoid>
+                    </messagepanel>
+                </hazardstatement></p>
+        </section>
+        <section>
+            <title>Creating the primary index</title>
+            <note>The <i>travel-sample</i> bucket already comes with pre-defined indexes. As such,
+                creating the primary index is not needed for the <i>travel-sample</i> bucket.</note>
+            <note> If a bucket lacks a primary index, the query service will not be able to query
+                it. Since the query service communicates with the indexing service, it requires that
+                the indexing service be active for a given bucket. In order to eliminate unnecessary
+                indexing activity on buckets which are not queried via the query service, by default
+                buckets are not indexed. </note>
+            <p>To create the primary index, issue the following
+                query:<codeblock>CREATE PRIMARY INDEX ON `travel-sample`;</codeblock>Note the
+                backticks (`) around the bucket name. Also note that the statement ends with a
+                semicolon: all N1QL statements end with a semicolon, as is standard in SQL.</p>
+            <p>You may also create the primary index using an SDK. Here is an example in
+                    Python:<codeblock>cb.n1ql_query('CREATE PRIMARY INDEX ON `travel-sample`').execute()</codeblock><note>Creating
+                    the primary index may fail if it already exists. This is OK for now. See [XXX]
+                    for a more graceful approach to determining if a primary index exists for a
+                        bucket.<p>Creating primary index in other languages: Python | C | Java |
+                        .NET | node.js | PHP | Ruby | Go </p></note></p>
+        </section>
+        <section>
+            <title>Querying</title>
+            <p>Once the primary index has been created, you may query documents within the
+                bucket.</p>
+            <p>Queries are issued in the SDK using the query or <apiname>n1qlQuery</apiname> API (in
+                some SDKs this is just called <apiname>query</apiname>). This API accepts a string
+                which is the statement to execute, and returns the rows (or an iterable object which
+                returns rows) representing the query’s result. Here is the above query, executed in
+                Python:<screen>>>> <b>for row in cb.n1ql_query('SELECT type FROM `travel-sample` LIMIT 4'):</b>
+...   <b>print row</b>
+... 
+{u'type': u'airline'}
+{u'type': u'airline'}
+{u'type': u'airline'}
+{u'type': u'airport'}
+</screen></p>
+            <p>The above query using
+                <i>cbq</i>:<screen>cbq> <b>SELECT type FROM `travel-sample` LIMIT 4;</b>
+{
+    "requestID": "3693c61a-5126-4e28-a7a4-9b3a7f4ddbf3",
+    "signature": {
+        "type": "json"
+    },
+    "results": [
+        {
+            "type": "airport"
+        },
+        {
+            "type": "airport"
+        },
+        {
+            "type": "airport"
+        },
+        {
+            "type": "airport"
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "436.801261ms",
+        "executionTime": "436.607057ms",
+        "resultCount": 4,
+        "resultSize": 164
+    }
+}
+</screen></p>
+            <p>The result is a JSON object. The important field within the object is the
+                    <codeph>results</codeph> property, which contains an array of results (a result
+                set). Each item within the result set may be thought of as a “row”. In this case,
+                since the entire document is selected, each result contains the entire content of
+                the document.<note>Couchbase SDKs provide a row-based API which returns an object
+                    which can be iterated over. Internally however, the response looks like the
+                        <i>cbq</i> output above.</note></p>
+        </section>
+        <section>
+            <title>Specifying query criteria</title>
+            <p>Specifying criteria is done much in the same manner as in SQL: Using a
+                    <codeph>WHERE</codeph> clause. Multiple conditions can be specified using the
+                    <codeph>AND</codeph> or <codeph>OR</codeph>
+                keywords:<screen>cbq> <b>SELECT airportname, city, country FROM `travel-sample` WHERE type="airport" AND city="Reno";</b>
+{
+    "requestID": "ef72fcdd-a4b8-4cb8-9a7b-a44aefb4f24d",
+    "signature": {
+        "airportname": "json",
+        "city": "json",
+        "country": "json"
+    },
+    "results": [
+        {
+            "airportname": "Reno Tahoe Intl",
+            "city": "Reno",
+            "country": "United States"
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "9.903854596s",
+        "executionTime": "9.903509441s",
+        "resultCount": 1,
+        "resultSize": 124
+    }
+}</screen>In
+                the above query, we select all records that are of type <i>airport</i> and have a
+                city of <i>Reno</i>.</p>
+        </section>
+        <section>
+            <title>Querying nested documents</title>
+            <p>The above queries showed how to query top-level fields within a document. One of the
+                main differences between JSON and flat rows is that JSON allows a nested structure
+                where sub-documents can reside. N1QL contains extensions to deal with nested
+                documents.</p>
+            <screen>cbq> <b>SELECT airportname, city, country, geo.alt FROM `travel-sample` WHERE type="airport" AND geo.alt > 4000 AND country="United States" LIMIT 3;</b>
+{
+    "requestID": "0fe0bb33-987f-4095-acf3-220378344a85",
+    "signature": {
+        "airportname": "json",
+        "alt": "json",
+        "city": "json",
+        "country": "json"
+    },
+    "results": [
+        {
+            "airportname": "Cheyenne Rgnl Jerry Olson Fld",
+            "alt": 6156,
+            "city": "Cheyenne",
+            "country": "United States"
+        },
+        {
+            "airportname": "Pueblo Memorial",
+            "alt": 4726,
+            "city": "Pueblo",
+            "country": "United States"
+        },
+        {
+            "airportname": "Cedar City Rgnl",
+            "alt": 5622,
+            "city": "Cedar City",
+            "country": "United States"
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "2.284177667s",
+        "executionTime": "2.283990592s",
+        "resultCount": 3,
+        "resultSize": 473
+    }
+}</screen>
+            <p>The above query selects airports in the United States which have an altitude of 4,000
+                feet above sea level or greater.</p>
+            <p>Note that the syntax <codeph>geo.alt</codeph> is used. In N1QL, this indicates that
+                geo is a sub-document, and that its alt field (within the sub-document) is
+                referenced. For comparison, the actual document looks like this (with the relevant
+                field in
+                bold):<screen>{
+                "airportname": "Cedar City Rgnl",
+                "city": "Cedar City",
+                "country": "United States",
+                "faa": "CDC",
+                "<b>geo</b>": {
+                    "<b>alt</b>": 5622,
+                    "lat": 37.700967,
+                    "lon": -113.098847
+                },
+                "icao": "KCDC",
+                "id": 3824,
+                "type": "airport",
+                "tz": "America/Denver"
+}</screen></p>
+            <note>In SQL, the dot syntax is used to indicate a specific column from a specific
+                table. This syntax may also be used in N1QL if the top level item (the first element
+                of the field) refers to a bucket.</note>
+        </section>
+        <section>
+            <title>Advanced sub-document access</title>
+            <p>While N1QL allows you to select documents based on whether a given field has a given
+                value, it can also perform powerful sub-document searching, allowing you to select
+                documents based on more powerful criteria typically only available within
+                full-featured programming languages.</p>
+            <p>For example:<ul id="ul_onq_4kt_zs">
+                    <li>A document contains any subdocument of which any (or every) child matches a
+                        given criteria.</li>
+                    <li>All of a document’s immediate children satisfy a given criteria.</li>
+                    <li>Any child within a document (and any of its sub-documents) contains a given
+                        value.</li>
+                </ul>These searches can be performed using the <codeph>ANY</codeph>,
+                    <codeph>EVERY</codeph>, and <codeph>WITHIN</codeph> operators.</p>
+            <p>[TODO. FILL IN THIS SECTION. travel-sample doesn’t provide a good dataset to
+                demonstrate this sort of query….]</p>
+        </section>
+        <section>
+            <title>Aggregate functions</title>
+            <p>You can also run analysis on records within the bucket. The following query returns
+                the number of types in the <i>travel-sample</i>
+                bucket:<codeblock>>>> <b>for row in cb.n1ql_query("SELECT DISTINCT(type) FROM `travel-sample`"):</b>
+...   <b>print row</b>
+... 
+{u'type': u'route'}
+{u'type': u'airport'}
+{u'type': u'airline'}
+{u'type': u'landmark'}</codeblock></p>
+        </section>
+        <section><title>Query placeholders (Dynamic parameters)</title><p>
+                <note>This feature is only available in the SDK and REST API. <i>cbq</i> currently
+                    does not support placeholders</note>
+            </p><p>Query placeholders allow your application to securely use dynamic query
+                parameters for your application.</p><p>Consider a function which returns all
+                airports located within a given city (passed as input). The query may be divided
+                into a <i>fixed</i> or <i>static</i> part (select all airports in a city) and a
+                    <i>dynamic</i> part (the actual city to search, specified via user
+                input).</p><p>A naive implementation of this function might look something like
+                this:</p><codeblock>def airports_in_city(city):
+  query_string = "SELECT airportname FROM `travel-sample` WHERE city="
+  query_string += '"' + city + '"'
+  return cb.n1ql_query(query_string)</codeblock>The
+            approach above is both unwieldy and insecure (subject to SQL injection attacks).<p>N1QL
+                allows the use of placeholders to declare dynamic query parameters. Here's a version
+                of the above using
+                placeholders:<codeblock>def airports_in_city(city):
+  query_string = "SELECT airportname FROM `travel-sample` WHERE city=$1"
+  query = N1QLQuery(query_string, city)
+  return cb.n1ql_query(query)</codeblock>The
+                    <codeph>$1</codeph> is a positional placeholder. When the query is constructed,
+                it may receive arguments, with each argument being used as the placeholder value in
+                the query. Thus, <codeph>$1</codeph> refers to the first
+                    argument,<codeph>$2</codeph> to the second, and so on.</p><p>Placeholders may
+                also be <i>named</i>. This is particularly useful when there are many query
+                parameters and ensuring that they are all in the correct order may be cumbersome.
+                Name query placeholders take the form of
+            <codeph>$name</codeph>.</p><codeblock>query_string = (
+"SELECT airportname FROM `travel-sample`"
+"AND country=$country "
+"AND geo.alt > $altitude "
+"AND (geo.lat BETWEEN $min_lat AND $max_lat) "
+"AND (geo.lon BETWEEN $min_lon AND $max_lon "
+)</codeblock>Then
+            to issue the actual
+            query:<codeblock>query = N1QLQuery(
+    query_string,
+    country=”United States”,
+    altitude=500, min_lat=-50, max_lat=50, min_lon=-180, max_lon=0)</codeblock></section>
+ </conbody>
+</concept>

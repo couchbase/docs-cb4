@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept xml:lang="en-us" id="concept2677">
+	<title>Managing views</title>
+	<shortdesc>You can use the Java SDK to manage views programmatically. Views are stored in design
+		documents. The SDK provides convenient methods to create, retrieve, and remove design
+		documents. To set up views, you create design documents that contain one or more view
+		definitions, and then insert the design documents into a bucket.</shortdesc>
+
+	<conbody>
+
+		<p> In the Java SDK, design documents are represented by the <codeph>DesignDocument</codeph>
+			class <codeph>View</codeph> interface. All operations on design documents are performed on
+			a <codeph>BucketManager</codeph> instance.</p>
+
+		<section>
+			<title>Creating design documents</title>
+			<p>Each view in a design document is represented by a name and a set of MapReduce
+				functions. The mandatory map function describes how to select and transform the data
+				from the bucket, and the optional reduce function describes how to aggregate the
+				results.</p>
+
+			<p>The following example inserts a design document with two regular views and one spatial
+				view into a bucket named <codeph>travel-sample</codeph>:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[CouchbaseCluster cluster = CouchbaseCluster.create("127.0.0.1");
+Bucket bucket = cluster.openBucket("travel-sample");
+// Get bucket manager
+BucketManager bucketManager = bucket.bucketManager();
+
+// Initialize design document
+DesignDocument designDoc = DesignDocument.create(
+    "landmarks",
+    Arrays.asList(
+        DefaultView.create("by_country",
+            "function (doc, meta) { if (doc.type == 'landmark') { emit([doc.country, doc.city], null); } }"),
+        DefaultView.create("by_activity",
+            "function (doc, meta) { if (doc.type == 'landmark') { emit(doc.activity, null); } }",
+            "_count"),
+        SpatialView.create("by_coordinates",
+            "function (doc, meta) { if (doc.type == 'landmark') { emit([doc.geo.lon, doc.geo.lat], null); } }")
+    )
+);
+
+// Insert design document into the bucket
+bucketManager.insertDesignDocument(designDoc);]]></codeblock>
+			<p>When you initialize the design document, you can also specify how often to trigger
+				indexing on documents and replicas. The following table lists the available options:</p>
+
+			<table>
+				<title><codeph>DesignDocument.create()</codeph> method <codeph>options</codeph>
+					parameter</title>
+				<tgroup cols="2">
+					<colspec colname="c1" colnum="1" />
+					<colspec colname="c2" colnum="2" />
+					<thead>
+						<row>
+							<entry>Option</entry>
+							<entry>Description</entry>
+						</row>
+					</thead>
+					<tbody>
+						<row>
+							<entry>
+								<codeph>UPDATE_MIN_CHANGES</codeph>
+							</entry>
+							<entry>The minimum changes to perform on a design document before indexing is
+								triggered.</entry>
+						</row>
+						<row>
+							<entry>
+								<codeph>REPLICA_UPDATE_MIN_CHANGES</codeph>
+							</entry>
+							<entry>The minimum changes to perform on a design document before replica
+								indexing is triggered.</entry>
+						</row>
+					</tbody>
+				</tgroup>
+			</table>
+
+			<p>By default, the <codeph>insertDesignDocument()</codeph> method publishes the design
+				document into production mode, which means that all documents in the distributed bucket
+				are indexed. Alternatively, you can create a lightweight development view by using
+					<codeph>bucketManager.insertDesignDocument(designDoc, true)</codeph>, where the
+				additional Boolean parameter specifies that you want the design document put into
+				development mode.</p>
+		</section>
+		<section>
+			<title>Retrieving design documents</title>
+			<p>To inspect design documents, you can either retrieve them by name or iterate through a
+				list of documents. The following example shows both approaches:</p>
+			<codeblock outputclass="language-java"><![CDATA[
+// Get design document by name
+DesignDocument designDoc = bucketManager.getDesignDocument("landmarks");
+System.out.println(designDoc.name() + " has " + designDoc.views().size() + " views");
+
+// Iterate over all production design documents
+List<DesignDocument> designDocs = bucketManager.getDesignDocuments();
+System.out.println("bucket 'travel-sample' has " + designDocs.size() + " design documents:");
+for (DesignDocument doc : designDocs) {
+    System.out.println(doc.name() + " has " + doc.views().size() + " views");
+}
+]]></codeblock>
+
+
+			<p>The example outputs the following messages:</p>
+			<codeblock><![CDATA[landmarks has 3 views
+bucket 'travel-sample' has 2 design documents:
+landmarks has 3 views
+spatial has 2 views]]></codeblock>
+		</section>
+
+		<section>
+			<title>Deleting design documents</title>
+			<p>To remove a design document from a bucket, pass its name to the
+					<codeph>removeDesignDocument</codeph> method, which also takes an optional Boolean
+				parameter that specifies whether to remove the document from development mode. When this
+				optional parameter is set to <codeph>true</codeph>, the design document is removed from
+				development mode. When the parameter is not included or is set to
+				<codeph>false</codeph>, the design document is removed from production mode. This
+				example shows how to remove a design document from production mode and from development
+				mode:</p>
+			<codeblock outputclass="language-java"><![CDATA[
+// remove design document from production mode
+bucketManager.removeDesignDocument("landmarks");
+
+// remove design document from development mode
+bucketManager.removeDesignDocument("landmarks",true);
+]]></codeblock>
+		</section>
+	</conbody>
+</concept>

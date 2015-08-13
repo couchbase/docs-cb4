@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept xml:lang="en-us" id="concept2677">
+	<title>Retrieving documents</title>
+	<shortdesc>Describes how to load documents using the various <codeph>get()</codeph>
+		methods.</shortdesc>
+	<conbody>
+
+		<section>
+			<title>Regular reads</title>
+
+			<p>Reading a document is done by using the <codeph>get()</codeph> method. This can be done
+				by either passing in the <codeph>id</codeph> of the <codeph>Document</codeph> or a
+					<codeph>Document</codeph> itself (where the <codeph>id</codeph> is taken from).</p>
+
+			<codeblock outputclass="language-java"><![CDATA[Observable<JsonDocument> loadedFromId = bucket.get("id");
+Observable<JsonDocument> loadedFromDoc = bucket.get(JsonDocument.create("id"));]]></codeblock>
+
+			<p>Both methods have the same effect. The latter method is helpful if you are already
+				dealing with <codeph>Document</codeph> instances in your code and you don't want to
+				extract the <codeph>ID</codeph> out of them on your own.</p>
+
+			<p>When only the ID is passed in, there is no way to figure out which
+					<codeph>Document</codeph> type should be used, so <codeph>JsonDocument</codeph> is
+				selected as a sensible default. If you want to override this, you can pass in a specific
+					<codeph>Document</codeph> type like this:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[Observable<LegacyDocument> loaded = bucket.get("legacyId", LegacyDocument.class);]]></codeblock>
+
+			<p>If the document is not found, an empty <codeph>Observable</codeph> is returned. This
+				aligns with how <codeph>Observable</codeph> objects are supposed to work by contract,
+				but also makes it easier to deal with the implementation later. If no document is
+				returned, the subsequent operations are just not executed, which avoids having null
+				checks all over the place (if say, a <codeph>Document</codeph> would be returned but
+				with the content set to <codeph>null</codeph>).</p>
+
+			<p>If you are dealing with blocking code, use <codeph>singleOrDefault()</codeph> to avoid a
+					<codeph>NoSuchElementException</codeph> to be thrown. You can either use a
+					<codeph>Document</codeph> populated with default settings or just
+					<codeph>null</codeph>, which can be checked later:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[JsonDocument found = bucket.get("notexisting").toBlocking().singleOrDefault(null);
+if (found == null) {
+    // doc not found
+} else {
+    // doc found
+}]]></codeblock>
+
+		</section>
+
+		<section>
+			<title>Reading from replica</title>
+
+			<p>A regular read always reads the document from its master node. If this node is down or
+				not available, the document cannot be loaded. Reading from replica allows you to load
+				the document from one or more replica nodes instead.</p>
+
+			<p>
+				<note>When replica reads are used, always use them under the assumption that the data
+					returned is stale. There is no way to guarantee that the data is up-to-date on the
+					replica node unless the proper durability requirements have been set and succeeded on
+					write operations. Only use replica reads if you understand the implications.</note>
+			</p>
+
+			<p>You can either read the data from one specific replica or all of the available
+				replicas:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[// Read from all available replicas and the master node and return all responding
+bucket.getFromReplica("id", ReplicaMode.ALL);
+
+// Read only from the first replica
+bucket.getFromReplica("id", ReplicaMode.FIRST);
+
+// Read only from the second replica
+bucket.getFromReplica("id", ReplicaMode.SECOND);
+
+// Read only from the third replica
+bucket.getFromReplica("id", ReplicaMode.THIRD);]]></codeblock>
+
+			<p>Note that if <codeph>ReplicaMode.ALL</codeph> is used, requests are sent to the master
+				node and all configured replicas. The main goal is to get responses back as fast as
+				possible, but because more requests are sent, more responses can arrive. You can use
+				this to either compare all of the responding documents and draw conclusions from that,
+				or just pick the first one arriving:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[bucket
+    .getFromReplica("id", ReplicaMode.ALL)
+    .first()
+    .subscribe();]]></codeblock>
+
+			<p>In addition, you can add operations to filter based on some of your assumptions. Imagine
+				you have a <codeph>version</codeph> field in your document and you want to only use the
+				replica information if it this specific version:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[bucket
+    .getFromReplica("id", ReplicaMode.ALL)
+    .filter(document -> document.content().getInt("version") > 5)
+    .first()
+    .subscribe();]]></codeblock>
+
+		</section>
+
+		<section id="read-and-lock">
+			<title>Reading and locking</title>
+
+			<p>Reading and locking works very similar to a regular read, but in addition the
+					<codeph>Document</codeph> is <b>write locked</b> (not read locked) on the server side
+				for the given amount of time.</p>
+
+			<codeblock outputclass="language-java"><![CDATA[// Get and lock for 10 seconds
+Observable<JsonDocument> doc = bucket.getAndLock("id", 10);]]></codeblock>
+
+			<p>
+				<note>You can only write lock a document for a maximum of 30 seconds. If an invalid lock
+					time (less than 0 or greater than 30 seconds) is provided, 15 seconds is used as the
+					default.</note>
+			</p>
+
+			<p>The <codeph>Document</codeph> is unlocked under the following conditions:</p>
+
+			<ul>
+				<li>The <codeph>unlock()</codeph> command is used.</li>
+				<li>The <codeph>Document</codeph> is replaced with the correct CAS value.</li>
+				<li>30 seconds are over and the server unlocks it for you.</li>
+			</ul>
+			<p>The following example shows the case with optimistic locking, where the locked document
+				is automatically released on error so it can be used by other clients.</p>
+			<codeblock outputclass="language-java"><![CDATA[
+JsonDocument doc = JsonDocument.create("stats",
+         JsonObject.empty().put("sold", 0).put("bought", 0));
+bucket.upsert(doc);
+
+doc = bucket.getAndLock("stats", 20);
+try {
+    doc.content().put("sold", doc.content().getInt("sold") + 1);
+    if (new Random().nextInt(100) < 30) {
+        throw new RuntimeException("processing error");
+    }
+} catch (RuntimeException ex) {
+    bucket.unlock("stats", doc.cas());
+}
+]]></codeblock>
+		</section>
+
+		<section>
+			<title>Reading and touching</title>
+
+			<p>Reading and touching works very similar to a regular read, but it also refreshes the
+				expiration time of the document to the specified value.</p>
+
+			<codeblock outputclass="language-java"><![CDATA[// Get and set the new expiration time to 4 seconds
+Observable<JsonDocument> doc = bucket.getAndTouch("id", 4);]]></codeblock>
+
+			<p>You can also use the <codeph>touch()</codeph> command if you do not want to read the
+				document and just refresh its expiration time.</p>
+
+			<p>If you specify an expiration time greater than 30 days in seconds (60 seconds * 60
+				minutes * 24 hours * 30 days = 2,592,000 seconds) it is considered an absolute time
+				stamp instead of a relative one.</p>
+
+		</section>
+	</conbody>
+</concept>

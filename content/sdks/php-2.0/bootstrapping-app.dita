@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+
+<concept xml:lang="en-us" id="concept6583">
+	<title>Bootstrapping the Application</title>
+	<conbody>
+		<p>With all the dependencies installed and ready to go, we can start out by adding our
+				<codeph>index.php</codeph> and doing the basic bootstrap.</p>
+		<p>Create a <codeph>index.php</codeph> file inside your <codeph>/beersample-php</codeph>
+			directory and add the following. We’ll discuss it afterwards:</p>
+		<codeblock outputclass="language-php">&lt;?php
+use Symfony\Component\HttpFoundation\Request;
+use Silex\Application;
+use Silex\Provider\TwigServiceProvider;
+
+// Config Settings
+define("SILEX_DEBUG", true);
+define("COUCHBASE_CONNSTR", "http://127.0.0.1");
+define("COUCHBASE_BUCKET", "beer-sample");
+define("COUCHBASE_PASSWORD", "");
+define("COUCHBASE_CONN_PERSIST", true);
+define("INDEX_DISPLAY_LIMIT", 20);
+
+// Autoloader
+require_once __DIR__.'/vendor/autoload.php';
+
+// Silex-Application Bootstrap
+$app = new Application();
+$app['debug'] = SILEX_DEBUG;
+
+// Connecting to Couchbase
+$cbc = new CouchbaseCluster(COUCHBASE_CONNSTR, "beer-sample", COUCHBASE_PASSWORD);
+$cb = $cbc->openBucket(COUCHBASE_BUCKET);
+
+// Register the Template Engine
+$app->register(new TwigServiceProvider(), array('twig.path' => __DIR__.'/templates'));
+
+// Run the Application
+$app->run();
+?></codeblock>
+		<p>The first part defines some constants to make configuration settings easy to change. Of course
+			this is not needed, but makes it easy for you to change the configuration later in
+			different environments. Afterward, the composer autoloader is included. This is needed to
+			make sure the <codeph>use</codeph> statements are available to us without having to require
+			all PHP files by hand.</p>
+		<p>The <codeph>new Application();</codeph> initializes a new Silex application. To make sure
+			that we see all errors during development, we can set <codeph>debug</codeph> to
+				<codeph>true</codeph>.</p>
+		<p>Now it gets interesting. We connect to our Couchbase cluster by constructing a new
+			Couchbase object. We pass in all required information (easy to grasp with the name of the
+			constants). This object will then be passed into all controller actions and used from
+			there.</p>
+		<p>Because we’re using the <xref href="http://twig.sensiolabs.org/" scope="external"
+				format="html">Twig template engine</xref>, we can register a <xref
+				href="http://silex.sensiolabs.org/doc/providers/twig.html" scope="external"
+				format="html">TwigServiceProvider</xref> which helps us to automatically locate and load
+			them. You’ll see later how these are rendered and how we can pass data to them.</p>
+		<p>Finally, we run the application through <codeph>$app->run();</codeph>. The actual actions are
+      implemented between the Twig registration call ( <codeph>$app->register(new
+        TwigServiceProvider()...</codeph> ) and the final run method ( <codeph>$app->run()</codeph>
+      ), so remember to put them in there.</p>
+		<p>If you now run the application in your browser, you should see the following Exception
+			showing up: <codeph>"Sorry, the page you are looking for could not be found."</codeph>.
+			This is actually great, because <xref href="http://silex.sensiolabs.org/" scope="external"
+				format="html">Silex</xref> is at work, but can’t find the route for the
+				<codeph>/</codeph> URL. Let’s fix this now. Add the following snippet between the
+				<codeph>TwigServiceProvider</codeph> and the <codeph>run()</codeph> call:</p>
+		<codeblock outputclass="language-php">$app->get('/', function() use ($app) {
+    return $app['twig']->render('welcome.twig.html');
+});</codeblock>
+		<p>This action is called when a <codeph>GET</codeph> request comes in for the
+				<codeph>/</codeph> URL. We don’t need to fetch any data from Couchbase here, so we just
+			instruct <xref href="http://silex.sensiolabs.org/" scope="external" format="html"
+				>Silex</xref> to render a <xref href="http://twig.sensiolabs.org/" scope="external"
+				format="html">Twig</xref> template named <codeph>welcome.twig.html</codeph>. Since we
+			haven’t created it yet, go ahead and place the file inside the “templates” directory:</p>
+		<codeblock outputclass="language-markup">{% extends "layout.twig.html" %}
+
+{% block content %}
+    &lt;div class="span6">
+      &lt;div class="span12">
+        &lt;h4>Browse all Beers&lt;/h4>
+        &lt;a href="/beersample-php/beers" class="btn btn-warning">Show me all beers&lt;/a>
+        &lt;hr />
+      &lt;/div>
+      &lt;div class="span12">
+        &lt;h4>Browse all Breweries&lt;/h4>
+        &lt;a href="/beersample-php/breweries" class="btn btn-info">Take me to the breweries&lt;/a>
+      &lt;/div>
+    &lt;/div>
+    &lt;div class="span6">
+      &lt;div class="span12">
+        &lt;h4>About this App&lt;/h4>
+        &lt;p>Welcome to Couchbase!&lt;/p>
+        &lt;p>This application helps you to get started on application
+            development with Couchbase. It shows how to create, update and
+            delete documents and how to work with JSON documents.&lt;/p>
+        &lt;p>The official tutorial can be found
+            &lt;a href="http://www.couchbase.com/docs/couchbase-sdk-php-1.1/tutorial.html">here&lt;/a>!&lt;/p>
+      &lt;/div>
+    &lt;/div>
+{% endblock %}</codeblock>
+		<p>There is nothing fancy here, we’re just showing some basic information to the user and
+			guiding them to the real application functionality. Also, note the <codeph>{% extends
+				"layout.twig.html" %}</codeph> and <codeph>{% block content %}</codeph> twig elements on
+			top of the page.</p>
+		<p>Since we don’t want to repeat the HTML layout part on every template, we can define a
+			layout and each template is a block that is loaded into that template. Since we haven’t
+			created the <codeph>layout.twig.html</codeph>, do that in the same directory as the
+				<codeph>welcome.twig.html</codeph> :</p>
+		<codeblock outputclass="language-markup">&lt;!DOCTYPE html>
+&lt;html lang="en">
+  &lt;head>
+    &lt;meta charset="utf-8">
+    &lt;title>Couchbase PHP Beer-Sample&lt;/title>
+    &lt;meta name="viewport" content="width=device-width, initial-scale=1.0">
+    &lt;meta name="description" content="The Couchbase PHP Beer-Sample App">
+    &lt;meta name="author" content="Couchbase, Inc. 2012">
+
+    &lt;link href="/beersample-php/assets/css/bootstrap.min.css" rel="stylesheet">
+    &lt;link href="/beersample-php/assets/css/beersample.css" rel="stylesheet">
+    &lt;link href="/beersample-php/assets/css/bootstrap-responsive.min.css" rel="stylesheet">
+
+    &lt;!-- HTML5 shim, for IE6-8 support of HTML5 elements -->
+    &lt;!--[if lt IE 9]>
+      &lt;script src="http://html5shim.googlecode.com/svn/trunk/html5.js">&lt;/script>
+    &lt;![endif]-->
+  &lt;/head>
+  &lt;body>
+    &lt;div class="container-narrow">
+      &lt;div class="masthead">
+        &lt;ul class="nav nav-pills pull-right">
+          &lt;li>&lt;a href="/beersample-php">Home&lt;/a>&lt;/li>
+          &lt;li>&lt;a href="/beersample-php/beers">Beers&lt;/a>&lt;/li>
+          &lt;li>&lt;a href="/beersample-php/breweries">Breweries&lt;/a>&lt;/li>
+        &lt;/ul>
+        &lt;h2 class="muted">Couchbase Beer-Sample&lt;/h2>
+      &lt;/div>
+      &lt;hr>
+      &lt;div class="row-fluid">
+        &lt;div class="span12">
+            {% block content %}{% endblock %}
+        &lt;/div>
+      &lt;/div>
+      &lt;hr>
+      &lt;div class="footer">
+        &lt;p>&amp;copy; Couchbase, Inc. 2012&lt;/p>
+      &lt;/div>
+    &lt;/div>
+    &lt;script src="/beersample-php/assets/js/jquery.min.js">&lt;/script>
+    &lt;script src="/beersample-php/assets/js/bootstrap.min.js">&lt;/script>
+    &lt;script src="/beersample-php/assets/js/beersample.js">&lt;/script>
+  &lt;/body>
+&lt;/html></codeblock>
+		<p>The <codeph>{% block content %}{% endblock %}</codeph> is responsible for loading the
+			appropriate block later (the other markup is again just HTML boilerplate to help with a
+			nice layout for <xref href="http://twitter.github.com/bootstrap/" scope="external"
+				format="html">Twitter Bootstrap</xref> ).</p>
+		<p>If you load the page, you should see the welcome page loading! If not, you may need to look
+			at your web server logs to see what kind of error messages have been generated when running
+			the scripts. Assuming all is working well, we’re now ready to implement the actual
+			functionality.</p>
+	</conbody>
+</concept>

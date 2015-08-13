@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept xml:lang="en-us" id="concept2677">
+	<title>Working with N1QL</title>
+	<shortdesc>The Java SDK offers advanced support for querying JSON documents using N1QL (aka "SQL for Documents"). N1QL is a superset of SQL.</shortdesc>
+	<conbody>
+        <p>To learn more about N1QL itself and Query support in Couchbase Server, see <xref href="http://query.couchbase.com/" format="html" scope="external">the Query Documentation</xref>.</p>
+
+        <section><title>Statements: the DSL vs. ad-hoc querying</title>
+            <p>The N1QL DSL is a powerful way to guide you in building your statements: you get type safety and autocompletion of relevant methods / N1QL clauses.</p>
+            <p>As of the <codeph>2.2</codeph> version of the SDK, the DSL supports the following features:
+             <ul>
+                 <li>Data selection with <codeph>Select.select(...)</codeph> as an entry point (including index hinting)</li>
+                 <li>All N1QL functions, organized by topic in the helper classes in the <codeph>com.couchbase.client.java.query.dsl.functions</codeph> package (eg. <codeph>AggregateFunctions</codeph>)</li>
+                 <li>A mini DSL for building CASE constructs via factory methods on the <codeph>Case</codeph> class</li>
+                 <li>A mini DSL for building collection constructs (ANY, EVERY, ARRAY...) via factory methods on the  <codeph>Collections</codeph> class</li>
+                 <li>Index management (index and primary index creation/deletion/deferred building) with <codeph>Index</codeph> factory methods as an entry point</li>
+             </ul>
+            </p>
+            <p>
+                To construct statements, you can use the <apiname>Expression</apiname> class, that comes in with a variety of factory methods to construct both tokens and litterals programmatically. Expressions can be combined and chained with operators (like <codeph>gte</codeph> for "greater than or equal to" comparison...).
+            </p>
+            <p>
+                Use <apiname>x</apiname> to construct a token, <apiname>s</apiname> to construct a string litteral, <apiname>i</apiname> to construct a token <b>escaped</b> with backticks (for instance the bucket name "beer-sample" must be escaped because it contains a dash).
+            </p>
+            <p>
+                Additionally, if you find the DSL doesn't support a particular statement, clause or keyword, <b>you can always revert to providing your statement in plain String form</b>. This ensures that even if the DSL somehow lags behind the evolutions of the language, users will always have a mean of using new language features.
+            </p>
+
+        </section>
+
+        <section><title>Querying</title>
+
+		<p>All queries are composed at a
+			minimum of a statement and optionally of N1QL additional parameters. The simplest form of
+			query is just a raw string statement, or a domain-specific language (DSL) statement:</p>
+
+<codeblock outputclass="language-java"><![CDATA[// raw string query
+QueryResult queryResult =
+   bucket.query(Query.simple("SELECT * FROM beer-sample LIMIT 10"));
+
+// using the DSL
+QueryResult query = bucket.query(select("*").from("beer-sample").limit(10));]]></codeblock>
+
+		<p>The DSL provides a type-safe and intuitive way to perform queries. The
+				<apiname>select()</apiname> method is a static import that kicks off a  BNF-aware DSL
+			for N1QL. (BNF stands for Backus–Naur Form.) </p>
+
+		<p>The query always returns a <apiname>QueryResult</apiname>, which aside from the actual
+            <apiname>QueryRow</apiname>s also contains debug or error information if supplied.</p>
+
+		<p><ul>
+            <li><b>parseSuccess</b>: Returns true if the query could correctly be parsed. This
+					information is available immediately even if the actual list of results takes more
+					time to be computed and streamed to the client.</li>
+            <li><b>finalSuccess</b>: Returns true if the whole query could be executed successfully, including
+                retrieving all the results and streaming them to the client.</li>
+			<li><b>allRows</b>: Contains all rows returned by the query, can be an empty list.</li>
+            <li><b>rows</b>: Same as allRows but in an iterator form (the <apiname>QueryResult</apiname> itself is
+                iterable).</li>
+            <li><b>requestId</b>: The server-generated unique ID for this query (useful to find associated logs
+                on the N1QL server).</li>
+            <li><b>clientContextId</b>: User-provided identifier reflected in the server's response. This can be
+                useful to group several queries (eg. in a kind of in-house transaction) and find all associated
+                queries.</li>
+			<li><b>info</b>: Returns a <apiname>QueryMetrics</apiname> object containing metrics for the query (like number
+                of results, processing time, etc...).</li>
+			<li><b>errors</b>: Returns a list of <apiname>JsonObject</apiname> describing errors or warnings
+					(if any occurred during execution).</li>
+		</ul></p></section>
+
+        <section><title>Querying Asynchronously</title>
+            <p>Querying asynchronously is done through the <apiname>AsyncBucket</apiname> interface, obtained
+                by calling <apiname>bucket.async()</apiname>. The API is pretty similar except everything is
+                returned as an <apiname>Observable</apiname>. Some of the components of the query result (an
+                <apiname>AsyncQueryResult</apiname>) can also be delayed and so returned as Observables. Only
+                <apiname>requestId</apiname>, <apiname>clientContextId</apiname> and <apiname>parseSuccess</apiname>
+                return immediately.</p>
+		    <p>The following Java 8 code prints the found documents or errors as they come:</p>
+
+<codeblock outputclass="language-java"><![CDATA[bucket.async()
+.query(select("*").from("beer-sample").limit(10))
+.subscribe(result -> {
+    result.errors()
+        .subscribe(
+            e -> System.err.println("N1QL Error/Warning: " + e),
+            runtimeError -> runtimeError.printStackTrace()
+        );
+    result.rows()
+        .map(row -> row.value())
+        .subscribe(
+            rowContent -> System.out.println(rowContent),
+            runtimeError -> runtimeError.printStackTrace()
+        )
+    }
+);]]></codeblock>
+        <p>First, we see that we work on asynchronous mode. Second line issues a <apiname>Statement</apiname>
+            using the DSL. Then we subscribe a first time to trigger the query and obtain the result.</p>
+        <p>On receiving the result (there will be only one), we subscribe to its components to be notified
+            respectively of n1ql errors and n1ql results. Results (as rows) are first mapped into their
+            JSON values.</p>
+        <p>Notice we also define an <apiname>onError</apiname> behavior for both n1ql errors stream and results
+            stream, that just prints the stack trace.</p>
+        <p><i>Note: All this is done asynchronously so it's not suitable for a simple test (where the main
+            thread would exit potentially before any result could have been displayed)</i></p>
+        </section>
+
+        <section><title>Different Kinds of Queries</title>
+        <p>Queries are represented by the <apiname>Query</apiname> interface, which also provides factory
+            methods to create all variants of queries. Each variant can be constructed from a <apiname>
+            Statement</apiname>, even in <codeph>String</codeph> form, but also additionally can define
+            a <apiname>QueryParams</apiname>. This represents additional N1QL parameters, like setting a
+            <codeph>clientContextId</codeph>.</p>
+        <p>Variants of queries are:
+                <ul>
+                    <li><b>simple</b>: The basic query used so far in this tutorial.</li>
+                    <li><b>parameterized</b>: A variant to use with statements containing
+						placeholders (like <apiname>$1</apiname> or <apiname>$placeholder</apiname>). The
+						user must provide the values for the placeholders as well, either as a
+							<apiname>JsonArray</apiname> (for positional parameters) or
+							<apiname>JsonObject</apiname> (for named parameters).</li>
+                    <li><b>prepared</b>: This is very much like the idea of an SQL prepared
+						statement. First the <codeph>bucket.prepare(statement)</codeph> method must be
+						called to obtain a <apiname>PreparedPayload</apiname>. This payload can then be cached and
+						replayed using <codeph>Query.prepared(payload)</codeph>, skipping the query parsing
+						and preparation on the server side. Prepared statements can also use
+						placeholders.</li>
+                    </ul>
+        </p>
+        </section>
+        <section><title>Reading Your Own Writes (RYOW)</title>
+        <p>Often you will want to insert or update some data into Couchbase and immediately read this data back using a N1QL query. This is referred to as RYOW (Read Your Own Write).</p>
+        <p>This can be achieved by using the <codeph>QueryParams</codeph>, and more precisely the <codeph>consistency</codeph> parameter:</p>
+
+<codeblock outputclass="language-java"><![CDATA[
+JsonDocument doc = JsonDocument.create("test", JsonObject.create().put("test", true));
+bucket.insert(doc);
+
+Statement select = select("*").from("beer-sample")
+    .where(x("test").eq(true));
+QueryParams ryow = QueryParams.build().consistency(ScanConsistency.REQUEST_PLUS);
+
+bucket.async()
+    .query(Query.simple(select, ryow))
+    .subscribe(result -> {
+    result.errors()
+        .subscribe(
+            e -> System.err.println("N1QL Error/Warning: " + e),
+            runtimeError -> runtimeError.printStackTrace()
+        );
+    result.rows()
+        .map(row -> row.value())
+        .subscribe(
+            rowContent -> System.out.println(rowContent),
+            runtimeError -> runtimeError.printStackTrace()
+        )
+    }
+);]]></codeblock>
+    </section>
+
+        <section>
+            <title>Retrying on errors</title>
+            <p>SDK retries when the prepared statement's name was not known on the server and it was re-prepared. The
+            exact behaviour defined in <codeph>CouchbaseEnvironment.retryStrategy()</codeph>.</p>
+        </section>
+	</conbody>
+</concept>

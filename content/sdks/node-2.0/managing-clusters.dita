@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_jk4_mhq_44">
+	<title>Managing clusters</title>
+	<shortdesc>You can manage a cluster by using the <codeph>ClusterManager</codeph> and
+			<codeph>BucketManager</codeph> interfaces that are available through the
+			<apiname>manager()</apiname> methods exposed in <codeph>Bucket</codeph> and
+			<codeph>Cluster</codeph> instances.</shortdesc>
+	<conbody>
+		
+		<section><title>Creating a design document</title><p>To create a view, you can use the
+					<codeph>manager()</codeph> method of your bucket instance to retrieve a
+					<codeph>BucketManager</codeph> instance. After you have a
+					<codeph>BucketManager</codeph> instance, invoke the
+					<codeph>upsertDesignDocument</codeph> method to store the design document for later
+				querying.</p><codeblock outputclass="language-javascript">var bucket = cluster.openBucket();
+var bucketMgr = bucket.manager();
+
+var ddocdata = {
+  views: {
+    by_name: {
+      map: [ 'function(doc, meta) {',
+             '  if (doc.type &amp;&amp; doc.type == "beer") {',
+             '    emit(doc.name, null);',
+             '  }',
+             '}'
+           ].join('\n')
+    },
+  }
+};
+bucketMgr.upsertDesignDocument('ddocname', ddocdata, function(err) {
+  console.log('Insertion of design document completed with error:', err);
+});</codeblock>Alternatively,
+			you can just pass a JavaScript function into the design document manipulation methods and
+			they will automatically be serialized to JavaScript. For instance, the following code
+			snippets are functionally
+			equivalent:<codeblock>// Using a string
+var ddocdata = {
+  views: {
+    by_name: {
+      map: [ 'function(doc, meta) {',
+             '  if (doc.type &amp;&amp; doc.type == "beer") {',
+             '    emit(doc.name, null);',
+             '  }',
+             '}'
+           ].join('\n')
+    },
+  }
+};
+
+// Using a function
+var ddocdata = {
+  views: {
+    by_name: {
+      map: function(doc, meta) {
+             if (doc.type &amp;&amp; doc.type == "beer") {
+               emit(doc.name, null);
+             }
+           }
+    },
+  }
+};</codeblock></section>
+		<section>
+			<title>Deleting a design document</title>
+			<p>To delete a design document, pass the name of the design document to delete to the
+					<codeph>removeDesignDocument</codeph>
+				method.<codeblock>var bucket = cluster.openBucket();
+var bucketMgr = bucket.manager();
+
+bucketMgr.removeDesignDocument('ddocname', function(err) {
+  console.log('Insertion of design document completed with error:', err);
+});</codeblock></p>
+		</section>
+		<section>
+			<title>Removing a single view</title>
+			<p>Removing a single view involves retrieving the full design document, removing the specific
+				view and then replacing the existing design document with the version without your
+				targeted view. Here is an
+				example:<codeblock>var bucket = cluster.openBucket();
+var bucketMgr = bucket.manager();
+
+function deleteView(ddocname, viewname, callback) {
+  bucketMgr.getDesignDocument(ddocname, function(err, ddoc, meta) {
+    if (err) {
+      return callback(err);
+    }
+
+    delete ddoc.views[viewname];
+
+    bucketMgr.upsertDesignDocument(ddocname, ddoc, function(err) {
+      if (err) {
+        return callback(err);
+      }
+
+      callback(null);
+    });
+  });
+}
+
+deleteView('ddoc', 'view', function(err) {
+  console.log('Deletion completed with error:', err);
+});</codeblock></p>
+		</section>
+	</conbody>
+</concept>
