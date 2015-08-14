@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_x3j_lwg_1t">
+  <title>Monitor using the <cmdname>cbstats</cmdname> utility</title> <shortdesc>You can query individual nodes for statistics either through a client that uses binary
+    protocol or through the <codeph>cbstats</codeph> utility. </shortdesc>
+  <body>
+    <p>Software developers and system administrators seeking lower level statistic information can
+      retrieve them through the <xref href="../cli/cbstats-intro.dita#cbstats-intro">cbstats</xref>
+      command line utility, which provides deep insight into what occurs within a cluster. Below are
+      some of the key metrics available through <cmdname>cbstats</cmdname> and their meaning:</p>
+    <ol>
+      <li>By tracking the number of open and rejected connections via
+          <codeph>curr_connections</codeph> and <codeph>rejected_conns</codeph> statistics, we can
+        understand if any connection requests were rejected by this node.</li>
+      <li>Each time an object is requested by an application and not found in the cache, Couchbase
+        Server will find the object on disk. <p>This cache miss requires a background fetch and is a
+          measured per item fetched from disk by <codeph>ep_bg_fetched</codeph>. If you are managing
+          to a 100% working set, this could be a sign of a cluster under stress. The cache miss
+          might not be an issue if you have a smaller working set. In either scenario, gaining an
+          understanding of what’s typical in an environment is important as a large increase will
+          provide an early warning signal.</p></li>
+      <li>The number of items queued for persistence is an important area to monitor so that you
+        understand if your cluster has adequate I/O resources for your application. <p>While your
+          application will always be served via the caching tier, one of the great benefits of
+          Couchbase Server is its ability to provide data durability by persisting to disk. If this
+          asynchronous operation becomes overloaded, it can impact the application performance. As a
+          result, especially in heavy write systems, it will be important that you monitor
+            <codeph>ep_queue_size</codeph> and <codeph>ep_flusher_todo</codeph>. You would never
+          want to get to 1 million items in the queue, and you would likely want to flag a warning
+          around 500000 to 800000, especially if this is an upward trend over time.</p></li>
+      <li>Following the <codeph>vb_num_eject_replicas</codeph> statistic gives you the number of
+        times when Couchbase Server ejected replica values from memory. <p>This statistics indicates
+          that a specific bucket has reached its low watermark. While simply reaching this threshold
+          might not be problematic as the cluster is simply freeing memory resources, it might be a
+          problem if you consistently see this behavior or if it is an increasing trend. More
+          importantly, this is a way to head off out of memory (<codeph>ep_oom_errors</codeph>
+            and<codeph> ep_tmp_oom_errors</codeph>) scenarios, which you never want to see in your
+          production clusters.</p></li>
+      <li>The Couchbase Server design avoids stale cache scenarios by performing a warmup process
+        during the node startup. <p><term>Warmup</term> is the task of reading objects from the disk
+          and pre-loading the cache. Monitoring the warmup provides visibility into how quickly a
+          node will complete its startup process and be available to support load within the
+          cluster. The warmup is complete when <codeph>ep_warmup_value_count</codeph> is equal to
+            <codeph>vb_active_curr_items</codeph>. However, getting more granular information can be
+          provided by <codeph>ep_warmup_state</codeph>. </p><p>Below are the seven warmup states. A
+          node will not complete until its status is <codeph>done</codeph>.</p><ul>
+          <li><codeph>Initial</codeph>: Start warmup processes.</li>
+          <li><codeph>EstimateDatabaseItemCount</codeph>: Estimating database item count.</li>
+          <li><codeph>KeyDump</codeph>: Begin loading keys and metadata into RAM, but not
+            documents.</li>
+          <li><codeph>CheckForAccessLog</codeph>: Determine if an access log is available. This log
+            indicates which keys have been frequently read or written.</li>
+          <li>
+            <codeph>LoadingAccessLog</codeph>: Load information from the access log.</li>
+          <li><codeph>LoadingData</codeph>: The server is loading data first for keys listed in the
+            access log. If no log is available, it loads data based on keys found during the
+              <term>Key Dump</term> phase.</li>
+          <li>
+            <codeph>Done</codeph>: The server is ready to handle <cmdname>read</cmdname> and
+              <cmdname>write</cmdname> requests.</li>
+        </ul>
+      </li>
+      <li>Since Couchbase Server is not only a NoSQL persistence engine but also a cache, you need
+        to understand memory consumption of the Couchbase Server <codeph>ep_engine</codeph>. This
+        can be monitored by the option  <codeph>mem_used</codeph>.</li>
+     
+    </ol>
+    <p>For example: <codeblock>> cbstats localhost:11210 all
+ auth_cmds:                   9
+ auth_errors:                 0
+ bucket_conns:                10
+ bytes_read:                  246378222
+ bytes_written:               289715944
+ cas_badval:                  0
+ cas_hits:                    0
+ cas_misses:                  0
+ cmd_flush:                   0
+ cmd_get:                     134250
+ cmd_set:                     115750
+…
+</codeblock></p>
+    
+    
+  
+  </body>
+</topic>
