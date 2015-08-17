@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_s4t_4yb_bt">
+ <title>View consistency</title>
+ <shortdesc>By default, views in Couchbase Server are eventually consistent. However, an application can alter this behavior using the stale parameter. </shortdesc>
+ <conbody>
+  <p>The stale parameter can be set to one of the following values: 
+   <dl>
+   <dlentry>
+    <dt>false</dt>
+    <dd>This value specifies that the view engine must update the index before executing the view query. This ensures that all updated documents are included in the view. In this case, the response to the client may be delayed because the views engine must first update the index and then execute the query after the updated index is available. <fig id="fig_xsf_n1c_bt">
+       <title>Stale parameter set to "false"</title>
+       <image placement="break" href="images/view-consistency-false.png" width="400"
+        id="image_ysf_n1c_bt"/>
+      </fig></dd>
+   </dlentry>
+    <dlentry>
+     <dt>update_after</dt>
+     <dd>This is the default value used when the stale parameter is not specified. The views engine
+      uses the existing index as the basis of the query and marks the index to be updated after the
+      results are returned to the client. <fig id="fig_xnn_lcc_bt">
+       <title>Stale parameter set to &quot;update_after&quot;</title>
+       <image placement="break" href="images/views-consistency-update-after.png" width="400"
+        id="image_ynn_lcc_bt"/>
+      </fig>
+      <p>The indexing engine is an asynchronous process; this means querying an index may produce results you did not expect. For example, if you update a document and then immediately run a query on that document, you may not get the new information in the emitted view data.</p>
+      <p>This also means that deleted documents may still appear in the index even after deletion because the deleted document has not yet been removed from the index.</p>
+      <p>For both scenarios, you can use an observe command from a client with the <parmname>persistto</parmname> argument to verify the persistent state for the document and then force an update of the view using <codeph>stale=<userinput>false</userinput></codeph>. This ensures that the document is correctly updated in the view index.</p></dd>
+    </dlentry>
+    <dlentry>
+     <dt>ok</dt>
+     <dd>This value specifies that the view engine can use the existing index "as is" and does not
+      need to update the index. As a result, this setting provides the fastest response times for a
+      given query. However, if only stale=ok is used, the query will return incomplete information until the number of mutations trigger an index update. <fig
+       id="fig_lyy_jsc_bt">
+       <title>Stale parameter set to &quot;ok&quot;</title>
+       <image placement="break" href="images/views-consistency-ok.png" width="400"
+        id="image_myy_jsc_bt"/>
+      </fig>
+     </dd>
+   </dlentry>
+   </dl></p>
+  <note spectitle="Important">When an application sends a view request with stale=false, the result contains all the recent changes made to the documents at the time the query was made, including the changes that haven’t yet been persisted to disk. This means that you no longer need to use durability requirements such as observe to block for persistence in application code before issuing the stale=false query.</note>
+  <note spectitle="Best practice">For better scalability and throughput, consider setting the stale parameter to "<userinput>ok</userinput>". Typically, even with stale set to <userinput>ok</userinput>, the data returned is closer to the key-value data, although it may not include all of it.</note>
+  
+ <section><title>Multiple clients and index update</title>
+  <p>When multiple clients access an index, the index update process and results returned to the clients depends on the parameters passed by each client and the sequence in which the clients interact with the server. Consider the following scenarios. </p>
+  <dl>
+   <dlentry>
+    <dt>Scenario 1</dt>
+    <dd><ul>
+     <li>Client 1 queries view with <userinput>stale=false</userinput>.</li>
+     <li>Client 1 waits until server updates the index.</li>
+     <li>Client 2 queries view with <userinput>stale=false</userinput> while re-indexing from Client 1 is still in progress. </li>
+     <li>Client 2 waits until existing index process triggered by Client 1 completes. Client 2 gets an updated index.</li>
+    </ul></dd>
+   </dlentry>
+   <dlentry>
+    <dt>Scenario 2</dt>
+    <dd>
+    <ul>
+     <li>Client 1 queries view with <userinput>stale=false</userinput>.</li>
+     <li>Client 1 waits until server updates the index. </li>
+     <li>Client 2 queries view with <userinput>stale=ok</userinput> while re-indexing from Client 1 is still in progress.</li>
+     <li>Client 2 gets the existing index. </li>
+    </ul></dd>
+   </dlentry>
+   <dlentry>
+    <dt>Scenario 3</dt>
+    <dd><ul>
+     <li>Client 1 queries view with <userinput>stale=false</userinput>.</li>
+     <li>Client 1 waits until server updates the index. </li>
+     <li>Client 2 queries view with <userinput>stale=update_after</userinput>.</li>
+     <li>If re-indexing from Client 1 is not complete, Client 2 gets the existing index. If re-indexing from Client 1 has completed, Client 2 gets this updated index. It then triggers re-indexing. </li>  
+    </ul></dd>
+   </dlentry>
+   <dlentry>
+    <dt>Scenario 4: Sequential access</dt>
+    <dd>
+     <ul>
+      <li>Client 1 queries view with <userinput>stale=ok</userinput>.</li>
+      <li>Client 2 queries view with <userinput>stale=false</userinput>.</li>
+      <li>Views are updated.</li>
+      <li>Client 1 queries a second time with <userinput>stale=ok</userinput>.</li>
+      <li>Client 1 gets the updated view. </li>
+     </ul>
+     <note spectitle="Warning">This scenario can cause problems when paginating over a number of records as the record sequence may change between individual queries or if the number of mutations triggers an index update during pagination. </note>
+    </dd>
+   </dlentry>
+  </dl>
+  <p>Index updates are stacked when multiple clients request the view to be updated before executing the query and returning the information(<userinput>stale=false</userinput>). This ensures that multiple clients updating and querying the index data get the updated document and version of the view each time. For queries with <userinput>stale=update_after</userinput>, the server does not perform stacking because all updates occur after the query has been executed.</p>
+  </section>
+ </conbody>
+</concept>
