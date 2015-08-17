@@ -1,0 +1,436 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_rnt_zfk_np">
+ <title>FROM clause</title>
+
+ <conbody>
+  <p>The FROM clause defines the keyspaces and input objects for the query.</p>
+  <p>This is an optional clause for your query. If this clause is omitted, the input for the query is a single 
+   empty object. You can perform calculations with the SELECT statement if the FROM clause is omitted.</p>
+     <p>Every FROM clause specifies one or more keyspaces. The first keyspace is called the primary keyspace.</p>
+ 
+<codeblock>FROM from-term</codeblock>
+ 
+ <p>where <i>from-term</i> has the following syntax:</p>
+     
+  <codeblock>from-path [([AS] alias)] [use-keys-clause] | from-term join-clause | from-term nest-clause | from-term unnest-clause  
+  </codeblock>
+ 
+     <p><i>from-path:</i></p>
+     <codeblock>[namespace :] path
+  </codeblock>
+     
+     <p><i>namespace:</i></p>
+     <codeblock>identifier
+  </codeblock>
+     
+     <p><i>use-keys-clause:</i></p>
+     <codeblock>USE [PRIMARY] KEYS expression
+  </codeblock>
+     
+     <p><i>join-clause:</i></p>
+     <codeblock>[join-type] JOIN from-path [[AS] alias ] on-keys-clause 
+  </codeblock>
+     
+     <p><i>join-type:</i></p>
+     <codeblock>INNER | LEFT [OUTER] 
+  </codeblock>
+     
+     <p><i>on-keys-clause:</i></p>
+     <codeblock>ON [PRIMARY] KEYS expression
+  </codeblock>
+     
+     <p><i>nest-clause:</i></p>
+     <codeblock>[join-type] NEST from-path [ ( [AS] alias) ] on-keys-clause
+  </codeblock>
+     
+     <p><i>unnest-clause:</i></p>
+     <codeblock>[join-type] [UNNEST | FLATTEN] expression [ ( [AS] alias) ]
+  </codeblock>
+     
+<p><b>Omitted FROM clause</b></p>
+  <p>If the FROM clause is omitted, the data source is equivalent to an array containing a single 
+   empty object. This allows you to evaluate expressions that do not depend on stored data.</p>
+  <p>Evaluating an expression:</p>
+  <codeblock>SELECT 10 + 20 </codeblock>
+  <p>produces the following result:</p>
+<codeblock>[ { "$1" : 30 } ] </codeblock>
+  <p>Counting the number of inputs:</p>
+  <codeblock>SELECT COUNT(*) AS input_count</codeblock>
+  <p>produces the following result:</p>
+
+  <codeblock>[ { "input_count" : 1 } ]</codeblock>
+  <p>Getting the input contents:</p>
+  <codeblock>SELECT * </codeblock>
+  <p>produces the following result:</p>
+  <codeblock>[ { } ]</codeblock>
+  
+  <p><b>Keyspaces (buckets)</b></p>
+     <p>The simplest type of FROM clause specifies a keyspace (bucket):</p>
+  <codeblock>SELECT * FROM customer</codeblock>
+     <p>This returns every value in the customer keyspace.</p>
+     <p>The keyspace can be prefixed with an optional namespace (pool):</p>
+ <codeblock>SELECT * FROM main:customer</codeblock>
+     <p>This queries the customer keyspace in the main namespace.</p>
+     <p>If the namespace is omitted, the default namespace in the current session is used.</p>
+ 
+ <p><b>USE KEYS</b></p>
+     <p>Specific primary keys within a keyspace (bucket) can be specified. Only values 
+         having those primary keys will be included as inputs to the query.</p>
+     <p>To specify a single key:</p>
+ <codeblock>SELECT * FROM customer USE KEYS "acme-uuid-1234-5678"</codeblock>
+     <p>To specify multiple keys:</p>
+ <codeblock>SELECT * FROM customer USE KEYS [ "acme-uuid-1234-5678", "roadster-uuid-4321-8765" ]</codeblock>
+     <p>In the FROM clause of a subquery, USE KEYS is mandatory for the primary keyspace.</p>
+ 
+ 
+  <p><b>Nested Paths</b></p>
+  <p>Nested paths within keyspaces can be specified using the period [.] as a level designation. </p>
+  <p>For each document in the keyspace, the path is evaluated and its value becomes an input to the
+            query. For a given document, if any element of the path is NULL or MISSING, that
+            document is skipped and does not contribute any inputs to the query.</p>
+  
+  <p>For example, if some customer documents contain a primary_contact object, the following query can retrieve them:</p>
+  
+  <codeblock>SELECT * FROM customer.primary_contact</codeblock>
+  <p>Here is the result set:</p>
+  <codeblock>[
+{"name" : "John Smith", "phone" : "+1-650-555-1234", 
+      “address" : { ... } },         
+{"name" : "Jane Brown", "phone" : "+1-650-555-5678", 
+      "address" : { ... } }     
+] 
+ </codeblock>
+  <p>Nested paths can have arbitrary depth and can include array subscripts. For example, the following query:</p>
+  <codeblock>SELECT * FROM customer.primary_contact.address</codeblock>
+  <p>returns this result set:</p>
+  <codeblock>[
+  { "street" : "101 Main St.", "zip" : "94040" },         
+  { "street" : "3500 Wilshire Blvd.", "zip" : "90210" }     
+]
+  </codeblock>
+     
+ <p><b>Joins</b></p>
+     
+
+    <p>Joins allow you to create new input objects by combining two or more source objects. The
+            joins-clause is optional, and  follows the FROM clause; it allows you to combine two or
+            more source objects to use as input objects. The KEYS clause is required after each
+            JOIN. It specifies the primary keys for the second keyspace in the join. </p>
+        
+        <p>Here is the syntax for the JOIN clause:</p>
+    
+<codeblock>[ join-type ] JOIN from-path [ [ AS ] alias ] keys-clause
+  </codeblock>   
+        
+     <p>where <codeph>join-type [ LEFT ] is [ INNER | OUTER ]</codeph> and from-path is as discussed in the “from-path” section.</p>
+        
+       <p>Joins can be chained. By default, an INNER join is performed. This means that for each
+            joined object produced, both the left- and right-hand source objects must be non-missing
+            and non-null.</p><p>If LEFT or LEFT OUTER is specified, then a left outer join is performed. At least one joined
+            object is produced for each left-hand source object. If the right-hand source object is
+            NULL or MISSING, then the joined object's right-hand side value is also NULL or MISSING
+            (omitted), respectively. </p><p>The KEYS clause is required after each JOIN. It specifies the primary keys for the second
+            keyspace in the join. </p> 
+     
+<p>For example, if our customer objects were:</p>
+    <codeblock>
+  {
+     "name": ...,
+     "primary_contact": ...,
+     "address": [ ... ]
+   }      
+    </codeblock>
+ 
+     <p>And our invoice objects were:</p>
+ 
+ 
+  <codeblock>
+   {
+      "customer_key": ...,
+      "invoice_date": ...,
+      "invoice_item_keys": [ ... ],
+      "total": ...
+    }
+</codeblock>
+     <p>And the FROM clause was:</p>
+  <codeblock>FROM invoice inv JOIN customer cust ON KEYS inv.customer_key     
+  </codeblock>
+  
+     <p>Then each joined object would be:</p>
+  <codeblock>
+    {
+        "inv" : {
+            "customer_key": ...,
+            "invoice_date": ...,
+            "invoice_item_keys": [ ... ],
+            "total": ...
+        },
+        "cust" : {
+            "name": ...,
+            "primary_contact": ...,
+            "address": [ ... ]
+        }
+    }      
+  </codeblock>
+ 
+     <p>If our invoice_item objects were:</p>
+    
+     <codeblock>
+   {
+        "invoice_key": ...,
+        "product_key": ...,
+        "unit_price": ...,
+        "quantity": ...,
+        "item_subtotal": ...
+   }       
+     </codeblock>
+ 
+     <p>And the FROM clause was:</p>
+     <codeblock>FROM invoice JOIN invoice_item item ON KEYS invoice.invoice_item_keys</codeblock>
+
+     <p>Then our joined objects would be:</p>
+<codeblock>
+    {
+        "invoice" : {
+            "customer_key": ...,
+            "invoice_date": ...,
+            "invoice_item_keys": [ ... ],
+            "total": ...
+        },
+        "item" : {
+            "invoice_key": ...,
+            "product_key": ...,
+            "unit_price": ...,
+            "quantity": ...,
+            "item_subtotal": ...
+        }
+    },
+    {
+        "invoice" : {
+            "customer_key": ...,
+            "invoice_date": ...,
+            "invoice_item_keys": [ ... ],
+            "total": ...
+        },
+        "item" : {
+            "invoice_key": ...,
+            "product_key": ...,
+            "unit_price": ...,
+            "quantity": ...,
+            "item_subtotal": ...
+        }
+    },
+    ...
+    
+</codeblock>
+
+     <p>ON KEYS is required after each JOIN. It specifies the 
+         primary keys for the second keyspace (bucket) in the join.</p>
+     <p>Joins can be chained.</p>
+     <p>By default, an INNER join is performed. This means that for each joined object produced, 
+         both the left and right hand source objects must be non-missing and non-null.</p>
+     <p>If LEFT or LEFT OUTER is specified, then a left outer join is performed. At least one joined 
+         object is produced for each left hand source object. If the right hand source object is NULL or MISSING, then the joined object's right-hand side value is also NULL or MISSING (omitted), respectively.</p>
+ <p></p>
+<p><b>Unnests</b></p>
+  <p>If a document or object contains a nested array, UNNEST conceptually performs a join of the nested array 
+   with its parent object. Each resulting joined object becomes an input to the query. Unnests can be chained.</p>
+  <p>Here is the syntax for an UNNEST join:</p>
+<codeblock>[ join-type ] UNNEST path [ [ AS ] alias ]
+</codeblock>
+  <p>where join-type is <codeph>[ INNER | [ LEFT ] OUTER ]</codeph></p>
+  <p>The first path element after each UNNEST must reference some preceding path. </p>
+  <p>By default, an INNER unnest is performed. This means that for each result object produced, both the left-hand 
+   and right-hand source objects must be non-missing and non-null.</p>
+  <p>If LEFT or LEFT OUTER is specified, then a left outer unnest is performed. At least one result object is 
+   produced for each left source object. If the right-hand source object is NULL, MISSING, empty, or a non-array value, 
+   then the result object's right side value is MISSING (omitted).</p>
+  <p>Example</p>
+  <p>If some customer documents contain an array of addresses under the address field, the following query retrieves 
+   each nested address along with the parent customer's name.</p>
+<codeblock>SELECT c.name, a.* FROM customer c UNNEST c.address a </codeblock>
+  <p>Here is the result set:</p>
+<codeblock>
+ [
+    { "name" : "Acme Inc.", "street" : "101 Main St.", 
+        "zip" : "94040" },
+    { "name" : "Acme Inc.", "street" : "300 Broadway", 
+	"zip" : "10011" },
+    { "name" : "Roadster Corp.", "street" : "3500 Wilshire Blvd.",
+        "zip" : "90210" },
+    { "name" : "Roadster Corp.", "street" : "4120 Alamo Dr.", 
+	"zip" : "75019" }     
+] 
+</codeblock>
+  <p>In the following example, The UNNEST clause iterates over the reviews array and collects the reviewerName and publication 
+   from each element in the array. This collection of objects can be used as input for other query operations.</p>
+<codeblock>SELECT review.reviewerName, review.publication
+   FROM beers AS b
+      UNNEST review IN b.reviews   
+</codeblock>
+  <p>Here is the result set:</p>
+<codeblock>
+ {"id": "7983345",
+ "name": "Takayama Pale Ale",
+ "brewer": "Hida Takayama Brewing Corp.",
+ "reviews" : [ 
+   {"reviewerName" : "Takeshi Kitano",
+         "publication" : "Outdoor Japan Magazine","date": "3/2013"},
+   {"reviewerName" : "Moto Ohtake", "publication" : "Japan Beer Times",
+         "date" : "7/2013"} 
+            ]
+}         
+</codeblock>
+
+  <p><b>Nests</b></p>
+  <codeblock>[ join-type ] NEST from-path [ [ AS ] alias ] keys-clause</codeblock>
+  <p>where join-type is <codeph>[ INNER | [ LEFT ] OUTER ]</codeph></p>
+  <p>Nesting is conceptually the inverse of unnesting. Nesting performs a join across two keyspaces. But 
+   instead of producing a cross-product of the left and right inputs, a single result is produced for each left 
+   input, while the corresponding right inputs are collected into an array and nested as a single array-valued field 
+   in the result object.</p>
+  <p>Nests can be chained with other nests, joins, and unnests. By default, an INNER nest is
+            performed. This means that for each result object produced, both the left and right
+            source objects must be non-missing and non-null. The right-hand side result of NEST is
+            always an array or MISSING. If there is no matching right source object, then the right
+            source object is as follows:</p>
+<ul>
+ <li>If the ON KEYS expression evaluates to MISSING, the right value is also MISSING.</li>
+ <li>If the ON KEYS expression evaluates to NULL, the right value is MISSING.</li>
+ <li>If the ON KEYS expression evaluates to an array, the right value is an empty array.</li>
+ <li>If the ON KEYS expression evaluates to a non-array value, the right value is an empty array.</li>
+ </ul>
+ 
+    <p>If LEFT or LEFT OUTER is specified, then a left outer nest is performed. One result object is produced for 
+        each left source object.</p>
+    
+    <p>Example</p>
+  <p>This example shows the NEST clause using invoice and invoice_item_ objects.</p>
+  <p>Recall our invoice objects:</p>
+  <codeblock>
+{
+     "customer_key": ...,
+     "invoice_date": ...,
+     "invoice_item_keys": [ ... ],
+     "total": ...     
+ } 
+  </codeblock>
+  <p>And our invoice_item objects:
+  </p>
+  <codeblock>
+{
+         "invoice_key": ...,
+         "product_key": ...,
+         "unit_price": ...,
+         "quantity": ...,
+         "item_subtotal": ...     
+} 
+  </codeblock>
+  <p>If the FROM clause was:</p> 
+  <codeblock>FROM invoice inv NEST invoice_item items ON KEYS inv.invoice_item_keys </codeblock>
+  <p>The results would be:</p>
+  <codeblock>
+  {
+         "invoice" : {
+             "customer_key": ...,
+             "invoice_date": ...,
+             "invoice_item_keys": [ ... ],
+             "total": ...
+         },
+         "items" : [
+             {
+                 "invoice_key": ...,
+                 "product_key": ...,
+                 "unit_price": ...,
+                 "quantity": ...,
+                 "item_subtotal": ...
+             },
+             {
+                 "invoice_key": ...,
+                 "product_key": ...,
+                 "unit_price": ...,
+                 "quantity": ...,
+                 "item_subtotal": ...
+             }
+         ]
+     },
+     {
+         "invoice" : {
+             "customer_key": ...,
+             "invoice_date": ...,
+             "invoice_item_keys": [ ... ],
+             "total": ...
+         },
+         "items" : [
+             {
+                 "invoice_key": ...,
+                 "product_key": ...,
+                 "unit_price": ...,
+                 "quantity": ...,
+                 "item_subtotal": ...
+             },
+             {
+                 "invoice_key": ...,
+                 "product_key": ...,
+                 "unit_price": ...,
+                 "quantity": ...,
+                 "item_subtotal": ...
+             }
+         ]
+     },
+     ... 
+  
+  </codeblock>
+
+     <p><b>Arrays</b></p>
+     
+     <p>If an array occurs along a path, the array can be subscripted to select one element.</p>
+     <p>Example</p>
+     <p>For each customer, the entire address array is selected. The following statement</p>
+     <codeblock>SELECT a FROM customer.address a    
+  </codeblock>
+     <p>produces the following result:</p>
+     <codeblock>
+    [
+       {
+          "a": [
+                 { "street" : "101 Main St.", "zip" : "94040" },
+                 { "street" : "300 Broadway", "zip" : "10011" }
+               ]
+         },
+         {
+          "a": [
+                 { "street" : "3500 Wilshire Blvd.", "zip" : "90210" },
+                 { "street" : "4120 Alamo Dr.", "zip" : "75019" }
+               ]
+         }
+   ] 
+  
+  </codeblock>
+     
+     <p>Subscripting Example</p>
+     <p>For each customer, the first element of the address array is selected. The following statement</p>
+     <codeblock>SELECT * FROM customer.address[0]  
+  </codeblock>
+     <p>produces the following result:</p>
+     <codeblock>
+     [
+         { "street" : "101 Main St.", "zip" : "94040" },
+         { "street" : "3500 Wilshire Blvd.", "zip" : "90210" }
+     ] 
+  </codeblock>
+     
+     <p><b>AS Keyword</b></p>
+     <p>Like SQL, N1QL allows renaming fields using the AS keyword. However, N1QL also allows reshaping 
+         the data, which has no analog in SQL. To do this, you embed the attributes of the statement in 
+         the desired result object shape.</p>
+     
+     <p><b>Aliases</b></p>
+     <p>Aliases in the FROM clause create new names that can be referred to anywhere in the query. 
+         When an alias conflicts with a keyspace or field name in the same scope, the identifier 
+         always refers to the alias. This allows for consistent behavior in scenarios where an identifier 
+         only conflicts in some documents.</p>
+
+ </conbody>
+</concept>

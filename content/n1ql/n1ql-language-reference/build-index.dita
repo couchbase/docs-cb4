@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_mq5_ms2_5r">
+ <title>BUILD INDEX statement</title>
+ <shortdesc></shortdesc>
+ <conbody>
+ 	
+ 	<p>The BUILD INDEX statement allows you to build one or more GSI indexes that are marked for deferred building all at once. By default CREATE INDEX statement kicks off a building of the index. However for more efficient building of multiple indexes, CREATE INDEX command can mark indexes for deferred building using the "defer_build:true" option. BUILD INDEX is capable of kicking off building of multiple indexes all at once and can utilize a single scan to feed many index build operations.</p>
+ 	<p>BUILD INDEX is an asynchronous operation. BUILD INDEX creates a task to build the primary or secondary GSI indexes and returns as soon as the task is queued for execution. The full index creation operation happen in the background. Indexes of type GSI provide a status field and mark index status pending while the index build operation is in progress. This status field and other index metadata can be queried using system:indexes.</p>
+ 	<note type="important"><p><i>Known issue</i>: If multiple index building operations are kicked off without waiting for all
+				indexes to get to the online state, index building for some indexes might fail. In this
+				case, <codeph>system:indexes</codeph> output might report the following error:</p>
+ 	<codeblock>"errors": [{"code": 12014, 
+   "msg": "error: Build Already In Progress. Bucket BUCKET_NAME. Index INDEX_NAME. Index state: pending"}]</codeblock>
+ 	<p>Index building might never complete if you get error 12014. To work around the issue, you can
+				drop the indexes returning error 12014 and then recreate all of them either with a
+				deferred build in one BUILD INDEX command (instead of multiple BUILD INDEX commands) or
+				recreate them one at a time with a delay between the subsequent index creations to allow
+				for index building to complete (that is index to get to the online state).</p></note>
+ <p><i>	build-index:</i></p>
+<codeblock>BUILD INDEX ON named_keyspace_ref(index_name[,index_name]*) USING GSI;</codeblock>
+ 	<p><i>index_name:</i></p> 
+ 	<p><codeph>index_name</codeph> is a unique name that is provided to identify the index. It is
+			optional in the case of the secondary index and there can be one index that is unnamed.</p>
+ 	
+ 	<p><i>named-keyspace-ref</i></p>
+ <codeblock>[ namespace-name :] keyspace-name </codeblock>
+ 	<p><i>keyspace-name:</i></p>
+ 	<p><codeph>keyspace-name</codeph> is an identifier that refers to the bucket name. It specifies
+			the bucket as the source for which the index needs to be created. You can add an optional
+			namespace name to the keyspace name in this way:</p>
+ 	<codeblock>namespace-name : keyspace-name</codeblock>
+ 	<p>For example, <codeph>main:customer</codeph> indicates the customer keyspace in the main
+			namespace. If the namespace name is omitted, the default namespace in the current session
+			is used.</p>
+ 	<codeblock>USING GSI</codeblock>
+<p>The USING clause specifies the index type to use. The BUILD INDEX command can be used only with
+			GSI indexes. Views do not support deferred building.</p>
+ 	
+ 	<section><title>Example</title>
+ 	<p>The following example creates a set of primary and secondary indexes on the
+					<codeph>beer-sample</codeph> bucket with the <codeph>defer_build</codeph> option.
+				After the create index statement comes back, <codeph>system:indexes</codeph> is queried
+				to for the status of the index.</p>
+<codeblock>CREATE INDEX `beer-sample-type-index` ON `beer-sample`(type) USING GSI 
+   WITH {"defer_build":true};
+
+SELECT * FROM system:indexes WHERE name="beer-sample-type-index";</codeblock>
+ 	<p>With the <codeph>defer_build</codeph> option enabled, the output from
+					<codeph>system:indexes</codeph> shows the <codeph>beer-sample-type-index</codeph> in
+				the pending state (<codeph>"state": "pending"</codeph>). BUILD INDEX can be used to kick
+				off the deferred build on the index on type attribute.</p>
+ 	<codeblock>BUILD INDEX ON `beer-sample`(`beer-sample-type-index`) USING GSI;
+
+SELECT * FROM system:indexes WHERE name="beer-sample-type-index";</codeblock>
+ 	</section>
+ </conbody>
+</concept>

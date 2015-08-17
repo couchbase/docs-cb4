@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_npk_mth_rq">
+ <title>CREATE INDEX statement</title>
+ 
+ <conbody>
+ 	
+ 	
+ 	<p>The CREATE INDEX statement allows you to create a secondary index. Secondary indexes contain a
+			filtered or a full set of keys in a given bucket. Secondary indexes are optional but
+			increase query efficiency on a bucket.</p>
+ 	<p>CREATE INDEX is by default a synchronous operation. CREATE INDEX statement blocks until the
+			operation finishes. Index building starts by creating a task that is queued for index
+			build. After this phase, if you loose connectivity, index build operation continues to
+			happen in the background. You can also run index creation asynchronously using the
+			"defer_build" clause. In the async mode, CREATE INDEX starts a task to create the primary
+			index and returns as soon as the task is queued for execution. The full index creation
+			operation happens in the background.</p>
+		<p>Both GSI and View indexes provide a status field and mark index status pending. With GSI
+			indexer, index status continues to report "pending". This status field and other index
+			metadata can be queried using system:indexes.</p>
+ 	<note type="important">Indexes cannot be built concurrently on a given bucket unless the
+				<codeph>defer_build</codeph> option of the CREATE INDEX statement is used in combination
+			with BUILD INDEX statement. The following error is reported if a second index creation
+			operation is kicked off before the completion of the ongoing index creation.
+			<codeblock>"errors": [{"code": 12014, 
+    "msg": "error: Build Already In Progress. Bucket BUCKET_NAME. Index INDEX_NAME. Index state: pending"}]</codeblock></note>
+		<p>You can create multiple identical secondary indexes on a bucket for better index
+			availability and place them on separate nodes using the "nodes" clause. </p>
+ 	<p><i>create-index:</i></p>
+ 	<codeblock>CREATE INDEX [index_name] ON named_keyspace_ref(expression[,expression]*)
+    WHERE filter_expressions
+    [USING GSI|VIEW]
+    [WITH {"nodes”: [“node_name”], “defer_build”:true|false}];</codeblock>
+ 	<p><i>index_name:</i></p> 
+ 	<p>index name is a unique name that is provided to identify the index. The index name is optional
+			in the case of the secondary index and there can be one index that is unnamed.</p>
+ 	
+ 	<p><i>named-keyspace-ref(expression[,expression]*)</i></p>
+ <codeblock>[ namespace-name :] keyspace-name </codeblock>
+ 	<p><i>keyspace-name:</i></p>
+ 	<p>An identifier that refers to the bucket name. Specifies the bucket as the source for which the
+			index needs to be created. You can add an optional namespace name to the keyspace name in
+			this way:</p>
+ 	<p><i>namespace-name : keyspace-name</i></p>
+ 	<p>For example, <codeph>main:customer</codeph> indicates the customer keyspace in the main
+			namespace. If the namespace name is omitted, the default namespace in the current session
+			is used.</p>
+ 	<p><i>Expression</i></p>
+ 	<p>Refers to an attribute name or a function.</p>
+ 	<p><i>USING GSI|VIEW</i></p>
+ 	<p>USING clause specify the index type to use. Secondary indexes can be created using indexes (global secondary indexes or GSI) or views. If USING clause is not specified, by default views are used as the index type.</p>
+ 	<p><i>WITH options</i></p>
+ 	<p>With clause is used to specify additional options with the GSI type indexes.</p>
+ 	<p><i>"nodes":["node name"] </i></p>
+ 	<p>A single secondary index of type GSI can only be placed on a single node that runs the indexing
+			service. The "nodes" option allows you to specify the node that the index is placed on. If
+			nodes is not specified, one of the nodes running the index service is randomly picked for
+			the index. </p> 	
+ 	
+ 	<p><i>"defer_build":true|false</i></p>
+ 	<p>With defer_build set to true, CREATE INDEX operation queues the task for building the index but
+			immediately pauses the building of the index of type GSI. Index building require an
+			expensive scan operation. Deferring building of the index with multiple indexes can
+			optimize the expensive scan operation. Admins can defer building multiple indexes and,
+			using BUILD INDEX statement, multiple indexes to be built efficiently with one efficient
+			scan of bucket data.</p>
+		<p>With defer_build set to false, CREATE INDEX operation queues the task for building the
+			index and immediately kicks off the building of the index of type GSI. </p> 	
+ 	
+ 	<section><title>Examples</title>
+ 		
+ 		<p>The following example creates a secondary index that contains beers with an
+					<codeph>abv</codeph> value greater than 5:</p>
+ 		<codeblock>CREATE INDEX over5 ON `beer-sample`(abv) WHERE abv > 5 USING GSI;</codeblock>
+ 	<p>The following example creates a secondary index on the <codeph>beer-sample</codeph> bucket and
+				then queries <codeph>system:indexes</codeph> for status of the index:</p>
+ 		
+<codeblock>CREATE INDEX `beer-sample-type-index` ON `beer-sample`(type) USING GSI;
+SELECT * FROM system:indexes WHERE name="beer-sample-type-index";</codeblock>
+ 	
+<p>The following example creates the same secondary index by using the deferred build option and
+				then queries <codeph>system:indexes</codeph> for status of the index:</p> 	<codeblock>CREATE INDEX `beer-sample-type-index` ON `beer-sample`(type) USING GSI
+    WITH {"defer_build":true};
+SELECT * FROM system:indexes WHERE name="beer-sample-type-index";</codeblock>
+ 	<p>Because the deferred build option was enabled, the output from the query on
+					<codeph>system:indexes</codeph> shows <codeph>beer-sample-type-index</codeph> shows
+				the index has not finished building (<codeph>"state": "pending"</codeph>). </p>
+			<p>The following example uses the BUILD INDEX statement to kick off the deferred build on
+				the <codeph>beer-sample-type-index</codeph> index and then queries <codeph>system:indexes</codeph> for status of the index:</p>
+ <codeblock>BUILD INDEX ON `beer-sample`(`beer-sample-type-index`) USING GSI;
+SELECT * FROM system:indexes WHERE name="beer-sample-type-index";</codeblock>
+ 		<p>This time the query on <codeph>system:indexes</codeph> shows that the index is built
+					(<codeph>"state": "online"</codeph>).</p>
+ 	</section>
+ </conbody>
+</concept>

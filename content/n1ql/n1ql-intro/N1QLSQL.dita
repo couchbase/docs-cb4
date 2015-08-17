@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="topic_1_3" xml:lang="en-US">
+
+	<title id="title__Toc272567189">N1QL and SQL differences</title>
+	<shortdesc>The most important difference between traditional SQL and N1QL is the data
+		model.</shortdesc>
+	<conbody>
+		<p> In a traditional SQL database, data is constrained to tables with a uniform structure.
+			Here is how a very simple employee database might look in a relational database. It
+			consists of two tables, Employee and Employers. Name is the primary key.</p>
+
+		<codeblock>EMPLOYEE 
+Name | SSN | Wage
+----------------------------------------------------------------------- 
+Jamie | 234 | 123
+Steve | 123 | 456
+  
+SCHEMA:
+Name -> String of width 100 
+SSN -> Number of width 9 
+Wage -> Number of width 10  
+
+EMPLOYERS:
+----------------------------------------------------------------------- 
+ Name_Key  | Company   | Start | End
+ Jamie     | Yahoo     | 2005  | 2006
+ Jamie     | Oracle    | 2006  | 2012
+ Jamie     | Couchbase | 2012  | NULL       </codeblock>
+
+		<p>In N1QL, the data exists as free-form documents, gathered as large collections called
+			keyspaces. There is no uniformity and there is no logical proximity of objects of the same
+			data shape in a keyspace. This is what the data would look like for N1QL:</p>
+
+		<codeblock> (HRData keyspace)
+ {
+     'Name': 'Jamie'
+     'SSN': 234
+     'Wage': 123
+     'History':
+      [
+       ['Yahoo', 2005, 2006],
+       ['Oracle', 2006, 2012],
+     ]
+ },
+
+ {
+     'Name': Steve
+     'SSN':  123,
+     'Wage': 456,
+ } </codeblock>
+
+		<section>
+			<title>Projection Differences</title>
+			<p>When you run a query in SQL, a set of rows consisting of one or more columns each is
+				returned. A header can be retrieved to obtain metadata about each column. It is
+				generally not possible to get rowset where each row has a different set of columns. </p>
+
+			<codeblock>SELECT Name, Company
+    FROM Employee, Employers
+    WHERE Name_Key = Name 
+ 
+ Name | Company
+ ----------------
+ Jamie | Oracle
+ Jamie | Yahoo
+ Jamie | Couchbase
+ ----------------    </codeblock>
+
+			<p>Like SQL, N1QL allows renaming fields using the AS keyword. However, N1QL also allows
+				reshaping the data, which has no analog in SQL. This is done by embedding the attributes
+				of the statement in the desired result object shape. </p>
+
+			<codeblock> SELECT Name, History, {'FullTime': true} AS 'Status'
+      FROM HRData
+
+  {
+     'Name': 'Jamie',
+     'History':
+     [
+       ['Yahoo', 2005, 2006],
+       ['Oracle', 2006, 2012],
+       ['Couchbase', 2012, null]
+     ],
+     'Status': { 'FullTime': true }
+ }
+ {
+     'Name': 'Steve',
+     'Status': { 'FullTime': true }
+ } </codeblock>
+		</section>
+
+		<section>
+			<title>Selection Differences</title>
+
+
+			<p>In N1QL, the FROM clause is used to select between data sources, known as keyspaces. If
+				HRData is a keyspace, the following statement selects the <codeph>Name</codeph>
+				attribute from all documents in the HRData keyspace that have a <codeph>Name</codeph>
+				attribute defined. </p>
+
+			<codeblock>SELECT Name FROM HRData   </codeblock>
+
+			<p>A new twist is that each document can itself be regarded as a data source and the query
+				run over its nested elements. Such nested elements are addressed using the dot (.)
+				operator to descend a level and the square bracket (&#160;[ ]&#160;) operator to index
+				into an array element.</p>
+
+			<codeblock>  SELECT FullTime FROM HRData.Status  
+{
+     'FullTime': true 
+}    </codeblock>
+			<p>The selected fields can also be renamed using the AS operator, just like in SQL:</p>
+
+			<codeblock>SELECT firstjob FROM HRData.History[0] AS firstjob  
+{
+     'firstjob': ['Yahoo', 2005, 2006]
+}
+
+SELECT firstjob[2] FROM HRData.History[0] AS firstjob  
+{
+     'firstjob[2]': 2006 
+} </codeblock>
+		</section>
+
+		<section>
+			<title>Filtering Differences</title>
+
+			<p>N1QL supports the WHERE clause as does SQL with some slight differences. The dot
+				(&#160;.&#160;) and the square bracket (&#160;[]&#160;) operators can be used to access
+				nested elements as they are used in SELECT clauses.</p>
+
+			<p>Because N1QL data can be irregularly shaped, undefined values are recognized as distinct
+				from null. A complementary set of operators like IS MISSING is added in addition to
+				standard operators like IS NULL. New conversions, for example from non-zero integer
+				values to Boolean value true, are supported as well. </p>
+
+			<p>Most standard SQL functions (for example, LOWER()) are defined. In addition to standard
+				filtering predicates, some new operators are introduced: ANY, SOME, and EVERY. These
+				operators help in dealing with arrays in documents. ANY and SOME evaluate a condition
+				for each element, and return true if any element meets the condition. EVERY also
+				evaluates a condition for each element, except it returns true only if all elements
+				matched the condition.</p>
+		</section>
+
+
+	</conbody>
+</concept>
