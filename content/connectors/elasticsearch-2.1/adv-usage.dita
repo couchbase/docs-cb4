@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE topic 
+PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic xml:lang="en-us" id="topic4832">
+
+    
+    <title>Advanced usage</title>
+
+
+    <body>
+        <section><title>Advanced settings</title>
+            
+            <p>The Couchbase Plug-in for Elasticsearch has several settings in a YAML file that can be update. 
+                These additional settings include:</p>
+            <ul>
+                <li>couchbase.port: The port the plug-in listens on. Default: 9091.</li>
+                <li>couchbase.username: The username for HTTP basic authentication. Default: Administrator.</li>
+                <li>couchbase.password: The password for HTTP basic authentication. No default.</li>
+                <li>couchbase.num_vbuckets: number of data partitions Elasticsearch should
+                        specify to Couchbase Server. Default corresponds to the number of partitions
+                        expected by Couchbase Server and that exist on the source Couchbase cluster.
+                        For Mac OSX, the value is 64, and for all other platforms it is
+                        1024.</li>
+                <li>couchbase.defaultDocumentType: The type of documents stored in Elasticsearch.
+                        These documents contain indexing information from Elasticsearch. Defaults to
+                            <codeph>couchbaseDocument</codeph>. You can change this if you define
+                        and implement your own document type which provides specialized
+                        Elasticsearch search features. </li>
+                <li>couchbase.checkpointDocumentType: Type of document that stores status
+                        information about replication. Default: <codeph>couchbaseCheckpoint</codeph>.</li>
+                <li>couchbase.typeSelector: The mechanism used to select the Elasticsearch type from
+                    the document ID.</li>
+                <li>couchbase.documentTypes: Elasticsearch type setting.</li>
+                <li>couchbase.documentTypeParentFields: Parent fields.</li>
+                <li>couchbase.documentTypeRoutingFields: Routing fields.</li>
+                
+            </ul></section>
+        
+        
+        <section><title>Setting document type</title>
+            
+            <p>The Elasticsearch plug-in allows the Elasticsearch type to be set.</p>
+            
+            <p>The following example uses a regular expression selector for the plug-in 
+                to set the Elasticsearch type by matching regular expressions on the document ID.
+                The specification needs to be on the Elasticsearch configuration file. 
+                The default is config/elasticsearch.yml.</p>
+            
+            <codeblock>
+couchbase.typeSelector: org.elasticsearch.transport.couchbase.capi.RegexTypeSelector
+
+
+// To set the elasticsearch type by matching regular expressions on the document ID.
+// The following example matches document IDs like review-123 or review-789.
+couchbase.documentTypes.review: ^review-(\d)+$
+            
+// Parent field is configured by using
+couchbase.documentTypeParentFields.review: doc.bookId
+            
+// Routing is configured as
+couchbase.documentTypeRoutingFields.review: doc.bookId
+            
+// Where bookId is a couchbase document key. The plug-in requires it to be a string.    
+            </codeblock>
+        
+        
+        
+        
+        </section>
+        
+        
+        
+        
+        
+        
+        <section><title>Understanding metadata</title><p>As you get more advanced in your usage of
+                Couchbase Plug-in for Elasticsearch, it might be helpful for you to understand what
+                is actually sent via the plug-in and how Elasticsearch uses it. When you send a JSON
+                document to Couchbase Server to store, it looks similar to the
+                following:</p>
+            <codeblock>
+
+{
+   "name": "Green Monsta Ale",
+   "abv": 7.3,
+   "ibu": 0,
+   "srm": 0,
+   "upc": 0,
+   "type": "beer",
+   "brewery_id": "wachusetts_brewing_company",
+   "updated": "2010-07-22 20:00:20",
+   "description": "A BIG PALE ALE with an awsome balance of Belgian malts with Fuggles and East Kent Golding hops.",
+   "style": "American-Style Strong Pale Ale",
+   "category": "North American Ale"
+}
+
+                </codeblock>
+            <p>Here
+                we have a JSON document with all the information for a beer in our application. When
+                Couchbase stores this document, it adds metadata about the document so that we now
+                have JSON in Couchbase that looks like
+                this:</p>
+            <codeblock>
+{
+    {
+   "id": "wachusetts_brewing_company-green_monsta_ale",
+   "rev": "1-00000005ce01e6210000000000000000",
+   "expiration": 0,
+   "flags": 0,
+   "type": "json"
+    }
+    {
+       "name": "Green Monsta Ale",
+       "abv": 7.3,
+       "ibu": 0,
+       "srm": 0,
+       "upc": 0,
+       "type": "beer",
+       "brewery_id": "wachusetts_brewing_company",
+       "updated": "2010-07-22 20:00:20",
+       "description": "A BIG PALE ALE with an awsome balance of Belgian malts with Fuggles and East Kent Golding hops.",
+       "style": "American-Style Strong Pale Ale",
+       "category": "North American Ale"
+    }
+}
+
+                </codeblock>
+            <p>The
+                metadata that Couchbase Server stores with our beer document contains the key for
+                the document, an internal revision number, expiration, flags and the type of
+                document. When Couchbase Server replicates data to Elasticsearch via the plug-in, it
+                sends this entire JSON including the metadata. Elasticsearch will then index the
+                document and will store the following JSON with document
+                metadata:</p>
+            <codeblock>
+{
+  "id": "wachusetts_brewing_company-green_monsta_ale",
+  "rev": "1-00000005ce01e6210000000000000000",
+  "expiration": 0,
+  "flags": 0,
+  "type": "json"
+}
+
+            </codeblock>
+            <p>And
+                finally when you query Elasticsearch and get a result set, it will contain the
+                document metadata
+            only:</p>
+            
+            <codeblock>
+{
+    took: 22
+    timed_out: false
+    _shards: {
+    total: 5
+    successful: 5
+    failed: 0
+},
+    hits: {
+    total: 1
+    max_score: 0.18642133
+    hits: [
+        {
+        _index: beer-sample
+        _type: couchbaseDocument
+        _id: wachusetts_brewing_company-green_monsta_ale
+        _score: 0.18642133
+            _source: {
+                meta: {
+                    id: wachusetts_brewing_company-green_monsta_ale
+                    rev: 1-00000005ce01e6210000000000000000
+                    flags: 0
+                    expiration: 0
+                    }
+                }
+            }
+        ]
+    }
+}
+
+            </codeblock></section>
+        
+    </body>
+    <related-links>
+        <linklist>
+            <link href="http://www.elasticsearch.org/guide/reference/api/index_.html"
+                scope="external" format="html">
+                <linktext>Elasticsearch Guide, Index API</linktext>
+            </link>
+            <link href="https://github.com/couchbaselabs/elasticsearch-transport-couchbase"
+                scope="external" format="html">
+                <linktext>Couchbase Plug-in for ElasticSearch on Github</linktext>
+            </link>
+            <link
+                href="http://www.couchbase.com/presentations/couchbase-full-text-search-integration"
+                scope="external" format="html">
+                <linktext>Couchconf Presentation</linktext>
+            </link>
+            <link href="http://blog.couchbase.com/creating-content-store-couchbase-learning-portal"
+                scope="external" format="html">
+                <linktext>The Learning Portal</linktext>
+            </link>
+            <link href="https://github.com/couchbaselabs/learningportal/" scope="external"
+                format="html">
+                <linktext>Couchbaselabs, Learning Portal</linktext>
+            </link>
+            <link
+                href="http://blog.couchbase.com/couchbase-and-full-text-search-couchbase-transport-elastic-search"
+                scope="external" format="html">
+                <linktext>Blog post and tutorial on Elasticsearch with Couchbase</linktext>
+            </link>
+            <link href="http://www.elasticsearch.org/guide/" scope="external" format="html">
+                <linktext>Elasticsearch Guide</linktext>
+            </link>
+        </linklist>
+    </related-links>
+</topic>
