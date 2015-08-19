@@ -1,9 +1,54 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
 <concept id="concept_bb5_khb_ys">
- <title>GSI for N1QL</title>
- <shortdesc></shortdesc>
+ <title>Global Secondary Indexes for N1QL</title>
+ <shortdesc>Global Secondary Index (GSI) supports a variety of OLTP like use-cases for N1QL including basic, ad-hoc, and short-running reporting queries that require filtering.  For example, if you have a WHERE clause in a N1QL statement that selects a subset of your data on which the secondary index is defined, you can see a significant speedup in the N1QL query performance by using GSI.</shortdesc>
  <conbody>
-  <p></p>
+ <dl>
+  <dlentry>
+   <dt>Definition</dt>
+   <dd>You can define a primary or secondary index using GSIs in N1QL using the CREATE INDEX statement. </dd>
+  </dlentry>
+  <dlentry>
+   <dt>Distribution</dt>
+   <dd>GSIs reside on the index nodes in the cluster. Every index has an index key (used for lookup), and a partition key (used for sharding). Based on the partition key, the index is partitioned across all the index nodes. Index metadata stored on the index node knows about the distribution of the index. GSI does not use scatter-gather. Instead, based on the index metadata, it only touches the nodes that have the relevant data.</dd>
+  </dlentry>
+  <dlentry>
+   <dt>Latency</dt>
+   <dd>GSIs provide a lower latency compared to view indexes. For the storage layer, GSI uses ForestDB. ForestDB is Couchbase’s state-of-the-art storage engine with a modified data structure to increase read and write performance. ForestDB is written with multi-core processors and solid state drives in mind. GSIs leverage ForestDB’s buffer cache to provide low latency read-write operations. </dd>
+  </dlentry>
+  <dlentry>
+   <dt>Scaling</dt>
+   <dd>Couchbase Server scales indexes independent of data and queries. With multidimensional scaling, you can allocate separate hardware resources for separate services, and avoid resource contention by performing queries, maintaining indexes, and writing data to different nodes. If your application needs more indexing resources, you can either scale out your infrastructure to add more index nodes, or scale up the index services to handle more workload. </dd>
+  </dlentry>
+  <dlentry>
+   <dt>Load-balancing</dt>
+   <dd>To load-balance GSIs, you must manually specify the nodes on which indexes should be built on
+     and alternatively partition based on some range. If there are replica indexes (or indexes with
+     the same definition) available, the N1QL query engine uses the round-robin algorithm between
+     the replicas to distribute the indexing load. <p>For example, create two indexes
+      productName_index1 and productName_index2, using the following commands:
+      <codeblock>      CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) WHERE type="product" USING GSI WITH {"nodes":"node1:8091"};
+      
+      CREATE INDEX productName_index2 ON bucket_name(productName, ProductID) WHERE type="product" USING GSI WITH {"nodes":"node2:8091"};    </codeblock>
+      The indexing load will be distributed equally between the indexes productName_index1 and
+      productName_index2. </p><p>You can also create indexes by partitioning your indexes as shown
+      in the following example.
+      <codeblock>     CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) WHERE type="product" AND productName BETWEEN "A" AND "K" USING GSI WITH {"nodes":"node1:8091"};
+     
+     CREATE INDEX productName_index2 ON bucket_name(productName, ProductID) WHERE type="product" AND productName BETWEEN "K" AND "Z" USING GSI WITH {"nodes":"node2:8091"};     </codeblock></p></dd>
+  </dlentry>
+  <dlentry>
+   <dt>Consistency</dt>
+   <dd>You can specify a query consistency flag per request, similar to the view API. The query consistency flag can be one of the following: <ul>
+    <li><userinput>not_bounded</userinput> (stale=ok) <p>This value has the same characteristics as <userinput>stale=ok</userinput> in the view API.</p></li>
+    <li><userinput>request_plus</userinput> (stale=false) <p>This value has the same characteristics as <userinput>stale=false</userinput> in the view API.</p></li>
+   </ul>When using GSI, the default consistency setting is <userinput>not_bounded</userinput>. </dd>
+  </dlentry>
+  <dlentry>
+   <dt>Replication</dt>
+   <dd>GSIs are not automatically replicated. They must be defined on other indexing nodes for high-availability. </dd>
+  </dlentry>
+ </dl>
  </conbody>
 </concept>
