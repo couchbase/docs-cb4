@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_w4d_yml_bt">
+ <title>Writing spatial views</title>
+ <shortdesc>Spatial views use a single spatial function that is similar to the map function used in 	MapReduce views. The major difference between MapReduce views and spatial views is that spatial views do not have 	a map and a reduce function, but only a single function called the <i>spatial function</i>. </shortdesc>
+ <conbody>
+  <p>You can use the <cmdname>emit()</cmdname> function to create a spatial view. The <cmdname>emit()</cmdname> functions takes the parameters key and value as inputs where the key must be a multidimensional bounding box. </p>
+ 
+  <p>The key can be defined in several ways: <ul>
+   <li><b>Single values</b>
+     <p>When the key is specified as a single value, it expands to a collapsed range. For example,
+      the key <parmname>[1, 2]</parmname> is stored as <parmname>[[1, 1], [2, 2]]</parmname>.
+     </p></li>
+   <li><b>Ranges</b>
+     <p>Use ranges for keys to specify a range of values. For example, you can specify the opening
+      hours of a shop (10:00 to 20:00) as <cmdname>emit([[1000, 2000]], null);</cmdname></p></li>
+   <li><b>GeoJSON geometry</b>
+     <p>You can use a GeoJSON geometry in a key. However, it must be the first element of the array.
+      The bounding box is automatically calculated and used as the range. Couchbase Server supports
+      the following GeoJSON objects: <ul>
+       <li>Point</li>
+       <li>MultiPoint</li>
+       <li>LineString</li>
+       <li>MultiLineString</li>
+       <li>Polygon</li>
+       <li>MultiPolygon</li>
+       <li>GeometryCollection</li>
+      </ul> The following is a sample <cmdname>emit()</cmdname> function which uses a GeoJSON
+      geometry in a key:
+      <codeblock>     emit([{
+     "type": "Point",
+     "coordinates":[10.9, 48.4]
+     }], null);</codeblock>
+      Internally, the key is stored as <parmname>[[10.9, 10.9], [48.4, 48.4]]</parmname>.</p><p>You can combine GeoJSON geometry in the key with single values or ranges. For example, the
+       <cmdname>emit()</cmdname> function to store the categories in a shop and also specify that
+      category 5 refers to clothes can be as shown here:
+      <codeblock>     emit([{
+      "type": "Point",
+      "coordinates":[10.9, 48.4]
+      }, [1000, 2000], 5], null);</codeblock></p><note>For backward compatibility, you can also emit a GeoJSON geometry that is not wrapped in an array. </note></li>
+  </ul></p>
+  <p>The value parameter for the <cmdname>emit()</cmdname> function can be any arbitrary valid JSON.
+   Here is an example sample view function that emits a point with its height:
+   <codeblock>
+    function(doc, meta) {
+    if (doc.loc &amp;&amp; doc.height &amp;&amp; doc.name) {
+    emit([doc.loc.lon, doc.loc.lat, doc.height], doc.name);
+    }
+    }</codeblock></p>
+  <p>You can put a spatial view function into a design document by using the object name spatial to
+   indicate the nature of the view definition. For example, the following design document includes
+   the previous function as a view named points.
+   <codeblock>{
+    "spatial" : {
+    "points" : "function(doc, meta) {if (doc.loc  &amp;&amp; doc.height &amp;&amp; doc.name) {
+    emit([doc.loc.lon, doc.loc.lat, doc.height], doc.name);}}"
+    }
+    }</codeblock></p>
+  <p>If your document already contains GeoJSON encoded data, you can directly emit that geometry as follows: 
+   <codeblock>function(doc, meta) {
+   if (doc.geometry &amp; doc.name) {
+   emit([doc.geometry], doc.name);
+   }
+   }</codeblock></p>
+  <p>To execute the spatial query, use the design document format that uses the embedded spatial 	function. For example, a design document named <i>main</i> that resides within the bucket <i>places</i> is executed with this URL: <codeph>http://[localhost]:8092/places/_design/main/_spatial/points</codeph>.</p>
+ </conbody>
+</concept>
