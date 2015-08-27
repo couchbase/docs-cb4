@@ -5,8 +5,64 @@
  <shortdesc>This section discusses the tools for representing relationships and best practices for each type of relationship.</shortdesc>
  <conbody>
   <section> <title>Referencing documents</title>
+   <p>You can reference another document (or a binary value) using the item key. This is similar to normalization in relational terms. Referencing enables couchbase to cache, store and retrieve the documents independently. For example with entities like “beers” and “breweries”, you can store beers in a document of their own and reference breweries from the beer document with a brewery_id attribute.</p>
+   <p>In relational databases referencing is expected and is the norm as embedding is not typically supported. In some NoSQL solutions, referencing is highly discouraged due to lack of support for JOIN operators and sub-queries. However Couchbase Server with N1QL provides support for JOIN operators, set expressions and sub-queries so data modelers are free to choose referencing or embedding, whichever is the best option,for their case, without complicating code development.</p>
+   <p>Referencing can be beneficial in a numbers of cases: <ul>
+    <li>Referencing is advantageous if related items are not frequently accessed together. Each separate document is independently cached in managed cache and can be independently sent over the network. For example: a beer document that contains an embedded brewery document is larger than a beer document that merely references the brewery document. When the beer document referencing the brewery document using a brewery_id attribute, less memory is required to maintain the beer document.</li>
+    <li>Referencing can help with information consistency and update efficiency: if an update to the brewery document is issued, all the beers referencing that brewery don’t have to be updated. Whereas if brewery is embedded in beer document, since there could be many beers embedding the same brewery, the developer is required to search and update all the beers that embed the targeted brewery. </li>
+    <li>Referencing can optimize memory, storage and replication as it prevents repetition of
+      brewery attributes across many beers. Intra-cluster DCP replication and Cross Datacenter
+      Replication (XDCR) do not have to communicate the brewery attributes every time a beer gets
+      updated.</li>
+   </ul></p>
+   <p>Referencing also has downsides: <ul>
+    <li>If related items are mostly used together, this could create unnecessary overhead and may
+      complicate application coding. For example, even though the beer document may be in memory,
+      brewery document may get ejected under memory pressure causing additional latency for
+      operations referencing both beers and brewery. To retrieve or update related items, you may
+      need to issue multiple operations causing multiple round trips. For example, with “brewery”
+      document referencing “beer”, adding a new “beer” require an additional write to the
+      referencing “brewery” document.</li>
+    <li>Couchbase Server provides ACID properties on document operations addressing a single document. 
+     <ul>
+      <li>A single document write is guaranteed to either fully succeed or fail.</li>
+      <li>No operation can see a partially updated version of the document. </li>
+      <li>If update operation is issued with durability requirements such as replicated durability (replicateTo) or persisted durability (persistTo flag), Couchbase Server guarantees the whole document will be durable.</li>
+    </ul>
+     <p>Operations that require an update to beer and a brewery document cannot take advantage of ACID properties. For example: If brewery document is embedded in beer document, since there could be many beers embedding the same brewery, developer is required to search and update all the beers that embed the targeted brewery but that cannot be done in a single consistent operation.</p></li>
+   </ul></p>
+   
  </section>
   <section> <title>Embedding documents</title>
-  </section>
+   <p>You can embed a document in another document by simply defining an attribute to be a document. This enables couchbase to cache, store and retrieve the complex document with embedded documents as a single piece. For example “beers” entity can embed “breweries” by embedding an attribute called brewery in the beer document.</p>
+   <p>In relational databases embedding is not typically supported. In other NoSQL solution
+    embedding is typically overemphasized as JOINs and sub-queries are not supported in the
+    platforms and code development gets complicated with referencing. </p>
+   <p>In Couchbase Server, N1QL provides support for JOINs and subqueries so data modelers are free
+    to choose the best option for their case without complicating code development. Embedding can be
+    beneficial in a numbers of cases. Some of these are similar to the disadvantages of referencing. <ul>
+     <li>Embedding can be advantageous when related items are frequently used together. Because
+      multiple entities are contained in a single document, those entities are cached together in
+      Couchbase Server managed cache and can be retrieved with a single operation, which eliminates
+      the need for multiple roundtrips. </li>
+     <li>Couchbase Server provides ACID properties on operations addressing a single document. <ul>
+       <li>A single document write is guaranteed to either fully succeed or fail. </li>
+       <li>No operation can see a partially updated version of the document. </li>
+       <li>If an update operation is issued with durability requirements such as replicated
+        durability (replicateTo) or persisted durability (persistTo flag), Couchbase Server
+        guarantees the whole document will be durable.</li>
+      </ul>
+      <p>Imagine an order document that embeds order line items document embedded in it. With both
+       related entities in a single document, operations that are required to update both the order
+       and the order line items can take advantage of a single write. The atomic write ensures that
+       either the entire update is successful or none of the updates to the order or its line items
+       is committed to the document.</p></li>
+    </ul></p>
+   <p>Embedding also has downsides: <ul>
+    <li>Embedding can hinder information consistency and update efficiency across documents: if an update to the brewery document is issued, all the beers embedding the same brewery have to be updated to ensure all redundant copies of breweries are identical.</li>
+    <li>Embedding results in replicated bytes and therefore uses extra memory and storage space because it requires repetition of brewery attributes across many beers. Intra cluster replication (DCP) and Cross Datacenter Replication (XDCR) have to communicate the brewery attributes every time a beer gets updated.</li>
+   </ul></p>
+   </section>
+  <section><p>It is important to note that you can use hybrid solutions. Embedding may be a great choice for relationships like “book” and “authors” where there are only a few authors. However referencing may be a better way when you have “instruments” and “measurements” as the relationship. In this case there would be millions of measurements per instrument and embedding is not a good option. With Couchbase Server developers have full freedom to choose the best option for their application without compromising on application complexity.</p></section>
  </conbody>
 </concept>
