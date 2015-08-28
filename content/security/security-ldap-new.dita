@@ -38,6 +38,91 @@
     <section><title>Where to configure <codeph>saslauthd </codeph></title>
     <p><codeph>saslauthd </codeph> must be installed and configured on each Couchbase Server node. </p>
    </section>
-    
+    <section><title>Setting up <codeph>saslauthd</codeph> for RHEL6+</title>
+      <p>In LDAP authentication, <codeph>saslauthd</codeph> process handles authentication requests on
+        behalf of the SASL library while the LDAP protocol is used to connect to the LDAP server.</p>
+      
+      <p>Remote authentication with the LDAP server requires proper configuration of the
+        <codeph>saslauthd</codeph> agent, which must be installed and configured on each Couchbase
+        Server node. </p>
+      <note type="note">Make sure that you have the prerequisites for the LDAP software you are installing, such as OpenLDAP libraries.</note>
+      
+      <dl>
+        <dlentry>
+          <dt>Supported saslauthd packages for LDAP integration</dt>
+          <dd>Install your Unix operating system with the package that is supported for LDAP integration:
+            CentOS 6: saslauthd 2.1.26 or higher. <p>This binary is a part of <codeph>cyrus-sasl
+            </codeph>rpm, so make sure it is installed.</p></dd>
+        </dlentry>
+      </dl>
+      
+      
+      <dl>
+        <dlentry>
+          <dt>Set up the configuration file</dt>
+          <dd>On each Couchbase node, create <filepath>/etc/saslauthd.conf </filepath>:
+            <codeblock>$ cat /etc/saslauthd.conf
+              # ldap_servers: ldap:&lt;URI&gt;:&lt;PORT&gt; or ldaps:&lt;URI&gt;:&lt;PORT&gt; for TLS protected connection
+              ldap_servers: ldap://my.company.com:389
+              # Specifies the distinguished name to which the search is relative. 
+              # The search includes the base # or objects below. It also includes Domain Components (dc) 
+              # such as in dc=company and dc=com.
+              # The administrative users created in LDAP with the attribute uid are placed under the user's
+              # organizational unit ou under the two domain components (example and com).
+              OU=InteractiveUsers,DC=my,DC=company,DC=com
+              # Specifies the search filter. The values for these configuration options correspond to the values
+              # specific to the test
+              ldap_filter: (samAccountName=%u)
+              # Optional: specify a user to perform ldap queries
+              ldap_bind_dn: CN=<b>user_ldap</b>,OU=Users,DC=my,DC=company,DC=com
+              # Optional: specify ldap user’s password
+              ldap_password: -sEcReTp#AssWoRd!
+            </codeblock></dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Configure <filepath>/etc/sysconfig/saslauthd</filepath></dt>
+          <dd><codeblock>$ cat /etc/sysconfig/saslauthd
+            # Just keep the default
+            SOCKETDIR=/var/run/saslauthd
+            # Make sure MECH is set to ldap (pam is default)
+            MECH=ldap
+            # Include the config file described above
+            FLAGS="-O /etc/saslauthd.conf"
+          </codeblock></dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Test <codeph>saslauthd</codeph></dt>
+          <dd>
+            <p>If the connection is properly working, the user <codeph>couchbase</codeph> must have access
+              to <filepath>/var/run/saslauthd/mux</filepath> to communicate to
+              <codeph>saslauthd</codeph>.</p>
+            <ol>
+              <li>Start the <codeph>saslauthd</codeph> service (it is a good idea to set it to start
+                automatically with
+                <codeph>chkconfig</codeph>):<codeblock>[root@localhost ~]# service saslauthd restart
+                  Stopping saslauthd:                                    	[  OK  ]
+                  Starting saslauthd:                                    	[  OK  ]
+                  
+                  [root@localhost ~]# chkconfig  saslauthd on
+                  [root@localhost ~]# chkconfig --list saslauthd
+                  saslauthd   	0:off   1:off   2:on	3:on	4:on	5:on	6:off
+                </codeblock></li>
+              <li>Test LDAP authentication:
+                <codeblock>[root@localhost ~]# sudo -u couchbase /usr/sbin/testsaslauthd -u &lt;username&gt;\
+                  -p mypassword -f /var/run/saslauthd/mux
+                  <b>0: OK "Success</b>"
+                </codeblock></li>
+            </ol> 
+            
+            
+          </dd>
+        </dlentry>
+      </dl>
+      
+    </section>
   </body>
 </topic>
