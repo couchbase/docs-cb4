@@ -6,47 +6,72 @@
 		Placeholder text to have something here for testing.</shortdesc>
  <conbody>
   <section><title> Atomicity properties</title>
-  <p>
-   Couchbase server provides atomicity at the document level. A document write will either clearly succeed or clearly fail. It is impossible to end up with a document write that partially succeeds, for example, recording only some changed fields but not others. Couchbase is strongly consistent at the document level. Cross document transactions typically can be avoided by consolidating often-accessed information into a single document, or addressed using other techniques. 
-  </p></section>
-  <section><title> Consistency and durability</title>
-   <p> When talking about the <xref
-    href="http://www.infoq.com/articles/cap-twelve-years-later-how-the-rules-have-changed"
-     format="html" scope="external">CAP Theorem</xref>, distributed data management systems are generally considered
-    to be either CP or AP, that is, evaluators focus on a tradeoff in either consistency (C) or
-    availability (A). Couchbase Server behaves like a CP system in its default configuration and
-    running as a single cluster. This is because any access to a given key (read, write, update,
-    delete) is always directed to the node that hosts that active data at that point in time. The
-    application client library transparently distributes requests to the appropriate nodes and
-    therefore every application server/thread will immediately read the writes of any other
-    application server/thread. Any write is also replicated within the cluster, but these replicas
-    are primarily for the purpose of high availability and by default do not service any traffic
-    until made active.</p>
-    
-    <p>According to the CAP Theorem, a network partition cannot be distinguished from a failure of a
-    part of the system. With Couchbase, in the event of a failure of one node, some data will be
-    temporarily unavailable for writes until it is made active elsewhere in the cluster (either
-    manually or automatically). Reads, however, can continue to be served by the replica copies of
-    data elsewhere in the cluster. </p>
-    
-    <p>If a single node fails, the data on a node that failed will not accept writes until the node
-    is failed over (but reads can be serviced from replicas). </p>
-    
-    <p>Couchbase Server enables users to increase availability by replicating data between multiple Couchbase Server clusters running in the same or separate data centers using a capability called cross datacenter replication (XDCR, described later). With XDCR the state of information on both clusters will eventually be made consistent, and in the meantime Couchbase remains available to take read and write traffic. </p>
-    
-   <p>Although the <xref
-    href="http://www.infoq.com/articles/cap-twelve-years-later-how-the-rules-have-changed"
+  <p> Couchbase server provides atomicity at the document level. A document write will either
+    clearly succeed or clearly fail. It is impossible to end up with a document write that partially
+    succeeds, for example, recording only some changed fields but not others. Couchbase is strongly
+    consistent at the document level. Cross document transactions typically can be avoided by
+    consolidating often-accessed information into a single document, or addressed using other
+    techniques. <draft-comment author="will">There used to be a document called Transactional Logic
+     in the 3.0 docs, I would like to link to that here if we bring it forward.</draft-comment></p></section>
+  <section><title> Strong Consistency and durability</title><draft-comment author="will">I would like to add a simpler intro on the topic of strong consistency,
+    maybe remove the amount of details that are here now into their own  topic. </draft-comment>
+   <draft-comment author="will">Couchbase Server is a strongly consistent system that provides
+    Read-Your-Writes consistency: when an item is written successfully, Couchbase guarantees that
+    the next read of that item will return exactly the value that was just written to any reader
+    instead of potentially returning an earlier value. There is one active copy of the data that is
+    definitively up-to-date. For example, if user Alice enters "A" into a document 1234 and then
+    changes its value to "B", if Bob then accesses that document he will always see "B" and never
+    "A".</draft-comment> <p>When talking about the <xref
+     href="http://www.infoq.com/articles/cap-twelve-years-later-how-the-rules-have-changed"
+     format="html" scope="external">CAP Theorem</xref>, distributed data management systems are
+    generally considered to be either CP or AP, that is, evaluators focus on a tradeoff in either
+    consistency (C) or availability (A). It's important to understand that the CAP Theorem is only
+    relevant in so far as it describes how a system behaves during a network partition and how it
+    recovers afterwards; when a system is working normally, no sacrifices need to be
+    made.</p><p>Couchbase Server acts like a CP system in its default configuration and running as a
+    single cluster. This is because any access to a given key (read, write, update, delete) is
+    always directed to the node that hosts that active data at that point in time. The application
+    client library transparently distributes requests to the appropriate nodes and therefore every
+    application server/thread will immediately read the writes of any other application
+    server/thread. Any write is also replicated within the cluster, but these replicas are primarily
+    for the purpose of high availability and by default do not service any traffic until made
+    active.</p><p>According to the CAP Theorem, a network partition cannot be distinguished from a
+    failure of a part of the system. With Couchbase, in the event of a failure of one node, some
+    data will be temporarily unavailable for writes until it is made active elsewhere in the
+    cluster, either manually or automatically. Reads, however, can continue to be served by the
+    replica copies of data elsewhere in the cluster. </p><p>If a single node fails, the data on a
+    node that failed will not accept writes until the node is failed over, although reads can be
+    serviced from replicas if desired. </p><p>Couchbase Server enables users to increase
+    availability by replicating data between multiple Couchbase Server clusters running in the same
+    or separate data centers using a capability called cross datacenter replication (XDCR, described
+    later). With XDCR the state of information on both clusters will eventually be made consistent,
+    and in the meantime Couchbase remains available to take read and write traffic. </p><p>Couchbase
+    Lite further increases availability in mobile and IOT scenarios. It does this by preserving
+    local changes on device as a user interacts with the application as normal and then managing
+    sync to Couchbase Server when network connectivity is restored. </p><p>Although the <xref
+     href="http://www.infoq.com/articles/cap-twelve-years-later-how-the-rules-have-changed"
      format="html" scope="external">CAP Theorem</xref> is a useful high-level formulation of
     principles, a full discussion of how Couchbase Server behaves and recovers from various
     distributed failure conditions is beyond the scope of this paper, especially given the various
     configuration and programming options available. For a more thorough discussion of the CAP
     Theorem as it applies to Couchbase Server, see <xref
-     href="http://blog.couchbase.com/cap-theorem-and-couchbase-server-time-xdcr"
-     format="html" scope="external"/>. </p></section>
-  <section> <title>Eventual consistency for indexes and replicas</title>
-   <p> 
-    Consistency for indexes and replicas follows an eventual consistency model: if there are no new updates to the system, eventually all readers will see the most recent value. Indexes are built incrementally, so after the initial build Couchbase Server can immediately respond to a request, or it can be made to catch up to the point in time when the query was issued. A developer can choose how fresh the index data is at the time of query by setting the “stale” property. This offers a high degree of configurability, from requiring that Couchbase Server process all updates before issuing a response to allowing Couchbase Server to immediately respond to a request using the current state of the index at the time of the query, or somewhere in between. The range of options allows applications to be as fast as possible unless there is a hard requirement to have the freshest information in the index.
-   </p> </section>
+     href="http://blog.couchbase.com/cap-theorem-and-couchbase-server-time-xdcr" format="html"
+     scope="external"/>. </p></section>
+  <section> <title>Consistency of indexes and replicas</title>
+   <p> By default, indexes and replicas are updated asynchronously for best performance.  On a
+    per-write or per-query basis, an application can choose to relax some of the performance to
+    favor stronger reliability (for replicas) or consistency (for queries). Traditional RDBMs and
+    NoSQL databases slow down writes in order to keep indexes and replicas up-to-date. Couchbase by
+    design allows the application developer to make informed tradeoffs depending on what is most
+    important for that part of the application.</p>
+   <p> Couchbase indexes are built incrementally, so after the initial build Couchbase Server can
+    immediately respond to a request, or it can be made to catch up to the point in time when the
+    query was issued. A developer can choose how fresh the index data is at the time of query by
+    setting the “stale” property. This offers a high degree of configurability, from requiring that
+    Couchbase Server process all updates before issuing a response to allowing Couchbase Server to
+    immediately respond to a request using the current state of the index at the time of the query,
+    or somewhere in between. The range of options allows applications to be as fast as possible
+    unless there is a hard requirement to have the freshest information in the index. </p> </section>
   <section> <title> Tunable durability requirements </title>
    <p>By default, writes are asynchronous and the data manager sends an acknowledge message (ACK) to a client as soon as an update is in RAM. Once a write is in memory, the data manager immediately adds it to replication, disk, and indexing queues. Replication is RAM-based, so it is extremely fast. To increase tolerance to failures at the cost of increased latency, Couchbase can acknowledge the change to the application only after the update is also  replicated, persisted to disk or both. Data is replicated to 1, 2, or 3 nodes for a total of up to four copies and saved to disk, regardless of whether the ACK message is held up for those operations.  
    </p> </section>
