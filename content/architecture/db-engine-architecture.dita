@@ -12,7 +12,7 @@
    storage engine enables the server to efficiently hold data much larger than the size of memory.
     <fig id="fig_bpn_3ft_xs">
     <title>Database engine architecture</title>
-    <image placement="break" href="images/db-engine-architecture.png" width="400"
+    <image placement="break" href="images/db-engine-architecture.png" width="600"
      id="image_cpn_3ft_xs"/>
    </fig></p>
   <section><title>Listeners</title>
@@ -27,33 +27,44 @@
    <p>Whenever you restart the Couchbase Server or restore the data, the node goes through a warmup process before it starts handling data requests again. During warmup, the Couchbase Server loads data  persisted on disk into RAM. </p>
    <p>Couchbase Server provides an optimized warmup process that loads data sequentially from disk into RAM. It divides the data to be loaded and handles it in multiple phases. After the warmup process completes, the data is available for clients to read and write. The time needed for a node warmup depends on the system size, system configuration, the amount of data persisted in the node, and the ejection policy configured for the buckets. 
     <note>The Couchbase Server is capable of serving data before it actually loads all the keys and data from the vBuckets. </note></p>
-   <p>Couchbase Server identifies items that are frequently used, prioritizes them, and loads them before sequentially loading the remaining data. The frequently-used items are prioritized in an access log. The server prefetches a list of the most frequently accessed keys and then fetches these keys before fetching any other items from disk. </p>
+   <p>Couchbase Server identifies items that are frequently used, prioritizes them, and loads them
+    before sequentially loading the remaining data. The frequently-used items are prioritized in an
+    access log. The server performs a prefetch to get a list of the most frequently accessed keys
+    and then fetches these keys before fetching any other items from disk. </p>
    <p>The server runs a configurable scanner process that determines the keys that are most frequently used. The scanner process is preset and is configurable. You can use the command-line tool,<cmdname>cbepctl flush_param</cmdname>, to change the initial time and interval for the scanner process. For example, you can configure the scanner process to run during a specific time period when a given list of keys need to be identified and made available sooner.</p>
    <p>The server can also switch into a <i>ready mode</i> before it has actually retrieved all documents for keys into RAM, thereby enabling data to be served before all the stored items are loaded. Switching into ready mode is a configurable setting that enables you to adjust the server warmup time.</p>
-   <p></p>
   </section>
   <section><title>Tunable memory with ejection policy</title>
    <p>Tunable memory enables you to configure the ejection policy for a bucket as one of the following: <ul>
     <li>Value-only ejection (default) removes data from the cache but keeps all keys and metadata fields for non-resident items. When a value bucket ejection occurs, the value of the item is reset. Value-only ejection, also referred to as value ejection, is well suited for cases where low latency access is critical to the application and the total item keys for the bucket can easily fit in the allocated Data RAM quota. </li>
-    <li>Full metadata ejection removes all data including keys, metadata, and key-value pairs from the cache for non-resident items. Full ejection is well suited for cases where the application has cold data that is not accessed frequently or the total data size is too large to fit in memory plys higher latency access to the data is accepted. <note spectitle="Important">Full ejection may involve additional disk I/O per operation. For example, when the request <i>get_miss</i> which requests a key that does not exist is received, Couchbase Server will check for the key on the disk even if the bucket is 100% resident. </note></li>
+    <li>Full metadata ejection removes all data including keys, metadata, and key-value pairs from
+      the cache for non-resident items. Full ejection is well suited for cases where the application
+      has cold data that is not accessed frequently or the total data size is too large to fit in
+      memory plus higher latency access to the data is accepted. <note spectitle="Important">Full
+       ejection may involve additional disk I/O per operation. For example, when the request
+        <i>get_miss</i> which requests a key that does not exist is received, Couchbase Server will
+       check for the key on the disk even if the bucket is 100% resident. </note></li>
    </ul></p>
   </section>
   <section><title>Working set management and ejection</title>
    <p>Couchbase Server actively manages the data stored in a caching layer; this includes the information which is frequently accessed by clients and which needs to be available for rapid reads and writes. When there are too many items in RAM, Couchbase Server removes certain data to create free space and to maintain system performance. This process is called “working set management” and the set of data in RAM is referred to as the “working set”. In general, the working set consists of all the keys, metadata, and associated documents which are frequently used require fast access. The process the server performs to remove data from RAM is known as ejection.</p>
    <p>Couchbase Server performs ejections automatically. When ejecting information, it works in conjunction with the disk persistence system to ensure that data in RAM is persisted to disk and can be safely retrieved back into RAM whenever the item is requested. </p>
-   <p>In addition to the Data RAM quota for the caching layer, the engine uses two watermarks, mem_low_wat and mem_high_wat, to determine when it needs to start persisting more data to disk.</p>
+   <p>In addition to the Data RAM quota for the caching layer, the engine uses two watermarks,
+     <parmname>mem_low_wat</parmname> and <parmname>mem_high_wat</parmname>, to determine when it
+    needs to start persisting more data to disk.</p>
    <p>As more and more data is held in the caching layer, at some point in time it passes the
-    mem_low_wat value. At this point, no action is taken. As data continues to load, it eventually
-    reaches the mem_high_wat value. At this point, the Couchbase Server schedules a background job
-    called item pager which ensures that items are migrated to disk and memory is freed up for other
-    Couchbase Server items. This job runs until measured memory reaches mem_low_wat. If the rate of
-    incoming items is faster than the migration of items to disk, the system returns errors
-    indicating there is not enough space until there is sufficient memory available. The process of
-    migrating data from the cache to make way for actively used information is called ejection and
-    is controlled automatically through thresholds set on each configured bucket in the Couchbase
-    Server cluster. <fig id="fig_cr5_jk5_xs">
+     <parmname>mem_low_wat</parmname> value. At this point, no action is taken. As data continues to
+    load, it eventually reaches the <parmname>mem_high_wat</parmname> value. At this point, the
+    Couchbase Server schedules a background job called item pager which ensures that items are
+    migrated to disk and memory is freed up for other Couchbase Server items. This job runs until
+    measured memory reaches <parmname>mem_low_wat</parmname>. If the rate of incoming items is
+    faster than the migration of items to disk, the system returns errors indicating there is not
+    enough space until there is sufficient memory available. The process of migrating data from the
+    cache to make way for actively used information is called ejection and is controlled
+    automatically through thresholds set on each configured bucket in the Couchbase Server cluster.
+     <fig id="fig_cr5_jk5_xs">
      <title>Working set management and ejection</title>
-     <image placement="break" href="images/tunable-memory-bucket-config.png" width="250"
+     <image placement="break" href="images/tunable-memory-bucket-config.png" width="300"
       id="image_dr5_jk5_xs"/>
     </fig></p> 
    <p>Depending on the ejection policy set for the bucket, the vBucket Manager removes just the
@@ -72,10 +83,10 @@
   <section><title>Not Recently Used (NRU) items</title>
    <p>All items in the server contain metadata indicating whether the item has been recently accessed or not. This metadata is known as not-recently-used (NRU). If an item has not been recently used, then the item is a candidate for ejection. When data in the cache exceeds the high water mark (mem_high_wat), the server evicts items from RAM.</p>
     <p>Couchbase Server provides two NRU bits per item and also provides a replication protocol that can propagate items that are frequently read, but not mutated often.</p>
-   <p><draft-comment author="amarantha">The earlier versions of Couchbase Server provided only a single bit for NRU and a different replication protocol which resulted in two issues: <ul>
+   <!--<p><draft-comment author="amarantha">The earlier versions of Couchbase Server provided only a single bit for NRU and a different replication protocol which resulted in two issues: <ul>
     <li>metadata could not reflect how frequently or recently an item had been changed</li>
     <li>the replication protocol only propagated NRUs for mutation items from an active vBucket to a replica vBucket</li>
-   </ul>The second behavior implied that the working set on an active vBucket could be quite different than the set on a replica vBucket. By changing the replication protocol, Couchbase Server ensures that the working set in replica vBuckets is now closer to the working set in the active vBucket.</draft-comment></p>
+   </ul>The second behavior implied that the working set on an active vBucket could be quite different than the set on a replica vBucket. By changing the replication protocol, Couchbase Server ensures that the working set in replica vBuckets is now closer to the working set in the active vBucket.</draft-comment></p>-->
    <p>NRUs are decremented or incremented by server processes to indicate an item that is more
     frequently or less frequently used. The following table lists the bit values with the
     corresponding scores and statuses: <table frame="all" rowsep="1" colsep="1"
@@ -202,8 +213,7 @@
     <dlentry>
      <dt>Scheduler</dt>
      <dd>The scheduler is responsible for managing a shared thread-pool and providing a fair allocation of resources to the jobs waiting to execute in the vBucket engine. Shared thread pool services requests across all buckets.
-       <p>As an administrator, you can govern the allocation of resources by configuring a bucket’s disk I/O prioritization setting to be either high or low.</p> </dd>
-    </dlentry>
+       <p>As an administrator, you can govern the allocation of resources by configuring a bucket’s disk I/O prioritization setting to be either high or low.</p> </dd></dlentry>
     <dlentry>
      <dt>Shared thread pool</dt>
      <dd>A shared thread pool is a collection of threads which are shared across multiple buckets for long running operations such as disk I/O. Each node in the cluster has a thread pool that is shared across multiple vBuckets on the node. Based on the number of CPU cores on a node, the database engine spawns and allocates threads when a node instance starts up.
@@ -211,17 +221,21 @@
        <li>Better parallelism for worker threads with more efficient I/O resource management. </li>
        <li>Better system scalability with more buckets being serviced with fewer worker threads.</li>
        <li>Availability of task priority if the disk bucket I/O priority setting is used.</li>
-      </ul></p>
-     </dd>
-    </dlentry>
+      </ul></p></dd> </dlentry>
    </dl>
   </section>
   <section><title>Disk I/O priority</title>
    <p>Disk I/O priority enables workload priorities to be set at the bucket level.</p>
    <p>You can configure the bucket priority settings at the bucket level and set the value to be either high or low. Bucket priority settings determine whether I/O tasks for a bucket must be queued in the low or high priority task queues. Threads in the global pool poll the high priority task queues more often than the low priority task queues. When a bucket has a high priority, its I/O tasks are picked up at a higher frequency and thus, processed faster than the I/O tasks belonging to a low priority bucket.</p>
-   <p>You can configure the bucket I/O priority settings during initial setup and change the settings later, if needed. However, changing a bucket I/O priority after the initial setup results in a restart of the bucket and the client connections are reset. </p>
-   <p><draft-comment author="amarantha">Get screenshot of Create Default Bucket wizard</draft-comment>
-    The previous versions of Couchbase Server, version 3.0 or earlier, required the I/O thread allocation per bucket to be configured manually. However, when you upgrade from a 2.x version to a 3.x or higher version, Couchbase Server converts an existing thread value to either a high or low priority based on the following criteria: <ul>
+   <p>You can configure the bucket I/O priority settings during initial setup and change the
+    settings later, if needed. However, changing a bucket I/O priority after the initial setup
+    results in a restart of the bucket and the client connections are reset. <fig
+     id="fig_hvl_jq2_2t">
+     <title>Create bucket settings</title>
+     <image placement="break" href="images/create-bucket-settings.png" width="600"
+      id="image_ivl_jq2_2t"/>
+    </fig></p>
+   <p>The previous versions of Couchbase Server, version 3.0 or earlier, required the I/O thread allocation per bucket to be configured manually. However, when you upgrade from a 2.x version to a 3.x or higher version, Couchbase Server converts an existing thread value to either a high or low priority based on the following criteria: <ul>
     <li>Buckets allocated six to eight (6-8) threads in Couchbase Server 2.x are marked high priority in bucket setting after the upgrade to 3.x or later.</li>
     <li>Buckets allocated three to five (3-5) threads in Couchbase Server 2.x are marked low priority in bucket settings after the upgrade to 3.x or later.</li>
    </ul> </p>
