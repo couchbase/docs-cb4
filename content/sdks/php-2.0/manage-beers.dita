@@ -15,7 +15,7 @@
     $results = $cb->query(
         CouchbaseViewQuery::from("beer", "by_name")
             ->limit(INDEX_DISPLAY_LIMIT)
-    ));
+    );
 
     $beers = array();
     // Iterate over the returned rows
@@ -24,7 +24,7 @@
         $doc = $cb->get($row['id']);
         if($doc) {
             // Decode the JSON string into a PHP array
-            $doc = json_decode($doc, true);
+            $doc = json_decode($doc->value, true);
             $beers[] = array(
                 'name' => $doc['name'],
                 'brewery' => $doc['brewery_id'],
@@ -91,7 +91,7 @@
     $beer = $cb->get($id);
     if($beer) {
        // If a document was found, decode it
-       $beer = json_decode($beer, true);
+       $beer = json_decode($beer->value, true);
        $beer['id'] = $id;
     } else {
        // Redirect if no document was found
@@ -151,7 +151,7 @@ $app->get('/beers/edit/{id}', function($id) use ($app, $cb) {
     $beer = $cb->get($id);
     if($beer) {
         // Decode the document
-       $beer = json_decode($beer, true);
+       $beer = json_decode($beer->value, true);
        $beer['id'] = $id;
     } else {
         // Redirect if no document was found
@@ -181,7 +181,7 @@ $app->post('/beers/edit/{id}', function(Request $request, $id) use ($app, $cb) {
     $newbeer['type'] = 'beer';
 
     // Encode it to a JSON string and save it back
-    $cb->set($id, json_encode($newbeer));
+    $cb->upsert($id, json_encode($newbeer));
 
     // Redirect to show the beers details
     return $app->redirect('/beersample-php/beers/show/' . $id);
@@ -266,13 +266,6 @@ $app->post('/beers/edit/{id}', function(Request $request, $id) use ($app, $cb) {
     // Extract the search value
     $input = strtolower($request->query->get('value'));
 
-    // Define the Query options
-    $options = array(
-      'limit' => INDEX_DISPLAY_LIMIT, // Limit the number of returned documents
-      'startkey' => $input, // Start the search at the given search input
-      'endkey' => $input . '\uefff' // End the search with a special character (see explanation below)
-    );
-
     // Query the view
     $q = CouchbaseViewQuery::from('beer', 'by_name')
         ->limit(INDEX_DISPLAY_LIMIT)
@@ -286,7 +279,7 @@ $app->post('/beers/edit/{id}', function(Request $request, $id) use ($app, $cb) {
         $doc = $cb->get($row['id']);
         if($doc) {
             // If the doc is found, decode it.
-            $doc = json_decode($doc, true);
+            $doc = json_decode($doc->value, true);
             $beers[] = array(
                 'name' => $doc['name'],
                 'brewery' => $doc['brewery_id'],
@@ -298,12 +291,11 @@ $app->post('/beers/edit/{id}', function(Request $request, $id) use ($app, $cb) {
     // Return a JSON formatted response of all beers for the JavaScript code.
     return $app->json($beers, 200);
 });</codeblock>
-		<p>The two new query parameters we make use of are: <codeph>startkey</codeph> and
-				<codeph>endkey</codeph>. They allow us to define the key where the search should begin
-			and the key where the search should end. We use the special character
-				<codeph>'\uefff'</codeph> here, which means “end.” That way, we only get results that
-			correctly begin with the given search string. This is a little trick that comes in very
-			handy from time to time.</p>
+		<p>The <codeph>limit</codeph> method specifies the maximum number of documents to return. The
+				<codeph>range</codeph> method defines start and end keys for the search. The special
+			character concatenated to the end key, <codeph>'\uefff'</codeph> , means “end.” Using this
+			character assures that only documents beginning with the given search string are returned.
+			This is a little trick that comes in very handy from time to time.</p>
 		<p>The rest is very similar to the <codeph>index</codeph> action so we’ll skip the discussion for
 			that. Also, we don’t need a template here because we can return the JSON response
 			directly.</p>
