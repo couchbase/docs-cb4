@@ -1,20 +1,169 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
-<concept id="concept_cn2_5ck_r5">
+<concept id="concept_jc_rn_220">
 	<title>Release notes</title>
 	<shortdesc>Release notes for the 2.2 version of the Java SDK.</shortdesc>
 
 
-	<concept id="ga214">
-		<title>Couchbase Java Client 2.2.0 GA (day month 2015)</title>
-		<shortdesc>Version 2.1.0 is the first release of the 2.1 series. </shortdesc>
+	<concept id="ga220">
+		<title>Couchbase Java Client 2.2.0 GA (2nd September 2015)</title>
+		<shortdesc>Version 2.2.0 is the first release of the 2.2 series and brings compatibility with Couchbase Server 4.0 as well as lots of new features and enhancements. </shortdesc>
 		<conbody>
 
-			<section id="ga214-fixes">
+			<section id="ga220-migrating">
+				<title>Migration Notes</title>
+				<p>While the 2.2 release does not bring any breaking changes to stable API over 2.1, some API has been modified and unstable API renamed. The following provides guidelines on migrating from 2.1.x:</p>
+
+				<ul>
+
+ 					<li>The <codeph>counter(String id, long delta)</codeph> method and associated overloads (custom timeout or with durability requirements) has been modified so that it throws a <codeph>DocumentDoesNotExistException</codeph> if the document does not exist. Previously, the code automatically initialized the document with 0. The 1.x SDK provided a similar feature, so we wanted to bring it back for more flexibility. The new code is simple - just use the overload with an initial value of 0:
+
+<codeblock outputclass="language-java"><![CDATA[// before
+bucket.counter("id", 10);
+
+// after
+bucket.counter("id", 10, 0);]]></codeblock>
+					</li>
+
+ <li>If the cas is set on the documents used in append/prepend operations and the server cas does not match, previously a generic CouchbaseException was thrown. Now the code checks for this response status and returns a more correct <codeph>CASMismatchException</codeph>. Because this exception extends the <codeph>CouchbaseException</codeph>, your code might still work, although checking for this explicit exception type is recommended.</li>
+
+<li>If you have been using the asynchronous API, be aware that all the async API methods are now returning **cold** observables instead of <b>hot</b> ones. As a result, you don't need to call <codeph>Observable.defer()</codeph> around the bucket calls if you want proper retry semantics. If you are doing that already, you can remove the calls (but don't have to - it's just a little more overhead). Also, it has been always recommended, but make sure to subscribe to all of your observables. Hot observables might have been automatically executed, but cold observables won't. Not subscribing in general goes against the RX contract.</li>
+
+<li><p>If you've been implementing your own Document type together with a custom transcoder, you now need to implement a new method if you want to use the document together with the new feature called enhanced durability. The specific change is that you need to add a simple factory method which allows you to pass in the new <codeph>MutationToken</codeph>. Your old code will keep working, but for future compatibility we recommend adding this new method.</p>
+
+<p>As an example, here is how the <codeph>JsonDocument</codeph> implements the new method. If you want, you can also make the older factory method just forward to the new one:</p>
+
+<codeblock outputclass="language-java"><![CDATA[// Pre-2.2, can still be used
+@Override
+public JsonDocument newDocument(String id, int expiry, JsonObject content, long cas) {
+    return JsonDocument.create(id, expiry, content, cas);
+}
+
+// New in 2.2
+@Override
+public JsonDocument newDocument(String id, int expiry, JsonObject content, long cas,
+    MutationToken mutationToken) {
+    return JsonDocument.create(id, expiry, content, cas, mutationToken);
+}]]></codeblock>
+
+<p>If your document extends from the AbstractDocument, make sure you call the new super method with the token instead of the old one:</p>
+
+<codeblock outputclass="language-java"><![CDATA[private JsonDocument(String id, int expiry, JsonObject content, long cas, MutationToken mutationToken) {
+    super(id, expiry, content, cas, mutationToken);
+}]]></codeblock>
+
+<p>If you have been experimenting with the 2.2 developer previews, the following has changed:</p>
+</li>
+
+<li>To make the N1QL queries more consistent with the View queries, all exposed N1QL classes have been prefixed with N1QL or been renamed in a slightly different manner to make the intent clear. We did rename Query, QueryResult, QueryRow, their async counterparts, concrete
+implementations and related tests by prefixing <codeph>Query</codeph> with <codeph>N1ql</codeph>. Also, <codeph>QueryMetrics</codeph> and <codeph>QueryParams</codeph> have been respectively renamed to
+<codeph>N1qlMetrics</codeph> and <codeph>N1qlParams</codeph>. Finally, the <codeph>QueryExecutor</codeph> has been renamed to <codeph>N1qlQueryExecutor</codeph>.</li>
+
+<li>Since we are stabilizing the API now, we also had to rename the <codeph>parametrized</codeph> query to <codeph>parameterized</codeph>. This is to ensure the best possible experience across SDKs and consistent documentation for client and server.</li>
+
+				</ul>
+
+
+			</section>
+
+			<section id="ga220-features">
+				<title>New features and behavioural changes</title>
+				<p>This release brings the following features and enhancements:</p>
+
+
+				<ul>
+
+					<li><xref href="https://www.couchbase.com/issues/browse/JVMCBC-137" format="html"
+							scope="external">JVMCBC-137</xref>, <xref href="https://www.couchbase.com/issues/browse/JVMCBC-222" format="html"
+							scope="external">JVMCBC-222</xref>, <xref href="https://www.couchbase.com/issues/browse/JCBC-732" format="html"
+							scope="external">JCBC-732</xref>, <xref href="https://www.couchbase.com/issues/browse/JCBC-761" format="html"
+							scope="external">JCBC-761</xref> (and more): Official Couchbase Server 4.0 Support. This includes mainly a stable and tested N1QL API, as well as support for MDS (Multi-Dimensional Scaling). Use 2.2.0 and later as your go-to release when working with CB Server 4.0 and up.
+							</li>
+
+
+					<li><xref href="https://www.couchbase.com/issues/browse/JVMCBC-60" format="html"
+							scope="external">JVMCBC-60</xref>: System and Latency Metrics are now collected in an "always on" fashion and emitted to the event bus every hour by default. This is all configurable and tunable based on the applications needs. Please consult the documentation on metrics to get all the nitty gritty details.
+							</li>
+
+					<li><xref href="https://www.couchbase.com/issues/browse/JCBC-826" format="html"
+							scope="external">JCBC-826</xref>, <xref href="https://www.couchbase.com/issues/browse/JVMCBC-190" format="html"
+							scope="external">JVMCBC-190</xref>, <xref href="https://www.couchbase.com/issues/browse/JVMCBC-205" format="html"
+							scope="external">JVMCBC-205</xref>: 4.0 also introduces a new feature called "Enhanced Durability" which allows for more accurate durability requirements (PersistTo and ReplicateTo). All you need to do is enable the mutation tokens on the environment, but keep in mind that there is an increased byte overhead on every mutation.
+
+<codeblock outputclass="language-java"><![CDATA[// Enable enhanced durability
+CouchbaseEnvironment environment = DefaultCouchbaseEnvironment.builder()
+            .mutationTokensEnabled(true)
+            .build();
+
+// Perform an operation as before and benefit from it transparently
+bucket.upsert(doc, PersistTo.MASTER, ReplicateTo.ONE);]]></codeblock>
+
+							</li>
+
+					<li><xref href="https://www.couchbase.com/issues/browse/JCBC-744" format="html"
+							scope="external">JCBC-744</xref>: Experimental support for POJO mapping capabilities has been added in form of a repository API. See this <xref href="http://blog.couchbase.com/javasdk-2.2-dp" format="html" scope="external">blog post</xref> for more details. Here is a quick example. Right now you need a no-args constructor to recreate the object again, we'll make it more flexible with explicit constructors in the future so you can use final fields.
+
+
+ <codeblock outputclass="language-java"><![CDATA[public static class User {
+
+    @Id
+    private String username;
+
+    private String firstname;
+
+    @Field("lname")
+    private String lastname;
+
+    public User(String username, String firstname, String lastname) {
+        this.username = username;
+        this.firstname = firstname;
+        this.lastname = lastname;
+    }
+
+    public User() {}
+}
+
+Repository repository = bucket.repository();
+
+User user = new User("daschl", "Michael", "N.");
+repository.upsert(EntityDocument.create(user));
+
+System.out.println(repository.get("daschl", User.class).content().firstname);]]></codeblock>
+
+
+							</li>
+					<li><xref href="https://www.couchbase.com/issues/browse/JCBC-805" format="html"
+							scope="external">JCBC-805</xref>: The <codeph>getFromReplica()</codeph> method now has an overload which returns an <codeph>Iterator</codeph>, making it more flexible on the blocking API to only extract one or two results if needed (and don't wait for all responses).
+							</li>
+					<li><xref href="https://www.couchbase.com/issues/browse/JCBC-749" format="html"
+							scope="external">JCBC-749</xref>: <codeph>includeDocs</codeph> on the ViewQuery has been readded (it was there in 1.x) so that the blocking API can benefit from efficient bulk document loading in the background automatically. If you are using the async API only, you won't need this query option.</li>
+					<li><xref href="https://www.couchbase.com/issues/browse/JCBC-784" format="html"
+							scope="external">JCBC-784</xref>: As mentioned in the migration notes above, the counter overload with no default value has been enhanced to throw an exception if the document does not exist. Previously, it was not possible to only use the counter method on documents which exist (they would always be initialized with a default value of 0 instead).</li>
+					<li><xref href="https://www.couchbase.com/issues/browse/JCBC-836" format="html"
+							scope="external">JCBC-836</xref>: Durability Requirements for <codeph>append</codeph>, <codeph>prepend</codeph> and <codeph>counter</codeph> have been added to the Bucket API. This allows you to observe persistence and replication not only on insert, upsert, replace and remove, but also on append, prepend and counter. Of course, this all plays well with the new enhanced durability feature we've added if you work against the 4.0 server or later.</li>
+					<li><xref href="https://www.couchbase.com/issues/browse/JCBC-782" format="html"
+							scope="external">JCBC-782</xref>: All async API calls are now "cold", which means they are not eagerly run until subscribed by the caller. This won't affect basic usage, but makes it easier when doing async retry logic or branching to fallback calls.</li>
+					<li><xref href="https://www.couchbase.com/issues/browse/JCBC-652" format="html"
+							scope="external">JCBC-652</xref>: When creating or replacing a <codeph>DesignDocument</codeph>, you can now specify different options which are configurable on a per design document basis. Please see the documentation for a list of those options.</li>
+					<li><xref href="https://www.couchbase.com/issues/browse/JVMCBC-237" format="html"
+							scope="external">JVMCBC-237</xref>: To detect cluster changes in MDS setup more reliably, the SDK now polls for a new configuration every 10 seconds. This is completely transparent, but can be seen when dumping the network traffic. Note that the NOOP heartbeat polling is still in place, only the "piggybacked" config reloading has been superseeded with this more general approach.</li>
+				</ul>
+
+			</section>
+
+			<section id="ga220-fixes">
 				<title>Fixed issues</title>
 				<p>This release fixes the following issues:</p>
 
-				
+				<ul>
+					<li><xref href="https://www.couchbase.com/issues/browse/JVMCBC-231" format="html"
+							scope="external">JVMCBC-231</xref>: A race condition has been fixed during shutdown (internal reconfigure), when all nodes are removed.</li>
+					<li><xref href="https://www.couchbase.com/issues/browse/JCBC-834" format="html"
+							scope="external">JCBC-834</xref>: The blocking API for spatial queries was using the default timeout for N1QL queries instead of views. They are set to the same value by default, but can be changed on the environment separately, probably leading to weird behaviour if not taken into account.</li>
+					<li><xref href="https://www.couchbase.com/issues/browse/JCBC-815" format="html"
+							scope="external">JCBC-815</xref>: Do not let the <codeph>CouchbaseEnvironment.Builder</codeph> implement the <codeph>CouchbaseEnvironment</codeph>. This has lead to confusion during development and is not necessary.</li>
+				</ul>
+
 			</section>
 
 		</conbody>
