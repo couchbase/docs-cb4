@@ -1,0 +1,360 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_xfr_byq_ft">
+	<title>Durability requirements</title>
+	<shortdesc />
+	<conbody>
+		<p>If you do not specify any durability requirements, the server will respond with a success
+			message if the data has been acknowledged and processed in the managed cache. This means
+			that because persistence and replication are asynchronous tasks and happen eventually,
+			there is a time gap where a node failure can lead to data loss. This time gap is exactly
+			between the data has neither been replicated to another node nor persisted to disk.</p>
+		<p>In general, for most use cases this time gap is totally acceptable (since it is usually
+			very small), but for the important mutation operations we need stronger guarantees.
+			Changing the server to some more magic (like only acknowledging once it has been replicated
+			or persisted) by default makes the whole system slower, so Couchbase has another way to
+			handle those situations. Here is how it works:</p>
+		<ol>
+			<li>The SDK will perform the normal mutation without durability requirements.</li>
+			<li>If the server returns with a successful response, the client will start polling.</li>
+			<li>The client polls all the affected (more in a bit on this) nodes for this mutation until
+				either the desired state is reached or it can’t be reached for a reason.</li>
+			<li>In the successful case the operation will also complete towards the application layer,
+				and in the failure case the client will error out the operation, leaving the user to
+				decide whats next.</li>
+		</ol>
+		<p>The following code will make sure that the document has been persisted on the active node
+			for this document ID and also replicated to one of the configured replicas:</p>
+		<codeblock outputclass="language-java">JsonDocument docPersistedAndReplicated = bucket.upsert(docToStore, PersistTo.MASTER, ReplicateTo.ONE);
+</codeblock>
+		<p>In this example the client will poll two nodes until completion: the active node for this
+			document and also the configured replica. If any of the constraints cannot be fulfilled, an
+			exception will be raised. We’ll cover the specific error scenarios later in this
+			chapter.</p>
+		<p>In case you wonder why in the failure case we put the burden on you to figure out what
+			next: the SDK has no idea of your SLAs or intents to what do to when the operation fails.
+			Sometimes it might be fine to proceed and log the error, in other cases you may want
+			sophisticated retry mechanisms where the SDK can guide you with functionality, but not the
+			actual execution semantics.</p>
+
+		<section>
+			<title>PersistTo and ReplicateTo</title>
+			<p>The way to specify your intent to define durability requirements is by passing in
+					<codeph>PersistTo</codeph> and/or <codeph>ReplicateTo</codeph> enums as parameters on
+				mutation operations.</p>
+			<p>The following states can be set, and all of the combinations between the two are
+				supported. Note that the <codeph>NONE</codeph> states are the defaults, and in this case
+				this durability requirement won’t be used. The <codeph>NONE</codeph> state is useful
+				nonetheless if you define it based on a system property and need a fallback to the
+				default.</p>
+			<ul>
+				<li><codeph>PersistTo:</codeph> NONE, MASTER, ONE, TWO, THREE, FOUR</li>
+				<li><codeph>ReplicateTo:</codeph> NONE, ONE, TWO, THREE</li>
+			</ul>
+			<p>Since you can have a maximum of three replicas, the maximum number of replicas you can
+				check is three as well. For persisting the maximum number is four, because the active
+				node can be checked in addition to the three replicas.</p>
+			<p>All options (other than NONE and MASTER) will return as soon as the requirement is
+				fulfilled. So for example if you have two replicas configured on the bucket and you
+				specify <codeph>ReplicateTo.ONE</codeph>, as soon as either one of the two reports
+				success for the document ID the condition is assumed to be fulfilled.</p>
+			<p>If you provide both <codeph>PersistTo</codeph> and <codeph>ReplicateTo</codeph> both
+				conditions are linked together with a logical “and”, meaning that both conditions must
+				be satisfied in order for the SDK to report success.</p>
+			<p>Keep in mind that if the durability requirement failed, it could very well be that the
+				original mutation operation succeeded. See the common failure scenarios on more context.
+				This is due to the effect that the actual mutation and the subsequent polling are
+				individual operations which can also fail individually. As an example, if you specify
+					<codeph>ReplicateTo.ONE</codeph> and you have no replica configured, the original
+				mutation will complete without issues, but the durability requirement will fail.</p>
+
+		</section>
+		
+		<section>
+			<title>API support</title>
+			<p>The following mutation operations provide support for durability requirements:</p>
+			<ul>
+				<li>insert</li>
+				<li>upsert</li>
+				<li>replace</li>
+				<li>remove</li>
+			</ul>
+			<p>Here is an example that inserts a document and waits until it is persisted on the active
+				node:</p>
+			<codeblock outputclass="language-java">bucket.insert(document, PersistTo.MASTER);</codeblock>
+			<p>The following example replaces a document and waits until it is replicated to at least
+				one replica:</p>
+			<codeblock outputclass="language-java">bucket.replace(document, ReplicateTo.ONE);</codeblock>
+			<p>While not obvious in the first place, the same holds true for removal operations. If you
+				want to make sure that the deletion of the document survives node failures under any
+				conditions, you can use the same semantics. The following example makes sure that the
+				removal is persisted on at least two nodes in the cluster (like the master and one
+				replica):</p>
+			<codeblock>bucket.remove("docid", PersistTo.TWO);</codeblock>
+			<p>In this last example also specifying <codeph>ReplicateTo.ONE</codeph> would be
+				redundant, since persisting on a replica means it first needs to be replicated to
+				it.</p>
+		</section>
+		
+		<section>
+			<title>
+				<b>Exceptions and errors</b>
+			</title>
+			<p>The asynchronous API will send error notifications to your subscriber in the failure
+				case. Since the synchronous API just wraps the asynchronous one, those errors will be
+				converted into actual exceptions.</p>
+			<p>Every exception that happens during the durability requirement polling will be wrapped
+				into a <codeph>com.couchbase.client.java.error.DurabilityException</codeph>. The
+				original exception is carried as part of the <codeph>DurabilityException</codeph>, so
+				you can always call <codeph>Throwable#getCause()</codeph> on it.</p>
+			<p>After you do that, you will come across the following errors:</p>
+			<ul>
+				<li><codeph>DocumentConcurrentlyModifiedException</codeph>: If the observed document has
+					been concurrently modified by another caller.</li>
+				<li><codeph>ReplicaNotConfiguredException</codeph>: There are not enough replicas
+					configured to fulfill the durability requirement in the first place.</li>
+				<li><codeph>ReplicaNotAvailableException</codeph>: There are currently not enough
+					replicas in the cluster to fulfill the durability requirement right now.</li>
+				<li><codeph>DocumentMutationLostException</codeph>: The mutation has been lost during a
+					hard failover. Only applies to enhanced durability.</li>
+			</ul>
+			<p>These errors can happen for a subset of the documents, depending on which node has been
+				failed over and no replica is available at this point. Other errors will affect all
+				documents, for example if no replica is configured on the bucket at all.</p>
+			<p>Keep in mind that because the polling for durability happens after the original
+				mutation, every failure on that one will propagate immediately and never trigger the
+				polling in the first place. This means that if you specify durability requirements, you
+				need to handle those errors in addition to the errors on the original mutation.</p>
+		</section>
+
+		<section>
+			<title>Failure modes and their impact</title>
+			<p>An advanced feature of the SDK are different failure modes, but in the context of
+				durability requirements they become more important. By default, the SDK uses
+					the<codeph>BestEffortRetryStrategy</codeph>, but you can plug in a different one
+				(commonly the <codeph>FailFastRetryStrategy</codeph>) or even write your own. If you
+				want to change it, you can do it on the environment like this:</p>
+			<codeblock outputclass="language-java">CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+    .builder()
+    .retryStrategy(FailFastRetryStrategy.INSTANCE)
+    .build();</codeblock>
+			<p>Keep in mind that since this is a global setting, all operations will be affected by it.
+				Now, what does it change in the context of durability requirements?</p>
+			<p>If the SDK detects an issue during the polling activity it will either continue to retry
+				(best effort), or bail out immediately (fail fast). So if a node goes down (see below
+				for more info) and does not come back up quickly enough with best effort you’ll hit the
+				client side timeout specified, while with fail fast you’ll very quickly get a
+					<codeph>DurabilityException</codeph> which contains the root cause, for example a
+					<codeph>RequestCancelledException</codeph>.</p>
+			<p>So if you use the fail fast retry strategy, you are trading more complex retry code on
+				your side for faster feedback cycles in the failure case. A common reason to enable fail
+				fast is if you use some more sophisticated libraries on top of the SDK, for example
+					<xref href="https://github.com/Netflix/Hystrix" format="html" scope="external"
+					>Hystrix</xref>.</p>
+		</section>
+		<section>
+			<title>
+				<b>Common failure scenarios</b>
+			</title>
+			<p>Because durability constraints in general span more than one node, the statistical
+				chance for operation failures is higher. As a result, it is even more important for
+				production stability to consider what can go wrong and in what ways to react.</p>
+			<p>This section focuses on failures that come up because of invalid cluster setup while the
+				next section covers node failures (like a node failing because of a power outage or
+				hardware failure).</p>
+			<p>Lots of durability requirement failures happen because the bucket doesn’t have enough
+				replicas configured in the first place or the number of nodes is not sufficient enough
+				(for example 2 replicas configured, but only 2 nodes in the cluster).</p>
+			<p>So if you have one replica configured on the bucket but you issue a mutation with
+					<codeph>ReplicateTo.TWO</codeph>, you’ll get the following error:</p>
+			<codeblock>Exception in thread "main" com.couchbase.client.java.error.DurabilityException: 
+				Durability requirement failed: Not enough replicas configured on the bucket.
+    at com.couchbase.client.java.CouchbaseAsyncBucket$18$1.call(CouchbaseAsyncBucket.java:549)
+    at com.couchbase.client.java.CouchbaseAsyncBucket$18$1.call(CouchbaseAsyncBucket.java:545)
+    at rx.internal.operators.OperatorOnErrorResumeNextViaFunction$1.onError(OperatorOnErrorResumeNextViaFunction.java:99)
+    ...
+Caused by: com.couchbase.client.core.ReplicaNotConfiguredException: Not enough replicas configured on the bucket.
+    at com.couchbase.client.core.message.observe.ObserveViaCAS$6$2.call(ObserveViaCAS.java:144)
+    at com.couchbase.client.core.message.observe.ObserveViaCAS$6$2.call(ObserveViaCAS.java:136)
+    at rx.internal.operators.OperatorMap$1.onNext(OperatorMap.java:55)
+</codeblock>
+			<p>When you have a replica configured on the bucket, but not enough nodes in the cluster to
+				actually replicate the data, the behavior varies on the retry strategy. By default (best
+				effort), you’ll get a timeout, because the client tries as long as possible (since the
+				node can be added to the cluster at run time):</p>
+			<codeblock>Exception in thread "main" java.lang.RuntimeException: java.util.concurrent.TimeoutException
+    at com.couchbase.client.java.util.Blocking.blockForSingle(Blocking.java:75)
+    at com.couchbase.client.java.CouchbaseBucket.upsert(CouchbaseBucket.java:375)
+    at com.couchbase.client.java.CouchbaseBucket.upsert(CouchbaseBucket.java:370)
+    at test.MainTest.main(MainTest.java:30)
+    at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+    at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+    at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+    at java.lang.reflect.Method.invoke(Method.java:497)
+    at com.intellij.rt.execution.application.AppMain.main(AppMain.java:140)
+Caused by: java.util.concurrent.TimeoutException
+    ... 9 more
+</codeblock>
+			<p>If you choose fail fast, the error will be a <codeph>DurabilityException</codeph> which
+				contains a <codeph>ReplicaNotAvailableException</codeph>:</p>
+			<codeblock>Exception in thread "main" com.couchbase.client.java.error.DurabilityException: 
+				Durability requirement failed: Replica number 1 not available for bucket default
+    at com.couchbase.client.java.CouchbaseAsyncBucket$18$1.call(CouchbaseAsyncBucket.java:549)
+    at com.couchbase.client.java.CouchbaseAsyncBucket$18$1.call(CouchbaseAsyncBucket.java:545)
+    at rx.internal.operators.OperatorOnErrorResumeNextViaFunction$1.onError(OperatorOnErrorResumeNextViaFunction.java:99)
+    at rx.internal.operators.OperatorMap$1.onError(OperatorMap.java:49)
+    at rx.internal.operators.OperatorMap$1.onError(OperatorMap.java:49)
+    at rx.internal.operators.OperatorTake$1.onError(OperatorTake.java:62)
+    ...
+Caused by: com.couchbase.client.core.ReplicaNotAvailableException: Replica number 1 not available for bucket default
+    at com.couchbase.client.core.node.locate.KeyValueLocator.errorObservables(KeyValueLocator.java:202)
+    at com.couchbase.client.core.node.locate.KeyValueLocator.locateForCouchbaseBucket(KeyValueLocator.java:127)
+    at com.couchbase.client.core.node.locate.KeyValueLocator.locate(KeyValueLocator.java:79)
+    ...
+</codeblock>
+			<p>Note the subtle difference between a <codeph>ReplicaNotConfiugredException</codeph> and
+				a <codeph>ReplicaNotAvailableException</codeph>. This lets you quite effectively
+				troubleshoot your cluster if it is not setup properly or if it is suffering from a
+				temporary failure condition.</p>
+		</section>
+		<section>
+			<title>Understanding and handling node failures</title>
+			<p>In addition to wrong cluster setup, the most common issue with durability requirements
+				is if at run time the cluster topology changes in a way that makes it not possible to
+				fulfill the requirements anymore.</p>
+			<p>In practice, this is commonly referred to as a “node failure”. This can happen because
+				the <codeph>couchbase-server</codeph> service is restarted, the node is powered down or
+				it is not reachable across the network. In all cases operations will start to fail,
+				either because the active partitions do not respond (the normal mutation fails) or the
+				replicas don’t (the observe for the durability requirement fails).</p>
+			<p>In this state, the outcome is nearly the same as in the chapter above. If you use the
+				best effort strategy you will run into your operation timeouts, in the fail fast case
+				you’ll see the <codeph>DurabilityExceptions</codeph> with the different underlying
+				causes.</p>
+			<p>The difference is though that only a subset of the operations will fail, since if you
+				have a 5 node cluster only 1/5th of the mutations will fail and the durability
+				requirement will only fail if the node down involved is the only one who can help
+				fulfilling. What that means in practice is that if you have 2 replicas configured, one
+				node is down and you use <codeph>ReplicateTo.ONE</codeph>, the other replica can still
+				help make the requirement succeed.</p>
+			<p>Once you manually trigger the node failover or the auto-failover feature kicks in, the
+				replicas are promoted to active and the regular mutations on those partitions will start
+				to work again. Here is the gotcha: since replicas have been promoted to active a few
+				seconds ago, those replicas are now gone.</p>
+			<p>So you either have more than one replica configured (in this case there is a spare one
+				sitting in the cluster answering the durability requirement requests) or you’ll still
+				get <codeph>ReplicaNotAvailableExceptions</codeph>.</p>
+			<p>Now once you hit rebalance and the cluster manager makes sure enough replicas are in
+				place again and the data is shuffled around, at some point
+					the<codeph>ReplicaNotAvailableExceptions</codeph> are gone and everything is good
+				again.</p>
+			<p>In terms of what to do when you hit such an exception very much depends on the type of
+				application. If you need to make sure the data is stored and you don’t mind waiting for
+				the cluster to settle again you can retry the operation with an exponential backoff. If
+				you are running an interactive application, most of the time you need to propagate the
+				error up the stack or fail in a controlled way.</p>
+			<p>While you should definitely plan for node failures, in general they don’t happen every
+				hour and if you plan accordingly you can minimize production impact. Strategies like
+				multiple replicas, using the enterprise edition rack awareness feature and since 4.0 the
+				transparent enhanced durability provide a strong foundation to build always-on services,
+				even in the failure case.</p>
+		</section>
+		<section>
+			<title>Handling concurrent document modifications</title>
+			<p>One error you might encounter in a concurrent application, even if all nodes are up and
+				running, is the <codeph>DocumentConcurrentlyModifiedException</codeph>. To understand
+				its roots, we need to peel back a layer and see how the polling mechanism works.</p>
+			<p>A successful mutation returns the new CAS value as part of the response. Because the CAS
+				value changes all the time when the document changes, we can use it to track the
+				replication and persistence on the server side. So here is roughly what happens inside
+				the SDK.</p>
+			<ol>
+				<li>The mutation is performed.</li>
+				<li>If successful, the document ID is sent to each participating server through the
+					internal <codeph>observe</codeph> command.</li>
+				<li>All responses are collected which contain a status (persisted, replicated) and the
+					CAS of the document on each server.</li>
+				<li>If on the master (active) node the CAS value is different from the one of our
+					mutation a <codeph>DocumentConcurrentlyModifiedException</codeph> is raised.</li>
+			</ol>
+			<p>Why?</p>
+			<p>Imagine application A mutates document D and gets a CAS returned. Then it starts
+				polling. Slightly afterward, application B also mutates document D and the CAS value
+				changes again. Because the managed cache on the server performs deduplication or the
+				document can be replicated between poll cycles, the CAS returned to application A might
+				never be observed since it already changed to the CAS from application B.</p>
+			<p>In order to detect this scenario, once the CAS on the master changes the SDK will raise
+				a <codeph>DocumentConcurrentlyModifiedException</codeph>. How to react depends on the
+				nature of the application. If from the semantics the latter operation subsumes the
+				previous one, ignoring the error might be acceptable. If not, application A needs to
+				fetch the document again, perform its changes or raise an error. In general, error
+				handling is very similar to a <codeph>CASMismatchException</codeph>.</p>
+			<p>The next section describes the “next generation observe” which removes the possibility
+				of a <codeph>DocumentConcurrentlyModifiedException</codeph> happening.</p>
+		</section>
+		<section>
+			<title>Enhanced durability requirements with 4.0+</title>
+			<p>Couchbase Server 4.0 introduces a new feature that allows the SDK to be more accurate
+				during the observe poll cycle, especially in the concurrent and failover cases. Instead
+				of using the CAS to verify mutations, it uses sequence numbers and partition UUIDs.</p>
+			<p>To enable them, all you need to do is enable mutation tokens on the environment:</p>
+			<codeblock outputclass="language-java">CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+    .builder()
+    .mutationTokensEnabled(true)
+    .build();</codeblock>
+			<p>The tradeoff here is an extra 16 byte overhead on every mutation. Every mutation returns
+				the partition UUID and the sequence number which are then used for the enhanced
+				durability requirements.</p>
+			<p>As a result, the new <codeph>MutationToken</codeph> on the <codeph>Document</codeph>
+				will be set and as a result the polling logic will automatically fall back to the
+				enhanced requirements. Only enable enhanced durability on a minimum node version of 4.0,
+				because the SDK will not check if each individual node supports the new observe
+				option.</p>
+			<p>Every mutation on the server side increases the sequence number. And because the SDK
+				uses sequence numbers instead of the CAS value, in the example above even if application
+				A and B update document D (say sequence 1 and 2 on the document), if we observe sequence
+				2 we can be sure sequence 1 has also been replicated or persisted.</p>
+			<p>If a hard failover happens, a new partition UUID is created and the server will return
+				with a different response. From this response the SDK can reliably infer if a mutation
+				has been lost (the replica took over but the last replicated sequence did not include
+				the mutation we have been polling for). In this case, a
+					<codeph>DocumentMutationLostException</codeph> will be raised. In general it is
+				recommended that the application re-performs the operation if this exception is
+				encountered to avoid data loss.</p>
+		</section>
+		<section>
+			<title>Performance considerations</title>
+			<p>Couchbase Server is widely recognized for its excellent and predictable performance. One
+				of the reasons for that is its managed cache, which allows it to return a response very
+				quickly and not having to take replication or persistence latency into account.</p>
+			<p>Again, it’s all tradeoffs. If you need to make sure data is replicated and/or persisted
+				your network or disk performance will be the dominant factor. If you need high
+				throughput and durability requirements, make sure (and measure) to have fast disks (SSD)
+				and/or fast network.</p>
+			<p>Because more than one node is in general involved and more round trips are needed, think
+				about realistic timeouts you want to set and measure them in production. If you hit
+				performance issues in production, make use of the new built-in metrics feature to gather
+				operation latency percentile information and adjust timeouts based on those
+				measurements. All timeouts you set on the blocking API need to take the original
+				mutation and all subsequent polls into account until the durability requirement is
+				met.</p>
+			<p>There is one final know you can tune on the environment: the
+					<codeph>observeIntervalDelay</codeph>. It allows you to tune the delays between
+				subsequent polls. By default, an exponential delay between 10 microseconds and 100
+				milliseconds is used. That way there will be a few very quick polls followed by some
+				with a longer pause, the ceiling at 100ms (so it does not grow exponentially out of
+				bounds). The following example fixes it at 50 microseconds:</p>
+			<codeblock outputclass="language-java">CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+    .builder()
+    .observeIntervalDelay(Delay.fixed(50, TimeUnit.MICROSECONDS))
+    .build();</codeblock>
+			<p>You want to tune the delay according to your network and disk performance
+				characteristics. Too frequent polls just overload the network unnecessarily while too
+				high poll delays will increase the latency for the overall operation (and subsequently
+				reduce application throughput). If you are uncertain, work with Couchbase Support to
+				find the optimal settings for your environment.</p>
+		</section>
+
+
+	</conbody>
+</concept>
