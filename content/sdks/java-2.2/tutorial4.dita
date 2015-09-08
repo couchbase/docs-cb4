@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept xml:lang="en-us" id="concept2677">
+	<title>Java SDK tutorial</title>
+	<shortdesc>The Java SDK tutorial bridges the gap between simple and advanced concepts by walking through a complete
+		web application.</shortdesc>
+	<conbody>
+
+		<section>
+			<p>The full source code for the tutorial is available <xref
+					href="https://github.com/couchbaselabs/try-cb-java/" scope="external"
+					format="html"> on GitHub couchbaselabs/try-cb-Java</xref>.
+				The primary focus of the tutorial is to explain the
+				function and theory behind the Couchbase Java client and how it works together with Couchbase Server, and especially new features in version 4.0 like <codeph>N1QL</codeph>. It makes use of the <codeph>travel-sample</codeph> dataset. The code that generates the web application is provided with the source code,
+				but is not discussed in this tutorial.
+			</p>
+			<note type="other">For reference, you can find the previous tutorial that focuses more on key/value operations and views (since N1QL was introduced in CB 4.0): <xref href="tutorial3.dita"/>.</note>
+		</section>
+
+		<section>
+			<title>Pre-Requisites and Getting Set Up</title>
+			<p>
+				You'll need:
+				<ul><li>Your favorite IDE with a JDK 1.6+ installed (this tutorial assumes IntelliJ with JDK 1.8)</li>
+				   <li>Maven 3</li>
+				<li>The sample app source code from Github (we'll only cover the Java part of the app)</li>
+				<li>A local <codeph>Couchbase 4.0</codeph> installation (make sure that the <codeph>travel-sample</codeph> bucket has been loaded and that there is at least one node with data, query and index services in the cluster</li>
+				<li>That's it!</li>
+				</ul>
+			</p>
+			<note type="tip">
+				<b>Installing Couchbase Server</b>
+				<p>
+					Download <xref href="http://www.couchbase.com/download" scope="external" format="html">Couchbase Server </xref> and install it.
+					As you follow the download instructions and setup wizard, make sure you keep all the services (<codeph>data</codeph>, <codeph>query</codeph> and <codeph>index</codeph>) selected and that you install the sample bucket named <codeph>travel-sample</codeph> (introduced in CB 4.0) because it contains the data used in this tutorial.
+				</p>
+				<p>
+					If you already have Couchbase Server installed but did not install the <codeph>travel-sample</codeph> bucket, open the Couchbase Web Console and select <menucascade><uicontrol>Settings</uicontrol><uicontrol>Sample Buckets</uicontrol></menucascade>.
+					Select the <codeph>travel-sample</codeph> check box, and then click <uicontrol>Create</uicontrol>. A notification box in the upper-right corner disappears when the bucket is ready to use.
+				</p>
+			</note>
+			<p>
+				To get set up for the tutorial proper, follow these steps:
+				<ul>
+					<li><codeph>git clone https://github.com/couchbaselabs/try-cb-java.git</codeph> or download the source <xref href="https://github.com/couchbaselabs/try-cb-java/archive/v1.0a.zip" format="html" target="external">here></xref></li>
+					<li>if you don't want to connect to localhost, change the configuration in <codeph>src/main/resources/application.properties</codeph> (eg. hostname).</li>
+					<li>open the project in your IDE, import as needed and let it build</li>
+					<li>alternatively, go straight to running the project by issuing the following in command line inside the project's directory: <codeph>mvn spring-boot:run</codeph></li>
+				</ul>
+			</p>
+			<note type="note">
+				If you want to code it yourself, the real work is done in the following classes:
+				<ul><li><codeph>trycb.config.Database</codeph></li>
+				<li><codeph>trycb.service.Airport</codeph></li>
+				<li><codeph>trycb.service.FlightPath</codeph></li>
+				<li><codeph>trycb.service.User</codeph></li></ul>
+
+				<p>There's currently no "fill-in-the-blanks" branch so you'll have to delete method bodies and try to take it from there.</p>
+			</note>
+
+			<note type="tip">
+				This tutorial focuses on querying through N1QL rather than views for now. If you want information about using views,	see the following resources:
+			<ul>
+				<li>General Information about views: <xref
+						href="http://docs.couchbase.com/admin/admin/Views/views-intro.html" format="html"
+						scope="external">Views and indexes</xref>
+				</li>
+				<li>Examples and patterns you can use for views:<xref
+						href="http://docs.couchbase.com/admin/admin/Views/views-querySample.html"
+						format="html" scope="external">View and query pattern samples</xref></li>
+			</ul>
+			</note>
+		</section>
+
+		<section>
+			<title>Configure and Bootstrap the SDK</title>
+			<p><b>Where</b>: <codeph>trycb.config.Database</codeph></p>
+			<p><b>Goals</b>: Connecting to the <codeph>Cluster</codeph> and getting a reference to a <codeph>Bucket</codeph>, learn to reuse it.</p>
+			<p><b>Relevant Documentation Topics</b>: <xref href="managing-connections.dita"></xref></p>
+			<p>
+				The first step is to let the application connect to your cluster and obtain a reference to a <codeph>Bucket</codeph> (the Bucket is your entry point for the whole storage API). Spring Boot will inject values from your configuration file in the <codeph>hostname</codeph>, <codeph>bucket</codeph> and <codeph>password</codeph> attributes.
+			</p>
+			<p>
+				Note that both <codeph>Cluster</codeph> and <codeph>Bucket</codeph> are thread safe and <b>must</b> be reused across your application (if you don't, you'll see a warning in the logs). Here we'll let Spring inject those as <codeph>@Bean</codeph>, so they'll be singletons in the application.
+			</p>
+			<b>Connecting to the Cluster</b>
+			<codeblock outputclass="language-java"><![CDATA[public @Bean Cluster cluster() {
+	return CouchbaseCluster.create(hostname);
+}]]></codeblock>
+			<p>
+				The <codeph>cluster()</codeph> method creates the bean for the cluster reference. Here we use one of the simpler factory methods, with just a hostname. Without a <codeph>hostname</codeph>, the default is to connect to <codeph>localhost</codeph>. Note that you can tune the SDK through a <codeph>CouchbaseEnvironment</codeph> instance that you could pass in as an additional first argument (that is particularly recommended if you need to connect to multiple clusters in the same application).
+			</p>
+			<note type="tip">You could make the bootstrap process safer by providing a list of hostnames/IPs to bootstrap from (in case the one node you provided for bootstrap is unfortunately down when creating the Cluster reference). In production the best practice is to provide 3.</note>
+
+			<b>Getting a Bucket</b>
+			<codeblock outputclass="language-java"><![CDATA[public @Bean Bucket bucket() {
+	return cluster().openBucket(bucket, password);
+}]]></codeblock>
+			<p>
+				Second step is to connect to the Couchbase bucket you'll be using. Here we want to use sample data from <codeph>travel-sample</codeph> (and the <codeph>application.properties</codeph> configuration reflects that). To obtain the corresponding Bucket from the Cluster and register it as a <codeph>@Bean</codeph> in <codeph>bucket()</codeph> method, simply open it using the configured <codeph>bucket</codeph> name and <codeph>password</codeph>.
+			</p>
+			<p>
+				Both bucket and cluster can be managed through the SDK as well (eg. add views or create new buckets), see <xref href="managing-cluster.dita"/> and <xref href="managing-views.dita"/> for more information.</p>
+			<p>
+				With these steps, the application is ready to use the API. In the next step we'll cover the Key/Value (kv) store part of the API.
+			</p>
+		</section>
+
+		<section>
+			<title>Manage Users using Key/Value API</title>
+			<p><b>Where</b>: <codeph>trycb.service.User</codeph></p>
+			<p><b>Goals</b>: Use <codeph>Bucket</codeph>'s Key/Value operations and discover the <codeph>Document</codeph> API.</p>
+			<p><b>Relevant Documentation Topics</b>: <xref href="documents-basics.dita"/>, <xref href="documents-creating.dita"/>, <xref href="documents-retrieving.dita"/>, <xref href="documents-updating.dita"/>, ... <xref href="observables.dita"/></p>
+			<p>
+				Couchbase is a document oriented database which provides access to your data both through its document id (for high performance access), as well as through Views and N1ql (as powerful query languages).
+			</p>
+			<p>
+				This is noticeable in the API, where the methods reflect Key/Value operations (<codeph>get</codeph>, <codeph>create</codeph>, etc...) and work with a <codeph>Document</codeph> interface that has an <codeph>id()</codeph> and a content. The default Document implementation, <codeph>JsonDocument</codeph>, accepts a simple representation of JSON as a content: the <codeph>JsonObject</codeph>.
+			</p>
+			<note type="tip">
+				If you already have mechanisms in place that deal with marshalling/unmarshalling of your domain objects to/from JSON, skip the extra step of converting them to JsonObject and use a <codeph>RawJsonDocument</codeph> instead.</note>
+
+			<b>Creating new users</b>
+			<p>
+				Since this is a <codeph>@Service</codeph>, the createLogin method is part of the REST API and returns a <codeph>ResponseEntity&lt;String&gt;</codeph> (a Spring representation of a http response with code and all around the JSON string). Spring injects the Bucket reference for us, along with the request parameters <codeph>username</codeph> and <codeph>password</codeph>:
+			</p>
+<codeblock outputclass="language-java"><![CDATA[/**
+ * Create a user.
+ */
+public static ResponseEntity<String> createLogin(final Bucket bucket, final String username, final String password) {
+]]></codeblock>
+
+		<p>
+			Next we'll prepare the content for our new user (as a JsonObject) and the associated document (in order to give it an ID):
+		</p>
+<codeblock outputclass="language-java"><![CDATA[JsonObject data = JsonObject.create()
+    .put("type", "user")
+    .put("name", username)
+    .put("password", BCrypt.hashpw(password, BCrypt.gensalt()));
+JsonDocument doc = JsonDocument.create("user::" + username, data);]]></codeblock>
+
+	<note type="tip">
+		The <codeph>"user::"</codeph> prefix is arbitrary to this application, this is just a convention that the app uses to obtain unique keys and have additional information in it, but the key could have been anything else (even sequence numbers or UUIDs) really.
+	</note>
+
+	<p>
+		Here comes the part where we use the Couchbase API to store the document, it's rather simple:
+	</p>
+<codeblock outputclass="language-java"><![CDATA[bucket.insert(doc);]]></codeblock>
+
+	<p>
+		Actually we want to send a response with the content and a success flag to the HTTP client. We also want to indicate failure if the SDK throws an exception, so let's wrap that in a try-catch block:
+	</p>
+<codeblock outputclass="language-java"><![CDATA[try {
+	bucket.insert(doc);
+	JsonObject responseData = JsonObject.create()
+        .put("success", true)
+        .put("data", data);
+    return new ResponseEntity<String>(responseData.toString(), HttpStatus.OK);
+} catch (Exception e) {
+    JsonObject responseData = JsonObject.empty()
+        .put("success", false)
+        .put("failure", "There was an error creating account")
+        .put("exception", e.getMessage());
+    return new ResponseEntity<String>(responseData.toString(), HttpStatus.OK);
+}]]></codeblock>
+
+			<note type="tip">When it comes to storing a document, you have broadly three choices of method:
+				<ul><li><codeph>insert</codeph> will only work if no document currently exists for the given ID, otherwise a <codeph>DocumentAlreadyExistsException</codeph> will be thrown.</li>
+				<li><codeph>replace</codeph> on the contrary will only work if the document does already exist (otherwise a <codeph>DocumentDoesNotExistException</codeph> is thrown).</li>
+				<li><codeph>upsert</codeph> will always work, replacing or creating the document as needed.</li></ul>
+			</note>
+
+			<b>Checking login by getting the User's document</b>
+			<p>
+				In the <codeph>login</codeph> method, we check a User's credential and for that we need to retrieve the corresponding document of course! Since user documents are identified by prefixing their username with <codeph>user::</codeph>, this is pretty simple:
+			</p>
+			<codeblock outputclass="language-java"><![CDATA[JsonDocument doc = bucket.get("user::" + username);]]></codeblock>
+			<p>
+				If that particular key doesn't exist, the <codeph>get</codeph> method returns <codeph>null</codeph>. That's useful to check if the user exists at all:
+			</p>
+<codeblock outputclass="language-java"><![CDATA[if (doc == null) {
+	responseContent = JsonObject.create().put("success", false).put("failure", "Bad Username or Password");
+}]]></codeblock>
+			<p>
+				Otherwise it's just a matter of checking the hashed password with the one provided by the user, and responding accordingly. Notice how we get the hash by calling <codeph>content().getString("password")</codeph>:
+			</p>
+<codeblock outputclass="language-java"><![CDATA[//...continued
+else if(BCrypt.checkpw(password, doc.content().getString("password"))) {
+    responseContent = JsonObject.create().put("success", true).put("data", doc.content());
+} else {
+    responseContent = JsonObject.empty().put("success", false).put("failure", "Bad Username or Password");
+}]]></codeblock>
+			<b>A super quick glance at the async API with <codeph>RxJava</codeph></b>
+			<p>
+				The 2.x Java SDK relies on <xref href="http://reactivex.io/" scope="external" format="html"><codeph>RxJava</codeph></xref> for its asynchronous API. It offers a powerful way of composing asynchronous streams for your processing. The <codeph>getFlightsForUser()</codeph> method can serve as a quick example of such an asynchronous call, we'll return the result of a chain started with the async SDK call:
+			</p>
+<codeblock outputclass="language-java"><![CDATA[bucket.async().get("user::" + username)]]></codeblock>
+			<p>
+				RxJava's <codeph>Observable</codeph> is a push model where you describe your stream (by composing and chaining rx operators) then subscribe to it (to consume the end data). You can also manage what to do with error notifications in the subscription.
+			</p>
+			<p>
+				The <codeph>async()</codeph> method on Bucket will switch to the async API. There, <codeph>get</codeph> will return an <codeph>Observable</codeph> in which the requested Document is emitted.
+			</p>
+			<note type="note">If the requested key doesn't exist, the async API will instead result in an empty Observable, nothing gets emitted. See below for an example of how to deal with that particular case.</note>
+			<p>
+				The next step in our chain is simply to extract the flight information that we need and return it as a <codeph>ResponseEntity</codeph>. This is done by the transforming operator <codeph>map</codeph>. We pass a function that will transform each emitted <codeph>JsonDocument</codeph> into a <codeph>ResponseEntity&lt;String&gt;</codeph>:
+			</p>
+<codeblock outputclass="language-java"><![CDATA[.map(new Func1<JsonDocument, ResponseEntity<String>>() {
+	@Override
+ 	public ResponseEntity<String> call(JsonDocument doc) {
+		return new ResponseEntity<String>(doc.content().getArray("flights").toString(), HttpStatus.OK);
+ 	}
+})]]></codeblock>
+			<p>
+				In order to detect that the document doesn't exist, we have to do things a bit differently since the <i>map</i> function won't receive a null (it's the enclosing Observable stream that is empty). Fortunately RxJava provides a method to emit a single default value if an upstream Observable is empty:
+			</p>
+<codeblock outputclass="language-java"><![CDATA[.defaultIfEmpty(new ResponseEntity<String>("{failure: 'No flights found'}", HttpStatus.OK))
+]]></codeblock>
+			<p>
+				Finally, since in this example we still must exit the method by returning a value in a synchronous manner, we can revert to blocking behavior and say "we only expect one <codeph>single()</codeph> value to be emitted, wait for it an return it":
+			</p>
+<codeblock outputclass="language-java"><![CDATA[                     .toBlocking()
+.single();]]></codeblock>
+			<note type="note">To learn more about Observables, see the <xref href="observables.dita"/> section.</note>
+		</section>
+
+		<section>
+			<title>A First N1QL Query: Finding Airports</title>
+			<p><b>Where</b>: <codeph>trycb.service.Airport</codeph></p>
+			<p><b>Goals</b>: Use N1QL and the DSL to perform your first <codeph>SELECT</codeph> on Couchbase.</p>
+			<p><b>Relevant Documentation Topics</b>: <xref href="querying-n1ql.dita"/>.</p>
+			<p>
+				In the SDK, we have a <codeph>query</codeph> method that accepts all variants of querying with Couchbase (views, spatial/geo views and N1QL). For N1QL, the <codeph>N1qlQuery</codeph> is expected. This allows to wrap a N1QL <codeph>Statement</codeph>, provide query tuning through a <codeph>N1qlParams</codeph> and if necessary provide values for placeholders in the statement as <codeph>JsonObject</codeph> or <codeph>JsonArray</codeph>.
+			</p>
+			<note type="tip">N1QL is a super-set of SQL, so if you're familiar with SQL you feel at ease.</note>
+			<p>
+				Statements can be provide either in String form or using the DSL. So let's issue our first <codeph>SELECT</codeph> using the DSL!
+			</p>
+			<p>
+				The <codeph>findAll</codeph> method is expected to return a <codeph>List</codeph> (several matching rows) of <codeph>Map</codeph>s representing the JSON value. Spring will inject the Bucket into it and the <codeph>params</codeph> attribute from the HTTP request. From that we'll start building a <codeph>Statement</codeph>:
+			</p>
+<codeblock outputclass="language-java"><![CDATA[/**
+ * Find all airports.
+ */
+public static List<Map<String, Object>> findAll(final Bucket bucket, final String params) {
+    Statement query;
+	//continued...]]></codeblock>
+			<p>
+				We'll want to select just the airport name from relevant documents in our <codeph>bucket</codeph>. Since we want to filter relevant document on a criteria that depends on the input length, let's just do the SELECT and FROM clauses first:
+			</p>
+<codeblock outputclass="language-java"><![CDATA[AsPath prefix = select("airportname").from(i(bucket.name()));]]></codeblock>
+			<p>
+				Then we can chose the correct fields to look into depending on the length of the input. Notice the <codeph>x</codeph> method that produces a token/expression out of a string. From there you can apply operators like <codeph>eq</codeph> (equals).
+			</p>
+<codeblock outputclass="language-java"><![CDATA[if (params.length() == 3) {
+	query = prefix.where(x("faa").eq(s(params.toUpperCase())));
+} else if (params.length() == 4 && (params.equals(params.toUpperCase()) || params.equals(params.toLowerCase()))) {
+	query = prefix.where(x("icao").eq(s(params.toUpperCase())));
+} else {
+    query = prefix.where(i("airportname").like(s(params + "%")));
+}]]></codeblock>
+
+			<note type="tip">Use <b>static</b> imports on these methods of the <codeph>Expression</codeph> class:
+			<ul><li><codeph>x</codeph> to create an <codeph>Expression</codeph> representing a plain token, like a field.</li>
+			<li><codeph>s</codeph> to create a string litteral (with adequate quotes).</li>
+			<li><codeph>i</codeph> to escape a token with backticks (for instance when refering to the travel-sample bucket, you need to escape it because otherwise N1QL will interpret the dash as a substraction operator).</li></ul></note>
+
+			<p>
+				The statement is ready! You can view (and log it) via its <codeph>toString()</codeph> method:
+			</p>
+<codeblock outputclass="language-java"><![CDATA[logQuery(query.toString());
+//query.toString() example: SELECT airportname FROM `travel-sample` WHERE faa = "LAX"]]></codeblock>
+			<p>
+				Then we need to actually execute this statement by wrapping it in a <codeph>N1qlQuery</codeph> and invoking <codeph>bucket.query()</codeph>. Here it is very simple, no placeholders and no particular tuning of the query is necessary, so we'll use the <codeph>N1qlQuery.simple()</codeph> factory method:
+			</p>
+			<codeblock outputclass="language-java"><![CDATA[N1qlQueryResult result = bucket.query(N1qlQuery.simple(query));
+return extractResultOrThrow(result);]]></codeblock>
+
+			<p>
+				Let's have a look at <codeph>extractResultOrThrow</codeph> to understand the structure of the N1QL response (as represented by <codeph>N1qlQueryResult</codeph>):
+			</p>
+			<codeblock outputclass="language-java"><![CDATA[/**
+ * Extract a N1Ql result or throw if there is an issue.
+ */
+private static List<Map<String, Object>> extractResultOrThrow(N1qlQueryResult result) {
+    if (!result.finalSuccess()) {
+        LOGGER.warn("Query returned with errors: " + result.errors());
+        throw new DataRetrievalFailureException("Query error: " + result.errors());
+    }
+
+    List<Map<String, Object>> content = new ArrayList<Map<String, Object>>();
+    for (N1qlQueryRow row : result) {
+        content.add(row.value().toMap());
+    }
+    return content;
+}]]></codeblock>
+			<p>
+				The <codeph>N1qlQueryResult</codeph> has two status flags: one intermediary <codeph>parseSuccess()</codeph> that indicates immediately if there is a syntax error (<codeph>parseSuccess() == false</codeph>) or not, and one that indicates the definite result of the query (<codeph>finalSuccess()</codeph>).
+			</p>
+			<p>
+				If the query is successful, it will offer a list of <codeph>N1qlQueryRow</codeph> through <codeph>allRows()</codeph>. Otherwise it will have JsonObject errors in <codeph>errors()</codeph>. That's what we inspect to respectively build a list of results or throw a <codeph>DataRetrievalFailureException</codeph> containing all the errors.
+			</p>
+		</section>
+
+		<section>
+			<title>More Complex Queries: Finding Routes</title>
+			<p><b>Where</b>: <codeph>trycb.service.FlightPath</codeph></p>
+			<p><b>Goals</b>: Let the DSL guide you into making more complex N1QL queries.</p>
+			<p><b>Relevant Documentation Topics</b>: <xref href="querying-n1ql.dita"/>.</p>
+			<p>
+				In this service, we have two more complex queries. The first aims at going from human-readable airport name for the departure and arrival airports to FAA codes:
+			</p>
+<codeblock outputclass="language-sql"><![CDATA[SELECT faa AS fromAirport FROM `travel-sample` WHERE airportname = "Los Angeles Intl"
+UNION SELECT faa AS toAirport FROM `travel-sample` WHERE airportname = "San Francisco Intl"]]></codeblock>
+			<p>
+				The second aims at constructing the result set of available flight paths that connect the two airports:
+			</p>
+<codeblock outputclass="language-sql"><![CDATA[SELECT a.name, s.flight, s.utc, r.sourceairport, r.destinationairport, r.equipment
+FROM `travel-sample` AS r
+UNNEST r.schedule AS s
+JOIN `travel-sample` AS a ON KEYS r.airlineid
+WHERE r.sourceairport = "LAX" AND r.destinationairport = "SFO" AND s.day = 6
+ORDER BY a.name ASC]]></codeblock>
+
+			<note type="tip">
+				Yes, you read that right, N1QL can do joins (on a single bucket or on several). It works as long as the "foreign key" described by <codeph>ON KEYS</codeph> clause can be mapped to a document's Key in the joined bucket.
+			</note>
+			<p>
+				A specificity of N1QL that we see in the second statement is <codeph>UNNEST</codeph>. It extracts a sub-JSON and puts it at the same root level as the bucket (so its possible to do joins on each element in this sub-json as if they were entries in a left-hand side bucket).
+			</p>
+			<p>
+				For this final step, try to obtain the equivalent of these statements via the DSL and see how it guides you through the possibilities of the query language.
+			</p>
+		</section>
+
+
+		<section>
+			<title>Indexing the Data: N1QL &amp; GSI</title>
+			<p><b>Where</b>: <codeph>trycb.utils.StartupPreparations</codeph></p>
+			<p><b>Goals</b>: Use the Index DSL to make sure data is indexed for N1QL to query it.</p>
+			<p>
+				Index management is a bit more advanced (and is already done when loading the sample), so now that you've learned about N1QL, you can have a look at it. For N1QL to work, you must first ensure that at least a <codeph>Primary Index</codeph> has been created. For that you can use the DSL from the <codeph>Index</codeph> class:
+			</p>
+<codeblock outputclass="language-java"><![CDATA[Index.createPrimaryIndex().on(bucket.name())]]></codeblock>
+			<p>
+				The fluent API will guide you with the available options, you just have to declare that you want to <codeph>createPrimaryIndex()</codeph> and specify <codeph>on(...)</codeph> which Bucket.
+			</p>
+			<p>
+				You can also create secondary indexes on specific fields of the JSON, for better performance:
+			</p>
+<codeblock outputclass="language-java"><![CDATA[Index.createIndex(name).on(bucket.name(), x(name.replace("def_", "")))]]></codeblock>
+			<p>
+				In this case, give a name to your index, specify the target bucket AND the field(s) in the JSON to index.
+			</p>
+		</section>
+	</conbody>
+</concept>
