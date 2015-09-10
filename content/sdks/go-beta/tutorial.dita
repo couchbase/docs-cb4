@@ -1,0 +1,403 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept xml:lang="en-us" id="concept2677">
+	<title>Go SDK Tutorial</title>
+	<shortdesc>The Go SDK tutorial introduces some advanced concepts by walking through a complete
+		web application.</shortdesc>
+	<conbody>
+
+		<p>The full source code for the tutorial is available <xref
+				href="https://github.com/couchbaselabs/try-cb-golang/" scope="external" format="html">on
+				GitHub</xref>. The primary focus of the tutorial is to explain the function and theory
+			behind the Couchbase Go client and how it connects to Couchbase server, and to highlight
+			new features in Couchbase version 4.0 such as the N1QL query language. It makes use of the
+				<codeph>travel-sample</codeph> bucket that is provided with Couchbase Server. The code
+			that generates the web application is provided with the source code, but is not discussed
+			in this tutorial. </p>
+		<draft-comment>Commenting this out because I don't want to reference back to the old versions
+			of documentation.<note type="note">For reference, you can find the tutorial for CB 3.x
+				here: <!--<xref href="tutorial3.dita"/>-->.</note></draft-comment>
+
+
+		<section>
+			<title>Prerequisites and setup</title>
+			<p>To go through this tutorial you'll need the following: </p>
+			<ul>
+				<li>Your favorite IDE or editor. The <xref href="https://atom.io" scope="external"
+						format="html">Atom</xref> text editor, with the <xref
+						href="https://github.com/joefitzgerald/go-plus" scope="external" format="html"
+						>go-plus plugin</xref> installed, provides a great Go IDE experience. This
+					tutorial is IDE agnostic.</li>
+				<li>Go 1.4 or higher. This tutorial was written and tested using Go 1.5.</li>
+				<li>The sample app source code from GitHub (this tutorial cover only the Go part of the
+					app). The data model and AngularJS front end are explained in detail at <xref
+						href="http://developer.couchbase.com/documentation/server/4.0/travel-app/travel-app-data-model.html"
+						scope="external" format="html">travel-sample walkthrough</xref>.</li>
+				<li>
+					<p>A local <codeph>Couchbase Server 4.0</codeph> installation. Make sure that the
+						sample bucket named <codeph>travel-sample</codeph> is loaded and that there is at
+						least one node with data, query and index services in the cluster.</p>
+					<p>If you already have Couchbase Server installed but did not install the
+							<codeph>travel-sample</codeph> bucket, open the Couchbase Web Console and
+						select <menucascade>
+							<uicontrol>Settings</uicontrol>
+							<uicontrol>Sample Buckets</uicontrol></menucascade>. Select the
+							<codeph>travel-sample</codeph> check box, and then click
+							<uicontrol>Create</uicontrol>. A notification box in the upper-right corner
+						disappears when the bucket is ready to use.</p>
+				</li>
+			</ul>
+
+
+			<p>To run the tutorial app:<ul>
+					<li>As long as your <codeph>GOPATH</codeph> environment variable is set up correctly, you
+						should be able to install from the terminal by using the following command:
+						<codeblock outputclass="language-bash">go get github.com/couchbaselabs/try-cb-golang</codeblock></li>
+					<li>If you don't want to connect to <codeph>localhost</codeph>, you need to change the
+						configuration set up in the connection statement in the
+							<filepath>try.go</filepath> file (<codeph>cluster, _ :=
+							gocb.Connect("couchbase://127.0.0.1")</codeph>. You can use either an IP
+						address or a host name in the string.</li>
+					<li>Open <filepath>try.go</filepath> (located under
+							<filepath>$GOPATH/src/github.com/couchbaselabs/try-cb-golang</filepath>)</li>
+					<li>Alternatively, go straight to running the project:
+						<codeblock outputclass="language-bash">go run try.go</codeblock></li>
+				</ul>
+			</p>
+			<draft-comment> No referring back to the old documentation <note type="tip"> This tutorial
+					focuses on querying through N1QL rather than views. If you want information about
+					using views, see the following resources: <ul>
+						<li>General Information about views: <xref
+								href="http://docs.couchbase.com/admin/admin/Views/views-intro.html"
+								format="html" scope="external">Views and indexes</xref>
+						</li>
+						<li>Examples and patterns you can use for views:<xref
+								href="http://docs.couchbase.com/admin/admin/Views/views-querySample.html"
+								format="html" scope="external">View and query pattern samples</xref></li>
+					</ul>
+				</note></draft-comment>
+		</section>
+
+		<section>
+			<title>Configuring and bootstrapping the SDK</title>
+			<p>Configuring and bootstrapping the SDK involves connecting to the
+					<codeph>Cluster</codeph> and getting a reference to a <codeph>Bucket</codeph>. You
+				can find the code discussed in this section in <apiname>func main()</apiname> on line
+				340–341 in the <filepath>try.go</filepath> file. </p>
+			<p>The first step is to let the application connect to your cluster and obtain a reference
+				to a <codeph>Bucket</codeph> object. The bucket is your entry point for the whole
+				storage API. Both <codeph>Cluster</codeph> and <codeph>Bucket</codeph> should be reused
+				across your application. They are instantiated within the <apiname>main()</apiname>
+				function so they can be used across the application. </p>
+			<p>Import the Couchbase Go client in the import code block:</p>
+			<codeblock outputclass="language-go"><![CDATA["github.com/couchbase/gocb"]]></codeblock>
+			<p>Declare a pointer to be used for the Couchbase bucket:</p>
+			<codeblock outputclass="language-go"><![CDATA[var bucket *gocb.Bucket]]></codeblock>
+			<p>The <codeph>bucket</codeph> variable is used by various functions within the
+				application. The cluster and bucket references are instantiated in <codeph>func
+					main()</codeph>.</p>
+			<note type="tip">For best results always use a bucket by reference. Declaring the bucket
+				variable as a pointer to the Couchbase bucket allows the bucket connection to be used by
+				reference. This is extremely important for performance. Applications that spin up,
+				execute, and tear down connections for each operation within an application are
+				inefficient, resource intensive, cause garbage collection headaches, and are not
+				performant. </note>
+			<p>The following code snippet connects to the cluster and opens the
+					<codeph>travel-sample</codeph> bucket:</p>
+			<codeblock outputclass="language-go"><![CDATA[cluster, _ := gocb.Connect("couchbase://127.0.0.1")
+bucket, _ = cluster.OpenBucket("travel-sample","")]]></codeblock>
+			<p>From within <codeph>func main()</codeph> we connect to the cluster, and then open the
+				database (bucket). This allows us to use sample data from
+				<codeph>travel-sample</codeph>. For using secure credentials reference
+					<codeph>OpenBucket</codeph> from within the API <xref
+					href="http://godoc.org/github.com/couchbase/gocb" format="html" scope="external">docs
+				</xref>. </p>
+			<p>The application is now ready to use the Couchbase API. To learn more about configuring
+				the client and connecting to a bucket, see <xref href="managing-connections.dita"
+				 />.</p>
+		</section>
+
+		<section>
+			<title>Manage users by using the key-value API</title>
+			<p><b>Where</b>: <codeph>try.go func loginHandler() lines 262-295</codeph></p>
+			<p><b>Goals</b>: Use <codeph>Bucket</codeph>'s Key/Value operations and understand the
+				API.</p>
+			<p><b>Relevant Documentation Topics</b>: <!--<xref href="documents-basics.dita"/>-->,
+				<!--<xref href="documents-creating.dita"/>-->,
+				<!--<xref href="documents-retrieving.dita"/>-->,
+				<!--<xref href="documents-updating.dita"/>--></p>
+			<p>You can find the code discussed in this section in <apiname>func
+					loginHandler()</apiname> on lines 262–295 in the <filepath>try.go</filepath>
+				file.</p><p>Couchbase is both a document-oriented store and a key-value store (meaning
+				it can be used purely as a key-value store, for example for caching, but offers advanced
+				document oriented capabilities based on JSON documents, like indexing, views, and N1QL
+				querying). This is noticeable in the API, where the methods reflect key-value operations
+				(such as <codeph>get</codeph> and <codeph>insert</codeph>) and work with a
+					<codeph>value</codeph> interface pointer. Go's built-in JSON support for marshaling
+				and unmarshaling is a natural fit for working with JSON documents stored in Couchbase. </p>
+			<note type="tip"> The Couchbase Go client always returns a pointer to an interface variable
+				for retrieval operations. This greatly simplifies loading results into structs.</note>
+			<b>Creating new users</b>
+			<p> These are the steps for creating new users: </p>
+			<ol>
+				<li>Route the HTTP request and check if it's a <codeph>POST</codeph> (new user) or
+						<codeph>GET</codeph> (existing user) request.</li>
+				<li>Check if a user exists.</li>
+				<li>Create a new user with a JSON web token.</li>
+				<li>Save the new user.</li>
+				<li>Return the JSON web token in a response </li>
+			</ol>
+			<p>
+				<b>Route the HTTP request</b>
+			</p>
+			<p>Go's built in <codeph>net/http</codeph> package is extremely simple for routing
+				requests. In <codeph>func main()</codeph> we route the request to the predefined request
+				handler <codeph>loginHandler</codeph>: </p>
+			<codeblock outputclass="language-go"><![CDATA[http.HandleFunc("/api/user/login",loginHandler)]]></codeblock>
+			<p>Within the <codeph>func loginHandler()</codeph>, we can check the request type by
+				looking at the request method. The request method is interrogated from a pointer to the
+				request itself <codeph>r.Method</codeph>. A <codeph>"POST"</codeph> is a new user. </p>
+			<codeblock outputclass="language-go"><![CDATA[	switch r.Method {
+		case "GET":
+			// login request for existing user
+			q.User = r.URL.Query().Get("user")
+			q.Password = r.URL.Query().Get("password")
+			if authenticated:=q.LoginUser(); authenticated==true{
+				s.Success=q.Token
+				bytes,_:=json.Marshal(s)
+				w.Write(bytes)
+			}else{
+				bytes:=[]byte(`{"failure":"Bad Username or Password"}`)
+				w.Write(bytes)
+			}
+		case "POST":
+			// login request for a new user
+			_ = json.NewDecoder(r.Body).Decode(&q)
+			if exists := q.CheckUserExists(); exists == true {
+				bytes:=[]byte(`{"failure":"User exists, please choose a different username"}`)
+				w.Write(bytes)
+			}
+			if created := q.CreateUser(); created == true {
+				s.Success=q.Token
+				bytes,_:=json.Marshal(s)
+				w.Write(bytes)
+			}
+		}
+}]]></codeblock>
+			<p><b>Check if the user exists</b>
+			</p>
+			<p> Now we use the key-value API to determine if the new user we are going to create
+				already exists. First we define a variable <codeph>curUser</codeph> from our
+					<codeph>User struct</codeph>. </p>
+			<codeblock outputclass="language-go"><![CDATA[type User struct {
+	Type string `json:"_type"`
+	ID string `json:"_id"`
+	Name string `json:"name"`
+	Password string `json:"password"`
+	Token string `json:"token"`
+	Flights []UserFlight `json:"flights"`
+}
+]]></codeblock>
+			<p>Then from our <codeph>bucket.Get()</codeph> call we pass in a reference to that
+				variable. If the user we're trying to create exists, the <codeph>curUser</codeph>
+				variable is populated. The function returns <codeph>true</codeph> or
+					<codeph>false</codeph> depending on if the user was found. </p>
+			<codeblock outputclass="language-go"><![CDATA[func (u *UserIntermediary) CheckUserExists() bool{
+	var curUser User
+	if _,err := bucket.Get(u.User,&curUser); err != nil{
+		return false
+	}
+	return true
+}]]></codeblock>
+			<p><b>Create a new user with a JSON web token, Step 4 - Save the user to Couchbase, Step 5
+					- Respond with the JSON web token </b>
+			</p>
+			<p>In this step we create a new instance of a <codeph>User</codeph> and assign the fields
+				based on the information provided. We also create a new JSON web token based on the
+				credentials. Because our <codeph>User</codeph> struct, shown above, is a native JSON
+				document, storing this struct into Couchbase is simple. We insert the document into
+				Couchbase using the <codeph>Username</codeph> field as the key, and the
+					<codeph>User</codeph> struct instance as the value. </p>
+			<codeblock outputclass="language-go"><![CDATA[func (u *UserIntermediary) CreateUser() bool{
+	token := jwt.New(jwt.SigningMethodHS256)
+	token.Claims["user"] = u.User
+	if encryptedToken, err := token.SignedString([]byte(hashToken)); err != nil{
+		return false
+	} else {
+		u.Token=encryptedToken
+	}
+
+	var newUser User
+	newUser.Type = "User"
+	newUser.ID = "NOT_CURRENTLY_USED"
+	newUser.Name = u.User
+	newUser.Password = u.Password
+	newUser.Token = u.Token
+	if _, err := bucket.Insert(newUser.Name, newUser, 0); err != nil{
+			return false
+	}
+	return true
+}]]></codeblock>
+			<p> After the User is stored, the application responds with the JSON token.</p>
+		</section>
+
+		<section>
+			<title>A first N1QL query: finding airports</title>
+			<p><b>Where</b>: <codeph>try.go func airportHandler() lines 151-181</codeph></p>
+			<p><b>Goals</b>: Use N1QL to perform your first <codeph>SELECT</codeph> on Couchbase.</p>
+			<p><b>Relevant Documentation Topics</b>: <!--<xref href="querying-n1ql.dita"/>-->.</p>
+			<p> In Go, we have a several methods for querying documents in Couchbase. These methods
+				operate on views, geospatial views and of course: N1QL. The types within Go are
+					<codeph>SpatialQuery, ViewQuery, N1qlQuery</codeph>. For N1QL, the
+					<codeph>N1qlQuery</codeph> type is expected. This allows us to wrap a N1QL statement
+				in <codeph>N1qlQuery</codeph>, provide query tuning through a <codeph>params</codeph>
+				interface. The N1qlQuery is then run by the <codeph>bucket.ExecuteN1qlQuery()</codeph>
+				method </p>
+			<note type="tip">N1QL is a super-set of SQL, so if you're familiar with SQL you will feel
+				at ease.</note>
+			<p> Let's issue our first <codeph>SELECT</codeph> query to find a list of airports that
+				match a specified search string! </p>
+			<p> The <codeph>func airportHandler()</codeph> first builds the query string based on the
+				search string provided. We want to search by different fields like FAA, ICAO and to
+				convert to all capitals if we're searching by those particular fields. </p>
+			<codeblock outputclass="language-go"><![CDATA[	var queryPrep string
+
+	switch search := r.URL.Query().Get("search"); len(search) {
+	case 3:
+		queryPrep = "SELECT airportname FROM `travel-sample` WHERE faa ='" + strings.ToUpper(search) + "'"
+	case 4:
+		if s:=strings.ToUpper(search); s==search {
+			queryPrep = "SELECT airportname FROM `travel-sample` WHERE icao ='" + strings.ToUpper(search) + "'"
+		}else{
+			queryPrep = "SELECT airportname FROM `travel-sample` WHERE airportname like '" + search + "%'"
+		}
+	default:
+		queryPrep = "SELECT airportname FROM `travel-sample` WHERE airportname like '" + search + "%'"
+	}]]></codeblock>
+			<p> We'll want to select just the airport name from relevant documents in our
+					<codeph>bucket</codeph>. After the query string is built we define it as a query
+				statement and then run using <codeph>bucket.ExecuteN1qlQuery</codeph>. There are two
+				values that returned from each N1QL query: </p>
+			<ul>
+				<li>an <codeph>interface{}</codeph> type</li>
+				<li>error, if one is returned</li>
+			</ul>
+			<codeblock outputclass="language-go"><![CDATA[	myQuery := gocb.NewN1qlQuery(queryPrep)
+	rows,err := bucket.ExecuteN1qlQuery(myQuery,nil)]]></codeblock>
+			<p> We then loop through the results, and return the results in JSON format back in a
+				response. </p>
+			<codeblock outputclass="language-go"><![CDATA[	var airports []Airport
+	var row Airport
+	for rows.Next(&row){
+		airports=append(airports,row)
+	}
+	bytes,_:=json.Marshal(airports)
+	w.Write(bytes)]]></codeblock>
+
+			<note type="tip">N1QL makes use of the backtick ` (sharing the same key as the tilde, on
+				Western Keyboards) for escape sequences. Go also uses this for character for escape
+				sequences in <codeph>struct</codeph> definitions. </note>
+
+		</section>
+
+		<section>
+			<title>Finding routes by using complex queries</title>
+			<p><b>Where</b>: <codeph>try.go func flightPathHandler lines 184-248 </codeph></p>
+			<p><b>Goals</b>: Understand complex queries and Advanced N1QL Functionality using JOINS and
+				UNNEST</p>
+			<p><b>Relevant Documentation Topics</b>: <xref href="querying.dita" />.</p>
+			<p>This application also demonstrates complex queries that use UNION, JOIN, and UNNEST
+				clauses. The following query that uses a UNION clause to go from human-readable airport
+				names for the departure and arrival airports to FAA codes that allow us to search on
+				available flights by route. Routes have departure and arrival airport fields defined by
+				FAA codes: </p>
+			<codeblock outputclass="language-sql"><![CDATA[SELECT faa AS fromAirport FROM `travel-sample` WHERE airportname = "Los Angeles Intl"
+UNION SELECT faa AS toAirport FROM `travel-sample` WHERE airportname = "San Francisco Intl"]]></codeblock>
+			<p>This query constructs the result set of available flight paths that connect the two
+				airports:</p>
+			<codeblock outputclass="language-sql"><![CDATA[SELECT a.name, s.flight, s.utc, r.sourceairport, r.destinationairport, r.equipment
+FROM `travel-sample` AS r
+UNNEST r.schedule AS s
+JOIN `travel-sample` AS a ON KEYS r.airlineid
+WHERE r.sourceairport = "LAX" AND r.destinationairport = "SFO" AND s.day = 6
+ORDER BY a.name ASC]]></codeblock>
+
+			<p>N1QL can do joins on a single bucket or on several buckets. It works as long as the
+				foreign key described by an <codeph>ON KEYS</codeph> clause can be mapped to a
+				document's key in the joined bucket.</p>
+			<p>A powerful feature of N1QL shown in the second statement is the <codeph>UNNEST</codeph>
+				clause. It extracts fields within an embedded JSON document within a result set and puts
+				it at the same root level as the bucket (so it's possible to do joins on each element in
+				this embedded JSON as if they were entries in a left-hand side bucket). </p>
+			<p>The <codeph>funcFlightPathHandler()</codeph> method implements the above functionality
+				including date verification, calculating flight duration, calculating pricing, and
+				returns the response. </p>
+			<codeblock outputclass="language-go"><![CDATA[func flightPathHandler(w http.ResponseWriter, r *http.Request) {
+
+      	var queryPrep, queryTo, queryFrom string
+      	var fromLon, fromLat, toLon, toLat, dist float64
+      	var price, flightTime, weekday int
+      	var leave time.Time
+      	var row AirportIntermediary
+      	var airports []AirportIntermediary
+      	var flight Flight
+      	var flights []Flight
+
+      	from := r.URL.Query().Get("from")
+      	to := r.URL.Query().Get("to")
+
+      	leave,_ = time.Parse(layout,r.URL.Query().Get("leave"))
+      	weekday = int(leave.Weekday())+1
+
+      	queryPrep = "SELECT faa as fromAirport,geo FROM `travel-sample` WHERE airportname = '" + from +
+      	        "' UNION SELECT faa as toAirport,geo FROM `travel-sample` WHERE airportname = '" + to + "'"
+
+      	myQuery := gocb.NewN1qlQuery(queryPrep)
+      	rows,err := bucket.ExecuteN1qlQuery(myQuery,nil)
+      	if err!=nil{
+      		fmt.Println("ERROR EXECUTING N1QL QUERY:",err)
+      	}
+
+      	for rows.Next(&row) {
+      		airports = append(airports,row)
+      		if row.ToAirport!="" {
+      			toLat=row.Geo.Lat
+      			toLon=row.Geo.Lon
+      			queryTo=row.ToAirport
+      		}
+      		if row.FromAirport!="" {
+      			fromLat=row.Geo.Lat
+      			fromLon=row.Geo.Lon
+      			queryFrom=row.FromAirport
+      		}
+      		row = AirportIntermediary{}
+      	}
+      	dist = Haversine(fromLon,fromLat,toLon,toLat)
+      	flightTime = int(dist/averageKilometersHour)
+      	price = int(dist * distanceCostMultiplier)
+
+      	_ = rows.Close()
+
+      	queryPrep="SELECT r.id, a.name, s.flight, s.utc, r.sourceairport, r.destinationairport, r.equipment " +
+                  "FROM `travel-sample` r UNNEST r.schedule s JOIN `travel-sample` a ON KEYS r.airlineid WHERE r.sourceairport='" +
+      						queryFrom + "' AND r.destinationairport='" + queryTo + "' AND s.day=" + strconv.Itoa(weekday) + " ORDER BY a.name"
+
+      	myQuery = gocb.NewN1qlQuery(queryPrep)
+      	rows,err = bucket.ExecuteN1qlQuery(myQuery,nil)
+      	if err!=nil{
+      		fmt.Println("ERROR EXECUTING N1QL QUERY:",err)
+      	}
+
+      	for i:=0; rows.Next(&flight);i++ {
+      		flight.Flighttime=flightTime
+      		flight.Price=price
+      		flights=append(flights,flight)
+      	}
+      	_ = rows.Close()
+      	bytes,_:=json.Marshal(flights)
+      	w.Write(bytes)
+      }]]></codeblock>
+		</section>
+	</conbody>
+</concept>
