@@ -1,0 +1,649 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE topic
+  PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic xml:lang="en-us" id="topic25783">
+  <title>View and query examples</title>
+  <shortdesc>This section provides general information and query examples.</shortdesc>
+  <body>
+    <p>Building views and querying the indexes they generate is a combined process based both on the
+      document structure and the view definition. 
+      Writing an effective view to query your data may
+      require changing or altering your document structure, or creating a more complex view in order
+      to allow the specific selection of the data through the querying mechanism.</p>
+    <p>For background and examples, the following selections provide a number of different scenarios
+      and examples have been built to demonstrate the document structures, views and querying
+      parameters required for different situations.</p>
+
+
+
+
+    <section><title>General advice</title><p>There are some general points and advice for writing
+        all views that apply irrespective of the document structure, query format, or view
+        content.</p><ul>
+        <li>Do not assume the field will exist in all documents.</li>
+      </ul><p>Fields may be missing from your document, or may only be supported in specific
+        document types. Use an <codeph>if</codeph> test to identify problems. For example:</p>
+      
+      <codeblock>if (document.firstname)...</codeblock>
+      <ul>
+        <li>View output is case sensitive.</li>
+      </ul><p>The value emitted by the <codeph>emit()</codeph> function is case sensitive. Emitting
+        a field value of ‘Martin’ but specifying a <codeph>key</codeph> value of ‘martin’ will not
+        match the data. Emitted data, and the key selection values, should be normalized to
+        eliminate potential problems. For example:</p>
+      <codeblock>emit(doc.firstname.toLowerCase(),null);</codeblock>
+      <ul>
+        <li>Number formatting</li>
+      </ul><p>Numbers within JavaScript may inadvertently be converted and output as strings. To
+        ensure that data is correctly formatted, the value should be explicitly converted. For
+        example:</p>
+      <codeblock>emit(parseInt(doc.value,10),null);</codeblock><p>The
+          <codeph>parseInt()</codeph> built-in function will convert a supplied value to an integer.
+        The <codeph>parseFloat()</codeph> function can be used for floating-point
+      numbers.</p></section>
+
+
+
+    <section><title>Validating document type</title>
+      <p>If your dataset includes documents that may be either JSON or binary, then you do not want
+        to create a view that outputs individual fields for non-JSON documents. You can fix this by
+        using a view that checks the metadata <codeph>type</codeph> field before outputting the JSON
+        view
+        information:</p><codeblock>function(doc,meta) {
+    if (meta.type == "json") {
+        emit(doc.firstname.toLowerCase(),null);
+    }
+}</codeblock><p>In
+        the above example, the <codeph>emit()</codeph> function will only be called on a valid JSON
+        document. Non-JSON documents will be ignored and not included in the view
+      output.</p></section>
+
+
+
+    <section><title>Document ID (primary) index</title>
+      <p>To create a ‘primary key’ index, i.e. an index that contains a list of every document
+        within the database, with the document ID as the key, you can create a simple
+        view:</p><codeblock>function(doc,meta)
+{
+  emit(meta.id,null);
+}
+</codeblock><p>This
+        enables you to iterate over the documents stored in the database.</p><p>This will provide
+        you with a view that outputs the document ID of every document in the bucket using the
+        document ID as the key.</p><p>The view can be useful for obtaining groups or ranges of
+        documents based on the document ID, for example to get documents with a specific ID
+        prefix:</p><codeblock>?startkey="object"&amp;endkey="object\u0000"
+</codeblock><p>Or
+        to obtain a list of objects within a given
+        range:</p><codeblock>?startkey="object100"&amp;endkey="object199"
+</codeblock><p>For
+        all views, the document ID is automatically included as part of the view response. But the
+        without including the document ID within the key emitted by the view, it cannot be used as a
+        search or querying mechanism.</p></section>
+
+
+
+    <section><title>Secondary index</title>
+      <p>The simplest form of view is to create an index against a single field from the documents
+        stored in your database.</p><p>For example, given the document
+        structure:</p><codeblock>{
+    "firstname": "Martin",
+    "lastname": "Brown"
+}
+</codeblock><p>A
+        view to support queries on the <codeph>firstname</codeph> field could be defined as
+        follows:</p><codeblock>function(doc, meta)
+{
+  if (doc.firstname)
+  {
+     emit(doc.firstname.toLowerCase(),null);
+  }
+}</codeblock><p>The
+        view works as follows for each document:</p><ul>
+        <li><p>Only outputs a record if the document contains a <codeph>firstname</codeph>
+            field.</p></li>
+        <li><p>Converts the content of the <codeph>firstname</codeph> field to lowercase.</p></li>
+      </ul><p>Queries can now be specified by supplying a string converted to lowercase. For
+        example:</p><codeblock>?key="martin"</codeblock><p>Will return all
+        documents where the <codeph>firstname</codeph> field contains ‘Martin’, regardless of the
+        document field capitalization.</p></section>
+
+
+
+    <section><title>Using expiration metadata</title>
+      <p>The metadata object makes it very easy to create and update different views on your data
+        using information outside of the main document data. For example, you can use the expiration
+        field within a view to get the list of recently active sessions in a system.</p><p>Using the
+        following <codeph>map()</codeph> function, which uses the expiration as part of the emitted
+        data.</p><codeblock>function(doc, meta)
+{
+  if (doc.type &amp;&amp; doc.type == "session")
+  {
+    emit(meta.expiration, doc.nickname)
+  }
+}</codeblock><p>If
+        you have sessions which are saved with a TTL, this will allow you to give a view of who was
+        recently active on the service.</p></section>
+
+
+
+    <section><title>Emitting multiple rows</title><p>The <codeph>emit()</codeph> function is used to
+        create a record of information for the view during the map phase, but it can be called
+        multiple times within that map phase to allowing querying over more than one source of
+        information from each stored document.</p><p>An example of this is when the source documents
+        contain an array of information. For example, within a recipe document, the list of
+        ingredients is exposed as an array of objects. By iterating over the ingredients, an index
+        of ingredients can be created and then used to find recipes by
+        ingredient.</p><codeblock>{
+    "title": "Fried chilli potatoes",
+    "preptime": "5"
+    "servings": "4",
+    "totaltime": "10",
+    "subtitle": "A new way with chips.",
+    "cooktime": "5",
+    "ingredients": [
+        {
+            "ingredtext": "chilli powder",
+            "ingredient": "chilli powder",
+            "meastext": "3-6 tsp"
+        },
+        {
+            "ingredtext": "potatoes, peeled and cut into wedges",
+            "ingredient": "potatoes",
+            "meastext": "900 g"
+        },
+        {
+            "ingredtext": "vegetable oil for deep frying",
+            "ingredient": "vegetable oil for deep frying",
+            "meastext": ""
+        }
+    ],
+}</codeblock><p>The
+        view can be created using the following <codeph>map()</codeph>
+        function:</p><codeblock>function(doc, meta)
+{
+  if (doc.ingredients)
+  {
+    for (i=0; i &lt; doc.ingredients.length; i++)
+    {
+        emit(doc.ingredients[i].ingredient, null);
+    }
+  }
+}</codeblock><p>To
+        query for a specific ingredient, specify the ingredient as a
+        key:</p><codeblock>?key="carrot"
+</codeblock><p>The <codeph>keys</codeph>
+        parameter can also be used in this situation to look for recipes that contain multiple
+        ingredients. For example, to look for recipes that contain either “potatoes” or “chilli
+        powder” you would
+        use:</p><codeblock>?keys=["potatoes","chilli powder"]
+</codeblock><p>This
+        will produce a list of any document containing either ingredient. A simple count of the
+        document IDs by the client can determine which recipes contain all three.</p><p>The output
+        can also be combined. For example, to look for recipes that contain carrots and can be
+        cooked in less than 20 minutes, the view can be rewritten
+        as:</p><codeblock>function(doc, meta)
+{
+  if (doc.ingredients)
+  {
+    for (i=0; i &lt; doc.ingredients.length; i++)
+    {
+      if (doc.ingredients[i].ingredtext &amp;amp;&amp;amp; doc.totaltime)
+      {
+        emit([doc.ingredients[i].ingredtext, parseInt(doc.totaltime,10)], null);
+      }
+    }
+  }
+}</codeblock><p>In
+        this map function, an array is output that generates both the ingredient name, and the total
+        cooking time for the recipe. To perform the original query, carrot recipes requiring less
+        than 20 minutes to
+        cook:</p><codeblock>?startkey=["carrot",0]&amp;endkey=["carrot",20]
+</codeblock><p>This
+        generates the following
+      view:</p><codeblock>{"total_rows":26471,"rows":[
+{"id":"Mangoandcarrotsmoothie","key":["carrots",5],"value":null},
+{"id":"Cheeseandapplecoleslaw","key":["carrots",15],"value":null}
+]
+}</codeblock></section>
+
+
+
+    <section id="time-stamp-patterns"><title>Date and time selection</title><p>For date and time selection, consideration
+        must be given to how the data will need to be selected when retrieving the information. This
+        is particularly true when you want to perform log roll-up or statistical collection by using
+        a reduce function to count or quantify instances of a particular event over
+        time.</p><p>Examples of this in action include querying data over a specific range, on
+        specific day or date combinations, or specific time periods. Within a traditional relational
+        database it is possible to perform an extraction of a specific date or date range by storing
+        the information in the table as a date type.</p><p>Within a map/reduce, the effect can be
+        simulated by exposing the date into the individual components at the level of detail that
+        you require. For example, to obtain a report that counts individual log types over a period
+        identifiable to individual days, you can use the following <codeph>map()</codeph>
+        function:</p><codeblock>function(doc, meta) {
+    emit([doc.year, doc.mon, doc.day, doc.logtype], null);
+}</codeblock><p>By
+        incorporating the full date into the key, the view provides the ability to search for
+        specific dates and specific ranges. By modifying the view content you can simplify this
+        process further. For example, if only searches by year/month are required for a specific
+        application, the day can be omitted.</p><p>And with the corresponding
+          <codeph>reduce()</codeph> built-in of <codeph>_count</codeph>, you can perform a number of
+        different queries. Without any form of data selection, for example, you can use the
+          <codeph>group_level</codeph> parameter to summarize down as far as individual day, month,
+        and year. Additionally, because the date is explicitly output, information can be selected
+        over a specific range, such as a specific
+        month:</p><codeblock>endkey=[2010,9,30]&amp;group_level=4&amp;startkey=[2010,9,0]</codeblock><p>Here
+        the explicit date has been specified as the start and end key. The
+          <codeph>group_level</codeph> is required to specify roll-up by the date and log
+        type.</p><p>This will generate information similar to
+        this:</p><codeblock>{"rows":[
+{"key":[2010,9,1,"error"],"value":5},
+{"key":[2010,9,1,"warning"],"value":10},
+{"key":[2010,9,2,"error"],"value":8},
+{"key":[2010,9,2,"warning"],"value":9},
+{"key":[2010,9,3,"error"],"value":16},
+{"key":[2010,9,3,"warning"],"value":8},
+{"key":[2010,9,4,"error"],"value":15},
+{"key":[2010,9,4,"warning"],"value":11},
+{"key":[2010,9,5,"error"],"value":6},
+{"key":[2010,9,5,"warning"],"value":12}
+]
+}</codeblock><p>Additional
+        granularity, for example down to minutes or seconds, can be achieved by adding those as
+        further arguments to the map
+        function:</p><codeblock>function(doc, meta)
+{
+    emit([doc.year, doc.mon, doc.day, doc.hour, doc.min, doc.logtype], null);
+}</codeblock><p>The
+        same trick can also be used to output based on other criteria. For example, by day of the
+        week, week number of the year or even by
+        period:</p><codeblock>function(doc, meta) {
+  if (doc.mon)
+  {
+    var quarter = parseInt((doc.mon - 1)/3,10)+1;
+
+    emit([doc.year, quarter, doc.logtype], null);
+  }
+}</codeblock><p>To
+        get more complex information, for example a count of individual log types for a given date,
+        you can combine the <codeph>map()</codeph> and <codeph>reduce()</codeph> stages to provide
+        the collation.</p><p>For example, by using the following <codeph>map()</codeph> function we
+        can output and collate by day, month, or year as before, and with data selection at the date
+        level.</p><codeblock>function(doc, meta) {
+    emit([doc.year, doc.mon, doc.day], doc.logtype);
+}
+</codeblock><p>For
+        convenience, you may wish to use the <codeph>dateToArray()</codeph> function, which converts
+        a date object or string into an array. For example, if the date has been stored within the
+        document as a single
+        field:</p><codeblock>function(doc, meta) {
+    emit(dateToArray(doc.date), doc.logtype);
+}
+</codeblock><p>For
+        more information, see <codeph>dateToArray()</codeph>.</p><p>Using the following
+          <codeph>reduce()</codeph> function, data can be collated for each individual logtype for
+        each day within a single record of
+        output.</p><codeblock>function(key, values, rereduce)
+{
+  var response = {"warning" : 0, "error": 0, "fatal" : 0 };
+  for(i=0; i&lt;values.length; i++)
+  {
+    if (rereduce)
+    {
+      response.warning = response.warning + values[i].warning;
+      response.error = response.error + values[i].error;
+      response.fatal = response.fatal + values[i].fatal;
+    }
+    else
+    {
+      if (values[i] == "warning")
+      {
+        response.warning++;
+      }
+      if (values[i] == "error" )
+      {
+        response.error++;
+      }
+      if (values[i] == "fatal" )
+      {
+        response.fatal++;
+      }
+    }
+  }
+  return response;
+}</codeblock><p>When
+        queried using a <codeph>group_level</codeph> of two (by month), the following output is
+        produced:</p><codeblock>{"rows":[
+{"key":[2010,7], "value":{"warning":4,"error":2,"fatal":0}},
+{"key":[2010,8], "value":{"warning":4,"error":3,"fatal":0}},
+{"key":[2010,9], "value":{"warning":4,"error":6,"fatal":0}},
+{"key":[2010,10],"value":{"warning":7,"error":6,"fatal":0}},
+{"key":[2010,11],"value":{"warning":5,"error":8,"fatal":0}},
+{"key":[2010,12],"value":{"warning":2,"error":2,"fatal":0}},
+{"key":[2011,1], "value":{"warning":5,"error":1,"fatal":0}},
+{"key":[2011,2], "value":{"warning":3,"error":5,"fatal":0}},
+{"key":[2011,3], "value":{"warning":4,"error":4,"fatal":0}},
+{"key":[2011,4], "value":{"warning":3,"error":6,"fatal":0}}
+]
+}</codeblock><p>The
+        input includes a count for each of the error types for each month. Note that because the key
+        output includes the year, month and date, the view also supports explicit querying while
+        still supporting grouping and roll-up across the specified group. For example, to show
+        information from 15th November 2010 to 30th April 2011 using the following
+        query:</p><codeblock>?endkey=[2011,4,30]&amp;group_level=2&amp;startkey=[2010,11,15]
+</codeblock><p>Which
+        generates the following
+        output:</p><codeblock>{"rows":[
+{"key":[2010,11],"value":{"warning":1,"error":8,"fatal":0}},
+{"key":[2010,12],"value":{"warning":3,"error":4,"fatal":0}},
+{"key":[2011,1],"value":{"warning":8,"error":2,"fatal":0}},
+{"key":[2011,2],"value":{"warning":4,"error":7,"fatal":0}},
+{"key":[2011,3],"value":{"warning":4,"error":4,"fatal":0}},
+{"key":[2011,4],"value":{"warning":5,"error":7,"fatal":0}}
+]
+}</codeblock><p>Keep
+        in mind that you can create multiple views to provide different views and queries on your
+        document data. In the above example, you could create individual views for the limited
+        datatypes of logtype to create a <codeph>warningsbydate</codeph> view.</p></section>
+
+
+
+    <section><title>Selective record output</title><p>If you are storing different document types
+        within the same bucket, then you may want to ensure that you generate views only on a
+        specific record type within the <codeph>map()</codeph> phase. This can be achieved by using
+        an <codeph>if</codeph> statement to select the record.</p><p>For example, if you are storing
+        blog ‘posts’ and ‘comments’ within the same bucket, then a view on the blog posts could be
+        created using the following
+        map:</p><codeblock>function(doc, meta) {
+    if (doc.title &amp;&amp; doc.type &amp;&amp; doc.date &amp;&amp;
+        doc.author &amp;&amp; doc.type == 'post')
+    {
+        emit(doc.title, [doc.date, doc.author]);
+    }
+}
+</codeblock><p>The
+        same solution can also be used if you want to create a view over a specific range or value
+        of documents while still allowing specific querying structures. For example, to filter all
+        the records from the statistics logging system over a date range that are of the type error
+        you could use the following <codeph>map()</codeph>
+        function:</p><codeblock>function(doc, meta) {
+    if (doc.logtype == 'error')
+    {
+       emit([doc.year, doc.mon, doc.day],null);
+    }
+}
+</codeblock><p>The
+        same solution can also be used for specific complex query types. For example, all the
+        recipes that can be cooked in under 30 minutes, made with a specific
+        ingredient:</p><codeblock>function(doc, meta)
+{
+  if (doc.totaltime &amp;amp;&amp;amp; doc.totaltime &lt;= 20)
+  {
+    if (doc.ingredients) {
+      for (i=0; i &lt; doc.ingredients.length; i++)
+      {
+        if (doc.ingredients[i].ingredtext)
+        {
+          emit(doc.ingredients[i].ingredtext, null);
+        }
+      }
+    }
+  }
+}
+</codeblock><p>The
+        above function provides for much quicker and simpler selection of recipes by using a query and
+        the <codeph>key</codeph> parameter, instead of having to work out the range that may be
+        required to select recipes when the cooking time and ingredients are generated by the
+        view.</p><p>These selections are application specific, but by producing different views for
+        a range of appropriate values, for example 30, 60, or 90 minutes, recipe selection can be
+        much easier at the expense of updating additional view indexes.</p></section>
+
+
+
+    <section><title>Sorting on reduce values</title>
+      <p>The sorting algorithm within the view system outputs information ordered by the generated
+        key within the view, and therefore it operates before any reduction takes place.
+        Unfortunately, it is not possible to sort the output order of the view on computed reduce
+        values, as there is no post-processing on the generated view information.</p><p>To sort
+        based on reduce values, you must access the view content with reduction enabled from a
+        client, and perform the sorting within the client application.</p></section>
+
+
+
+    <section><title>Solutions for simulating joins</title>
+      <p>Joins between data, even when the documents being examined are contained within the same
+        bucket, are not possible directly within the view system. However, you can simulate this by
+        making use of a common field used for linking when outputting the view information. For
+        example, consider a blog post system that supports two different record types, ‘blogpost’
+        and ‘blogcomment’. The basic format for ‘blogpost’
+        is:</p><codeblock>{
+    "type" : "post",
+    "title" : "Blog post"
+    "categories" : [...],
+    "author" : "Blog author"
+    ...
+}
+</codeblock><p>The
+        corresponding comment record includes the blog post ID within the document
+        structure:</p><codeblock>{
+    "type" : "comment",
+    "post_id" : "post_3454"
+    "author" : "Comment author",
+    "created_at" : 123498235
+...
+}
+</codeblock><p>To
+        output a blog post and all the comment records that relate to the blog post, you can use the
+        following
+        view:</p><codeblock>function(doc, meta)
+{
+    if (doc.post_id &amp;&amp; doc.type &amp;&amp; doc.type == "post")
+    {
+        emit([doc.post_id, null], null);
+    }
+    else if (doc.post_id &amp;&amp; doc.created_at &amp;&amp; doc.type &amp;&amp; doc.type == "comment")
+    {
+        emit([doc.post_id, doc.created_at], null);
+    }
+}
+</codeblock><p>The
+        view makes use of the sorting algorithm when using arrays as the view key. For a blog post
+        record, the document ID will be output will a null second value in the array, and the blog
+        post record will therefore appear first in the sorted output from the view. For a comment
+        record, the first value will be the blog post ID, which will cause it to be sorted in line
+        with the corresponding parent post record, while the second value of the array is the date
+        the comment was created, allowing sorting of the child comments.</p><p>For
+        example:</p><codeblock>{"rows":[
+{"key":["post_219",null],       "value":{...}},
+{"key":["post_219",1239875435],"value":{...}},
+{"key":["post_219",1239875467],"value":{...}},
+]
+}
+</codeblock><p>Another
+        alternative is to make use of a multi-get operation within your client through the main
+        Couchbase SDK interface, which should load the data from cache. This lets you structure
+        your data with the blog post containing an array of the of the child comment records. For
+        example, the blog post structure might
+        be:</p><codeblock>{
+    "type" : "post",
+    "title" : "Blog post"
+    "categories" : [...],
+    "author" : "Blog author",
+    "comments": ["comment_2298","comment_457","comment_4857"],
+    ...
+}
+</codeblock><p>To
+        obtain the blog post information and the corresponding comments, create a view to find the
+        blog post record, and then make a second call within your client SDK to get all the comment
+        records from the Couchbase Server cache.</p></section>
+
+
+
+    <section><title>Simulating transactions</title>
+      <p>Couchbase Server does not support transactions, but the effect can be simulated by writing
+        a suitable document and view definition that produces the effect while still only requiring
+        a single document update to be applied.</p><p>For example, consider a typical banking
+        application, the document structure could be as
+        follows:</p><codeblock>{
+   "account" : "James",
+   "value" : 100
+}
+</codeblock><p>A
+        corresponding record for another
+        account:</p><codeblock>{
+   "account" : "Alice",
+   "value" : 200
+}
+</codeblock><p>To
+        get the balance of each account, the following <codeph>map()</codeph>
+        :</p><codeblock>function(doc, meta) {
+    if (doc.account &amp;&amp; doc.value)
+    {
+      emit(doc.account,doc.value);
+    }
+}
+</codeblock><p>The
+          <codeph>reduce()</codeph> function can use the built-in <codeph>_sum</codeph>
+        function.</p><p>When queried, using a <codeph>group_level</codeph> of 1, the balance of the
+        accounts is
+        displayed:</p><codeblock>{"rows":[
+{"key":"Alice","value":200},
+{"key":"James","value":100}
+]
+}
+</codeblock><p>Money
+        in an account can be updated just by adding another record into the system with the account
+        name and value. For example, adding the
+        record:</p><codeblock>{
+   "account" : "James",
+   "value" : 50
+}
+</codeblock><p>Re-querying
+        the view produces an updated balance for each
+        account:</p><codeblock>{"rows":[
+{"key":"Alice","value":200},
+{"key":"James","value":150}
+]
+}
+</codeblock><p>However,
+        if Alice wants to transfer $100 to James, two record updates are required:</p><ol>
+        <li>A record that records an update to Alice’s account to reduce the value by 100.</li>
+        <li>A record that records an update to James’s account to increase the value by
+          100.</li>
+      </ol><p>Unfortunately, the integrity of the transaction could be compromised in the event of a
+        problem between step 1 and step 2. Alice’s account may be deducted, without updates James’
+        record.</p><p>To simulate this operation while creating (or updating) only one record, a
+        combination of a transaction record and a view must be used. The transaction record looks
+        like
+        this:</p><codeblock>{
+     "fromacct" : "Alice",
+     "toacct" : "James",
+     "value" : 100
+}
+</codeblock><p>The
+        above records the movement of money from one account to another. The view can now be updated
+        to handle a transaction record and output a row through <codeph>emit()</codeph> to update
+        the value for each
+        account.</p><codeblock>function(doc, meta)
+{
+  if (doc.fromacct)
+  {
+    emit(doc.fromacct, -doc.value);
+    emit(doc.toacct, doc.value);
+  }
+  else
+  {
+    emit(doc.account, doc.value);
+  }
+}
+</codeblock><p>The
+        above <codeph>map()</codeph> effectively generates two fake rows, one row subtracts the
+        amount from the source account, and adds the amount to the destination account. The
+        resulting view then uses the <codeph>reduce()</codeph> function to sum up the transaction
+        records for each account to arrive at a final
+        balance:</p><codeblock>{"rows":[
+{"key":"Alice","value":100},
+{"key":"James","value":250}
+]
+}
+</codeblock><p>Throughout
+        the process, only one record has been created, and therefore transient problems with that
+        record update can be captured without corrupting or upsetting the existing stored
+      data.</p></section>
+
+
+    <section><title>Simulating multi-phase transactions</title>
+      <p>The technique in Simulating Transactions works if your data will allow the use of a view to
+        effectively roll-up the changes into a single operation. However, if your data and document
+        structure do not allow it then you can use a multi-phase transaction process to perform the
+        operation in a number of distinct stages.</p><p>This method is not reliant on views, but the
+        document structure and update make it easy to find out if there are ‘hanging’ or trailing
+        transactions that need to be processed without additional document updates. Using views and
+        the Observe operation to monitor changes could lead to long wait times during the
+        transaction process while the view index is updated.</p><p>To employ this method, you use a
+        similar transaction record as in the previous example, but use the transaction record to
+        record each stage of the update process.</p><p>Start with the same two account
+        records:</p><codeblock>{
+   "type" : "account",
+   "account" : "James",
+   "value" : 100,
+   "transactions" : []
+}
+</codeblock><p>The
+        record explicitly contains a <codeph>transactions</codeph> field which contains an array of
+        all the currently active transactions on this record.</p><p>The corresponding record for the
+        other
+        account:</p><codeblock>{
+   "type" : "account",
+   "account" : "Alice",
+   "value" : 200,
+   "transactions" : []
+}
+</codeblock><p>Now
+        perform the following operations in sequence:</p>
+      <ol>
+        <li>Create a new transaction record that records the transaction information:<p><codeph> {
+              "type" : "transaction", "fromacct" : "Alice", "toacct" : "James", "value" : 100,
+              "status" : "waiting" } </codeph></p>
+          <p>The core of the transaction record is the same,
+            the difference is the use of a <codeph>status</codeph> field which will be used to
+            monitor the progress of the transaction.</p><p>Record the ID of the transaction, for
+            example, <codeph>transact_20120717163</codeph>.</p></li>
+        <li>Set the value of the <codeph>status</codeph> field in the transaction document to
+              ‘pending’:<p><codeph> { "type" : "transaction", "fromacct" : "Alice", "toacct" :
+              "James", "value" : 100, "status" : "pending" } </codeph></p></li>
+        <li>Find all transaction records in the <codeph>pending</codeph> state using a suitable
+              view:<p><codeph> function(doc, meta) { if (doc.type &amp;&amp; doc.status &amp;&amp;
+              doc.type == "transaction" &amp;&amp; doc.status == "pending" ) {
+              emit([doc.fromacct,doc.toacct], doc.value); } } </codeph></p></li>
+        <li>Update the record identified in <codeph>toacct</codeph> with the transaction
+          information, ensuring that the transaction is not already pending:<p><codeph> { "type" :
+              "account", "account" : "Alice", "value" : 100, "transactions" :
+              ["transact_20120717163"] } </codeph></p><p>Repeat on the other account:</p>
+          <p><codeph>
+              { "type" : "account", "account" : "James", "value" : 200, "transactions" :
+              ["transact_20120717163"] } </codeph></p></li>
+        <li>Update the transaction record to mark that the records have been updated:<p><codeph> {
+              "type" : "transaction", "fromacct" : "Alice", "toacct" : "James", "value" : 100,
+              "status" : "committed" } </codeph></p></li>
+        <li>Find all transaction records in the <codeph>committed</codeph> state using a suitable
+              view:<p><codeph> function(doc, meta) { if (doc.type &amp;&amp; doc.status &amp;&amp;
+              doc.type == "transaction" &amp;&amp; doc.status == "committed" ) { emit([doc.fromacct,
+              doc.toacct], doc.value); } } </codeph></p><p>Update the source account record noted in
+            the transaction and remove the transaction ID:</p><p><codeph> { "type" : "account",
+              "account" : "Alice", "value" : 100, "transactions" : [] } </codeph></p><p>Repeat on
+            the other account:</p><p><codeph> { "type" : "account", "account" : "James", "value" :
+              200, "transactions" : [] } </codeph></p></li>
+        <li>Update the transaction record state to ‘done’. This will remove the transaction from the
+          two views used to identify unapplied, or uncommitted transactions.</li>
+      </ol><p>Within this process, although there are multiple steps required, you can identify at
+        each step whether a particular operation has taken place or not.</p><p>For example, if the
+        transaction record is marked as ‘pending’, but the corresponding account records do not
+        contain the transaction ID, then the record still needs to be updated. Since the account
+        record can be updated using a single atomic operation, it is easy to determine if the record
+        has been updated or not.</p><p>The result is that any sweep process that accesses the views
+        defined in each step can determine whether the record needs updating. Equally, if an
+        operation fails, a record of the transaction, and whether the update operation has been
+        applied, also exists, allowing the changes to be reversed and backed out.</p></section>
+  </body>
+</topic>
