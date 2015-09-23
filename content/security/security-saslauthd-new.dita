@@ -1,13 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_bcf_jmq_wq">
-  <title>Setting up <codeph>saslauthd</codeph></title><shortdesc>In LDAP authentication, <codeph>saslauthd</codeph> process handles authentication
-    requests on behalf of the <codeph>SASL</codeph> library while the LDAP protocol is used to
-    connect to the LDAP server. </shortdesc>
+  <title>Setting up <codeph>saslauthd</codeph></title><shortdesc><codeph>saslauthd</codeph> is a daemon process that handles plaintext authentication requests on behalf of
+    the SASL library. </shortdesc>
   <body>
+    <p>In LDAP authentication, <codeph>saslauthd</codeph> process handles authentication requests on
+      behalf of Couchbase Server while the LDAP protocol is used to connect to the LDAP server. </p>
+    <p>Remote authentication with the LDAP server requires proper configuration of the
+        <codeph>saslauthd</codeph> agent, which must installed and configured on each Couchbase
+      Server node.</p>
+    <note type="note">Make sure that you have the prerequisites for the LDAP software you are installing, 
+      such as OpenLDAP libraries.</note>
+    <note type="note">Installation packages are a part of <codeph>cyrus-sasl rpm</codeph>, so make sure it is installed.</note>
+    
+    
     <section><title>Supported <codeph>saslauthd</codeph> packages for LDAP
-      integration</title>Install your Unix operating system with the package that is supported for
-      LDAP integration: <dl>
+      integration</title>
+     
+      <p>Install your Unix operating system with the package that is supported for
+      LDAP integration: </p>
+      <dl>
         <dlentry>
           <dt>CentOS 6</dt>
           <dd>
@@ -27,6 +39,8 @@
           <dd><codeph>saslauthd 2.1.23</codeph> or higher</dd>
         </dlentry>
       </dl>
+     
+    
       <note type="important">LDAP authentication is not supported on Windows and Mac OS  environments.</note>
     </section>
     
@@ -104,15 +118,42 @@
           <dd>Add the <codeph>ldap_server</codeph> parameter (the system running the Centrify LDAP
             proxy) as well as your search base and the attribute that corresponds to the user name.
             With a tool such as Centrify, you can use the AD name (<codeph>samAccountName</codeph>)
-            or the userID contained in the PosixAccount class:
-            <codeblock>ldap_servers: ldap://cen1.corp.contoso.com
+            or the userID contained in the PosixAccount class: 
+<!--<codeblock>ldap_servers: ldap://cen1.corp.contoso.com
 
 ldap_search_base: ou=Staff,dc=corp,dc=contoso,dc=com
 
-ldap_filter: (samAccountName=%u)</codeblock></dd>
+ldap_filter: (samAccountName=%u)</codeblock> -->
+            <codeblock>$ cat /etc/saslauthd.conf
+# ldap_servers: ldap:&lt;URI&gt;:&lt;PORT&gt; or ldaps:&lt;URI&gt;:&lt;PORT&gt; for TLS protected connection
+ldap_servers: ldap://my.company.com:389
+# Specifies the distinguished name to which the search is relative. The search includes the base # or objects below.  
+# It also includes Domain Components (dc) such as in dc=company anddc=com.
+# The administrative users created in LDAP with the attribute uid are placed under the user's
+# organizational unit ou under the two domain components (example and com).
+OU=InteractiveUsers,DC=my,DC=company,DC=com
+# Specifies the search filter. The values for these configuration options correspond to the values
+# specific to the test
+ldap_filter: (samAccountName=%u)
+# Optional: specify a user to perform ldap queries
+ldap_bind_dn: CN=user_ldap,OU=Users,DC=my,DC=company,DC=com
+# Optional: specify ldap user’s password
+ldap_password: -sEcReTp#AssWoRd!</codeblock></dd>
         </dlentry>
       </dl>
     </section>
+    <section><title>Configure <filepath>/etc/sysconfig/saslauthd</filepath></title>
+      <p>Here is an example how to configure <filepath>/etc/sysconfig/saslauthd</filepath> for CentOS:</p>
+      <codeblock>$ cat /etc/sysconfig/saslauthd
+# Just keep the default
+SOCKETDIR=/var/run/saslauthd
+# Make sure MECH is set to ldap (pam is default)
+MECH=ldap
+# Include the config file described above
+FLAGS="-O /etc/saslauthd.conf"      </codeblock>
+     
+     
+   </section> 
        
     <section><title>Test <codeph>saslauthd</codeph></title>
  
@@ -122,12 +163,19 @@ ldap_filter: (samAccountName=%u)</codeblock></dd>
       
       <ol>
         <li>Start the saslauthd service (or set it to start automatically with
-            <cmdname>chkconfig</cmdname>).<codeblock>service saslauthd start</codeblock></li>
+            <cmdname>chkconfig</cmdname>).<codeblock>[root@localhost ~]# service saslauthd restart
+            Stopping saslauthd:                                    	[  OK  ]
+            Starting saslauthd:                                    	[  OK  ]
+            
+            [root@localhost ~]# chkconfig  saslauthd on
+            [root@localhost ~]# chkconfig --list saslauthd
+            saslauthd   	0:off   1:off   2:on	3:on	4:on	5:on	6:off        </codeblock></li>
         <li>Test <codeph>saslauthd</codeph> by using the <cmdname>testsaslauth</cmdname> script to
           test LDAP authentication:
-          <codeblock>/usr/sbin/testsaslauthd -u george.constanza -p &lt;cleartextpw&gt; -f /var/run/saslauthd/mux</codeblock></li>
-        <li>If you have set up everything properly, the output is: <systemoutput>0: OK
-          "Success."</systemoutput></li>
+          <codeblock>[root@localhost ~]# sudo -u couchbase /usr/sbin/testsaslauthd -u &lt;username&gt; \
+-p mypassword -f /var/run/saslauthd/mux
+<b>0: OK "Success."</b>        </codeblock>
+        </li>
         
       </ol>
       
