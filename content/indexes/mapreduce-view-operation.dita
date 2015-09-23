@@ -75,24 +75,60 @@
    <li><b>View names must be specified using one or more UTF–8 characters.</b> You cannot have a blank view name. View names cannot have leading or trailing white space characters (space, tab, newline, or carriage-return). </li>
    <li><b>Document IDs that are not UTF–8 encodable are automatically filtered and not included in any view.</b> The filtered documents are logged so that they can be identified.</li>
    <li>If you have a long view request, use POST instead of GET.</li>
-   <li><b>Views are updated incrementally.</b> The first time a view is indexed, all the documents within the bucket are processed through the map and reduce functions. Each new access to the view only processes the documents that have been added, updated, or deleted, since the last time the view index was updated. 
-    <p>In practice, this means that views are entirely incremental in nature. Updates to views are typically quick as they only update changed documents.<ul>
-     <li>Because of the incremental nature of the view update process, information is only appended to the index stored on disk. This helps ensure that the index is updated efficiently. Compaction (including auto-compaction) optimizes the index size on disk and the index structure. An optimized index is more efficient to update and query.</li>
-     <li>The entire view is recreated when the view definition changes. Because this has a detrimental effect on live data, only development views can be modified.</li>
-    </ul></p>
-    <p>Views are organized by design document, and indexes are created according to the design document. Changing a single view in a design document with multiple views invalidates all the views (and stored indexes) within the design document, and all the corresponding views defined in that design document must be rebuilt. This increases the I/O across the cluster while the index is rebuilt, in addition to the I/O required for any active production views.<ul>
-     <li>You can choose to update the result set from a view before you query it or after you query. Or you can choose to retrieve the existing result set from a view when you query the view. In this case the results are possibly out of date, or stale.</li>
-     <li>The views engine creates an index for each design document. This index contains the results for all the views within that design document.
-     </li>
-     <li>The index information stored on disk consists of the combination of both the key and value information defined within your view. The key and value data is stored in the index so that the information can be returned as quickly as possible, and so that views that include a reduce function can return the reduced information by extracting that data from the index.</li>
-    </ul></p></li>
+   <li><b>Views are updated incrementally.</b> The first time a view is indexed, all the documents
+          within the bucket are processed through the map and reduce functions. Each new access to
+          the view only processes the documents that have been added, updated, or deleted, since the
+          last time the view index was updated. <p>In practice, this means that views are entirely
+            incremental in nature. Updates to views are typically quick as they only update changed documents.<ul>
+              <li>Because of the incremental nature of the view update process, information is only
+                appended to the index stored on disk. This helps ensure that the index is updated
+                efficiently. Compaction (including auto-compaction) optimizes the index size on disk
+                and the index structure. An optimized index is more efficient to update and
+                query.</li>
+              <li>The entire view is recreated when the view definition changes. Because this has a
+                detrimental effect on live data, only development views can be modified.</li>
+            </ul></p><p>Views are organized by design document, and indexes are created according to
+            the design document. Changing a single view in a design document with multiple views
+            invalidates all the views (and stored indexes) within the design document, and all the
+            corresponding views defined in that design document must be rebuilt. This increases the
+            I/O across the cluster while the index is rebuilt, in addition to the I/O required for
+            any active production views.<ul>
+              <li>You can choose to update the result set from a view before you query it or after
+                you query. Or you can choose to retrieve the existing result set from a view when
+                you query the view. In this case the results are possibly out of date, or
+                stale.</li>
+              <li>The views engine creates an index for each design document. This index contains
+                the results for all the views within that design document. </li>
+              <li>The index information stored on disk consists of the combination of both the key
+                and value information defined within your view. The key and value data is stored in
+                the index so that the information can be returned as quickly as possible, and so
+                that views that include a reduce function can return the reduced information by
+                extracting that data from the index.</li>
+            </ul></p></li>
    <li><b>The value and key information from the defined map function are stored in the index.</b> Thus, the overall size of the index can be larger than the stored data if the emitted key/value information is larger than the original source document data.</li>
-   <li><b>Deleted documents may show up in the view.</b> Couchbase Server implements lazy expiration, that is, expired items are flagged as deleted rather than being immediately erased. Couchbase Server has a maintenance process, called <i>expiry pager</i>, that periodically looks through all data and erases expired items. This maintenance process runs every 60 minutes, by default, unless configured to run at a different interval. Expired items are also purged on data access and on compaction. When an item is requested, Couchbase Server removes the item flagged for deletion and provides a response that the item does not exist.
-    <p>The result set from a view <i>will contain</i> any items stored on disk that meet the requirements of your views function. Therefore, expired documents that have not yet been removed from the bucket may appear as part of a result set when you query a view.</p>
-    <p>Using Couchbase Server views, you can also run reduce functions on the returned data, which perform calculations or other aggregations of data. For instance, if you want to count the instances of a type of object, use a reduce function. Once again, if an item is in a bucket, it will be included in any calculation performed by your reduce functions. In this case, you may want to run the expiry pager process more frequently to ensure that items that have expired are not included in calculations used in the reduce function. We recommend an interval of 10 minutes for the expiry pager on each node of a cluster. <note>This interval has a small impact on node performance as the expiry pager process will be performing cleanups more frequently on the node.</note> </p>
-    <p>For more information about setting intervals for the maintenance process, see section "Couchbase command line tool" and review the examples on <cmdname>exp_pager_stime</cmdname>.
-    </p>
-   </li>
+   <li><b>Deleted documents may show up in the view.</b> Couchbase Server implements lazy
+          expiration, that is, expired items are flagged as deleted rather than being immediately
+          erased. Couchbase Server has a maintenance process, called <i>expiry pager</i>, that
+          periodically looks through all data and erases expired items. This maintenance process
+          runs every 60 minutes, by default, unless configured to run at a different interval.
+          Expired items are also purged on data access and on compaction. When an item is requested,
+          Couchbase Server removes the item flagged for deletion and provides a response that the
+          item does not exist. <p>The result set from a view <i>will contain</i> any items stored on
+            disk that meet the requirements of your views function. Therefore, expired documents
+            that have not yet been removed from the bucket may appear as part of a result set when
+            you query a view.</p><p>Using Couchbase Server views, you can also run reduce functions
+            on the returned data, which perform calculations or other aggregations of data. For
+            instance, if you want to count the instances of a type of object, use a reduce function.
+            Once again, if an item is in a bucket, it will be included in any calculation performed
+            by your reduce functions. In this case, you may want to run the expiry pager process
+            more frequently to ensure that items that have expired are not included in calculations
+            used in the reduce function. We recommend an interval of 10 minutes for the expiry pager
+            on each node of a cluster. <note>This interval has a small impact on node performance as
+              the expiry pager process will be performing cleanups more frequently on the node.
+            </note></p><p>For more information about setting intervals for the maintenance process,
+            see section "Couchbase command line tool" and review the examples on
+              <cmdname>exp_pager_stime</cmdname>. </p>
+        </li>
   </ul></p> 
  </conbody>
 </concept>
