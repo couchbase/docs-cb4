@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_tvx_nhq_44">
+  <title>Working with view queries</title>
+ <shortdesc>You can use MapReduce views to create queryable secondary and composite indexes in Couchbase Server. </shortdesc>
+ <conbody>
+   <p>The Couchbase .NET SDK offers access to all features of the Couchbase View API. Note that before working with the API, a design document and View must exist on the Couchbase Server you are targeting.</p>
+   <p>For these examples, we will use the design documents and views that come with the
+				<codeph>beer-sample</codeph> sample bucket that can be installed directly from the
+			Couchbase Management Console. To install the sample buiket, navigate to the console, log
+			in, and click the <uicontrol>Settings</uicontrol> tab. After you have done this, click
+				<uicontrol>Sample Buckets</uicontrol>. Under <uicontrol>Available Samples</uicontrol>,
+			select the <uicontrol>beer-sample</uicontrol> check box. Then click
+				<uicontrol>Create</uicontrol>.</p>
+   <p><image href="images/installing-beer-sample.png" id="image_tj3_r4d_3p"/></p>
+   <p>After you have the <codeph>beer-sample</codeph> sample data and bucket installed, you can run
+			some queries. The <codeph>beer-sample</codeph> comes with a design document called
+				<codeph>beer</codeph> and some views defined: <codeph>brewery_beers</codeph>,
+				<codeph>by_country</codeph>, and <codeph>by_location</codeph>. We use these in the next
+			several examples.</p>
+   <p>First a very simple query that fetches the results of the <codeph>brewery_beers</codeph> view. The view definition looks like this:</p>
+   <codeblock outputclass="language-javascript" spectitle="brewery_beers view">
+function(doc, meta) {
+	switch (doc.type) {
+		case "brewery":
+			emit([meta.id]);
+			break;
+		case "beer":
+			if (doc.brewery_id) {
+				emit([doc.brewery_id, meta.id]);
+			}
+			break;
+	}
+}
+</codeblock>
+   <p>What this does is create secondary indexes for every document with a type of
+				<codeph>brewery</codeph> and a composite index for every document of type
+				<codeph>beer</codeph>. When this map function runs, it returns a list of all of these
+			keys. Here is an example of querying this view using the Couchbase .NET SDK: </p>
+   <codeblock outputclass="language-csharp">
+ var query = bucket.CreateQuery("beer", "brewery_beers”, false).
+     Limit(5);
+
+ var result = bucket.Query&lt;dynamic>(query);
+ foreach (var row in result.Rows)
+ {
+    Console.WriteLine(row);
+ }
+   </codeblock>
+   <p>First, an <codeph>IViewQuery</codeph> object is created by calling the factory method
+				<apiname>IBucket.CreateQuery()</apiname> and passing in <codeph>false</codeph> to
+			indicate that we want to target a production view. Then we specify the design document to
+			use, the view on the design document that we want to query, and the limit on the number of
+			rows to return. We then use the <apiname>IBucket.Query()</apiname> method to execute the
+			query and then iterate through the results.</p>
+   <p><codeph>IViewQuery</codeph> is a fluent interface that allows a series of methods to be
+			chained together. Internally, it’s creating the HTTP request URL that will be sent the
+			server and executed. Besides the methods defined in the query above, which are the minimal
+			set of methods you must call to make a query, there are several others. The following table
+			lists select <codeph>IViewQuery</codeph> methods. For a complete list of
+				<codeph>IViewQuery</codeph> methods, the parameters they take and their return types,
+			refer to the API Reference.</p>
+   
+        <table id="table_e5b_rpd_3p">
+        	<title>Selected<codeph>IVQuery</codeph> methods</title>
+          <tgroup cols="2">
+          <colspec colnum="1" colname="col1" colwidth="1*"/>
+          <colspec colnum="2" colname="col2" colwidth="3.65*"/>
+            <thead>
+              <row>
+                <entry>Name</entry>
+                <entry>Description</entry>
+              </row>
+            </thead>
+            <tbody>
+            
+            <row>
+              <entry><codeph>From</codeph></entry>
+              <entry>Specify the bucket and the design document to query</entry>
+            </row>
+            <row>
+              <entry><codeph>Bucket</codeph></entry>
+              <entry>Specify the bucket to query</entry>
+            </row>
+            <row>
+              <entry><codeph>DesignDoc</codeph></entry>
+              <entry>Specify the design document to query</entry>
+            </row>
+            <row>
+              <entry><codeph>View</codeph></entry>
+              <entry>Specify the view to query</entry>
+            </row>
+            <row>
+              <entry><codeph>Skip</codeph></entry>
+              <entry>The number of records to skip</entry>
+            </row>
+            <row>
+              <entry><codeph>Stale</codeph></entry>
+              <entry>Whether or not to return stale data or force an index:
+								<codeph>StaleMode.False</codeph> | <codeph>Ok</codeph> |
+								<codeph>UpdateAfter</codeph></entry>
+            </row>
+            <row>
+              <entry><codeph>Asc</codeph></entry>
+              <entry>Sort in ascending order by key</entry>
+            </row>
+            <row>
+              <entry><codeph>Desc</codeph></entry>
+              <entry>Sort in descending order by key</entry>
+            </row>
+            <row>
+              <entry><codeph>Group</codeph></entry>
+              <entry>Groups the results from the reduce function into a single row</entry>
+            </row>
+            <row>
+              <entry><codeph>GroupLevel</codeph></entry>
+              <entry>Specify the level of grouping to use</entry>
+            </row>
+            <row>
+              <entry><codeph>Limit</codeph></entry>
+              <entry>The maximum number of rows to return</entry>
+            </row>
+            <row>
+              <entry><codeph>Reduce</codeph></entry>
+              <entry>True to use the reduce method</entry>
+            </row>
+            <row>
+              <entry><codeph>ConnectionTimeout</codeph></entry>
+              <entry>The number of seconds to wait before timing out a request</entry>
+            </row>
+            <row>
+              <entry><codeph>RawUri</codeph></entry>
+              <entry>Returns the internally created HTTP request URL</entry>
+            </row>
+          </tbody>
+        </tgroup>
+        </table>
+     
+      
+   <p>The <apiname>IBucket.Query()</apiname> method returns an object implementing the
+				<codeph>IViewResult&lt;T></codeph> interface. The following table lists some of the
+			members of the <codeph>IViewResult&lt;T></codeph> interface.</p>
+   <p>
+        <table id="table_mnb_gqd_3p">
+        	<title>Selected <codeph>IViewResult&lt;T></codeph> interface methods</title>
+          <tgroup cols="2">
+          <colspec colnum="1" colname="col1" colwidth="1*"/>
+          <colspec colnum="2" colname="col2" colwidth="3.44*"/>
+          <thead>
+            <row>
+              <entry>Name</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            <row>
+              <entry><codeph>Error</codeph></entry>
+              <entry>The error message returned by the View engine</entry>
+            </row>
+            <row>
+              <entry><codeph>Message</codeph></entry>
+              <entry>If the query failed as the result of a server error, a message indicating the
+                reason why</entry>
+            </row>
+            <row>
+              <entry><codeph>Rows</codeph></entry>
+              <entry>A List&lt;T&gt; of T, which is the result of the query</entry>
+            </row>
+            <row>
+              <entry><codeph>Success</codeph></entry>
+              <entry>true if the query completed successfully</entry>
+            </row>
+            <row>
+              <entry><codeph>StatusCode</codeph></entry>
+              <entry>The HTTP status code returned by the server</entry>
+            </row>
+            <row>
+              <entry><codeph>TotalRows</codeph></entry>
+              <entry>The total rows available; may not match the exact rows returned if Limit is
+                called.</entry>
+            </row>
+          </tbody>
+        </tgroup>
+        </table>
+      </p>
+   <p>You can iterate over the <codeph>Rows</codeph> property if the query was successful or check
+			the <codeph>Message</codeph> and <codeph>Error</codeph> properties if
+				<codeph>Success</codeph> returns false to determine the reason why the query failed. </p>
+ </conbody>
+</concept>
