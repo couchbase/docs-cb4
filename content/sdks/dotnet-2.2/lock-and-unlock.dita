@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_hnt_y1b_4t">
+ <title>Lock and Unlock: pessimistic concurrency</title>
+ <shortdesc>While CAS on an operation handles optimistic concurrency without requiring explicit
+  locks, pessimistic concurrency can be achieved by using Lock and Unlock. Using Lock ensures that
+  no other users can update the key or value if it is locked. Unlock removes the lock held on key so
+  that it can be mutated by other users.</shortdesc>
+ <conbody>
+  <section>
+   <title>Example: GetWithLock and Unlock</title>
+   <p>Here is an example of using GetAndLock and Unlock:</p>
+   <codeblock outputclass="language-csharp">
+    static async Task&lt;bool&gt; UpdatePostWithLockAsync(Post modified)
+    {
+        var bucket = ClusterHelper.GetBucket("default");
+        var success = false;
+    
+        //get the original document - if it doesn't exist fail
+        var result = await bucket.GetWithLockAsync&lt;Post&gt;(modified.PostId, TimeSpan.FromSeconds(5));
+        if (result.Success)
+        {
+            //update the original documents fields
+            var original = result.Value;
+            original.Content = modified.Content;
+            original.Author = modified.Author;
+            original.Views = original.Views++;
+    
+            //perform the mutation passing in the CAS value
+            var updated = await bucket.UpsertAsync(original.PostId, original, result.Cas);
+            if (updated.Success)
+            {
+                success = true;
+            }
+            await bucket.UnlockAsync(original.PostId, result.Cas);
+        }
+        return success;
+    }
+    </codeblock>
+   <p>This is roughly equivalent to the optimistic concurrency example. First, we get the document
+    and lock it, giving us a 5 second lock to complete the operation. Then we update the original
+    document and replace it. Finally, we unlock the document using the original CAS value from the
+    GetWithLockAsync call.</p>
+  </section>
+ </conbody>
+</concept>
