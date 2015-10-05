@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept-id-cluster-helper">
+  <title>Using the ClusterHelper</title>
+  <shortdesc>The ClusterHelper is a singleton/multiton that makes it easier to manage resources and
+    instances in server runtime environments such as ASP.NET and Owin/Katana. A ClusterHelper will
+    make a singleton instance of a Cluster object and configuration and store references to opened
+    IBucket objects that can be reused throughout the lifespan of an application.</shortdesc>
+
+  <conbody>
+    <section>
+      <title>Initializing the ClusterHelper</title>
+      <p>The ClusterHelper must be initialized before it can be used. This typically is done at
+        application start time in either the Global.asax or the Startup.cs classes. Here is an
+        example of initializing the ClusterHelper in Global.asax of an ASP.NET application:</p>
+      <codeblock outputclass="language-csharp">
+        public class MvcApplication : System.Web.HttpApplication
+        {
+            protected void Application_Start()
+            {
+                AreaRegistration.RegisterAllAreas();
+                FilterConfig.RegisterGlobalFilters(GlobalFilters.Filters);
+                RouteConfig.RegisterRoutes(RouteTable.Routes);
+                BundleConfig.RegisterBundles(BundleTable.Bundles);
+        
+                //Initialize the helper
+                var config = new ClientConfiguration();
+                ClusterHelper.Initialize(config);
+            }
+        
+            ...
+        }
+</codeblock>
+      <p>Here in the Application_Start event handler, we are creating a ClientConfiguration object
+        and passing it into ClusterHelper.Initialize. Once this is done, the ClusterHelper can be
+        used throughout the application.</p>
+      <p>Here is an alternative way of initializing the ClusterHelper in a Owin or Katana
+        application:</p>
+      <codeblock outputclass="language-csharp">
+       public partial class Startup
+       {
+           public void Configuration(IAppBuilder app)
+           {
+               ConfigureAuth(app);
+       
+               //initialize the ClusterHelper
+               ClusterHelper.Initialize(new ClientConfiguration
+               {
+                   Servers = new List&lt;Uri&gt;
+                   {
+                       new Uri("http://localhost:8091/")
+                   }
+               });
+       
+               ...
+           }
+       }
+      </codeblock>
+      <p>In this example we are also creating the Servers list for bootstrapping the client before
+        passing it to the Initialize method.</p>
+    </section>
+    <section>
+      <title>Closing the ClusterHelper</title>
+      <p>When the application shuts down whether explicitly or via an app-pool reload, the
+        ClusterHelper should be closed as well freeing up any OS resources that it may be using. In
+        a ASP.NET application you can do this again in the Global.asax class:</p>
+      <codeblock outputclass="language-csharp">
+        public class MvcApplication : System.Web.HttpApplication
+        {
+            ...
+        
+            protected void Application_End()
+            {
+                //Cleanup all resources
+                ClusterHelper.Close();
+            }
+        }
+        </codeblock>
+      <p>Here we are using the Application_End event handler to close the CLusterHelper. This event
+        will be fired when the application shuts down.</p>
+      <p>In Owin or Katana application this can be done by registering an event on an OnAppDisposing
+        token.</p>
+      <codeblock outputclass="language-csharp">
+        public partial class Startup
+        {
+            public void Configuration(IAppBuilder app)
+            {
+        
+                ...
+        
+                //Register a callback that will dispose of the ClusterHelper on app shutdown
+                var properties = new AppProperties(app.Properties);
+                var token = properties.OnAppDisposing;
+                if (token != CancellationToken.None)
+                {
+                    token.Register(() =&gt;
+                    {
+                        ClusterHelper.Close();
+                    });
+                }
+            }
+        }
+        </codeblock>
+    </section>
+    <section>
+      <title>Using the ClusterHelper in the application</title>
+      <p>To use the ClusterHelper, you simple call ClusterHelper.OpenBucket and pass in the bucket
+        name and optional password:</p>
+      <codeblock outputclass="language-csharp">
+        public ActionResult Index()
+        {
+            var bucket = ClusterHelper.GetBucket("default");
+            var result = bucket.Upsert("foo", "bar");
+            return View();
+        }
+       </codeblock>
+      <p>In this example, we are getting a reference to the bucket object in an Action method called
+        Index on a controller. Once we get the reference, we Upsert a key and value and then return
+        a View. Notice that there is no "using" statement; this is critical. If we were to do
+        this:</p>
+      <codeblock outputclass="language-csharp">
+        public ActionResult Index()
+        {
+            using(var bucket = ClusterHelper.GetBucket("default"))
+            {
+                var result = bucket.Upsert("foo", "bar");
+                return View();
+            }
+        }
+        </codeblock>
+      <p>Then we would be disposing of the reference to the bucket held by the ClusterHelper. The
+        next time GetBucket was called a new bucket would have to be instantiated and the TCP
+        connections recreated and authenticated. This would slow things down tremendously!</p>
+    </section>
+  </conbody>
+</concept>
