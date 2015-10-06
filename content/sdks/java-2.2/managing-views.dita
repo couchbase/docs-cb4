@@ -31,16 +31,16 @@ BucketManager bucketManager = bucket.bucketManager();
 
 // Initialize design document
 DesignDocument designDoc = DesignDocument.create(
-    "landmarks",
-    Arrays.asList(
-        DefaultView.create("by_country",
-            "function (doc, meta) { if (doc.type == 'landmark') { emit([doc.country, doc.city], null); } }"),
-        DefaultView.create("by_activity",
-            "function (doc, meta) { if (doc.type == 'landmark') { emit(doc.activity, null); } }",
-            "_count"),
-        SpatialView.create("by_coordinates",
-            "function (doc, meta) { if (doc.type == 'landmark') { emit([doc.geo.lon, doc.geo.lat], null); } }")
-    )
+	"landmarks",
+	Arrays.asList(
+		DefaultView.create("by_country",
+			"function (doc, meta) { if (doc.type == 'landmark') { emit([doc.country, doc.city], null); } }"),
+		DefaultView.create("by_activity",
+			"function (doc, meta) { if (doc.type == 'landmark') { emit(doc.activity, null); } }",
+			"_count"),
+		SpatialView.create("by_coordinates",
+			"function (doc, meta) { if (doc.type == 'landmark') { emit([doc.geo.lon, doc.geo.lat], null); } }")
+	)
 );
 
 // Insert design document into the bucket
@@ -99,7 +99,7 @@ System.out.println(designDoc.name() + " has " + designDoc.views().size() + " vie
 List<DesignDocument> designDocs = bucketManager.getDesignDocuments();
 System.out.println("bucket 'travel-sample' has " + designDocs.size() + " design documents:");
 for (DesignDocument doc : designDocs) {
-    System.out.println(doc.name() + " has " + doc.views().size() + " views");
+	System.out.println(doc.name() + " has " + doc.views().size() + " views");
 }
 ]]></codeblock>
 
@@ -109,6 +109,32 @@ for (DesignDocument doc : designDocs) {
 bucket 'travel-sample' has 2 design documents:
 landmarks has 3 views
 spatial has 2 views]]></codeblock>
+		</section>
+
+		<section>
+			<title>Adding or replacing views in an existing design document</title>
+			<p>
+				When you want to update an existing document with a new view (or a modification of a view's definition), you can use the <codeph>upsertDesignDocument</codeph> method.
+				The catch is that this method needs the list of views in the document to be exhaustive, meaning that if you just create the new <codeph>View</codeph> definition as previously and add it to a new <codeph>DesignDocument</codeph> that you upsert, all your other views will be erased!
+			</p>
+			<p>
+				The solution is to perform a <codeph>getDesignDocument(ddoc)</codeph>, add your view definition to the DesignDocument's <codeph>views()</codeph> list, then upsert it. This also works with view modifications, provided the change is in the <codeph>map</codeph> or <codeph>reduce</codeph> functions (just reuse the same name for the modified <codeph>View</codeph>).
+			</p>
+			<codeblock outputclass="language-java"><![CDATA[
+// Get design document to be updated
+DesignDocument designDoc = bucketManager.getDesignDocument("landmarks");
+
+//update the "by_country" view, adding a reduce
+designDoc.views().add(
+	DefaultView.create("by_country", //reuse same name
+		"function (doc, meta) { if (doc.type == 'landmark') { emit([doc.country, doc.city], null); } }", //same map function
+		"_count" //added reduce function
+		)
+	);
+
+//resend to server
+bucketManager.upsertDesignDocument(designDoc);
+]]></codeblock>
 		</section>
 
 		<section>
