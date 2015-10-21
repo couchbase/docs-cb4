@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE concept
   PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
-<concept xml:lang="en-us" id="concept2677">
+<concept xml:lang="en-us" id="n1ql">
 	<title>Working with N1QL</title>
 	<shortdesc>The Java SDK offers advanced support for querying JSON documents using N1QL (aka "SQL for Documents"). N1QL is a superset of SQL.</shortdesc>
 	<conbody>
@@ -14,12 +14,16 @@
 			<p>As of the <codeph>2.2</codeph> version of the SDK, the DSL supports the following features:
 			 <ul>
 				 <li>Data selection with <codeph>Select.select(...)</codeph> as an entry point (including index hinting)</li>
-				 <li>All N1QL functions, organized by topic in the helper classes in the 
+				 <li>All N1QL functions, organized by topic in the helper classes in the
 				 	<codeph>com.couchbase.client.java.query.dsl.functions</codeph> package (eg. <codeph>AggregateFunctions</codeph>)</li>
-				 <li>A mini DSL for building CASE constructs via factory methods on the <codeph>Case</codeph> class</li>
-				 <li>A mini DSL for building collection constructs (ANY, EVERY, ARRAY...) 
+				 <li>A <xref
+ 					href="#n1ql/case">mini DSL for building CASE constructs</xref
+> via factory methods on the <codeph>Case</codeph> class</li>
+				 <li>A <xref
+ 					href="#n1ql/collections">mini DSL for building collection constructs</xref
+> (ANY, EVERY, ARRAY...)
 				 	via factory methods on the  <codeph>Collections</codeph> class</li>
-				 <li>Index management (index and primary index creation/deletion/deferred building) with <codeph>Index</codeph> 
+				 <li><xref href="#n1ql/index">Index management</xref> (index and primary index creation/deletion/deferred building) with <codeph>Index</codeph>
 				 	factory methods as an entry point</li>
 			 </ul>
 			</p>
@@ -104,12 +108,12 @@ N1qlQueryResult query = bucket.query(select("*").from("beer-sample").limit(10));
 		)
 	}
 );]]></codeblock>
-		<p>First, we see that we work on asynchronous mode. Second line issues a <apiname>Statement</apiname>
-			using the DSL. Then we subscribe a first time to trigger the query and obtain the result.</p>
-		<p>On receiving the result (there will be only one), we subscribe to its components to be notified
+		<p>First, you can see that asynchronous mode is used. Second line issues a <apiname>Statement</apiname>
+			using the DSL. Then a first subscription is made to trigger the query and obtain the result.</p>
+		<p>On receiving the result (there will be only one), you have to subscribe to its components to be notified
 			respectively of n1ql errors and n1ql results. Results (as rows) are first mapped into their
 			JSON values.</p>
-		<p>Notice we also define an <apiname>onError</apiname> behavior for both n1ql errors stream and results
+		<p>Notice this example also define an <apiname>onError</apiname> behavior for both n1ql errors stream and results
 			stream, that just prints the stack trace.</p>
 		<p><i>Note: All this is done asynchronously so it's not suitable for a simple test (where the main
 			thread would exit potentially before any result could have been displayed)</i></p>
@@ -180,7 +184,108 @@ bucket.async()
 			</p>
 		</section>
 
-		<section>
+		<section id="case">
+			<title>Conditionals, Case Expressions Mini DSL</title>
+			<p>
+				The <codeph>com.couchbase.client.java.query.dsl.functions.Case</codeph> class contains a mini-DSL to deal with Conditional operators in N1QL of the <codeph>CASE</codeph> family.
+			</p>
+			<p>
+				The <codeph>Simple CASE</codeph> expression is defined as:
+			</p>
+<codeblock outputclass="language-sql"><![CDATA[CASE expression  ( WHEN expression THEN expression)
+[ ( WHEN expression THEN expression) ]*
+[  ELSE expression ]  END]]></codeblock>
+			<p>
+				The <codeph>Searched CASE</codeph> expression is defined as:
+			</p>
+<codeblock outputclass="language-sql"><![CDATA[CASE  ( WHEN  condition THEN expression)
+[( WHEN  condition THEN expression ) ]*
+[ ELSE  expression ] END ]]></codeblock>
+			<p>
+				The corresponding mini-DSL are <codeph>Case.caseSimple</codeph> and <codeph>Case.caseSearch</codeph>. Simple Case will compare the initial expression with each WHEN clause for equality, returning the corresponding THEN expression if a match is found. Search Case allows to have a different condition for each WHEN clause.
+				Let's see two examples. First one could be used to map match results to a score:
+			</p>
+<codeblock outputclass="language-sql"><![CDATA[CASE hist.result WHEN "won" THEN 1 ELSE 0 END]]></codeblock>
+
+<codeblock outputclass="language-java"><![CDATA[//import static com.couchbase.client.java.query.dsl.Expression.*;
+//import static com.couchbase.client.java.query.dsl.functions.Case.*;
+
+caseSimple(x("hist.result"))
+	.when(s("won")).then(x(1))
+	.elseReturn(x(0))]]></codeblock>
+
+			<p>
+				Second example implements more complex scoring rule using a Search Case (first match of the day counts as 5 points if won):
+			</p>
+
+<codeblock outputclass="language-sql"><![CDATA[CASE WHEN hist.result = "won" AND hist.matchNumber = 1 THEN 5
+WHEN hist.result = "won" THEN 1
+WHEN hist.result = "lost" THEN 0
+END]]></codeblock>
+
+<codeblock outputclass="language-java"><![CDATA[//import static com.couchbase.client.java.query.dsl.Expression.*;
+//import static com.couchbase.client.java.query.dsl.functions.Case.*;
+
+caseSearch()
+	.when(x("hist.result").eq(s("won")).and(x("hist.matchNumber").eq(1))).then(x(5))
+	.when(x("hist.result").eq(s("won"))).then(x(1))
+	.when(x("hist.result").eq(s("lost"))).then(x(0))
+	.end(); //no ELSE clause means other values will return NULL, have to explicitly close the CASE]]></codeblock>
+		</section>
+
+
+		<section id="collections">
+			<title>Collection Operators Mini DSL</title>
+			<p>
+				The <codeph>com.couchbase.client.java.query.dsl.functions.Collections</codeph> class contains a mini-DSL to deal with Collections operators in N1QL, such as <codeph>ANY</codeph>, <codeph>EVERY</codeph>, <codeph>ARRAY</codeph> and <codeph>FIRST</codeph>.
+			</p>
+			<p>
+				For example, the <codeph>ARRAY</codeph> construct is defined as:
+			</p>
+<codeblock outputclass="language-sql"><![CDATA[ARRAY expression FOR variable ( IN |  WITHIN ) expression
+[ ,  variable ( IN | WITHIN ) expression ]* [ ( WHEN  condition) ] END ]]></codeblock>
+			<p>
+				The corresponding mini-DSL is <codeph>Collections.arrayIn</codeph> (or <codeph>Collections.arrayWithin</codeph> if you want to start with a WITHIN clause).
+				Let's see two examples from the following statement, which extracts children and also lists the ones that are teenagers:
+			</p>
+<codeblock outputclass="language-sql"><![CDATA[SELECT tutorial.fname || ' ' || tutorial.lname AS adult,
+	ARRAY child FOR child IN tutorial.children END AS children,
+	ARRAY child.fname FOR child IN tutorial.children WHEN child.age >= 12 END AS teenagers
+FROM tutorial WHERE tutorial.children IS NOT NULL;]]></codeblock>
+			<p>
+				Here is how to write the second and third lines using the DSL:
+			</p>
+
+<codeblock outputclass="language-java"><![CDATA[//import static com.couchbase.client.java.query.dsl.Expression.*;
+//import static com.couchbase.client.java.query.dsl.functions.Collections.*;
+
+//ARRAY child FOR child IN tutorial.children END AS children
+arrayIn(x("child"), "child", path("tutorial", "children")).end().as("children");
+
+//ARRAY child.fname FOR child IN tutorial.children WHEN child.age >= 12 END AS teenagers
+arrayIn(path("child", "fname"), "child", path("tutorial", "children")).when(path("child", "age").gte(12)).as("teenagers"));]]></codeblock>
+
+			<p>
+				Similarly, <codeph>ANY</codeph> allows to test for a condition that applies to at least one member of a nested array (you can also match on <codeph>EVERY</codeph> member of the array).
+				Any is defined as:
+			</p>
+<codeblock outputclass="language-sql"><![CDATA[ANY variable ( IN  | WITHIN ) expression
+[  ,  variable ( IN | WITHIN ) expression  ]*
+SATISFIES condition  END]]></codeblock>
+			<p>
+				In the previous example, you would see an entry for a parent that doesn't have teenagers (its "teenagers" field would be empty), because the statement didn't specify that the children should contain a teenager. You can fix that with ANY, by rewriting the WHERE clause:
+			</p>
+<codeblock outputclass="language-sql"><![CDATA[#...FROM tutorial
+#replace "WHERE tutorial.children IS NOT NULL" with:
+WHERE ANY child IN tutorial.children SATISFIES child.age >= 12;]]></codeblock>
+
+<codeblock outputclass="language-java"><![CDATA[//import static com.couchbase.client.java.query.dsl.Expression.*;
+//import static com.couchbase.client.java.query.dsl.functions.Collections.*;
+
+anyIn("child", x("tutorial.children")).satisfies(x("child.age").gte(12))]]></codeblock>
+		</section>
+
+		<section id="index">
 			<title>Managing Indexes</title>
 			<p>
 				For N1QL to work, you must first ensure that at least a <codeph>Primary Index</codeph> has been created. For that you can use the DSL from the <codeph>Index</codeph> class:
