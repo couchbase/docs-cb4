@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_r4d_bng_vt">
+ <title>Key-Value (CRUD) operations</title>
+ <shortdesc>Key-Value or CRUD operations allow fast access to documents in Couchbase
+        Server.</shortdesc>
+ <conbody>
+        <p>An overview of CRUD in Couchbase can be found at <xref
+                href="../../developer-guide/data-access-overview.dita#concept_r5s_c2m_zs"/>.</p>
+        <section id="py-mutation-input"><title>Input values for document mutations</title>All Python
+            objects which can be represented as JSON may be passed unmodified to a storage function,
+            and be received via the <apiname>get</apiname> method without any additional
+                modifications.<p>Storage operations accept a <i>format</i> keyword argument which
+                may be one of <option>FMT_JSON</option> (to indicate the object should be serialized
+                as JSON), <option>FMT_UTF8</option> (to serialize the object as a UTF-8 encoded
+                string), <option>FMT_BYTES</option> (to serialize an object as a raw set of bytes;
+                note the Python object in question must be of type <codeph>bytes</codeph>),
+                    <option>FMT_PICKLE</option> (to serialize an object using Python's native
+                    <codeph>pickle</codeph> module). You may also define new formats and utilize
+                them via a <i>custom transcoder</i> (see the API documentation for
+            details).</p></section>
+        <section id="py-result-object">
+            <title>Return value for CRUD operations</title>
+            <p>All Python SDK operations return a <codeph>Result</codeph> object (or a subclass
+                thereof). The result object contains general operation information and item metadata
+                retrieved from the server. Typically a <i>subclass</i> of <codeph>Result</codeph>
+                will be returned which also contains operation-specific result information, such as
+                the <codeph>value</codeph> field for a <apiname>get()</apiname> operation. The most
+                common fields in a <apiname>Result</apiname> object are:</p>
+            <table id="table_ivk_pcn_2q">
+                <tgroup cols="2">
+                    <thead>
+                        <row>
+                            <entry>Name</entry>
+                            <entry>Description</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry><codeph>value</codeph></entry>
+                            <entry>For retrieval-type operations, this field contains the value of
+                                the requested key.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>rc</codeph></entry>
+                            <entry>Contains the raw error code received from <i>libcouchbase</i>. If
+                                this number is zero then the operation was successful; otherwise it
+                                will be an error. The
+                                    <apiname>CouchbaseError.rc_to_exctype()</apiname> class method
+                                can be used to return the exception class which would have been
+                                thrown.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>success</codeph></entry>
+                            <entry>This is a convenience property which is equivalent to <codeph>rc
+                                    == 0</codeph></entry>
+                        </row>
+                        <row>
+                            <entry><codeph>cas</codeph></entry>
+                            <entry>An opaque object representing the resulting <xref
+                                    href="../../developer-guide/cas-concurrency.dita#concept_iq4_bts_zs"
+                                    >CAS</xref> value of the key that was operated on. This value is
+                                not meant to be user facing, but should be passed directly to other
+                                operations for locking purposes.</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+            <p>Note that for Twisted APIs, these objects are not returned per se, but rather a
+                    <apiname>Deferred</apiname> object is returned, and the appropriate
+                    <apiname>Result</apiname> or <apiname>Failure</apiname> object is passed into
+                the callback or errback, respectively.</p>
+        </section>
+        <section><title>Creating and updating documents</title>Documents may be created and updated
+            using the <apiname>Bucket.upsert()</apiname>, <apiname>Bucket.insert()</apiname>, and
+                <apiname>Bucket.replace()</apiname> family of methods. Read more about the
+            difference between these methods at <xref
+                href="../../developer-guide/creating-documents.dita#concept_ygh_llm_zs"/> in the
+            Couchbase developer guide.<p>These methods accept two mandatory arguments:<ul
+                    id="ul_x1s_m4g_vt">
+                    <li><parmname>key</parmname>: The ID of the document to modify. This should be a
+                        Python string or unicode object.</li>
+                    <li><parmname>value</parmname>: The desired new value of the document. This may
+                        be anything that can be serialized as JSON (other input types can also be
+                        specified, see <xref href="#py-mutation-input"/>).</li>
+                </ul></p><p>Additional options can be specified to the operation:<ul
+                    id="ul_btf_lpg_vt">
+                    <li><parmname>cas</parmname>: The CAS value for the document. If the CAS on the
+                        server does not match the CAS supplied to the method, the operation will
+                        fail with a <apiname>couchbase.exceptions.KeyExistsError</apiname> error.
+                        See <xref
+                            href="../../developer-guide/cas-concurrency.dita#concept_iq4_bts_zs"/>
+                        for more information on the usage of CAS values.</li>
+                    <li><parmname>ttl</parmname>: Specify the expiry time for the document. If
+                        specified, the document will expire and no longer exist after the given
+                        number of seconds. See <xref
+                            href="../../developer-guide/expiry.dita#concept_o53_kps_zs"/> for more
+                        information.</li>
+                    <li><parmname>format</parmname>: Specify the format of the new value. This
+                        indicates how the <parmname>value</parmname> should be serialized before
+                        being sent to the cluster. By default only JSON-serializable objects may be
+                        supplied as values. See <xref href="#py-mutation-input"/>.</li>
+                    <li><parmname>persist_to</parmname>, <parmname>replicate_to</parmname>: Specify
+                            <xref href="../../developer-guide/durability.dita#concept_gyg_14s_zs"
+                            >durability requirements</xref> for the operations. A value of
+                            <codeph>-1</codeph> indicates that the specific requirement will be set
+                        to the maximum possible.</li>
+                </ul></p><p>Upon success, the returned <apiname>Result</apiname> object will contain
+                the new <xref href="../../developer-guide/cas-concurrency.dita#concept_iq4_bts_zs"
+                    >CAS</xref> value of the document. If the document was not mutated successfully,
+                an exception is raised. See <xref href="exception-handling.dita"/> for more
+                information on exception types and how to handle
+                them.</p><codeblock outputclass="language-python" spectitle="creating (Sync API)">rv = bucket.insert('document_name', {'some': 'value'})
+print rv</codeblock><p>Output:</p><screen>OperationResult&lt;RC=0x0, Key=u'document_name', CAS=0x707339a4125aaa13></screen><codeblock spectitle="creating (Twisted API)" outputclass="language-python">d_insert = bucket.insert('document_name', {'some': 'value'})
+
+def on_ok(result):
+    print "Result stored OK!", result
+
+def on_err(err):
+    print "Failed to insert!", err
+
+d_insert.addCallbacks(on_ok, on_err)</codeblock><p>Output:<screen>Stored item OK OperationResult&lt;RC=0x0, Key=u'document_name', CAS=0xb81d69a5125aaa13></screen>If
+                the document being inserted already exists, the client will raise a
+                    <apiname>couchbase.exceptions.KeyExistsError</apiname>. If your application
+                simply wants to set the value ignoring whether it exists or not, use the
+                    <apiname>upsert()</apiname> method.</p></section>
+        <section><title>Retrieving documents</title><p>Documents may be retrieved using the
+                    <apiname>Bucket.get()</apiname> method. The <apiname>get()</apiname> method has
+                a single mandatory argument:<ul id="ul_lqq_mqg_vt">
+                    <li><parmname>key</parmname>: The document ID to retrieve</li>
+                </ul></p><p>Other options include:<ul id="ul_n1f_4qg_vt">
+                    <li><parmname>ttl</parmname>: Set the expiration for the document. This
+                        operation is known as a <i>get-and-touch</i> operation. See <xref
+                            href="../../developer-guide/expiry.dita#concept_o53_kps_zs"/> for more
+                        information.</li>
+                    <li><parmname>replica</parmname>: This may be passed as a boolean to issue a
+                            <xref
+                            href="../../developer-guide/error-handling.dita#concept_ybj_tqs_zs/devguide-replica-read"
+                            >replica read</xref>. This may be used if access to the master/primary
+                        node is temporarily unavailable.</li>
+                    <li><parmname>quiet</parmname>: Suppress throwing exceptions if the document
+                        does not exist. Rather than throwing an exception, status can be obtained
+                        from the <apiname>Result.success</apiname> property.
+                        <codeblock>rv = bkt.get('maybe', quiet=True)
+if rv.success:
+    handle_value(rv)
+else:
+    print "Item not found"</codeblock></li>
+                </ul></p>Upon success, a <apiname>ValueResult</apiname> object is returned. The
+            actual document may be access by using the <apiname>ValueResult.value</apiname>
+            property. Additional properties may also be accessed from the returned object. See <xref
+                href="#py-result-object"/>.<p>The <apiname>ValueResult.value</apiname> will contain
+                a native Python object, deserialized from JSON (or another format, per <xref
+                    href="#py-mutation-input"/>).</p><p>If the document does not exist (and
+                    <parmname>quiet=True</parmname> was not specified), a
+                    <apiname>couchbase.exceptions.NotFoundError</apiname> will be
+                raised.</p><codeblock outputclass="language-python" spectitle="Sync/gevent API">rv = bucket.get('document_name')
+print "Result object is:", rv
+print "Actual value is:", rv.value </codeblock><p>Sample
+                output:
+                </p><screen>Result object is ValueResult&lt;RC=0x0, Key=u'document_name', Value={u'some': u'value'}, 
+   CAS=0x20504a5e6a5aaa13, Flags=0x2000000>
+Actual value is {u'some': u'value'}</screen><codeblock outputclass="language-python" spectitle="Twisted API">def on_ok(result):
+    print "Got item. Result is", result
+    print "Value is", result.value
+
+def on_err(failure):
+    print "Couldn't store!", failure
+
+d_get = bkt.get('document_name')
+d_get.addCallbacks(on_ok, on_err)</codeblock><p>Sample
+                output:</p><screen>Got item. Result is ValueResult&lt;RC=0x0, Key=u'document_name', Value={u'some': u'value'}, 
+   CAS=0x20504a5e6a5aaa13, Flags=0x2000000>
+Value is {u'some': u'value'}</screen><p>If
+                the item does not exist, the client will raise a
+                    <apiname>couchbase.exceptions.NotFoundError</apiname>, which you can
+            catch:</p><codeblock outputclass="language-python" spectitle="Missing item; Sync API">from couchbase.exceptions import NotFoundError
+try:
+    rv = bkt.get('NOTEXISTENT')
+except NotFoundError as e:
+    print "Item not found", e</codeblock><codeblock spectitle="Missing item; Twisted API" outputclass="language-python">def on_err(failure):
+   failure.trap(NotFoundError)
+   print "Item not found!"</codeblock></section>
+        <section><title>Removing documents</title>Documents may be removed using the
+                <apiname>Bucket.remove()</apiname> method. This method takes a single mandatory
+                argument:<ul id="ul_ksh_3rg_vt">
+                <li><parmname>key</parmname>: The ID of the document to remove</li>
+            </ul>Some additional options:<ul id="ul_rw2_rrg_vt">
+                <li><parmname>quiet</parmname>: Do not raise an exception when attempting to remove
+                    a document which does not exist.</li>
+                <li><parmname>cas</parmname>: Only remove the document if the <xref
+                        href="../../developer-guide/cas-concurrency.dita#concept_iq4_bts_zs"
+                        >CAS</xref> has not changed.</li>
+            </ul></section>
+        <section><title>Updating document expiration``</title>Document expiration can be performed
+            using the <apiname>Bucket.touch()</apiname> method. See <xref
+                href="../../developer-guide/expiry.dita#concept_o53_kps_zs"/> for more
+            information.</section>
+        <section><title>Counter document modification</title>A <xref
+                href="../../developer-guide/counters.dita#concept_bf4_glh_ht">counter
+                document</xref> may be modified using the <apiname>Bucket.counter()</apiname>
+            method. See the linked section for more information on counter documents.</section>
+        <section><title>Raw append/prepend operations</title><xref
+                href="../../developer-guide/raw-append-prepend.dita#concept_kfc_zsg_vt">Raw binary
+                append and prepend operations</xref> can be performed using the
+                <apiname>Bucket.append()</apiname> and <apiname>Bucket.prepend()</apiname> methods,
+                respectively.<p>These functions behave similarly to the <apiname>upsert()</apiname>
+                family of methods, except that the <parmname>value</parmname> argument should be the
+                fragment to append or prepend (rather than the entire document). Additionally, the
+                    <parmname>format</parmname> argument <b>must</b> be supplied, and <b>must</b> be
+                set to either <option>couchbase.FMT_BYTES</option> or
+                    <option>couchbase.FMT_UTF8</option>.</p></section>
+    </conbody>
+</concept>
