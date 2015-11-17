@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_yv4_c2z_wt">
+ <title>Covering indexes</title>
+ <shortdesc>Indexes help locate data in a database and do not retrieve the data itself. Covering
+  indexes are special cases where the index includes all the information needed to satisfy a query
+  and do not require an additional step to access the data. As a result, covered queries, that is,
+  queries that get all their information from the index, are faster and deliver better
+  performance.</shortdesc>
+ <conbody>
+  <p>The following diagram illustrates the query execution work flow without covering indexes:</p>
+  <p>
+   <image placement="break" href="images/n1ql-query-workflow.png" width="5.5in" id="image_up2_ngx_xt"
+   />
+  </p>
+  <p>The following diagram illustrates the query execution work flow with covering indexes: <image
+    placement="break" href="images/n1ql-query-workflow-cover-idx.png" width="5.5in"
+    id="image_c25_zlp_yt"/></p>
+  <p>As you can see in the second diagram, a well designed query that uses a covering index avoids the additional steps to fetch the data from the data service. This results in a considerable performance improvement. </p>
+  <p>You can see the query execution plan using the EXPLAIN statement. When a query uses a covering
+   index, the EXPLAIN statement shows that a covering index is used for data access, thus avoiding
+   the overhead associated with key-value document fetches. Consider a simple index,
+    <userinput>idxstate</userinput>, on the attribute <parmname>state</parmname> in the
+    <codeph>beer-sample</codeph> bucket:
+   <codeblock>CREATE INDEX idxstate on `beer-sample` (state) USING GSI;</codeblock> If we select
+    <parmname>state</parmname> from the `beer-sample` bucket, all the data that is to be returned is
+   present in the index <parmname>idxstate</parmname> and thus avoids the additional step to fetch
+   the data. In this case, the index <parmname>idxstate</parmname> is called a covering index and
+   the query is a covered query.
+   <codeblock>cbq> EXPLAIN SELECT state from `beer-sample` WHERE state = "CA";
+    {
+    "requestID": "a2a734dc-7ddc-4bc0-8144-4f6b80f0bbc5",
+    "signature": "json",
+    "results": [
+    {
+    "#operator": "Sequence",
+    "~children": [
+    <b>{
+    "#operator": "IndexScan",
+    "covers": [
+    "cover((meta(`beer-sample`).`id`))",
+    "cover((`beer-sample`.`state`))"
+    ],
+    "index": "idxstate",
+    "keyspace": "beer-sample",
+    "namespace": "default",</b>
+    "spans": [
+    {
+    "Range": {
+    "High": [
+    "\"CA\""
+    ],
+    "Inclusion": 3,
+    "Low": [
+    "\"CA\""
+    ]
+    }
+    }
+    ],
+    "using": "gsi"
+    },
+    {
+    "#operator": "Parallel",
+    "~child": {
+    "#operator": "Sequence",
+    "~children": [
+    {
+    "#operator": "Filter",
+    "condition": "(cover((`beer-sample`.`state`)) = \"CA\")"
+    },
+    {
+    "#operator": "InitialProject",
+    "result_terms": [
+    {
+    "expr": "cover((`beer-sample`.`state`))"
+    }
+    ]
+    },
+    {
+    "#operator": "FinalProject"
+    }
+    ]
+    }
+    }
+    ]
+    }
+    ],
+    "status": "success",
+    "metrics": {
+    "elapsedTime": "12.239172ms",
+    "executionTime": "12.175594ms",
+    "resultCount": 1,
+    "resultSize": 1916
+    }
+    }</codeblock></p>
+  <p>If you modify the query to select the <parmname>state</parmname> and <parmname>city</parmname>
+   from the `beer-sample` bucket using the same index, <parmname>idxstate</parmname>, the index does
+   not contain all the information to satisfy the query and hence a key-value fetch is performed to
+   retrieve the data.
+    <codeblock>cbq> EXPLAIN SELECT state,city from `beer-sample` WHERE state = "CA";
+   {
+   "requestID": "d9d440cc-c5ef-4de7-9247-0203fa3cd208",
+   "signature": "json",
+   "results": [
+   {
+   "#operator": "Sequence",
+   "~children": [
+   {
+   <b>"#operator": "IndexScan",
+   "index": "idxstate",
+   "keyspace": "beer-sample",
+   "namespace": "default",</b>
+   "spans": [
+   {
+   "Range": {
+   "High": [
+   "\"CA\""
+   ],
+   "Inclusion": 3,
+   "Low": [
+   "\"CA\""
+   ]
+   }
+   }
+   ],
+   "using": "gsi"
+   },
+   {
+   "#operator": "Parallel",
+   "~child": {
+   "#operator": "Sequence",
+   "~children": [
+   {
+   <b>"#operator": "Fetch",
+   "keyspace": "beer-sample",
+   "namespace": "default"</b>
+   },
+   {
+   "#operator": "Filter",
+   "condition": "((`beer-sample`.`state`) = \"CA\")"
+   },
+   {
+   "#operator": "InitialProject",
+   "result_terms": [
+   {
+   "expr": "(`beer-sample`.`state`)"
+   },
+   {
+   "expr": "(`beer-sample`.`city`)"
+   }
+   ]
+   },
+   {
+   "#operator": "FinalProject"
+   }
+   ]
+   }
+   }
+   ]
+   }
+   ],
+   "status": "success",
+   "metrics": {
+   "elapsedTime": "4.97585ms",
+   "executionTime": "4.917805ms",
+   "resultCount": 1,
+   "resultSize": 2108
+   }
+   } </codeblock><note>To
+    use a covering index for the modified query, you must define an index with the
+     <parmname>state</parmname> and <parmname>city</parmname> attributes before executing the query.
+    <codeblock>CREATE INDEX idxstatecity on `beer-sample` (state, city) USING GSI;</codeblock></note></p>
+  <p>Covering indexes are only applicable to secondary index scans and can be used with views and global secondary indexes (GSI). Queries with expressions and aggregates benefit from covering indexes. </p>
+<p>The following queries can benefit from covering indexes. Try these statements using <apiname>cbq</apiname> to see the query execution plan. </p>
+  <p><b>Expressions and Aggregates</b>
+   <codeblock>EXPLAIN SELECT max(country) from `beer-sample` WHERE state = 'CA';</codeblock><codeblock>EXPLAIN SELECT country || state from `beer-sample` USE INDEX (idxstatecountry)  where state = 'CA'; </codeblock></p>
+  <p><b>UNION/INTERSECT/EXCEPT</b>
+   <codeblock>select country from `beer-sample` where state = 'CA'
+    UNION ALL
+    select country from `beer-sample` where state = 'Texas';</codeblock></p>
+  <p><b>Derived tables or sub-queries</b><codeblock>Select *
+   from (
+   SELECT country from `beer-sample` WHERE state = 'CA'
+   UNION ALL
+   select country from `beer-sample` WHERE state = 'Texas'
+   ) as newtab;
+  </codeblock></p>
+  <p><b>SELECT in INSERT statements</b><codeblock>INSERT into `travel-sample`(KEY k, value state) 
+   SELECT country as k, state from `beer-sample` b WHERE state = 'CA';</codeblock></p>
+  <p><b>Arrays in WHERE clauses</b>
+  </p>
+  <p>First, create a new index, <userinput>idxarray</userinput>.
+   <codeblock>CREATE INDEX idxarray on `beer-sample`(a, b);</codeblock> Then, run the following
+   query: <codeblock>SELECT b from `beer-sample` WHERE a = [1, 2, 3, 4];</codeblock></p>
+  <p><b>Prepared statements</b> also benefit from using covering indexes.</p>
+ </conbody>
+</concept>
