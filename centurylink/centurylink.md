@@ -41,14 +41,14 @@ After you successfully install a Blueprint, you will receive a notification emai
    3. Select the green Dashboard area on the top and then select **Blueprints Library**.
    ![](3-bprints-lib.png)
    4. In the panel "Blueprints Library", if needed use the keyword search on the right to select among multiple blueprints. In our case, choose from the available displayed blueprint thumbnails.
-  ![](4-bp-library.png)
+  ![](4-bp-library.png)      
 2. **Choose the Blueprint**. 
-  Click on **Install Couchbase Server on CentOS7**.
+  Click on **Install Couchbase Server on CentOS7**.     
 ![](5-select-centosx7.png)
-3. **Deploy the Blueprint.**
+3. **Deploy the Blueprint.**   
    In the panel "Install Couchbase Server on CentOS7", click **deploy blueprint**. 
 ![](6-install-cbs-centosx7.png)
-4. **Customize the Blueprint**. Use the panel "Deploy install Couchbase Server on CentOS7 Blueprint" customize your blueprint.
+4. **Customize the Blueprint**. Use the panel "Deploy install Couchbase Server on CentOS7 Blueprint" customize your blueprint.   
 ![](7-customize-bprint.png)
     1. **Build Server(s)** by entering or choosing the following:
 		* Password (for this example we use **Couchbase123**).
@@ -62,9 +62,9 @@ After you successfully install a Blueprint, you will receive a notification emai
 
     2. **Server Name(s)**. Enter a name, such as **CBNODE**.
     3. **Specify Credentials**. To run the task under the default administrative account, leave **NO** for credentials. 
-![](8-nextstep-2.png)   
+![](8-nextstep-2.png)      
 Click on **next step**.
-5. **Review the Blueprint**. Verify that you have the right information: 
+5. **Review the Blueprint**. Verify that you have the right information:    
 ![](9-review-bprint.png) 
         * Group: *group ID*
         * Network: **vlan_2006_10.141.6**.
@@ -75,10 +75,10 @@ Click on **next step**.
     1. Once you verify your information, click on the **deploy blueprint** button.   
  
 6. **Deploy the Blueprint**. In the panel "Deploy Blueprint: install Couchbase Server on CentOS7" you will see the deployment details.  
-  ![](10-deploy-bprint.png)
+  ![](10-deploy-bprint.png)   
 
 7. **Monitor the Activity Queue**  
-  ![](11-deploy-status.png)
+  ![](11-deploy-status.png)   
     1. Monitor the Deployment Queue to view the progress of the Blueprint deployment.
     2. Access the queue at any time by clicking the Queue link under the Blueprints menu on the main navigation drop-down.
     3. Once the Blueprint completes successfully, you will receive an email confirming that the Blueprint build is complete. Do not use the application until you have received this email notification.
