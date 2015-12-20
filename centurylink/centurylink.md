@@ -64,15 +64,16 @@ After you successfully install a Blueprint, you will receive a notification emai
     3. **Specify Credentials**. To run the task under the default administrative account, leave **NO** for credentials. 
 ![](8-nextstep-2.png)      
 Click on **next step**.
-5. **Review the Blueprint**. Verify that you have the right information:    
-![](9-review-bprint.png) 
-        * Group: *group ID*
-        * Network: **vlan_2006_10.141.6**.
-        * Primary DNS: **Manually Specify**; *172.17.1.26*.
-        * Secondary DNS: **Manually Specify**; *172.17.1.27*.
-        * Server Type: **Standard (default)**.
-        * Service Level: **Premium**.
-    1. Once you verify your information, click on the **deploy blueprint** button.   
+5. **Review the Blueprint**       
+![](9-review-bprint.png)
+    1. Verify the information:           
+        *Group: *group ID*   
+        *Network: **vlan_2006_10.141.6**   
+        *Primary DNS: **172.17.1.26**   
+        *Secondary DNS: **172.17.1.27**   
+        *Server Type: **Standard (default)**   
+        *Service Level: **Premium**       
+    2. If your information is correct, click on the **deploy blueprint** button.   
  
 6. **Deploy the Blueprint**. In the panel "Deploy Blueprint: install Couchbase Server on CentOS7" you will see the deployment details.  
   ![](10-deploy-bprint.png)   
