@@ -37,19 +37,19 @@ After you successfully install a Blueprint, you will receive a notification emai
 1. **Locate the Couchbase Server Blueprint**
 
    1. Log into [CenturyLink Control Portal](https://control.ctl.io) and enter your login and password.   
-   2. Click on **sign in**. The dashboard containing CenturyLink servers will open, where you can select servers and the Blueprints library.   
+   2. Click on **sign in**. The dashboard containing CenturyLink servers will open, where you can select servers and the Blueprints library.      
    ![](2-dashboard-uc.png)
-   3. To find the Couchbase blueprint, select the green Dashboard area on the top and then select **Blueprints Library**.
+   3. To find the Couchbase blueprint, select the green Dashboard area on the top and then select **Blueprints Library**.   
    ![](3-bprints-lib.png)
-   4. In the panel "Blueprints Library", if needed use the keyword search on the right to select among multiple blueprints. In our case, choose from the available displayed blueprint thumbnails.
+   4. In the panel "Blueprints Library", if needed use the keyword search on the right to select among multiple blueprints. In our case, choose from the available displayed blueprint thumbnails.   
   ![](4-bp-lib.png)               
 2. **Choose the Blueprint**    
   Click on **Install Couchbase Server on CentOS6**.     
 3. **Deploy the Blueprint**      
-   In the panel "Install Couchbase Server on CentOS6", click **deploy blueprint**. 
+   In the panel "Install Couchbase Server on CentOS6", click **deploy blueprint**.    
  ![](6-install-cbs-osx.png)   
 4. **Customize the Blueprint**   
-Use the panel "Deploy install Couchbase Server on CentOS6 Blueprint" customize your blueprint.   
+Use the panel "Deploy install Couchbase Server on CentOS6 Blueprint" customize your blueprint.      
  ![](7-customize-bp.png)   
 
     1. **Build Server(s)** by entering or choosing the following:
@@ -63,7 +63,7 @@ Use the panel "Deploy install Couchbase Server on CentOS6 Blueprint" customize y
         * Service Level: **Premium**.
 
     2. **Server Name(s)**. Enter a name, such as **CBNODE**.
-    3. **Specify Credentials**. To run the task under the default administrative account, leave **NO** for credentials. 
+    3. **Specify Credentials**. To run the task under the default administrative account, leave **NO** for credentials.      
 ![](8-nextstep-2.png)      
 Click on **next step**.
 5. **Review the Blueprint**             
@@ -71,7 +71,7 @@ Click on **next step**.
     2. If your information is correct, click on the  button **deploy blueprint**.   
  
 6. **Deploy the Blueprint**    
-   In the panel "Deploy Blueprint: install Couchbase Server on CentOS6" you will see the deployment details.  
+   In the panel "Deploy Blueprint: install Couchbase Server on CentOS6" you will see the deployment details.     
   ![](10-deploy-bprint.png)   
 
 7. **Monitor the Activity Queue**          
