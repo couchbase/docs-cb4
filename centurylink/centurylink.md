@@ -40,7 +40,7 @@ After you successfully install a Blueprint, you will receive a notification emai
    2. Click on **sign in**. The dashboard containing CenturyLink servers will open, where you can select servers and the Blueprints library.      
    ![](2-dashboard-uc.png)
    3. To find the Couchbase blueprint, select the green Dashboard area on the top and then select **Blueprints Library**.   
-   ![](3-bprints-lib.png)
+  
    4. In the panel "Blueprints Library", if needed use the keyword search on the right to select among multiple blueprints. In our case, choose from the available displayed blueprint thumbnails.   
   ![](4-bp-lib.png)               
 2. **Choose the Blueprint**    
@@ -52,18 +52,17 @@ After you successfully install a Blueprint, you will receive a notification emai
 Use the panel "Deploy install Couchbase Server on CentOS6 Blueprint" customize your blueprint.      
  ![](7-customize-bp.png)   
 
-    1. **Build Server(s)** by entering or choosing the following:
-		* Password
-        * Confirm the same password
+    *  **Build Server(s)** by entering or choosing the following:
+		* Password: *password*
+        * Confirm the same password: *password*
         * Group: **default**.
-        * Network: **vlan_2006_10.141.6**.
+        * Network: *network ID*
         * Primary DNS: **Manually Specify**
         * Secondary DNS: **Manually Specify**
         * Server Type: **Standard (default)**.
-        * Service Level: **Premium**.
-
-    2. **Server Name(s)**. Enter a name, such as **CBNODE**.
-    3. **Specify Credentials**. To run the task under the default administrative account, leave **NO** for credentials.      
+        * Service Level: choose between **Premium** or **Standard**.
+    *  **Server Name(s)**. Enter a name, such as **CBNODE**.
+    *  **Specify Credentials**. To run the task under the default administrative account, leave **NO** for credentials.      
 ![](8-nextstep-2.png)      
 Click on **next step**.
 5. **Review the Blueprint**             
@@ -86,5 +85,5 @@ The costs associated with this Blueprint deployment are for the CenturyLink Clou
 ### Frequently Asked Questions
 
 #### Who should I contact for support?
-* For issues related to deploying the Couchbase Server Blueprint on CenturyLink Cloud, Licensing or Accessing the deployed software, please visit the [Couchbase  Support website](http://support.couchbase.com/home).
+* For issues related to the Couchbase Server Blueprint on CenturyLink Cloud or Licensing, please visit [Couchbase  Support website](http://support.couchbase.com/home).
 * For issues related to cloud infrastructure (VM's, network, and so on) or if you experience a problem deploying the Blueprint or Script Package, open a CenturyLink Cloud Support ticket by emailing [noc@ctl.io](mailto:noc@ctl.io) or [through the CenturyLink Cloud Support website](https://t3n.zendesk.com/tickets/new).
