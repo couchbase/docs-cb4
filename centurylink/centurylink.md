@@ -15,9 +15,8 @@ Couchbase is also the only big data database that offers a native integrated NoS
 For more information, please visit [couchbase.com](http://www.couchbase.com).
 
 ### Audience
-CenturyLink Cloud Users.   
-
-Developers wishing to migrate from Relational Databases to a NoSQL Document Database.   
+- CenturyLink Cloud Users.   
+- Developers wishing to migrate from Relational Databases to a NoSQL Document Database.   
 
 ### Impact
 After reading this article, users should  be able to start a server running Couchbase Server, create a Couchbase Server cluster, connect to that server using an IP address and start accessing Couchbase Server cluster in their application. 
@@ -29,8 +28,6 @@ After reading this article, users should  be able to start a server running Couc
 ### Postrequisite
 After you successfully install a Blueprint, you will receive a notification email. If you want to access your application from a computer that is outside of the CenturyLink Cloud network, you need to perform the following steps:
 
-< This may be none, but typically the following is required if the user is building a server that requires web login.  Is SSH is required, change ports below>
-
   1. [Add a Public IP](https://www.ctl.io/knowledge-base/network/how-to-add-public-ip-to-virtual-machine/) to your server through the CentiryLink Control Portal.
   2. Click on the Servers Public IP through Control Portal and configure the ports. The default port for Couchbase Server is 8091. For the additional available network ports, refer to the Couchbase Server [documentation](http://developer.couchbase.com/documentation/server/4.1/install/install-ports.html). 
 
@@ -40,21 +37,21 @@ After you successfully install a Blueprint, you will receive a notification emai
 1. **Locate the Couchbase Server Blueprint**
 
    1. Log into [CenturyLink Control Portal](https://control.ctl.io) and enter your login and password.   
-  ![](1-sign-in.png)  
-   2. Click on **sign in**. The dashboard containing CenturyLink servers will open, where you can select servers and the Blueprints library.
-   ![](2-dashboard-uc1.png)
+   2. Click on **sign in**. The dashboard containing CenturyLink servers will open, where you can select servers and the Blueprints library.   
+   ![](2-dashboard-uc.png)
    3. To find the Couchbase blueprint, select the green Dashboard area on the top and then select **Blueprints Library**.
    ![](3-bprints-lib.png)
    4. In the panel "Blueprints Library", if needed use the keyword search on the right to select among multiple blueprints. In our case, choose from the available displayed blueprint thumbnails.
-  ![](4-bp-library.png)      
-2. **Choose the Blueprint**. 
-  Click on **Install Couchbase Server on CentOS7**.     
-![](5-select-centosx7.png)
-3. **Deploy the Blueprint.**   
-   In the panel "Install Couchbase Server on CentOS7", click **deploy blueprint**. 
-![](6-install-cbs-centosx7.png)
-4. **Customize the Blueprint**. Use the panel "Deploy install Couchbase Server on CentOS7 Blueprint" customize your blueprint.   
-![](7-customize-bprint.png)
+  ![](4-bp-lib.png)               
+2. **Choose the Blueprint**    
+  Click on **Install Couchbase Server on CentOS6**.     
+3. **Deploy the Blueprint**      
+   In the panel "Install Couchbase Server on CentOS6", click **deploy blueprint**. 
+ ![](6-install-cbs-osx.png)   
+4. **Customize the Blueprint**   
+Use the panel "Deploy install Couchbase Server on CentOS6 Blueprint" customize your blueprint.   
+ ![](7-customize-bp.png)   
+
     1. **Build Server(s)** by entering or choosing the following:
 		* Password
         * Confirm the same password
@@ -69,24 +66,18 @@ After you successfully install a Blueprint, you will receive a notification emai
     3. **Specify Credentials**. To run the task under the default administrative account, leave **NO** for credentials. 
 ![](8-nextstep-2.png)      
 Click on **next step**.
-5. **Review the Blueprint**       
-![](9-review-bprint.png)
+5. **Review the Blueprint**             
     1. Verify the information:            
     2. If your information is correct, click on the  button **deploy blueprint**.   
  
-6. **Deploy the Blueprint**. In the panel "Deploy Blueprint: install Couchbase Server on CentOS7" you will see the deployment details.  
+6. **Deploy the Blueprint**    
+   In the panel "Deploy Blueprint: install Couchbase Server on CentOS6" you will see the deployment details.  
   ![](10-deploy-bprint.png)   
 
-7. **Monitor the Activity Queue**  
-  ![](11-deploy-status.png)   
+7. **Monitor the Activity Queue**          
     1. Monitor the Deployment Queue to view the progress of the Blueprint deployment.
     2. Access the queue at any time by clicking the Queue link under the Blueprints menu on the main navigation drop-down.
     3. Once the Blueprint completes successfully, you will receive an email confirming that the Blueprint build is complete. Do not use the application until you have received this email notification.
-
-### Access your <application name> server
-After your Blueprint deploys successfully, follow these instructions to access your server:
-  1. <task element one>
-  2. <task element two>
 
 ### Pricing
 The costs associated with this Blueprint deployment are for the CenturyLink Cloud infrastructure only.  There are no  license costs or additional fees bundled in. You will need a valid [Enterprise Edition license](http://www.couchbase.com/agreement/subscription) from Couchbase Inc.
