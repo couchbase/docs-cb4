@@ -2,24 +2,29 @@
 
 ### Technology Profile
 
-Couchbase Server is a distributed NoSQL database engineered for performance, scalability, and availability. It enables developers to build applications easier and faster by leveraging the power of SQL with the flexibility of JSON.
-Couchbase Server is available on CenturyLink Cloud platform as a virtual machine (VM) image. The VM image contains Couchbase Server version 4.0.0.
+Couchbase Server is the world’s **most complete, scalable, and highest performing NoSQL database**. We engineered the product to meet the most demanding enterprise and big data requirements for distributed database performance and scalability.
 
 ### Description
 
-<More detail on the features if required. This should be differentiating features, versioning, dependencies> 
+Couchbase Server provides highly elastic, available, scalable & real-time big data management system with consistently high performance, flexible global deployment topologies and a set of native SDKs to ease development & deployment of modern applications.   
 
-For more information, please visit http://www.couchbase.com.
+Couchbase Server comes with a shared nothing, fully scale-out, memory-centric architecture, designed to take full advantage of the speed of memory rather than disk, which all translates into a blazingly fast performance. Couchbase Server is the only NoSQL database that integrates a native caching tier and a document-oriented database, eliminating the need to install and manage a separate cache service.   
+
+Couchbase is also the only big data database that offers a native integrated NoSQL mobile solution [Couchbase Mobile](http://www.couchbase.com/nosql-databases/couchbase-mobile?gclid=COfC4_rG7skCFUaCfgodaEIEnA), including pre-built data synchronization (Couchbase Sync Gateway) and an embedded database (Couchbase Lite), enabling fast and easy development of mobile apps with online/offline data access.
+
+For more information, please visit [couchbase.com](http://www.couchbase.com).
 
 ### Audience
-CenturyLink Cloud Users
+CenturyLink Cloud Users.   
+
+Developers wishing to migrate from Relational Databases to a NoSQL Document Database.   
 
 ### Impact
-After reading this article, the user should <describe what is different as a result of reading this article>
+After reading this article, users should  be able to start a server running Couchbase Server, create a Couchbase Server cluster, connect to that server using an IP address and start accessing Couchbase Server cluster in their application. 
 
 ### Prerequisite
 - Access to the CenturyLink Cloud platform as an authorized user.
-- <More bullets as required.  Note that these are bullets>
+- An Couchbase Server Enterprise license from Couchbase Inc. See Enterprise Subscription [License Agreement](http://www.couchbase.com/agreement/subscription) for details.
 
 ### Postrequisite
 After you successfully install a Blueprint, you will receive a notification email. If you want to access your application from a computer that is outside of the CenturyLink Cloud network, you need to perform the following steps:
@@ -36,9 +41,9 @@ After you successfully install a Blueprint, you will receive a notification emai
 
    1. Log into [CenturyLink Control Portal](https://control.ctl.io) and enter your login and password.   
   ![](1-sign-in.png)  
-   2. Click on **sign in**. The dashboard containing CenturyLink servers will open, with the highlighted site to which you have access. 
+   2. Click on **sign in**. The dashboard containing CenturyLink servers will open, where you can select servers and the Blueprints library.
    ![](2-dashboard-uc1.png)
-   3. Select the green Dashboard area on the top and then select **Blueprints Library**.
+   3. To find the Couchbase blueprint, select the green Dashboard area on the top and then select **Blueprints Library**.
    ![](3-bprints-lib.png)
    4. In the panel "Blueprints Library", if needed use the keyword search on the right to select among multiple blueprints. In our case, choose from the available displayed blueprint thumbnails.
   ![](4-bp-library.png)      
@@ -51,12 +56,12 @@ After you successfully install a Blueprint, you will receive a notification emai
 4. **Customize the Blueprint**. Use the panel "Deploy install Couchbase Server on CentOS7 Blueprint" customize your blueprint.   
 ![](7-customize-bprint.png)
     1. **Build Server(s)** by entering or choosing the following:
-		* Password (for this example we use **Couchbase123**).
-        * Confirm the same password.
+		* Password
+        * Confirm the same password
         * Group: **default**.
         * Network: **vlan_2006_10.141.6**.
-        * Primary DNS: **Manually Specify**; *172.17.1.26*.
-        * Secondary DNS: **Manually Specify**; *172.17.1.27*.
+        * Primary DNS: **Manually Specify**
+        * Secondary DNS: **Manually Specify**
         * Server Type: **Standard (default)**.
         * Service Level: **Premium**.
 
@@ -66,14 +71,8 @@ After you successfully install a Blueprint, you will receive a notification emai
 Click on **next step**.
 5. **Review the Blueprint**       
 ![](9-review-bprint.png)
-    1. Verify the information:           
-        *Group: *group ID*   
-        *Network: **vlan_2006_10.141.6**   
-        *Primary DNS: **172.17.1.26**   
-        *Secondary DNS: **172.17.1.27**   
-        *Server Type: **Standard (default)**   
-        *Service Level: **Premium**       
-    2. If your information is correct, click on the **deploy blueprint** button.   
+    1. Verify the information:            
+    2. If your information is correct, click on the  button **deploy blueprint**.   
  
 6. **Deploy the Blueprint**. In the panel "Deploy Blueprint: install Couchbase Server on CentOS7" you will see the deployment details.  
   ![](10-deploy-bprint.png)   
@@ -90,10 +89,8 @@ After your Blueprint deploys successfully, follow these instructions to access y
   2. <task element two>
 
 ### Pricing
-The costs associated with this Blueprint deployment are for the CenturyLink Cloud infrastructure only.  There are no <Application Vendor Name><Modify this section as needed to address pricing> license costs or additional fees bundled in.
+The costs associated with this Blueprint deployment are for the CenturyLink Cloud infrastructure only.  There are no  license costs or additional fees bundled in. You will need a valid [Enterprise Edition license](http://www.couchbase.com/agreement/subscription) from Couchbase Inc.
 
-### About <Partner Name>
-CenturyLink Cloud works with [Couchbase](http://www.couchbase.com/) to provide <description of partners offerings>
 
 ### Frequently Asked Questions
 
