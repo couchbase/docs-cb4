@@ -10,15 +10,21 @@
 		<section>
 			<title>Insert</title>
 
-			<p>The <codeph>insert</codeph> method allows you to store a <codeph>Document</codeph>, if it does not already exist in the bucket. If it does exist, the <codeph>observable</codeph> fails with a <codeph>DocumentAlreadyExistsException</codeph> (or it is thrown in the synchronous counterpart).</p>
+			<p>The <codeph>insert</codeph> method allows you to store a <codeph>Document</codeph>, if it does not already exist in the bucket. If it does exist, the synchronous API throws a <codeph>DocumentAlreadyExistsException</codeph> (or the <codeph>Observable</codeph> propagates it to <codeph>onErro</codeph> in the case of the asynchronous API).</p>
 
 <codeblock outputclass="language-java"><![CDATA[JsonObject content = JsonObject.empty().put("name", "Michael");
 JsonDocument doc = JsonDocument.create("docId", content);
-JsonDocument inserted = bucket.insert(doc)]]></codeblock>
+//this will throw DocumentAlreadyExistException:
+JsonDocument inserted = bucket.insert(doc);]]></codeblock>
 
 <codeblock outputclass="language-java"><![CDATA[JsonObject content = JsonObject.empty().put("name", "Michael");
 JsonDocument doc = JsonDocument.create("docId", content);
-Observable<JsonDocument> inserted = asyncBucket.insert(doc)]]></codeblock>
+Observable<JsonDocument> inserted = bucket.async().insert(doc);
+inserted.subscribe(
+	System.out::println,
+	//this will be called with DocumentAlreadyExistException:
+	Throwable::printStackTrace
+);]]></codeblock>
 
 			<p>If the <codeph>Document</codeph> also has the <codeph>expiry</codeph> time set, it is
 				respected and picked up by the server.</p>
@@ -37,15 +43,20 @@ Observable<JsonDocument> inserted = asyncBucket.insert(doc)]]></codeblock>
 		<section>
 			<title>Upsert</title>
 
-			<p>The <codeph>upsert</codeph> method works similar to <codeph>insert</codeph>, but it also overrides a already stored <codeph>Document</codeph> (so there is no <codeph>DocumentAlreadyExistsException</codeph> thrown.</p>
+			<p>The <codeph>upsert</codeph> method works similar to <codeph>insert</codeph>, but it also overrides a already stored <codeph>Document</codeph> (so there is no <codeph>DocumentAlreadyExistsException</codeph> thrown by the synchronous API nor propagated by the asynchronous API).</p>
 
 <codeblock outputclass="language-java"><![CDATA[JsonObject content = JsonObject.empty().put("name", "Michael");
 JsonDocument doc = JsonDocument.create("docId", content);
-JsonDocument inserted = bucket.upsert(doc)]]></codeblock>
+JsonDocument inserted = bucket.upsert(doc);]]></codeblock>
 
 <codeblock outputclass="language-java"><![CDATA[JsonObject content = JsonObject.empty().put("name", "Michael");
 JsonDocument doc = JsonDocument.create("docId", content);
-Observable<JsonDocument> inserted = asyncBucket.upsert(doc)]]></codeblock>
+Observable<JsonDocument> inserted = bucket.async().upsert(doc);
+inserted.subscribe(
+	System.out::println,
+	//this won't be called:
+	Throwable::printStackTrace
+);]]></codeblock>
 
 			<p>If the <codeph>Document</codeph> also has the <codeph>expiry</codeph> time set, it is
 				respected and picked up by the server.</p>
@@ -64,15 +75,15 @@ Observable<JsonDocument> inserted = asyncBucket.upsert(doc)]]></codeblock>
 
 			<p>Both methods provide overloads to supply such requirements:</p>
 
-<codeblock outputclass="language-java"><![CDATA[Observable<D> insert(D document, PersistTo persistTo);
-Observable<D> insert(D document, ReplicateTo replicateTo);
-Observable<D> insert(D document, PersistTo persistTo, ReplicateTo replicateTo);
+<codeblock outputclass="language-java"><![CDATA[D insert(D document, PersistTo persistTo);
+D insert(D document, ReplicateTo replicateTo);
+D insert(D document, PersistTo persistTo, ReplicateTo replicateTo);
 
-Observable<D> upsert(D document, PersistTo persistTo);
-Observable<D> upsert(D document, ReplicateTo replicateTo);
-Observable<D> upsert(D document, PersistTo persistTo, ReplicateTo replicateTo);]]></codeblock>
+D upsert(D document, PersistTo persistTo);
+D upsert(D document, ReplicateTo replicateTo);
+D upsert(D document, PersistTo persistTo, ReplicateTo replicateTo);]]></codeblock>
 
-			<p>In addition, the synchronous wrapper provides the same methods with custom timeouts.</p>
+			<note type="tip">The synchronous API also provides the same methods with custom timeouts, whereas the asynchronous API in <codeph>AsyncBucket</codeph> would rely on RxJava's <codeph>timeout</codeph> operator.</note>
 
 			<p>You can configure either just one or both of the requirements when inserting or upserting. From an application point of view nothing needs to be changed when working with the response, although there is something that need to be kept in mind:</p>
 
@@ -96,7 +107,7 @@ bucket.insert(document, PersistTo.ONE, ReplicateTo.TWO);]]></codeblock>
 		<section>
 			<title>Batching</title>
 
-			<p>Because everything is asynchronous by default, batching <codeph>inserts</codeph> or <codeph>upserts</codeph> can be achieved with <codeph>Observable</codeph> functionality.</p>
+			<p>Because everything is asynchronous internally, batching <codeph>inserts</codeph> or <codeph>upserts</codeph> can be achieved with <codeph>Observable</codeph> functionality of the <codeph>AsyncBucket</codeph>.</p>
 
 			<p>A combination of <codeph>just()</codeph> and <codeph>flatMap()</codeph> is used to store them without blocking:</p>
 
