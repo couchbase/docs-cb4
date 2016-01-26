@@ -1,8 +1,163 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
-<topic id="topic_xrj_lt3_t5">
-  <title>Durability</title>
-  <body>
-    <p></p>
-  </body>
-</topic>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_gyg_14s_zs">
+    <title>Durability</title>
+    <shortdesc>Data durability refers to the fault tolerance and persistence of data in the face of
+        software or hardware failure. Even the most reliable software and hardware might fail at
+        some point, and along with the failures, introduce a chance of data loss.</shortdesc>
+    <conbody>
+        <p>Couchbase’s architecture guards against most forms of failure and protects against data
+            loss. Buckets can be configured for replication, which makes additional copies of the
+            data redundant and allows for the failure of copies: as long as the data is available
+            somewhere, it is not lost.</p>
+        <p>Data is also written to the disk, so in the case of a power outage or software crash,
+            data can be retrieved from the disk during recovery.</p>
+        <p>By default, Couchbase does not immediately replicate or write data to disk. After an item
+            is modified, Couchbase immediately stores these modifications in memory on the node that
+            is active for the given item. It then places the item inside a <term>disk queue</term>
+            and a <term>replication queue</term>. The disk queue is served by another thread that
+            persists the change to the disk, and the replication queue is served by another thread
+            that replicates the change to any replicas within the cluster. This is done to improve
+            performance, because modifying an item in memory is typically very quick, whereas
+            sending an item over the network or writing it to the disk may take longer. In most
+            cases items are replicated or persisted within a few milliseconds although the
+            operations may take longer if the storage medium is slow or the network is
+            congested.</p>
+        <p>If a node fails, any modifications in its queues are lost, and when it recovers it will
+            only contain modifications that had already been stored to disk. If the failed node is
+            failed over, a replica node (more precisely, a replica for the given vBucket) will take
+            it over, but will only know about the modifications that were successfully replicated to
+            it: any modifications in the failed node’s replication queue are lost.</p>
+        <section>
+            <title>Durability requirements</title>
+            <p>As mentioned before, modifications to items are done synchronously in memory and
+                asynchronously on the disk and network. The synchronous modification in memory
+                involves modifying the item and sending a success response to the client. This tells
+                your application that the item has successfully been stored/modified, and allows
+                your application to continue operating.</p>
+            <p>Applications may specify requirements for durability to the Couchbase client to wait
+                until the item has also been persisted and replicated. This ensures greater
+                durability of your data against failure in certain edge cases, such as a slow
+                network or storage media. Operations performed using the durability requirement
+                options will appear as failures to the application if the modification could not be
+                successfully stored to disk and/or replicated to replica nodes. Upon receiving such
+                a failure response, the application may retry the operation or mark it as a failure.
+                In any event, the application will never be under the mistaken assumption that the
+                modification was performed when it fact it was lost inside one of the aforementioned
+                queues.</p>
+        </section>
+        <section><title>Configuring durability</title><p>Durability requirements are typically
+                present as an extra option to mutation operations (such as upsert). The <term>level
+                    of durability</term> is configurable depending on the needs of the
+                application.</p><p>The level of durability may be expressed in two values:<ol
+                    id="ol_tzb_w4s_zs">
+                    <li>The <i>replication</i> factor of the operation: how many replicas must this
+                        operation be propagated to. This is specified as the
+                            <codeph>replicate_to</codeph> option.</li>
+                    <li>The <term>persistence</term> of the modification: how many persisted copies
+                        of the modified record must exist. Specified as
+                            the<codeph>persist_to</codeph> option.</li>
+                </ol></p>Examples of these settings include:<ul id="ul_h5y_z4s_zs">
+                <li>Ensure the modification is stored (on disk) on the active (master) node:
+                        <codeph>persist_to=1</codeph></li>
+                <li>Ensure the modification exists (in memory) on at least one replica:
+                        <codeph>replicate_to=1</codeph></li>
+                <li>Ensure the modification is stored (on disk) on at least one replica:
+                        <codeph>persist_to=1, replicate_to=1</codeph></li>
+                <li>Ensure the modification exists (in memory) on all replicas:
+                        <codeph>replicate_to=-1</codeph></li>
+                <li>Ensure the modification is stored (on disk) on the active node, and exists (in
+                    memory) on all replicas: <codeph>persist_to=1, replicate_to=-1</codeph></li>
+                <li>Ensure the modification is stored (on disk) on the active node, and on all
+                    replicas: <codeph>persist_to=-1, replicate_to=-1</codeph></li>
+            </ul><p>When an operation is propagated to a replica, it is first propagated to the
+                replica’s memory and then placed in a queue (as above) to be persisted to the
+                replica’s disk. You can control whether you desire the operation to only be
+                propagated to a replica’s memory (<codeph>ReplicateTo</codeph>), or whether to wait
+                until it is fully persisted to the replica’s disk
+                    (<codeph>PersistTo</codeph>).</p><p><option>persist_to</option> receives a value
+                total to the number of nodes that an operation should be persisted. The maximum
+                value is the number of replica nodes plus one. A value of 1 indicates master-only
+                persistence (and no replica persistence). A value of -1 indicates to persist to the
+                master node and any on-line replica nodes.</p><p><option>replicate_to</option>
+                receives a value total to the number of <i>replica</i> nodes the operation should be
+                replicated. Its maximum value is the number of replica nodes. A value of -1 means to
+                use all available replica nodes.</p></section>
+        <section>
+            <title>Performance considerations</title>
+            <p>Note that Couchbase’s design of asynchronous persistence and replication is there for
+                a reason: The time it takes to store an item in memory is several orders of
+                magnitude quicker than persisting it to disk or sending it over the network.
+                Operation times and latencies will increase when waiting on the speed of the network
+                and the speed of the disk.</p>
+            <p>A common requirement is that an operation should be propagated to at least one
+                additional location before continuing. An additional copy can either be in the
+                master’s storage (master persistence), or in the memory of a replica node. Depending
+                on your environment either persistence or replication may be quicker: replication
+                will be quicker on a 10GE network with commodity magnetic drives, but persistence
+                will be quicker on a 1GE network with SSD drives.</p>
+            <p>Durability operations may also cause increased network traffic since it is
+                implemented at the client level by sending special probes to each server once the
+                actual modification has completed.</p>
+        </section>
+        <section>
+            <title>Example</title>
+            <codeblock>#!/usr/bin/env python
+
+from couchbase.bucket import Bucket
+
+cb = Bucket('couchbase://10.0.0.31/default')
+
+# In the Python SDK you can specify "maximum" persistence and
+# replication by specifying -1 for either valie
+cb.upsert('docid', {'some': 'value'}, persist_to=-1, replicate_to=-1)
+
+# Store with persisting to master node
+cb.upsert('docid', {'some': 'value'}, persist_to=1)
+
+# Note, this will fail if there are no replicas online
+cb.upsert('docid', {'some': 'value'}, persist_to=1, replicate_to=1)</codeblock>
+        </section>
+        <section><title>Enhanced (sequence-based) durability</title><p>Couchbase 4.0 offers
+                additional durability options which provide clearer semantics in the face of
+                failover.</p><p>Prior to Couchbase 4.0, durability was only implemented using the
+                    <xref href="cas-concurrency.dita#concept_iq4_bts_zs">CAS</xref>. Since the CAS
+                changed for each mutation, a client could normally determine if the mutation was
+                persisted on a given node if the item existed on the node with the same
+                CAS.</p><p>The core issue with CAS-based checking is that a different CAS on a
+                replica may either be a result of:</p><p>
+                <ul id="ul_wf2_ylg_lt">
+                    <li>Client contention: The CAS is different from the current mutation because it
+                        been changed by a subsequent mutation (one performed <i>after</i> our
+                        current client)</li>
+                    <li>Slow propagation: The mutation has not yet been propagated to all
+                        replicas</li>
+                    <li>Failover: The CAS has changed because the master was failed over and control
+                        has been transferred to a replica which is using an older copy.</li>
+                </ul>
+            </p>In Couchbase 4.0, an enhanced mode of durability, based on <i>sequence numbering</i>
+            is available. To this effect, an application may opt to enable receiving sequence data
+            for each mutation. This provides the SDK with an ever-increasing sequence number for a
+            given mutation. The sequence number data contains:<ul id="ul_l1d_n1l_55">
+                <li>A random identifier representing (called a <u>UUID</u>) the current cluster
+                    state. This state is changed whenever something happens to the cluster (for
+                    example, a failover).</li>
+                <li>A counter value which is associated with the current state.</li>
+            </ul><p>Applications may enable this extra sequence data to be sent for each mutation
+                response. This data is then transparently used by the SDK to use sequence
+                number-based durability checking.</p><p>Unlike CAS-based polling, it is simple to
+                distinguish various failure cases:<ul id="ul_qbd_n1l_55">
+                    <li>If the <i>UUID</i> is equal, but the sequence number is lower than the
+                        expected value, then it means the mutation has not yet been propagated.</li>
+                    <li>If the UUID is equal, and the sequence number is greater or equal to the
+                        current mutation, it means the current mutation has been propagated.</li>
+                    <li>If the UUID is different than the one available at the client, it means the
+                        mutation has been lost.</li>
+                </ul></p>Enhanced durability can be enabled and used transparently via the SDK.
+            Enhanced durability is disabled by default as it adds an overhead of 16 bytes per
+            operation. To enable enhanced durability, the <codeph>fetch_mutation_tokens</codeph>
+            option should be enabled in the connection
+            string.<codeblock>from couchbase.bucket import Bucket
+cb = Bucket('couchbase://localhost/default?<b>fetch_mutation_tokens=1</b></codeblock></section>
+    </conbody>
+</concept>
