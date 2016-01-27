@@ -2,43 +2,242 @@
 <!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
 <concept id="concept_yv4_c2z_wt">
  <title>Covering indexes</title>
- <shortdesc>Indexes help locate data in a database and do not retrieve the data itself. Covering
-  indexes are special cases where the index includes all the information needed to satisfy a query
-  and do not require an additional step to access the data. As a result, covered queries, that is,
-  queries that get all their information from the index, are faster and deliver better
-  performance.</shortdesc>
+ <shortdesc>When an index includes the actual values of all the fields specified in the query, the
+  index covers the query and does not require an additional step to fetch the actual values from the
+  data service. An index, in this case, is called a covering index and the query is called a covered
+  query.  As a result, covered queries are faster and deliver better performance.</shortdesc>
  <conbody>
-  <p>The following diagram illustrates the query execution work flow without covering indexes. </p>
-  <p> </p>
-  <p>Covering indexes are only applicable to secondary index scans and can be used with views and
-   global secondary indexes (GSI). Consider is a simple index, <userinput>coveridx1</userinput>, on
-   the <codeph>beer-sample</codeph> sample bucket that includes the <parmname>brewery_id</parmname>,
-    <parmname>name</parmname>, <parmname>state</parmname>, and <parmname>category</parmname>:
-   <codeblock>create index coveridx1 on `beer-sample` (brewery_id, name, state, category) using gsi;</codeblock>The
-   following EXPLAIN statement illustrates how the query gets all the information from the index
-    <userinput>coveridx1</userinput>. In this case, the query is called a <term>covered query</term>
-   and the index <userinput>coveridx1</userinput> is called a <term>covering index</term>. <codeblock spectitle="Query">cbq> EXPLAIN select brewery_id, name, category from `beer-sample` where brewery_id = "cedar_brewing" limit 1;</codeblock>
-   <codeblock spectitle="Response">{
-    "requestID": "5b4f0505-2a41-4fae-b170-746ec5ebcc8c",
-    "signature": {
-    "brewery_id": "json",
-    "category": "json",
-    "name": "json"
-    },
+        <p>The following diagram illustrates the query execution work flow without covering
+            indexes:</p>
+        <p>
+            <image placement="break" href="images/n1ql-query-workflow.png" width="5.5in"
+                id="image_up2_ngx_xt"/>
+        </p>
+        <p>The following diagram illustrates the query execution work flow with covering indexes:
+                <image placement="break" href="images/n1ql-query-workflow-cover-idx.png"
+                width="5.5in" id="image_c25_zlp_yt"/></p>
+        <p>As you can see in the second diagram, a well designed query that uses a covering index
+            avoids the additional steps to fetch the data from the data service. This results in a
+            considerable performance improvement. </p>
+        <p>You can see the query execution plan using the EXPLAIN statement. When a query uses a
+            covering index, the EXPLAIN statement shows that a covering index is used for data
+            access, thus avoiding the overhead associated with key-value document fetches. Consider
+            a simple index, <userinput>idxstate</userinput>, on the attribute
+                <parmname>state</parmname> in the <codeph>beer-sample</codeph> bucket:
+            <codeblock>CREATE INDEX idxstate on `beer-sample` (state) USING GSI;</codeblock> If we
+            select <parmname>state</parmname> from the `beer-sample` bucket, the actual values of
+            the field <parmname>state</parmname> that are to be returned are present in the index
+                <parmname>idxstate</parmname>, and avoids an additional step to fetch the data. In
+            this case, the index <parmname>idxstate</parmname> is called a covering index and the
+            query is a covered query.
+            <codeblock>cbq> EXPLAIN SELECT count(state) from `beer-sample` WHERE state = "CA";
+{
+    "requestID": "98b6e3dd-3d89-4e00-9748-70f13160286e",
+    "signature": "json",
     "results": [
-    {
-    "brewery_id": "cedar_brewing",
-    "category": "North American Ale",
-    "name": "Black Cobra Stout"
-    }
+        {
+            "#operator": "Sequence",
+            "~children": [
+                {
+                    "#operator": "IndexScan",
+                    "covers": [
+                        "cover((meta(`beer-sample`).`id`))",
+                        "cover((`beer-sample`.`state`))"
+                    ],
+                    "index": "idxstate",
+                    "keyspace": "beer-sample",
+                    "namespace": "default",
+                    "spans": [
+                        {
+                            "Range": {
+                                "High": [
+                                    "\"CA\""
+                                ],
+                                "Inclusion": 3,
+                                "Low": [
+                                    "\"CA\""
+                                ]
+                            }
+                        }
+                    ],
+                    "using": "gsi"
+                },
+                {
+                    "#operator": "Parallel",
+                    "~child": {
+                        "#operator": "Sequence",
+                        "~children": [
+                            {
+                                "#operator": "Filter",
+                                "condition": "(cover((`beer-sample`.`state`)) = \"CA\")"
+                            },
+                            {
+                                "#operator": "InitialGroup",
+                                "aggregates": [
+                                    "count(cover((`beer-sample`.`state`)))"
+                                ],
+                                "group_keys": []
+                            }
+                        ]
+                    }
+                },
+                {
+                    "#operator": "IntermediateGroup",
+                    "aggregates": [
+                        "count(cover((`beer-sample`.`state`)))"
+                    ],
+                    "group_keys": []
+                },
+                {
+                    "#operator": "FinalGroup",
+                    "aggregates": [
+                        "count(cover((`beer-sample`.`state`)))"
+                    ],
+                    "group_keys": []
+                },
+                {
+                    "#operator": "Parallel",
+                    "~child": {
+                        "#operator": "Sequence",
+                        "~children": [
+                            {
+                                "#operator": "InitialProject",
+                                "result_terms": [
+                                    {
+                                        "expr": "count(cover((`beer-sample`.`state`)))"
+                                    }
+                                ]
+                            },
+                            {
+                                "#operator": "FinalProject"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
     ],
     "status": "success",
     "metrics": {
-    "elapsedTime": "4.202182ms",
-    "executionTime": "4.13965ms",
-    "resultCount": 1,
-    "resultSize": 140
+        "elapsedTime": "10.311043ms",
+        "executionTime": "10.261957ms",
+        "resultCount": 1,
+        "resultSize": 2997
     }
-    }</codeblock></p>
- </conbody>
+}    </codeblock></p>
+        <p>If you modify the query to select the <parmname>state</parmname> and
+                <parmname>city</parmname> from the `beer-sample` bucket using the same index,
+                <parmname>idxstate</parmname>, the index does not contain the values of all the
+            fields to satisfy the query and hence a key-value fetch is performed to retrieve this
+            data.
+            <codeblock>cbq> EXPLAIN SELECT state,city from `beer-sample` WHERE state = "CA";
+{
+    "requestID": "3706f7fa-3a6f-46fe-8174-e5f1dee5c38d",
+    "signature": "json",
+    "results": [
+        {
+            "#operator": "Sequence",
+            "~children": [
+                {
+                    "#operator": "IndexScan",
+                    "index": "idxstate",
+                    "keyspace": "beer-sample",
+                    "namespace": "default",
+                    "spans": [
+                        {
+                            "Range": {
+                                "High": [
+                                    "\"CA\""
+                                ],
+                                "Inclusion": 3,
+                                "Low": [
+                                    "\"CA\""
+                                ]
+                            }
+                        }
+                    ],
+                    "using": "gsi"
+                },
+                {
+                    "#operator": "Parallel",
+                    "~child": {
+                        "#operator": "Sequence",
+                        "~children": [
+                            {
+                                "#operator": "Fetch",
+                                "keyspace": "beer-sample",
+                                "namespace": "default"
+                            },
+                            {
+                                "#operator": "Filter",
+                                "condition": "((`beer-sample`.`state`) = \"CA\")"
+                            },
+                            {
+                                "#operator": "InitialProject",
+                                "result_terms": [
+                                    {
+                                        "expr": "(`beer-sample`.`state`)"
+                                    },
+                                    {
+                                        "expr": "(`beer-sample`.`city`)"
+                                    }
+                                ]
+                            },
+                            {
+                                "#operator": "FinalProject"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "3.961692ms",
+        "executionTime": "3.91835ms",
+        "resultCount": 1,
+        "resultSize": 2108
+    }</codeblock>To
+            use a covering index for the modified query, you must define an index with the
+                <parmname>state</parmname> and <parmname>city</parmname> attributes before executing
+            the query.
+            <codeblock>CREATE INDEX idxstatecity on `beer-sample` (state, city) USING GSI;</codeblock></p>
+        <p>
+            <note type="attention">MISSING items are not indexed by indexers. To take advantage of
+                covering indexes and for the index to qualify, a query needs to exclude documents
+                where the index key expression evaluates to MISSING. For example, index index1
+                defined below covers the following query.
+                <codeblock>CREATE INDEX index1 ON bucket(attribute1) WHERE attribute2 = "value"; </codeblock><codeblock>SELECT attribute1 FROM bucket WHERE attribute2="value AND attribute1 IS NOT MISSING;</codeblock></note>
+        </p>
+        <p>Covering indexes are applicable to secondary index scans and can be used with view and
+            global secondary indexes (GSI). Queries with expressions and aggregates benefit from
+            covering indexes. </p>
+        <p>The following queries can benefit from covering indexes. Try these statements using
+                <apiname>cbq</apiname> to see the query execution plan. </p>
+        <p><b>Expressions and Aggregates</b>
+            <codeblock>EXPLAIN SELECT max(country) from `beer-sample` WHERE state = 'CA';</codeblock><codeblock>EXPLAIN SELECT country || state from `beer-sample` USE INDEX (idxstatecountry)  where state = 'CA'; </codeblock></p>
+        <p><b>UNION/INTERSECT/EXCEPT</b>
+            <codeblock>select country from `beer-sample` where state = 'CA'
+    UNION ALL
+    select country from `beer-sample` where state = 'Texas';</codeblock></p>
+        <p><b>Sub-queries</b><codeblock>Select *
+   from (
+   SELECT country from `beer-sample` WHERE state = 'CA'
+   UNION ALL
+   select country from `beer-sample` WHERE state = 'Texas'
+   ) as newtab;
+  </codeblock></p>
+        <p><b>SELECT in INSERT
+            statements</b><codeblock>INSERT into `travel-sample`(KEY k, value state) 
+   SELECT country as k, state from `beer-sample` b WHERE state = 'CA';</codeblock></p>
+        <p><b>Arrays in WHERE clauses</b>
+        </p>
+        <p>First, create a new index, <userinput>idxarray</userinput>.
+            <codeblock>CREATE INDEX idxarray on `beer-sample`(a, b);</codeblock> Then, run the
+            following query:
+            <codeblock>SELECT b from `beer-sample` WHERE a = [1, 2, 3, 4];</codeblock></p>
+        <p><b><xref href="../n1ql/n1ql-language-reference/prepare.dita">Prepared
+                statements</xref></b> also benefit from using covering indexes. </p>
+    </conbody>
 </concept>
