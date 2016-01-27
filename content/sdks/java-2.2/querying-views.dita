@@ -10,10 +10,10 @@
         <section>
             <title>Anatomy of a view query</title>
 
-            <p>When you query a view you need to provide both the name of the Design Document and
-				the name of the View. If you do not provide any further options, the SDK assumes you
-				want to query a published view (so it is not in development mode) and also will not set
-				any query options.</p>
+            <p>When you query a view, you need to provide both the name of the Design Document and
+                the name of the View. If you do not supply any further options, the SDK assumes you
+                want to query a published view (so it is not in development mode) and also will not
+                set any query options.</p>
 
             <p>This example queries a view with the name <codeph>myview</codeph>, which lives in the
 				Design Document <codeph>designdoc</codeph>. If no further arguments are provided, it is
@@ -36,12 +36,7 @@ bucket.query(ViewQuery.from("designdoc", "myview").development(false).limit(10))
 
 
             <p>If you want to query a geospatial view, you just need to use a different query
-				builder:</p>
-
-            <p><note>Geospatial queries are supported only against Couchbase Server 3.0.1 or later and are
-					currently experimental. If going as planned, the next major release will provide
-					stable support. It is not expected that the client API will change, because it is
-					very similar to what is provided against regular views.</note></p>
+				builder (which you can also use to provide more parameters):</p>
 
 <codeblock outputclass="language-java"><![CDATA[// Perform the SpatialViewQuery
 SpatialViewResult result = bucket.query(SpatialViewQuery.from("designdoc", "myview"));
@@ -51,8 +46,10 @@ for (SpatialViewRow row : result) {
     System.out.println(row);
 }]]></codeblock>
 
-            <p>For all types of views, a <codeph>*ViewResult</codeph> is always returned, which
-				contains zero to many <codeph>*ViewRows</codeph>. In addition to iterative row access,
+            <p><note>Geospatial queries are supported only against Couchbase Server 4.0 or later (although there was experimental support starting from 3.0.1).</note></p>
+
+            <p>For all types of views, a <codeph>ViewResult</codeph> is always returned, which
+				contains zero to many <codeph>ViewRows</codeph>. In addition to iterative row access,
 				more methods are available on the result:</p>
 
             <table>
@@ -76,7 +73,8 @@ for (SpatialViewRow row : result) {
                         </row>
                         <row>
                             <entry><codeph>int totalRows()</codeph></entry>
-                            <entry>The total number of rows in the index, can be greater than the number of <codeph>rows()</codeph> returned.</entry>
+                            <entry>The total number of rows in the index can be greater than the
+                                number of <codeph>rows()</codeph> returned.</entry>
                         </row>
                         <row>
                             <entry><codeph>boolean success()</codeph></entry>
@@ -84,7 +82,8 @@ for (SpatialViewRow row : result) {
                         </row>
                         <row>
                             <entry><codeph>JsonObject error()</codeph></entry>
-                            <entry>Contains the error if the query was not successfull, null otherwise.</entry>
+                            <entry>Contains the error if the query was not successful or null
+                                otherwise.</entry>
                         </row>
                         <row>
                             <entry><codeph>JsonObject debug()</codeph></entry>
@@ -102,8 +101,8 @@ for (SpatialViewRow row : result) {
             <title>Regular View Options</title>
 
             <p>All options shown here are available on the <codeph>ViewQuery</codeph> in a fluent
-				API manner. All of them are optional, so only when they are explicitly provided they
-				will alter the behavior of the query.</p>
+                API manner. All of them are optional, so only when they are explicitly provided,
+                they will alter the behavior of the query.</p>
 
             <p>As a general note, all arguments that accept JSON are provided with a higher number
 				of method overloads to accommodate all combinations in a type-safe manner.</p>
@@ -159,7 +158,8 @@ for (SpatialViewRow row : result) {
                         <row>
                             <entry><codeph>stale</codeph></entry>
                             <entry><codeph>Stale.TRUE, Stale.FALSE, Stale.UPDATE_AFTER (default)</codeph></entry>
-                            <entry>Defines how stale the view results are allowed to be on query.</entry>
+                            <entry>Defines how stale the view results are allowed to be in the
+                                query.</entry>
                         </row>
                         <row>
                             <entry><codeph>debug</codeph></entry>
@@ -174,7 +174,9 @@ for (SpatialViewRow row : result) {
                         <row>
                             <entry><codeph>descending</codeph></entry>
                             <entry><codeph>boolean</codeph></entry>
-                            <entry>Returns the documents in descending by key order if true, default is false.</entry>
+                            <entry>Returns the documents in descending order by key if
+                                    <codeph>true</codeph>, default is
+                                <codeph>false</codeph>.</entry>
                         </row>
                         <row>
                             <entry><codeph>key</codeph></entry>
@@ -206,22 +208,47 @@ for (SpatialViewRow row : result) {
                             <entry><codeph>JSON</codeph></entry>
                             <entry>The key where the row return range should end.</entry>
                         </row>
+                        <row>
+                            <entry><codeph>includeDocs</codeph></entry>
+                            <entry><codeph>boolean</codeph>, optional <codeph>Class&lt;? extends Document&gt;</codeph></entry>
+                            <entry>Wether or not to automatically fetch the document corresponding
+                                to each row. The second parameter is the target class for the
+                                document, <codeph>JsonDocument</codeph> if omitted. <p>This method
+                                    is needed only when using the blocking API since on the async
+                                    API there is no benefit over just calling
+                                        <apiname>.document()</apiname> in the stream. </p><p>See
+                                    note on <codeph>includeDocs</codeph> below.</p></entry>
+                        </row>
                     </tbody>
                 </tgroup>
             </table>
 
             <p><note><b>Important when using Grouping:</b>
-					<codeph>group(boolean)</codeph> and <codeph>groupLevel(int)</codeph> should not be
-					used together in the same view query. It is sufficient to only set the grouping level
-					only and use this setter in cases where you always want the highest group level
-					implicitly.</note></p>
+                    <codeph>group(boolean)</codeph> and <codeph>groupLevel(int)</codeph> should not
+                    be used together in the same view query. It is sufficient only to set the
+                    grouping level only and use this setter in cases where you always want the
+                    highest group level implicitly.</note></p>
+
+            <note type="important">
+                <p><b><codeph>includeDocs</codeph></b>: This parameter allows for eager retrieval of the document associated with each row. 
+                    It is only beneficial in the synchronous API (in the async API you could just call <codeph>get(row.id())</codeph> on the async bucket). 
+                    It impacts the row's <codeph>document(...)</codeph> method by preloading the return value of said method.</p>
+
+                <p>However, since the simple signature of <codeph>row.document()</codeph> assumes a <codeph>JsonDocument</codeph>, 
+                    if you want a different document type you have to call both <codeph>includeDocs()</codeph> and <codeph>document()</codeph> 
+                    with the desired target class: <codeph>query.includeDocs(SomeDocumentClass.class)</codeph> <b>and</b> <codeph>row.document(SomeDocumentClass.class)</codeph>.</p>
+
+                <p>Note that the <codeph>ViewQuery</codeph> has a getter for the target class: <codeph>includeDocsTarget()</codeph>.</p>
+            </note>
 
         </section>
 
         <section>
             <title>Geospatial View Options</title>
 
-            <p>All options shown here are available on the <codeph>SpatialViewQuery</codeph> in a fluent API manner. All of them are optional, so only when they are explicitly provided they will alter the behaviour of the query.</p>
+            <p>All options shown here are available on the <codeph>SpatialViewQuery</codeph> in a
+                fluent API manner. All of them are optional, so only when they are explicitly
+                provided, they will alter the behaviour of the query.</p>
 
             <table>
                 <tgroup cols="3">
@@ -269,21 +296,63 @@ for (SpatialViewRow row : result) {
                         <row>
                             <entry><codeph>startRange</codeph></entry>
                             <entry><codeph>JsonArray</codeph></entry>
-                            <entry>Where the spatial range should start. Can be multidimensial.</entry>
+                            <entry>Where the spatial range should start. Can be
+                                multidimensional.</entry>
                         </row>
                         <row>
                             <entry><codeph>endRange</codeph></entry>
                             <entry><codeph>JsonArray</codeph></entry>
-                            <entry>Where the spatial range should end. Can be multidimensial.</entry>
+                            <entry>Where the spatial range should end. Can be
+                                multidimensional.</entry>
                         </row>
                         <row>
                             <entry><codeph>range</codeph></entry>
                             <entry><codeph>JsonArray, JsonArray</codeph></entry>
                             <entry>Convenience method to combine start and endrange in one argument.</entry>
                         </row>
+                        <row>
+                            <entry><codeph>includeDocs</codeph></entry>
+                            <entry><codeph>boolean</codeph>, optional <codeph>Class&lt;? extends Document&gt;></codeph></entry>
+                            <entry>Wether or not to automatically fetch the document corresponding
+                                to each row. The second parameter is the target class for the
+                                document, <codeph>JsonDocument</codeph> if omitted. <p>This method
+                                    is needed only when using the blocking API since on the async
+                                    API there is no benefit over just calling
+                                        <apiname>.document()</apiname> in the stream. </p><p>See
+                                    note on <codeph>includeDocs</codeph> below.</p></entry>
+                        </row>
                     </tbody>
                 </tgroup>
             </table>
+
+            <note type="important">
+                <p><b><codeph>includeDocs</codeph></b>: This parameter allows for eager retrieval of the document associated with each row. It is only beneficial in the synchronous API (in the async API you could just call <codeph>get(row.id())</codeph> on the async bucket). It impacts the row's <codeph>document(...)</codeph> method by preloading the return value of said method.</p>
+
+                <p>However, since the simple signature of <codeph>row.document()</codeph> assumes a <codeph>JsonDocument</codeph>, if you want a different document type you have to call both <codeph>includeDocs()</codeph> and <codeph>document()</codeph> with the desired target class: <codeph>query.includeDocs(SomeDocumentClass.class)</codeph> <b>and</b> <codeph>row.document(SomeDocumentClass.class)</codeph>.</p>
+
+                <p>Note that the <codeph>SpatialViewQuery</codeph> has getter for the target class: <codeph>includeDocsTarget()</codeph>.</p>
+            </note>
+
+            <p>Here is how to use the <codeph>range</codeph> parameter to find documents with a location within a bounding box. We have stored cities Paris, Vienna, Berlin and New York. Each city's coordinates is represented as two attributes, <codeph>lon</codeph> and <codeph>lat</codeph>. The spatial view's map function is:</p>
+<codeblock outputclass="language-javascript"><![CDATA[function (doc) { if (doc.type == "city") { emit([doc.lon, doc.lat], null); } }]]></codeblock>
+
+            <p>To query the view and find cities within Europe, we use Europe's bouding box. The startRange is the most south-western point of the bounding box, the endRange is its most north-eastern point:</p>
+<codeblock outputclass="language-java"><![CDATA[JsonArray EUROPE_SOUTH_WEST = JsonArray.from(-10.8, 36.59);
+JsonArray EUROPE_NORTH_EAST = JsonArray.from(31.6, 70.67);
+
+SpatialViewResult result = bucket.query(SpatialViewQuery.from("cities", "by_location")
+            .stale(Stale.FALSE)
+            .range(EUROPE_SOUTH_WEST, EUROPE_NORTH_EAST));
+List<SpatialViewRow> allRows = result.allRows();
+
+for (SpatialViewRow row : allRows) {
+    System.out.println(row.id());
+}
+
+//prints:
+//city::Vienna
+//city::Berlin
+//city::Paris]]></codeblock>
         </section>
 
         <section>
@@ -310,13 +379,15 @@ for (SpatialViewRow row : result) {
                         </row>
                         <row>
                             <entry>404</entry>
-                            <entry>In case the library detects yet unprovisioned node, it will retry, otherwise it will
-                            report <codeph>ViewDoesNotExistException</codeph>.</entry>
+                            <entry>In case the library detects yet unprovisioned node, it will
+                                retry. Otherwise, it will report
+                                    <codeph>ViewDoesNotExistException</codeph>.</entry>
                         </row>
                         <row>
                             <entry>500</entry>
-                            <entry>If the error payload reports missing view document, it will not retry, otherwise it
-                            will retry request.</entry>
+                            <entry>If the error payload reports missing view document or badly
+                                formed query, it will not retry. Otherwise, it will retry
+                                request.</entry>
                         </row>
                     </tbody>
                 </tgroup>
