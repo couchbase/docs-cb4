@@ -36,12 +36,7 @@ bucket.query(ViewQuery.from("designdoc", "myview").development(false).limit(10))
 
 
             <p>If you want to query a geospatial view, you just need to use a different query
-				builder:</p>
-
-            <p><note>Geospatial queries are supported only against Couchbase Server 3.0.1 or later and are
-					currently experimental. If going as planned, the next major release will provide
-					stable support. It is not expected that the client API will change, because it is
-					very similar to what is provided against regular views.</note></p>
+				builder (which you can also use to provide more parameters):</p>
 
 <codeblock outputclass="language-java"><![CDATA[// Perform the SpatialViewQuery
 SpatialViewResult result = bucket.query(SpatialViewQuery.from("designdoc", "myview"));
@@ -51,8 +46,10 @@ for (SpatialViewRow row : result) {
     System.out.println(row);
 }]]></codeblock>
 
-            <p>For all types of views, a <codeph>*ViewResult</codeph> is always returned, which
-				contains zero to many <codeph>*ViewRows</codeph>. In addition to iterative row access,
+            <p><note>Geospatial queries are supported only against Couchbase Server 4.0 or later (although there was experimental support starting from 3.0.1).</note></p>
+
+            <p>For all types of views, a <codeph>ViewResult</codeph> is always returned, which
+				contains zero to many <codeph>ViewRows</codeph>. In addition to iterative row access,
 				more methods are available on the result:</p>
 
             <table>
@@ -206,6 +203,11 @@ for (SpatialViewRow row : result) {
                             <entry><codeph>JSON</codeph></entry>
                             <entry>The key where the row return range should end.</entry>
                         </row>
+                        <row>
+                            <entry><codeph>includeDocs</codeph></entry>
+                            <entry><codeph>boolean</codeph>, optional <codeph>Class&lt;? extends Document&gt;</codeph></entry>
+                            <entry>Wether or not to automatically fetch the document corresponding to each row. The second parameter is the target class for the document, <codeph>JsonDocument</codeph> if ommitted. See note on includeDocs below.</entry>
+                        </row>
                     </tbody>
                 </tgroup>
             </table>
@@ -215,6 +217,14 @@ for (SpatialViewRow row : result) {
 					used together in the same view query. It is sufficient to only set the grouping level
 					only and use this setter in cases where you always want the highest group level
 					implicitly.</note></p>
+
+            <note type="important">
+                <p><b><codeph>includeDocs</codeph></b>: This parameter allows for eager retrieval of the document associated with each row. It is only beneficial in the synchronous API (in the async API you could just call <codeph>get(row.id())</codeph> on the async bucket). It impacts the row's <codeph>document(...)</codeph> method by preloading the return value of said method.</p>
+
+                <p>However, since the simple signature of <codeph>row.document()</codeph> assumes a <codeph>JsonDocument</codeph>, if you want a different document type you have to call both <codeph>includeDocs()</codeph> and <codeph>document()</codeph> with the desired target class: <codeph>query.includeDocs(SomeDocumentClass.class)</codeph> <b>and</b> <codeph>row.document(SomeDocumentClass.class)</codeph>.</p>
+
+                <p>Note that the <codeph>ViewQuery</codeph> has a getter for the target class: <codeph>includeDocsTarget()</codeph>.</p>
+            </note>
 
         </section>
 
@@ -281,9 +291,43 @@ for (SpatialViewRow row : result) {
                             <entry><codeph>JsonArray, JsonArray</codeph></entry>
                             <entry>Convenience method to combine start and endrange in one argument.</entry>
                         </row>
+                        <row>
+                            <entry><codeph>includeDocs</codeph></entry>
+                            <entry><codeph>boolean</codeph>, optional <codeph>Class&lt;? extends Document&gt;></codeph></entry>
+                            <entry>Wether or not to automatically fetch the document corresponding to each row. The second parameter is the target class for the document, <codeph>JsonDocument</codeph> if ommitted. See note on includeDocs below.</entry>
+                        </row>
                     </tbody>
                 </tgroup>
             </table>
+
+            <note type="important">
+                <p><b><codeph>includeDocs</codeph></b>: This parameter allows for eager retrieval of the document associated with each row. It is only beneficial in the synchronous API (in the async API you could just call <codeph>get(row.id())</codeph> on the async bucket). It impacts the row's <codeph>document(...)</codeph> method by preloading the return value of said method.</p>
+
+                <p>However, since the simple signature of <codeph>row.document()</codeph> assumes a <codeph>JsonDocument</codeph>, if you want a different document type you have to call both <codeph>includeDocs()</codeph> and <codeph>document()</codeph> with the desired target class: <codeph>query.includeDocs(SomeDocumentClass.class)</codeph> <b>and</b> <codeph>row.document(SomeDocumentClass.class)</codeph>.</p>
+
+                <p>Note that the <codeph>SpatialViewQuery</codeph> has getter for the target class: <codeph>includeDocsTarget()</codeph>.</p>
+            </note>
+
+            <p>Here is how to use the <codeph>range</codeph> parameter to find documents with a location within a bounding box. We have stored cities Paris, Vienna, Berlin and New York. Each city's coordinates is represented as two attributes, <codeph>lon</codeph> and <codeph>lat</codeph>. The spatial view's map function is:</p>
+<codeblock outputclass="language-javascript"><![CDATA[function (doc) { if (doc.type == "city") { emit([doc.lon, doc.lat], null); } }]]></codeblock>
+
+            <p>To query the view and find cities within Europe, we use Europe's bouding box. The startRange is the most south-western point of the bounding box, the endRange is its most north-eastern point:</p>
+<codeblock outputclass="language-java"><![CDATA[JsonArray EUROPE_SOUTH_WEST = JsonArray.from(-10.8, 36.59);
+JsonArray EUROPE_NORTH_EAST = JsonArray.from(31.6, 70.67);
+
+SpatialViewResult result = bucket.query(SpatialViewQuery.from("cities", "by_location")
+            .stale(Stale.FALSE)
+            .range(EUROPE_SOUTH_WEST, EUROPE_NORTH_EAST));
+List<SpatialViewRow> allRows = result.allRows();
+
+for (SpatialViewRow row : allRows) {
+    System.out.println(row.id());
+}
+
+//prints:
+//city::Vienna
+//city::Berlin
+//city::Paris]]></codeblock>
         </section>
 
         <section>
@@ -315,7 +359,7 @@ for (SpatialViewRow row : result) {
                         </row>
                         <row>
                             <entry>500</entry>
-                            <entry>If the error payload reports missing view document, it will not retry, otherwise it
+                            <entry>If the error payload reports missing view document or badly formed query, it will not retry, otherwise it
                             will retry request.</entry>
                         </row>
                     </tbody>
