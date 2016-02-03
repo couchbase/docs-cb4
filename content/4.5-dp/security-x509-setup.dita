@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_jn3_fzk_w5">
+  <title>Certificate configuration</title><shortdesc>This section explains how to configure an X.509 certificate for Couchbase Server. </shortdesc>
+  <body>
+   
+      
+    <note type="note">Choosing a root CA, the CA hierarchy, and obtaining a certificate from that CA
+      chain to set up a Couchbase cluster are not within the scope of this document.</note> 
+    <p>An X.509 certificate, which assumes a strict hierarchical system of Certificate
+        Authorities (CAs) for issuing, specifies formats for public key certificates,
+        certificate revocation lists, attribute certificates, and a certification path
+        validation algorithm.</p>
+      <p>Couchbase Server will accept an X.509 certificate as valid if it meets the following
+        requirements:</p>
+      <ul>
+        <li>The current system time must fall between the times set in the certificate's
+          properties <codeph>valid from</codeph> and <codeph>valid to</codeph>. </li>
+        <li>The node certificate must be designated for server authentication that is set in
+          the optional field of the certificate's property <codeph>enhanced key usage</codeph>
+          as <codeph>Server Authentication</codeph>. </li>
+        <li>Be sure to follow these certificate requirements: <ul>
+          <li>Common name: This is a wildcard for a certificate or node name.</li>
+          <li>Key length: 2048 bits or higher.</li>
+        </ul></li>
+      </ul>
+      <p>The certificate should also pass the <xref
+        href="https://www.openssl.org/docs/manmaster/apps/verify.html" format="html"
+        scope="external">OpenSSL validate certificate test</xref>. </p>
+    <section>
+      <title>Couchbase cluster and node certificates</title>
+      <p>The Couchbase cluster certificate must be signed by the root CA, directly or via an
+        intermediate CA. Generate a Couchbase cluster certificate manually, without using an
+        automated certificate signing request. </p>
+      <p>The Couchbase cluster certificate is then used to sign a Couchbase node certificate, which
+        contains the following: <ul>
+          <li>The node private key, or the <varname>server.key</varname></li>
+          <li>The node certificate or the <varname>server.pem</varname></li>
+          <li>The certificate chain file based on the supported CA hierarchy or
+            <varname>cacert.pem</varname></li>
+        </ul></p>
+      <p>Only full Couchbase administrators can generate Couchbase cluster and node
+        certificates.</p>
+    </section>
+<section><title>Generating a certificate</title>
+  <p>To help you generate an X.509 certificate for Couchbase Server, follow these steps: </p>
+  <ol>
+    <li>Create the root CA for the certificate:
+          <p><codeblock>mkdir root
+cd root
+openssl genrsa -out ca.key 2048
+openssl req -new -x509  -days 3650 -sha256 -key ca.key -out ca.pem -subj '/C=UA/O=My Company/CN=My Company Root CA' </codeblock></p></li>
+    <li>Create the intermediate CA: <p><codeblock>mkdir ../int
+cd int
+openssl genrsa -out int.key 2048 
+openssl req -new -key int.key -out int.csr -subj '/C=UA/O=My Company/CN=My Company Intermediate CA'</codeblock></p></li>
+    <li>Create the configuration file for OpenSSL:
+      <p><codeblock>cat &lt;&lt;EOF &gt; v3_ca.ext subjectKeyIdentifier=hash authorityKeyIdentifier=keyid:always,issuer:always basicConstraints=CA:true EOF</codeblock></p></li>
+    <li>Use the Certificate signing request for the intermediate CA: <p>
+            <codeblock>openssl x509 -req -in int.csr -CA ../root/ca.pem -CAkey ../root/ca.key -CAcreateserial -CAserial rootCA.srl -extfile v3_ca.ext -out int.pem -days 365 -sha256</codeblock>
+          </p></li>
+    <li>Verify the intermediate-root chain: <p><codeblock>openssl verify -CAfile ../root/ca.pem int.pem 
+openssl x509 -in int.pem -text</codeblock></p></li>
+    <li>Create a node certificate: <p><codeblock>mkdir ../node
+cd node
+openssl genrsa -out pkey.key 2048
+openssl req -new -key pkey.key -out pkey.csr -subj '/C=UA/O=My Company/CN=127.0.0.1'
+openssl x509 -req -in pkey.csr -CA ../int/int.pem -CAkey ../int/int.key -CAcreateserial -CAserial intermediateCA.srl -out pkey.pem -days 365 -sha256</codeblock></p></li>
+    <li>Verify the node-intermediate-root chain: <p><codeblock>openssl verify -verbose pkey.pem
+openssl verify -untrusted ../int/int.pem pkey.pem
+openssl verify -untrusted ../int/int.pem -CAfile ../root/ca.pem pkey.pem   </codeblock></p></li>
+    <li>Generate a chain file (lowest goes first not including CA): <p><codeblock>cat pkey.pem ../int/int.pem > chain.pem</codeblock></p></li>
+    <li>Copy the chain file and the key to the Inbox Couchbase folder: <p><codeblock>cp chain.pem /Users/don/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/
+cp pkey.key /Users/don/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/pkey.pem</codeblock></p></li>
+    <li>Change permissions so that Couchbase can read: <p><codeblock>cd /Users/don/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/
+chmod 777 chain.pem
+chmod 777 pkey.pem</codeblock></p></li>
+   
+  </ol>
+  
+  
+</section>   
+<section><title>Setting up Couchbase Server with a cluster certificate</title>
+      
+ <dl>
+   <dlentry>
+     <dt>Using REST API</dt>
+     <dd><codeblock>cd ../root
+curl -X POST --data-binary "@./ca.pem" http://Administrator:password@127.0.0.1:8091/controller/uploadClusterCA</codeblock></dd>
+   </dlentry>
+ </dl>     
+      <dl>
+        <dlentry>
+          <dt>Using CLI</dt>
+          <dd><codeblock>couchbase-cli ssl-manage -c [nodehost ip]:8091 -u[admin] -p[password] \
+            --upload-cluster-ca=[path to pem encoded root certificate]</codeblock></dd>
+        </dlentry>
+      </dl>         
+    </section> 
+    
+    <section><title>Setting up Couchbase Server with a node certificate</title>
+      
+      <dl>
+        <dlentry>
+          <dt>Using REST API</dt>
+          <dd><codeblock>curl -X POST http://Administrator:password@127.0.0.1:8091/node/controller/reloadCertificate</codeblock></dd>
+        </dlentry>
+      </dl>     
+      <dl>
+        <dlentry>
+          <dt>Using CLI</dt>
+          <dd></dd>
+        </dlentry>
+      </dl>         
+    </section>
+    <section><title>Configuring client SDKs</title>
+      
+      
+      
+    </section>     
+    
+  </body>
+</topic>
