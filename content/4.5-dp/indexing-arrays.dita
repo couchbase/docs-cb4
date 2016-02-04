@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_hv4_sbr_w5">
+  <title>Indexing Arrays</title>
+  <body>
+    <p>Couchbase 4.5 adds the capability to create global indexes on array elements and optimizes
+      the execution of queries involving array elements. This is a huge leap from the previous
+      versions where secondary indexes could only be created and subsequently queried on whole
+      arrays. You can now create an index of array elements ranging from plain scalar values to
+      complex arrays or JSON objects nested deeper in the array. </p>
+    <section> <title>N1QL Syntax</title>
+      <codeblock>CREATE INDEX [ <varname>index_name</varname> ] 
+        ON <varname>named_keyspace_ref</varname> ( <varname>expression</varname> || <varname>all_expression</varname>, … )
+        WHERE <varname>filter_expressions</varname>
+        USING GSI
+        [ WITH { "nodes”: [ “<varname>node_name</varname>” ], 
+                “defer_build”: true | false
+              }
+        ];</codeblock>
+      <p>
+        <dl>
+          <dlentry>
+            <dt><varname>index_name</varname></dt>
+            <dd>Specify a unique name to identify the index. The index name is optional and there can be one index that is unnamed.</dd>
+          </dlentry>
+          <dlentry>
+            <dt><varname>named_keyspace_ref</varname></dt>
+            <dd><codeblock><varname>named_keyspace_ref</varname> ::= [ <varname>namespace-name</varname> : ] <varname>keyspace-name</varname></codeblock> <p>Specify the name of the bucket to create an index on</p></dd>
+          </dlentry>
+          <dlentry>
+            <dt><varname>expression</varname></dt>
+            <dd>Refers to the an attribute name or a function that returns a single element.</dd>
+          </dlentry>
+          <dlentry>
+            <dt><varname>all_expression</varname></dt>
+            <dd><codeblock><varname>all_expression</varname> ::= ALL [ <varname>indexable_expression1</varname> [ , <varname>indexable_expression2,</varname> … ] IN ] <varname>source_expression</varname></codeblock>
+              <p>The ALL clause ensures iteration over the <varname>source_expression</varname> array and returns one or more indexable expressions. <ul>
+                <li><varname>all_expression</varname> can be a standalone expression or a compound expression with other non-ALL expressions.</li>
+                <li>Only one expression in the compound indexes can use the ALL clause.</li>
+                <li>If the <varname>source_expression</varname> or <varname>indexable_expression</varname> is missing, a MISSING value is returned and MISSING is not indexed.</li>
+                <li>If the <varname>source_expression</varname> is not missing and <varname>source_expression</varname> is either NULL, not an array, or is an empty array, NULL is returned. NULL is indexed.</li></ul></p></dd> 
+          </dlentry>
+          <dlentry>
+            <dt><varname>filter_expression</varname></dt>
+            <dd>Specifies a predicate to qualify the subset of documents to include in the index.
+              The ALL clause iterates over all the elements of the array. Consider the following
+              statement which indexes all elements of '<codeph>b</codeph>' even though the
+              expression filters on '<codeph>b.i</codeph>':
+              <codeblock>CREATE INDEX i1 
+         ON default ( ALL b ) 
+         WHERE ANY i IN b SATISFIES i > 1 END;</codeblock></dd>
+          </dlentry>
+          <dlentry>
+            <dt>USING GSI</dt>
+            <dd>USING clause specifies the index type to use. When using the ALL clause, USING only
+              supports GSI. <note>VIEW index type is not supported when using the ALL
+              clause.</note></dd>
+          </dlentry>
+          <dlentry>
+            <dt>WITH options</dt>
+            <dd>Use the WITH clause to specify additional options and is fully supported with nodes,
+                <varname>defer_build</varname>, and <varname>in_memory</varname> expressions.</dd>
+          </dlentry>
+        </dl> </p> </section>
+    <section><title>Examples</title>
+      <p>Let's use the following sample document with id "foo":
+        <codeblock>{
+        "a":1,
+        "b":[1,2],
+        "c":{"ca":[1,2,3], "cb":4},  
+        "d":[{"da":5,"db":6},
+        {"da":7,"db":8}],
+        "e":[{"ea":9,"eb":[10,11,12]},
+        {"ea":13,"eb":[14,NULL,16]}],
+        "f":[[17,18],
+        [19,20,21]]
+}   </codeblock></p>
+      <p><b>Indexing individual elements in an array</b></p>
+      <p>With the ALL clause in CREATE INDEX, devs can create an index that iterate over the
+        individual elements of an array and index each element.
+        <codeblock>CREATE INDEX i1 ON default(ALL b) USING GSI;   </codeblock> Given b as [1,2,3] or
+        as [1, {“A”:1, “B”:2},[0,1,2]], the index contains 3 separate elements with 3 separate
+        docIDs, one for each element in the array.</p>
+      <p>The following examples that can take advantage of the index:
+        <codeblock>//uses each element of the index to test i=?
+select * from default WHERE any i in b satisfies i=1 end;
+select * from default WHERE every i in b satisfies i&lt;100 end;
+
+//uses each element of the index to test t2=?
+select * from default t1 UNNEST t1.b t2 WHERE t2={“A”:1, “B”:2};</codeblock></p>
+      
+    </section>
+    <section><title>Limitations</title>
+      <p><ul>
+        <li>Covering indexes with indexed arrays do not cover queries where the array needs to be
+            reconstructed in full form, with duplicates and position of each element placed
+            correctly in the projection. <table frame="all" rowsep="1" colsep="1"
+              id="table_crm_35r_w5">
+              <tgroup cols="2">
+                <colspec colname="c1" colnum="1" colwidth="1*"/>
+                <colspec colname="c2" colnum="2" colwidth="7.33*"/>
+                <thead>
+                  <row>
+                    <entry>Supported</entry>
+                    <entry>Example</entry>
+                  </row>
+                </thead>
+                <tbody>
+                  <row>
+                    <entry><image href="pict/yes-check.png" width="16" height="16"
+                        id="image_mq3_1wr_w5"/></entry>
+                    <entry><codeblock>SELECT a 
+         FROM default 
+         WHERE ANY i IN b SATISFIES i &lt; 5 END;</codeblock></entry>
+                  </row>
+                  <row>
+                    <entry><image href="pict/yes-check.png" width="16" height="16"
+                        id="image_p2j_cwr_w5"/></entry>
+                    <entry><codeblock>SELECT ARRAY_DISTINCT(b) 
+        FROM default 
+        WHERE a = 5;</codeblock></entry>
+                  </row>
+                  <row>
+                    <entry><image href="pict/neg-check.png" width="16" height="16"
+                        id="image_phk_dwr_w5"/></entry>
+                    <entry> <codeblock>SELECT b,a 
+       FROM default;</codeblock></entry>
+                  </row>
+                </tbody>
+              </tgroup>
+            </table></li>
+        <li>Indexed arrays do not maintain duplicate elements of an array or the position of the
+            elements within an array in the GSI array index. This means that GSI array indexes do
+            not cover expressions that reference the array attribute itself. For example, the
+            following statements are not
+            supported:<codeblock>SELECT b FROM default;
+SELECT b[*] FROM default;
+SELECT b[1] FROM default;</codeblock></li>
+        <li>N1QL WITHIN is not supported with the ALL keyword. WITHIN requires a full iteration of the complete sub-tree while the ALL keyword explicitly unpacks a single specific level of a tree.  </li>
+        
+      </ul></p>
+    </section>
+  </body>
+</topic>
