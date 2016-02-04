@@ -63,7 +63,7 @@
           </dlentry>
         </dl> </p> </section>
     <section><title>Examples</title>
-      <p>Let's use the following sample document with id "foo":
+      <p>Let's use the following sample document with doc Id "foo":
         <codeblock>{
         "a":1,
         "b":[1,2],
@@ -76,19 +76,54 @@
         [19,20,21]]
 }   </codeblock></p>
       <p><b>Indexing individual elements in an array</b></p>
-      <p>With the ALL clause in CREATE INDEX, devs can create an index that iterate over the
-        individual elements of an array and index each element.
-        <codeblock>CREATE INDEX i1 ON default(ALL b) USING GSI;   </codeblock> Given b as [1,2,3] or
-        as [1, {“A”:1, “B”:2},[0,1,2]], the index contains 3 separate elements with 3 separate
-        docIDs, one for each element in the array.</p>
-      <p>The following examples that can take advantage of the index:
+      <p>Use the ALL clause in CREATE INDEX to create an index that iterates over the individual
+        elements of an array and indexes each element.
+        <codeblock>CREATE INDEX i1 ON default(ALL b) USING GSI;   </codeblock></p>
+      <note><draft-comment>[This does not use the sample document above]</draft-comment></note>
+      <p>Given <parmname>b</parmname> is an array consisting of the elements <parmname>[1, {“A”:1,
+          “B”:2},[0,1,2]]</parmname>. The index <parmname>i1</parmname> contains 3 separate elements
+        with 3 separate doc Ids, one for each element in the array.</p>
+      <p>The following queries can take advantage of the index <draft-comment
+          author="amarantha"><parmname>i1</parmname>??</draft-comment>:
         <codeblock>//uses each element of the index to test i=?
-select * from default WHERE any i in b satisfies i=1 end;
-select * from default WHERE every i in b satisfies i&lt;100 end;
+select * from default 
+  WHERE any i in b satisfies i=1 end;
+
+select * from default 
+  WHERE every i in b satisfies i&lt;100 end;
 
 //uses each element of the index to test t2=?
-select * from default t1 UNNEST t1.b t2 WHERE t2={“A”:1, “B”:2};</codeblock></p>
-      
+select * from default t1 UNNEST t1.b t2 
+  WHERE t2={“A”:1, “B”:2};</codeblock></p>
+      <p><b>Compound indexing with individual elements of an array and other attributes</b></p>
+      <p>Use the ALL clause when creating an index to combine non-array elements with array elements. In such cases, the ALL clause iterates over the individual elements of an array and indexes each element. For example,  <codeblock>CREATE INDEX i1 ON default(ALL b, a) USING GSI; </codeblock></p>
+      <p>Given b is [1, {“A”:1, “B”:2},[0,1,2]], the index (i1) leaf contains 3 separate elements (b[1],a), (b[2],a), (b[3],a) respectively and a doc Id per index element. </p>
+      <codeblock>CREATE INDEX i1 ON default(a, ALL b) USING GSI;</codeblock>
+      <p>Given b is [1, {“A”:1, “B”:2},[0,1,2]], the index (i1) leaf contains 3 separate elements (a, b[1]), (a, b[2]), (a, b[3]) respectively and a doc Id per index element. </p>
+      <p>The following queries can take advantage of the index <draft-comment author="amarantha"
+            ><parmname>i1</parmname>??</draft-comment>
+        <codeblock>//uses each element of the index to test i=?
+select * from default 
+  WHERE any i in b satisfies i=1 end AND a=1;
+
+//uses each element of the index to test t2=?
+select * from default t1 UNNEST t1.b t2 
+  WHERE t2={“A”:1, “B”:2} and t1.a=1;
+        </codeblock></p>
+      <p><b>Indexing individual attributes of an array of documents</b></p>
+      <p>Use the ALL clause to index specific attributes of a document when the array contains documents. For example, attribute d in the sample document "foo". In this case, when you create an index, the ALL clause iterates over the individual elements of an array and indexes each element.</p> <p>For example, <codeblock>CREATE INDEX i1 ON default(ALL da, db IN d) USING GSI;</codeblock>Given d is "d":[{"da":5,"db":6, “dc”:6.5},{"da":7,"db":8}], the index leaf contains 2 elements (da, db) and a docID per index element.</p>
+      <p><codeblock>CREATE INDEX i1 ON default(ALL dc IN d) USING GSI;</codeblock> Given d is "d":[{"da":5,"db":6, “dc”:6.5},{"da":7,"db":8}], the index leaf contains 1 element (dc) and a docID per index element.</p>
+      <p>The following queries can take advantage of the index:
+        <codeblock>//uses each element of the index to test i=?
+select * from default 
+  WHERE every i IN d satisfies i.da>=5 end;
+
+select * from default 
+  WHERE any i IN d satisfies i.dc=5 AND i.db=6 end;</codeblock></p>
+      <p><b>Indexing the individual elements of nest arrays</b></p>
+      <p>Use the ALL clause to index specific attributes of a document when the array contains other arrays or documents that contain arrays. For example, attribute f and e in the sample document "foo". In this case, when you create an index, the ALL clause iterates over the individual elements of the outer array. Use a nested ALL clause to iterate on additional arrays.</p> 
+      <p>For example, <codeblock>CREATE INDEX i1 ON default(e[].{ea,eb[].{ebb, ebc}}) USING GSI;</codeblock> Given d as "e":[{"ea":9,"eb":[10,11,12]},{"ea":13,"eb":[14,NULL,16]}] the index leaf contains 6 elements (ea, eb) and a docID per index element.</p>
+      <p><codeblock>CREATE INDEX i1 ON default(ALL (ALL f)) USING GSI;</codeblock> Given d as "f":[[17,18],[19,20,21]] the index leaf contains 5 elements (f..) and a docID per index element.</p>
     </section>
     <section><title>Limitations</title>
       <p><ul>
