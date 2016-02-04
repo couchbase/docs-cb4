@@ -6,7 +6,10 @@
    
       
     <note type="note">Choosing a root CA, the CA hierarchy, and obtaining a certificate from that CA
-      chain to set up a Couchbase cluster are not within the scope of this document.</note> 
+      chain to set up a Couchbase cluster are not within the scope of this document.</note>
+    <note type="note">Only full Couchbase administrators can generate Couchbase cluster and node
+      certificates.</note>
+    <section><title>General Couchbase certificate requirements</title>
     <p>An X.509 certificate, which assumes a strict hierarchical system of Certificate
         Authorities (CAs) for issuing, specifies formats for public key certificates,
         certificate revocation lists, attribute certificates, and a certification path
@@ -19,28 +22,27 @@
         <li>The node certificate must be designated for server authentication that is set in
           the optional field of the certificate's property <codeph>enhanced key usage</codeph>
           as <codeph>Server Authentication</codeph>. </li>
-        <li>Be sure to follow these certificate requirements: <ul>
+        <li>Make sure that the certificate meets these requirements: <ul>
           <li>Common name: This is a wildcard for a certificate or node name.</li>
           <li>Key length: 2048 bits or higher.</li>
         </ul></li>
       </ul>
       <p>The certificate should also pass the <xref
         href="https://www.openssl.org/docs/manmaster/apps/verify.html" format="html"
-        scope="external">OpenSSL validate certificate test</xref>. </p>
+        scope="external">OpenSSL validate certificate test</xref>. </p></section>
     <section>
-      <title>Couchbase cluster and node certificates</title>
+      <title>Cluster and node certificate requirements</title>
       <p>The Couchbase cluster certificate must be signed by the root CA, directly or via an
         intermediate CA. Generate a Couchbase cluster certificate manually, without using an
         automated certificate signing request. </p>
-      <p>The Couchbase cluster certificate is then used to sign a Couchbase node certificate, which
+      <p>The Couchbase cluster certificate is used to sign a Couchbase node certificate, which
         contains the following: <ul>
           <li>The node private key, or the <varname>server.key</varname></li>
           <li>The node certificate or the <varname>server.pem</varname></li>
           <li>The certificate chain file based on the supported CA hierarchy or
-            <varname>cacert.pem</varname></li>
+              <varname>cacert.pem</varname></li>
         </ul></p>
-      <p>Only full Couchbase administrators can generate Couchbase cluster and node
-        certificates.</p>
+      
     </section>
 <section><title>Generating a certificate</title>
   <p>To help you generate an X.509 certificate for Couchbase Server, here are the exact steps you
@@ -110,7 +112,7 @@ curl -X POST --data-binary "@./ca.pem" http://Administrator:password@127.0.0.1:8
       <dl>
         <dlentry>
           <dt>Using CLI</dt>
-          <dd></dd>
+          <dd><codeblock>couchbase-cli ssl-manage -c [nodehost ip]:8091 -u[admin] -p[password] --node-cert</codeblock></dd>
         </dlentry>
       </dl>         
     </section>
@@ -121,20 +123,91 @@ curl -X POST --data-binary "@./ca.pem" http://Administrator:password@127.0.0.1:8
     <dl>
       <dlentry>
         <dt>Load and import a certificate from the cluster into your JVM keystore</dt>
-        <dd>To load and import an X.509 certificate, </dd>
+        <dd>Set up your JVM keystore and install the certificate as explained in <xref
+              href="http://developer.couchbase.com/documentation/server/4.0/sdks/java-2.2/managing-connections.html#story-h2-5"
+              format="html" scope="external">Encryption</xref>.</dd>
       </dlentry>
     </dl>    
     <dl>
       <dlentry>
         <dt>Enable encryption on the client side and point it to the keystore</dt>
-        <dd> To enable </dd>
+        <dd>To enable encryption with the downloaded X.509 certificate, use the following example:
+            <codeblock outputclass="language-java">package com.couchbase.devguide;
+            
+            import java.util.Arrays;
+            import java.util.List;
+            
+            import com.couchbase.client.java.Bucket;
+            import com.couchbase.client.java.Cluster;
+            import com.couchbase.client.java.CouchbaseCluster;
+            import com.couchbase.client.java.env.CouchbaseEnvironment;
+            import com.couchbase.client.java.env.DefaultCouchbaseEnvironment;
+            import org.apache.log4j.Logger;
+            
+            public class ConnectingSsl {
+            
+            protected static final Logger LOGGER = Logger.getLogger("devguide");
+            
+            protected final Cluster cluster;
+            protected final Bucket bucket;
+            protected final CouchbaseEnvironment env;
+            
+            //=== EDIT THESE TO ADAPT TO YOUR COUCHBASE INSTALLATION ===
+            public static final String bucketName = "default";
+            public static final String bucketPassword = "";
+            public static final List&lt;String&gt; nodes = Arrays.asList("127.0.0.1");
+              
+              //=== You need to correctly set up your JVM keystore first! ===
+              //see instructions in http://developer.couchbase.com/documentation/server/4.0/sdks/java-2.2/managing-connections.html#story-h2-5
+              
+              protected ConnectingSsl() {
+              //configure the SDK to use SSL and point it to the keystore
+              env = DefaultCouchbaseEnvironment.builder()
+              .sslEnabled(true)
+              .sslKeystoreFile("/path/tokeystore")
+              .sslKeystorePassword("password")
+              .build();
+              
+              //connect to the cluster using the SSL configuration, by hitting one of the given nodes
+              cluster = CouchbaseCluster.create(env, nodes);
+              
+              //get a Bucket reference from the cluster to the configured bucket
+              bucket = cluster.openBucket(bucketName, bucketPassword);
+              }
+              
+              private void disconnect() {
+              //release shared resources and close all open buckets
+              cluster.disconnect();
+              
+              //also release the environment since we created it ourselves (notice this is an async operation so we block on it)
+              env.shutdownAsync().toBlocking().first();
+              }
+              
+              public void execute() {
+              //connection has been done in the constructor
+              doWork();
+              disconnect();
+              }
+              
+              /**
+              * Override this method to showcase specific examples.
+              * Make them executable by adding a main method calling new ExampleClass().execute();
+              */
+              protected void doWork() {
+              //this one just showcases connection methods, see constructor and shutdown()
+              LOGGER.info("Connected to the cluster, opened bucket " + bucketName);
+              }
+              
+              public static void main(String[] args) {
+              new ConnectingSsl().execute();
+              }
+              }
+        
+          </codeblock>
+          </dd>
       </dlentry>
     </dl>    
-      <p>If you are using a self-signed certificate with Java SDK, both operations have been
-        described in <xref
-          href="http://developer.couchbase.com/documentation/server/4.0/sdks/java-2.2/managing-connections.html#story-h2-5"
-          format="html" scope="external">Encryption</xref>.</p>
-      
+    
       
     </section>     
     
