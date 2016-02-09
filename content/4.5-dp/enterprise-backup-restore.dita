@@ -16,6 +16,14 @@
         format="html" scope="external">cbrestore</xref> tool, offers an easy and flexible solution
       to handle data including incremental backups, the new service is more convenient and efficient
       when handling large, multiple GB of data. </p>
+    <note type="important">You cannot use the <cmdname>restore</cmdname> command belonging to the
+      Backup and Restore tool to restore data that was backed up using <cmdname>cbbackup</cmdname>.
+      The directory structures are different and, therefore, data backed up with
+        <cmdname>cbbackup</cmdname> can be restored only with <cmdname>cbrestore</cmdname>.
+     <p> Likewise, data backed up with the <cmdname>create</cmdname> and <cmdname>cluster</cmdname>
+       commands belonging to the Backup and Restore tool cannot be restored with the command
+       <cmdname>cbrestore</cmdname> and requires the <cmdname>restore</cmdname> command included in
+       the Backup and Restore tool.</p></note>
     <p>By default, the Backup and Restore service performs incremental backups to back up only the
       new data. However, on a new cluster and for the first time this tool will produce a full
       backup. Each of the subsequent incremental backups will take a fraction of the time needed for
@@ -42,7 +50,8 @@
     <section><title>How the Backup and Restore service works</title>
     <p>The Backup and Restore service is installed as a part of the Couchbase Server Enterprise Edition package.</p>
       
-      <p>Here are the steps to follow to perform a simple quick backup of a specific bucket across all nodes of the cluster:</p> 
+      <p>Here are the steps to follow to perform a simple, quick backup of a specific bucket across
+        all nodes of the cluster:</p> 
       <dl>
         <dlentry>
           <dt>Create an archive repository with the command <cmdname>create</cmdname>:</dt>
@@ -53,7 +62,7 @@
         
       <dl>
         <dlentry>
-          <dt>Back up a bucket with the command <cmdname>cluster</cmdname>:</dt>    
+          <dt>Back up data with the command <cmdname>cluster</cmdname>:</dt>    
            <dd>Only full Couchbase administrators can perform backups using their credentials. <p>On
               Linux and Mac OS:
               <codeblock>$> ./backup cluster --dir=/tmp/backups --name=travel --host=http://localhost:8091 \
@@ -64,85 +73,69 @@
        <dd>The output of these commands will look similar to the following: <p><image
                 href="pict/backup-output.png" id="image_hqm_kmb_y5"/>
             </p></dd></dlentry></dl>
-      
+      <dl>
+        <dlentry>
+          <dt>Merge backups wit the command <cmdname>merge</cmdname></dt>
+          <dd>When you merge incremental backups, you free up disk space avoid running full backups
+            significantly reducing the amount of time needed to back up a  cluster. <p>Specify the
+              starting and ending backups that you want  to merge. </p>
+            <!--<p>The current backup names can be found by running the list command on your
+              backup archive. </p>-->
+            <p>The <cmdname>merge</cmdname> command first copies the oldest backup to be merged to a
+              special <codeph>.merge</codeph> directory. Data from each subsequent incremental
+              backup directory, which is a part of the merge, is then copied in this directory. Once
+              all of the data has been merged in the <codeph>.merge</codeph> directory, the old
+              backups are deleted from the backup archive and the <codeph>.merge</codeph> directory
+              is renamed to the backup specified in the <codeph>--end</codeph> argument.
+              </p><p>Merging of backups is fault-tolerant, and data loss is not possible even if the
+              backup tool crashes: there is a <codeph>.merge_status </codeph>file that records the
+              last completed step of the process and which incremental backups are supposed to be
+              merged. If a merge fails to complete, the backup tool will detect an incomplete merge
+              and revert it.</p><p>To merge several backups together:
+              <codeblock>./backup merge --dir /tmp/backups --name travel --start 2016-01-22T15:42:41.383468246-08:00 \
+--end 2016-01-22T15:42:41.383468246-08:00</codeblock></p>
+          </dd>
+        </dlentry>
+      </dl>     
       <dl>
         <dlentry>
           <dt>Restore data with the command <cmdname>restore</cmdname></dt>
-          <dd>Only full Couchbase administrators can perform restores using their credentials. 
-            To restore all backups in the backup repository <codeph>travel</codeph>: 
-            <p>On Linux and Mac OS:
-            <codeblock>$> ./backup restore --dir=/tmp/backups/travel --name=travel-sample --host=http://localhost:8091 \
+          <dd>Only full Couchbase administrators can perform restores using their credentials.
+              <p>First decide which backups you want to restore. Use the <codeph>--start</codeph>
+              and <codeph>--end</codeph> flags to specify the backups. If the
+                <codeph>--start</codeph> flag is not specified, it defaults to the first backup
+              taken. If the --end flag is not specified, it defaults to the last flag taken. If you
+              want to start or end from a different backup, specify the name of the backup for one
+              or both of these flags. </p><p>If you want to start or end from a different backup,
+              specify the name of the backup for one or both of these flags. </p>To restore all
+            backups in the backup repository <codeph>travel</codeph>: <p>On Linux and Mac OS:
+              <codeblock>$> ./backup restore --dir=/tmp/backups/travel --name=travel-sample --host=http://localhost:8091 \
  --username=MyAdminUsername --password=MyAdminPassword </codeblock></p><p>On
-                Windows:
+              Windows:
               <codeblock>C:\> backup restore --dir=C:\tmp\backups\travel --name=travel-sample --host=http://localhost:8091 \
 --username=MyAdminUsername --password=MyAdminPassword </codeblock></p></dd>
         </dlentry>
       </dl>
-      
-      
-      
-      
+  <dl>
+    <dlentry>
+      <dt>Compact data with the command <cmdname>compact</cmdname></dt>
+      <dd>Compact the data of an incremental backup and after the backup has completed:
+            <codeblock>./backup compact --dir /tmp/backups --name travel --incr-backup 2016-01-22T15:42:41.383468246-08:00</codeblock></dd>
+    </dlentry>
+  </dl>    
+   
+   <dl>
+     <dlentry>
+       <dt>Remove backups from the backup archive with the command <cmdname>remove</cmdname></dt>
+       <dd>Remove a backup from the backup archive. Make sure the data is no longer needed!
+            <codeblock>./backup remove --dir /tmp/backups --name travel</codeblock></dd>
+     </dlentry>
+   </dl> 
+    
+    
     </section>
-   <!--
     
-    <section><title>Backup limitations</title>
-     
-      <p>Couchbase Server backs up all the data up to the high sequence number of each VBucket. </p>
-     
-      <p><image href="pict/BR-service.png" id="image_bdw_4tl_55" align="left" width="400"/></p>
-      <p>The amount of time needed for a backup depends on the network card bandwidth  (3) or the
-        disk bandwidth on a particular node (4). </p>
-    
-      <dl>
-        <dlentry>
-          <dt>Type of backed up data</dt>
-          <dd>You can choose what kind of data you want to back up, such as: <ul>
-              <li>Cluster or bucket configuration </li>
-              <li>Views definitions</li>
-              <li>GSI definitions </li>
-              <li>Data</li>
-            </ul></dd>
-        </dlentry>
-      </dl>
-      <dl>
-        <dlentry>
-          <dt>Backup workflow</dt>
-          <dd>Once you decide what to back up, you can create a backup set and name it. Then, when
-            you run this service, you provide the backup set name, and the backup process will start
-            where the last backup in the set left off. </dd>
-          <dd>Each backup timeline has a name, and each backup occurrence has a timestamp value. </dd>
-          <dd>Backups are captured in backup logs.</dd>
-        </dlentry>
-      </dl> 
-    
-  </section>
-    <section><title>Restore</title>
-   <p>To restore the backed up data, specify a range of backups within the backup set using the
-        start and end timestamp. You can also use a command to list the backups within the backup
-        set to figure out the start and end timestamp.  </p>
-     
-      <dl>
-        <dlentry>
-          <dt>Restore granularity</dt>
-          <dd>When restoring the backed-up data, you can choose whether to restore: <ul>
-              <li>An entire backup timeline:<ul>
-                  <li>Restore the full backup of a whole cluster</li>
-                  <li> Restore the full backup of a whole bucket</li>
-                </ul></li>
-              <li>A backup timeline between particular start and end timestamp values: <ul>
-                  <li>full backup of an entire cluster</li>
-                  <li>full backup of an entire bucket</li>
-                  <li>an incremental backup to a particular backup occurrence timestamp </li>
-                </ul></li>
-              <li>Specified bucket objects.</li>
-            </ul></dd>
-          
-        </dlentry>
-      </dl>
-      
-      
-      
-    </section>
-   -->
+   
+  
   </body>
 </topic>
