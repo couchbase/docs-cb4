@@ -18,8 +18,10 @@
           the optional field of the certificate's property <codeph>enhanced key usage</codeph>
           as <codeph>Server Authentication</codeph>. </li>
         <li>Make sure that the certificate meets these requirements: <ul>
-          <li>Common name: This can be a wildcard certificate, certificate based on a <codeph>nodename</codeph>, 
-            or certificate based on an IP address.</li>
+          <li>Common name: This can be a wildcard certificate (<codeph>*.example.com</codeph>),
+              subject alternative name (SAN) certificate (<codeph>example.com</codeph> and
+                <codeph>example.net</codeph>), a certificate with a node name, or an IP
+              address.</li>
           <li>Key length: 2048 bits or higher.</li>
         </ul></li>
       </ul>
@@ -99,17 +101,33 @@ openssl x509 -req -in pkey.csr -CA ../int/int.pem -CAkey ../int/int.key -CAcreat
 openssl verify -untrusted ../int/int.pem pkey.pem
 openssl verify -untrusted ../int/int.pem -CAfile ../root/ca.pem pkey.pem   </codeblock>
               </p></li>
-            <li>Generate a chain file (lowest goes first not including CA): <p>
-                <codeblock>cat pkey.pem ../int/int.pem > chain.pem</codeblock>
-              </p><note type="note">Couchbase Server requires that you copy the private node key and
-                chain file manually to the <codeph>inbox</codeph> folder on each node. The
-                  <codeph>inbox</codeph> folder should be in the Couchbase Data folder path. For
+            <li>Generate a chain file (lowest goes first not including CA). <p>When a client
+                application tries to verify a certificate signed by the intermediate CA, it must
+                also verify the intermediate certificate against the root certificate. To complete
+                the chain of trust, create a certificate chain to present to the application.</p> To
+              create the certificate chain file, concatenate the intermediate and root certificates
+              together, beginning with the lowest one in the chain. <p>If you need to do this
+                manually, you can use:</p><p>
+                <codeblock>cat pkey.pem ../int/int.pem &lt;possibly other intermediate CAs&gt; > chain.pem</codeblock>
+              </p><p>Here is an example:
+                  <codeblock>-----BEGIN CERTIFICATE-----
+                Intermediate certificate 2
+                -----END CERTIFICATE-----
+                -----BEGIN CERTIFICATE-----
+                Intermediate certificate 1
+                -----END CERTIFICATE-----
+               </codeblock><note
+                  type="important">Do not include the root CA’s public key certificate, and
+                  intermediate certificates that are not in the trust path in your chain file.
+                </note></p><note type="note">Couchbase Server requires that you copy the private
+                node key and chain file manually to the <codeph>inbox</codeph> folder on each node.
+                The <codeph>inbox</codeph> folder should be in the Couchbase Data folder path. For
                 example, on Mac OSX by default this is
                   <filepath>/Users/&lt;username&gt;/Library/Application\
-                  Support/Couchbase/var/lib/couchbase/inbox/</filepath>. <p>The chain file and private
-                key file have to be in <codeph>.pem </codeph>format. The name of the private key
-                file should be <codeph>pkey.pem</codeph>, and the name of the chain file should
-                  be <codeph>chain.pem</codeph>.</p></note></li>
+                  Support/Couchbase/var/lib/couchbase/inbox/</filepath>. <p>The chain file and
+                  private key file have to be in <codeph>.pem </codeph>format. The name of the
+                  private key file should be <codeph>pkey.pem</codeph>, and the name of the chain
+                  file should be <codeph>chain.pem</codeph>.</p></note></li>
             <li>Copy the chain file and the key to the Couchbase folder <codeph>Inbox</codeph>: <p>
                 <codeblock>cp chain.pem /Users/<varname>username</varname>/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/
 cp pkey.key /Users/<varname>username</varname>/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/pkey.pem</codeblock>
@@ -117,9 +135,8 @@ cp pkey.key /Users/<varname>username</varname>/Library/Application\ Support/Couc
             <li>Change permissions so that Couchbase can read: <p>
                 <codeblock>cd /Users/<varname>username</varname>/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/
 chmod 777 chain.pem
-chmod 777 pkey.pem</codeblock>
-              </p>
-            </li>
+chmod 777 pkey.pem </codeblock>
+              </p></li>
           </ol></li>
    
   </ol>
