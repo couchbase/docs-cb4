@@ -12,28 +12,36 @@
       larger JSON documents. <note>The key-value APIs can also operate on binary format which is not
         supported by sub-document APIs.</note></p>
     <p>With the addition of sub-document API, you can now access and operate on individual JSON
-      components, <term>sub-document</term>, within a larger JSON document. Consider the following
-      example which uses a sub-document API to retrieve just the last name from the JSON document.
-        <image placement="break" href="pict/sub-doc-api-1.png" width="570" id="image_qmy_n4c_1v"/>
-      <!--<codeblock>       {
-            name: {
-                "first": John,
-                "last": Smith
-            },
-            ssn: 12345678,
-            email: jsmith@abc.com,
-            …
-        }</codeblock>
-      You can retrieve John's last name using the following:
-      <codeblock>SUBDOC_GET("foo", "name.last")</codeblock>-->
+      components, <term>sub-document fragments</term>, within a larger JSON document. Consider the
+      following example which uses a sub-document API to retrieve just the last name from the JSON
+      document. <image placement="break" href="pict/sub-doc-api-1.png" width="570"
+        id="image_qmy_n4c_1v"/>
       Note that only the requested or modified fields are sent over the network as opposed to the
-      entire document being sent over the network when using key-value APIs.</p>
+      entire document being sent over the network when using key-value APIs.</p> 
+      <p>Atomically modifying a document is typically suited in the following scenarios:<ul>
+          <li>An application does not have the existing document available locally, and wishes to
+            make a predetermined change to a specific field as part of a routine operation. For
+            example, incrementing a statistics counter or a login counter.</li>
+          <li>An application already has the existing document available locally, but wishes to use
+            an atomic operation for modifying it, to save bandwidth and be more efficient. For
+            example, an existing web session where the user modifies or stores some data such as an
+            updated profile or an updated score. </li>
+          <li>Cross-referencing scenarios, where an application-defined relationship exists between
+            two documents. In the context of social gaming, this may be thought of as sending
+            messages between inboxes. <ol id="ol_emq_v4b_1v">
+              <li>User #1 sends a message to User #2.</li>
+              <li>This may be implemented as: generate a key for the inbox message, store it
+                somewhere.</li>
+              <li><codeph>docAddValue(‘user:1’, ‘sent’, [‘user:2’, ‘keyToMessage’]</codeph></li>
+              <li><codeph>docAddValue(‘user:2’, ‘inbox’, [‘user:1’, ‘keyToMessage’]</codeph>
+              </li>
+            </ol></li>
+        </ul></p>
     <p>Consider a simple <filepath>HelloWorld.java</filepath> example that uses the sub-document API
       to connect to the <parmname>travel-sample</parmname> bucket, fetch the
         <parmname>name</parmname> field from the document “<userinput>airline_13633</userinput>”,
       and then print it.
-      <codeblock spectitle="HelloWorld.java">
-import com.couchbase.client.java.Bucket;
+      <codeblock spectitle="HelloWorld.java">import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.Cluster;
 import com.couchbase.client.java.CouchbaseCluster;
 import com.couchbase.client.java.document.subdoc.DocumentFragment;
@@ -57,18 +65,119 @@ public class HelloWorld {
       same
       document.<codeblock>[Thread 1]
         cb.upsert_in(Path("foo", "name.last"), "Lennon")
-        [Thread 2]
+[Thread 2]
         cb.upsert_in(Path("foo", "email"), "jlennon@abc.com")</codeblock></p>
-    <p>When using key-value APIs, updates to a single field requires CAS to maintain consistency. In
-      case of highly contended documents, if a CAS mismatch occurs the operation needs to be
-      restarted even though the modified field remains the same. Sub-document APIs do not require
-      the use of CAS when updating single fields. However, you can still use the CAS protection for
-      the document if your application requires it.</p><p>Depending on the application logic, a modification to a document may either require to be: <ul>
-        <li><term>Locally consistent</term> with regards to the immediate parent object which contains the value being modified. For example, ensure that a specific object key is unique, or ensure that a specific list item is not duplicated.</li>
-        <li><term>Globally consistent</term> with regards to the entire document. For example, if the existence of one field in the document only makes sense when another field is in a specific state.</li>
-      </ul>In Couchbase Server 4.1 or earlier versions, <i>both</i> these scenarios require the application to make use of CAS to ensure consistency. With the sub-document API model, the local consistency requirement does not require CAS as the server can ensure that the data is consistent atomically. For global consistency requirements, the SDKs may employ CAS to ensure that the document's state has not already changed. </p>
-    
-    <!--<p><b>Operations</b></p>-->
+    <section><title>Commands</title>
+      This section lists the available sub-document commands. The sub-document operations that have logical key-value equivalents are suffixed with the '<term>In</term>' term, indicating that they perform the logical key-value operation within a single document rather than the entire cluster. For example, <cmdname>Get</cmdname> retrieves a document within a cluster and <cmdname>GetIn</cmdname> retrieves a path within a single document. 
+      <p><b>Lookup Commands</b> <ul>
+        <li><cmdname>getIn</cmdname>: Retrieves a field within the document. <p>Parameters: <ul>
+                <li><parmname>id</parmname>: The ID for the document.</li>
+                <li><parmname>path</parmname>: The path to the sub-document that should be
+                  retrieved. </li>
+              </ul></p><p> Result: A sub-document with CAS and sub-value.</p></li>
+        <li><cmdname>existsIn</cmdname>: Determines whether a field exists. 
+          <p>Parameters: <ul>
+            <li><parmname>id</parmname>: The ID for the document.</li>
+            <li><parmname>path</parmname>: The path to the sub-document that should be checked. </li>
+        </ul></p> 
+          <p>Results: A sub-document with CAS. Note that the sub-value will be empty, but the return code should be successful.</p></li></ul></p>
+      <p><b>Mutation commands - Generic </b>
+        <ul><li><cmdname>replaceIn</cmdname>: Replaces the value of an existing field. 
+            <p>Parameters: <ul>
+              <li><parmname>id</parmname>: The ID for the document.</li>
+              <li><parmname>path</parmname>: The path to the sub-document that should be
+                replaced. </li>
+              <li><parmname>json</parmname>: The JSON value to use as a replacement</li>
+              <li><parmname>persist_to</parmname>:</li>
+              <li><parmname>replicate_to</parmname>:</li>
+              <li><parmname>exptime</parmname>:</li>
+            </ul></p></li>
+          
+          <li><cmdname>removeIn</cmdname>: Removes a field from a document. 
+            <p>Parameters: <ul>
+              <li><parmname>id</parmname>: The ID for the document.</li>
+              <li><parmname>path</parmname>: The path to the sub-document that should be
+                deleted. </li>
+              <li><parmname>persist_to</parmname>:</li>
+              <li><parmname>replicate_to</parmname>:</li>
+            </ul></p> </li>
+      </ul>
+      </p>
+      <p><b>Mutation commands - Dictionary </b><ul><li><cmdname>DICT_ADD</cmdname>:  
+          <p>Parameters: <ul>
+            <li></li>
+          </ul></p> 
+          <p>Results: </p></li>
+        
+        <li><cmdname>DICT_UPSERT</cmdname>:  
+          <p>Parameters: <ul>
+            <li></li>
+          </ul></p> 
+          <p>Results: </p></li>
+      </ul> </p>
+      <p><b>Mutation commands - Array </b>
+        <ul>
+          
+          <li><cmdname>ARRAY_PUSH_LAST</cmdname>:  
+            <p>Parameters: <ul>
+              <li></li>
+            </ul></p> 
+            <p>Results: </p></li>
+          
+          <li><cmdname>ARRAY_PUSH_FIRST</cmdname>: 
+            <p>Parameters: <ul>
+              <li></li>
+            </ul></p> 
+            <p>Results: </p></li>
+          
+          
+          <li><cmdname>ARRAY_INSERT</cmdname>:  
+            <p>Parameters: <ul>
+              <li></li>
+            </ul></p> 
+            <p>Results: </p></li>
+          
+          <li><cmdname>ARRAY_ADD_UNIQUE</cmdname>:  
+            <p>Parameters: <ul>
+              <li></li>
+            </ul></p> 
+            <p>Results: </p></li>
+      </ul> </p>
+      <p><b>Mutation commands - Counter </b>
+        <ul><li><cmdname>counterIn</cmdname>: Performs a counter operation inside a document field. 
+            <p>Parameters: <ul>
+              <li><parmname>id</parmname>: The ID for the document.</li>
+              <li><parmname>path</parmname>: The path to the numerical value. If it does not exist, the operation creates it. </li>
+              <li><parmname>delta</parmname>: The positive or negative delta to use. </li>
+              <li><parmname>create_intermediates</parmname>: Create intermediate components in the document, if they do not exist. </li>
+              <li><parmname>persist_to</parmname>:</li>
+              <li><parmname>replicate_to</parmname>:</li>
+              <li><parmname>exptime</parmname>:</li>              
+            </ul></p> 
+            <p>Results: </p></li>
+        </ul> </p>
+      
+    </section>
+    <section><title>Data Consistency</title>
+      <p>When using key-value APIs, updates to a single field requires CAS to maintain consistency.
+        In case of highly contended documents, if a CAS mismatch occurs the operation needs to be
+        restarted even though the modified field remains the same. Sub-document APIs do not require
+        the use of CAS when updating single fields. However, you can still use the CAS protection
+        for the document if your application requires it.</p>
+      <p>Depending on the application logic, a modification to a document may either require to be:
+          <ul id="ul_phc_w3h_1v">
+          <li><term>Locally consistent</term> with regards to the immediate parent object which
+            contains the value being modified. For example, ensure that a specific object key is
+            unique, or ensure that a specific list item is not duplicated.</li>
+          <li><term>Globally consistent</term> with regards to the entire document. For example, if
+            the existence of one field in the document only makes sense when another field is in a
+            specific state.</li>
+        </ul>In Couchbase Server 4.1 or earlier versions, <i>both</i> these scenarios require the
+        application to make use of CAS to ensure consistency. With the sub-document API model, the
+        local consistency requirement does not require CAS as the server can ensure that the data is
+        consistent atomically. For global consistency requirements, the SDKs may employ CAS to
+        ensure that the document's state has not already changed. </p>
+    </section>
     <p>In addition to retrieving and setting fields, the sub document API allows true "append" and "prepend" operations on arrays, as well as increment and decrement operations on numeric values.</p> <p>For information on using the sub-document API with Couchbase SDK, refer to the individual SDK
       documentation: <ul id="ul_grv_dry_y5">
         <li><xref
@@ -152,8 +261,7 @@ Whole document after mutations: {"someString":"this is a String","sub":{"fruits"
               "<parmname>callsign</parmname>" field of the document
               "<parmname>airline_13633</parmname>" to "<parmname>CLIPPER</parmname>". It then prints
             the complete new document.
-            <codeblock spectitle="MutateDict.java ">            
-import com.couchbase.client.java.Bucket;
+            <codeblock spectitle="MutateDict.java ">import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.Cluster;
 import com.couchbase.client.java.CouchbaseCluster;
 import com.couchbase.client.java.PersistTo;
@@ -175,6 +283,35 @@ public class MutateDict {
         System.out.println(bucket.get("airline_13633").content());
     }
 }</codeblock></p></li>
+        <li><b>Incrementing a counter in a document</b> <p>This example connects to the <parmname>travel-sample</parmname> bucket and uses the sub-document
+            API to count the number of passengers served on the airline and the number of passengers
+            who complained while being served.
+            <codeblock>import com.couchbase.client.java.Bucket;
+import com.couchbase.client.java.Cluster;
+import com.couchbase.client.java.CouchbaseCluster;
+import com.couchbase.client.java.PersistTo;
+import com.couchbase.client.java.ReplicateTo;
+import com.couchbase.client.java.document.subdoc.DocumentFragment;
+import java.util.Random;
+            
+public class Counter {
+            // increments the passengers_served counter on the airline
+            // uses dot-path notation to update counters in {"passengers": {"complained": 0, "served": 0}}
+            public static void main(String... args) {
+                Cluster cluster = CouchbaseCluster.create("127.0.0.1");
+                Bucket bucket = cluster.openBucket("travel-sample");
+            
+            
+                DocumentFragment&lt;Long&gt; counter = DocumentFragment.create("airline_13633", "passengers.served", 1L);
+                bucket.counterIn(counter, true, PersistTo.NONE, ReplicateTo.NONE);
+              
+                // simulate some randomness that a passenger complained while being served
+                if (new Random().nextInt() % 2 == 0) {
+                    counter = DocumentFragment.create("airline_13633", "passengers.complained", 1L);
+                    bucket.counterIn(counter, true, PersistTo.NONE, ReplicateTo.NONE);
+                    }
+                }
+             }</codeblock></p></li>
         <li><b>Manipulating arrays and dictionaries</b>
           <p>The example <xref
               href="https://gist.github.com/daschl/dd69b19517cd534edac1#file-arraysanddicts-java"
@@ -228,7 +365,7 @@ public static void main(String... args) {
       </ul>
     
     </section>
-<!--    <section><title>Sub-document API Suitability</title>
+<section><title>Sub-document API Suitability</title>
       <p>The sub-document API is a trade-off in server resource usage, between CPU and network
         bandwidth. When using a sub-document command (for example, SUBDOC_DICT_ADD), the client only
         transmits the key, path and fragment to change, as opposed to sending the key, and complete
@@ -287,24 +424,6 @@ public static void main(String... args) {
         <li>The document being operated on is not very small.</li>
         <li>The fragment being requested/modified is a small fraction of the total document size.</li>
       </ul></p>
-    </section>-->
-    <section><title>Sub-document API Suitability</title>
-      <p>Atomically modifying a document is typically suited in the following scenarios:<ul>
-        <li>An application does not have the existing document available locally, and wishes to make a predetermined change to a specific field as part of a routine operation. For example, incrementing a statistics counter or a login counter.</li>
-        <li>An application already has the existing document available locally, but wishes to use an atomic operation for modifying it, to save bandwidth and be more efficient. For example, an existing web session where the user modifies or stores some data such as an updated profile or an updated score. </li>
-        <li>Cross-referencing scenarios, where an application-defined relationship exists between
-            two documents. In the context of social gaming, this may be thought of as sending
-            messages between inboxes. <ol id="ol_emq_v4b_1v">
-              <li>User #1 sends a message to User #2.</li>
-              <li>This may be implemented as: generate a key for the inbox message, store it
-                somewhere.</li>
-              <li><codeph>docAddValue(‘user:1’, ‘sent’, [‘user:2’, ‘keyToMessage’]</codeph></li>
-              <li><codeph>docAddValue(‘user:2’, ‘inbox’, [‘user:1’, ‘keyToMessage’]</codeph></li>
-            </ol>
-          </li>
-      </ul>
-        
-        
-        </p></section>
+    </section>
   </body>
 </topic>
