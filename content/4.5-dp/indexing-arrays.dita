@@ -10,9 +10,9 @@
       complex arrays or JSON objects nested deeper in the array. </p>
     <section> <title>N1QL Syntax</title>
       <codeblock>CREATE INDEX [ <varname>index_name</varname> ] 
-        ON <varname>named_keyspace_ref</varname> ( <varname>expression</varname> || <varname>all_expression</varname>, … )
-        WHERE <varname>filter_expressions</varname>
-        USING GSI
+        ON <varname>named_keyspace_ref</varname> ( <varname>expression</varname> || <varname>distinct_array_expression</varname>, … )
+        [ WHERE <varname>filter_expressions</varname> ]
+        [ USING GSI ]
         [ WITH { "nodes": [ "<varname>node_name</varname>" ], 
                 "defer_build": true | false
               }
@@ -25,118 +25,157 @@
           </dlentry>
           <dlentry>
             <dt><varname>named_keyspace_ref</varname></dt>
-            <dd><codeblock><varname>named_keyspace_ref</varname> ::= [ <varname>namespace-name</varname> : ] <varname>keyspace-name</varname></codeblock> <p>Specify the name of the bucket to create an index on</p></dd>
+            <dd><codeblock><varname>named_keyspace_ref</varname> ::= [ <varname>namespace-name</varname> : ] <varname>keyspace-name</varname></codeblock> <p>Specify the name of the keyspace or bucket to create an index on</p></dd>
           </dlentry>
           <dlentry>
             <dt><varname>expression</varname></dt>
-            <dd>Refers to the an attribute name or a function that returns a single element.</dd>
+            <dd>Refers to the an attribute name or a function (or expression) that returns a single
+              element.</dd>
           </dlentry>
           <dlentry>
-            <dt><varname>all_expression</varname></dt>
-            <dd><codeblock><varname>all_expression</varname> ::= ALL [ <varname>indexable_expression1</varname> [ , <varname>indexable_expression2,</varname> … ] IN ] <varname>source_expression</varname></codeblock>
-              <p>The ALL clause ensures iteration over the <varname>source_expression</varname> array and returns one or more indexable expressions. <ul>
-                <li><varname>all_expression</varname> can be a standalone expression or a compound expression with other non-ALL expressions.</li>
-                <li>Only one expression in the compound indexes can use the ALL clause.</li>
-                <li>If the <varname>source_expression</varname> or <varname>indexable_expression</varname> is missing, a MISSING value is returned and MISSING is not indexed.</li>
-                <li>If the <varname>source_expression</varname> is not missing and <varname>source_expression</varname> is either NULL, not an array, or is an empty array, NULL is returned. NULL is indexed.</li></ul></p></dd> 
+            <dt><varname>distinct_array_expression</varname></dt>
+            <dd><codeblock><varname>distinct_array_expression</varname> ::= 
+[ ALL ] DISTINCT ARRAY <varname>expression</varname> FOR <varname>variable1</varname> ( IN | WITHIN ) <varname>expression1</varname>
+                                      [ , <varname>variable2</varname> ( IN | WITHIN ) <varname>expression2</varname> ]
+                                      [ ( WHEN <varname>condition</varname> ) ] END</codeblock>
+              <p>The <cmdname>ARRAY</cmdname> operator lets you map and filter the elements or
+                attributes of a collection, object, or objects. It evaluates to an array of the
+                operand expression that satisfies the WHEN clause, if specified.</p></dd> 
           </dlentry>
           <dlentry>
             <dt><varname>filter_expression</varname></dt>
-            <dd>Specifies a predicate to qualify the subset of documents to include in the index.
-              The ALL clause iterates over all the elements of the array. Consider the following
-              statement which indexes all elements of '<codeph>b</codeph>' even though the
-              expression filters on '<codeph>b.i</codeph>':
-              <codeblock>CREATE INDEX i1 
-         ON default ( ALL b ) 
-         WHERE ANY i IN b SATISFIES i > 1 END;</codeblock></dd>
+            <dd>Specifies WHERE clause predicates to qualify the subset of documents to include in
+              the index. </dd>
           </dlentry>
           <dlentry>
             <dt>USING GSI</dt>
-            <dd>USING clause specifies the index type to use. When using the ALL clause, USING only
-              supports GSI. <note>VIEW index type is not supported when using the ALL
-              clause.</note></dd>
+            <dd>USING clause specifies the index type to use. </dd>
           </dlentry>
           <dlentry>
             <dt>WITH options</dt>
-            <dd>Use the WITH clause to specify additional options and is fully supported with nodes,
-                <varname>defer_build</varname>, and <varname>in_memory</varname> expressions.</dd>
+            <dd>Use the WITH clause to specify additional options and is fully supported with nodes
+              and <varname>defer_build</varname> expressions.</dd>
           </dlentry>
-        </dl> </p> </section>
+        </dl> </p><p>See the <xref
+          href="http://developer.couchbase.com/documentation/server/4.1/n1ql/n1ql-language-reference/createindex.html"
+          format="html" scope="external">CREATE INDEX</xref> statement for more details on the
+        syntax. </p> </section>
     <section><title>Examples</title>
-      <!--<p>Let's use the following sample document with doc Id "foo":
-        <codeblock>{
-        "a":1,
-        "b":[1,2],
-        "c":{"ca":[1,2,3], "cb":4},  
-        "d":[{"da":5,"db":6},
-        {"da":7,"db":8}],
-        "e":[{"ea":9,"eb":[10,11,12]},
-        {"ea":13,"eb":[14,NULL,16]}],
-        "f":[[17,18],
-        [19,20,21]]
-}   </codeblock></p>-->
       <p>Consider the following sample documents: <ul id="ul_yn3_y5w_y5">
         <li>Food:
             <codeblock>"freefood_DocID" : 
-          { 
-          "type" :  "juice",
-          "items" : ["tomato", "cranberry", "mango"] , 
-          "airline_ids" : ["AI444", "AI333", "AI222"]  
-          } ,    
-          { 
-           "type" :  "snack",
-           "items" : ["peanuts", "crackers"],
-           "airline_ids" : ["AI444", "UA123", "SW111"]   
-          }     </codeblock></li>
+{ 
+    "type" :  "juice",
+    "items" : ["tomato", "cranberry", "mango"] , 
+    "airline_ids" : ["AI444", "AI333", "AI222"]  
+} ,    
+{ 
+    "type" :  "snack",
+    "items" : ["peanuts", "crackers"],
+    "airline_ids" : ["AI444", "UA123", "SW111"]   
+}     </codeblock></li>
         <li>Airlines_info<codeblock>"AI444_DocID":  
-          {
-          "id" : "AI 444", 
-          "schedule" : { 
-                          "source"          : "SFO",
-                          "source-time" : "8:44 AM", 
-                          "dest"               :  "JFK",
-                          "dest-time"     : "00:04 AM" 
-                        }
-          }
-        </codeblock></li>
+{
+    "id" : "AI 444", 
+    "schedule" : { 
+        "source"          : "SFO",
+        "source-time" : "8:44 AM", 
+        "dest"               :  "JFK",
+        "dest-time"     : "00:04 AM" 
+    }
+}</codeblock></li>
         <li>Passenger_trips
             <codeblock>"John Smith_docID" :   
-          {
-          "Name" : "John Smith",
-          "Trips"  : [ 
-                      { "purpose" :  "Business",
-                        "flight_segments" : [ 
-                            [ { "day"    : "Jan 4, 2016", "flight" : "AA444_DocID" }, 
-                              { "day"    : "Jan 4, 2016", "flight" : "AA333_DocID"} ], 
-                            [ { "day"    : "Jan 10, 2016", "flight" : "XY222_DocID"} ] 
-                        ]
-                      }, 
-                 …  ]
-          }</codeblock></li>
-        </ul></p>
+{
+    "Name" : "John Smith",
+    "Trips"  : [ 
+        { "purpose" :  "Business",
+          "flight_segments" : [ 
+              [ { "day"    : "Jan 4, 2016", "flight" : "AA444_DocID" }, 
+                { "day"    : "Jan 4, 2016", "flight" : "AA333_DocID"} ], 
+              [ { "day"    : "Jan 10, 2016", "flight" : "XY222_DocID"} ] 
+          ]
+        }, 
+    …  ]
+}</codeblock></li>
+      </ul></p>
       <p><b>Indexing individual elements in an array</b></p>
-      <p>Use the ALL clause in CREATE INDEX to create an index that iterates over the individual
-        elements of an array and indexes each element.
-        <codeblock><!--CREATE INDEX i1 ON default(ALL b) USING GSI;-->  
-CREATE INDEX fi1 ON Food (DISTINCT ARRAY i FOR i IN Food.items  END);
-          
-CREATE INDEX pi1 ON Passenger_trips  p (DISTINCT ARRAY t FOR t IN p.trips END) USING GSI;</codeblock></p>
-     <!-- <p>Given <parmname>b</parmname> is an array consisting of the elements <parmname>[1, {"A":1,
-          "B":2},[0,1,2]]</parmname>. The index <parmname>i1</parmname> contains 3 separate elements
-        with 3 separate doc Ids, one for each element in the array.</p>-->
-      <p>The following query takes advantage of the indices created above: <!--<codeblock>//uses each element of the index to test i=?
-select * from default 
-  WHERE any i in b satisfies i=1 end;
-
-select * from default 
-  WHERE every i in b satisfies i&lt;100 end;
-
-//uses each element of the index to test t2=?
-select * from default t1 UNNEST t1.b t2 
-  WHERE t2={"A":1, "B":2};</codeblock>-->
-        <codeblock>//Find all airlines that serve snacks or juice containing tomatoes
-
-SELECT airline_ids FROM Food WHERE ANY i IN Food.items SATISFIES i = "tomato";</codeblock></p>
+      <p>Create an index on all schedules:
+        <codeblock>CREATE INDEX isched 
+        ON `travel-sample` ( DISTINCT ARRAY v FOR v IN schedule END );</codeblock></p>
+      <p>Create an index on flight IDs scheduled in the first 4 days of the week:
+        <codeblock>CREATE INDEX iflight_day 
+        ON `travel-sample` ( DISTINCT ARRAY v.flight FOR v IN schedule WHEN v.day &lt; 4 END )
+        WHERE type = "route" ;</codeblock></p>
+      <p>The following query finds the list of scheduled flights grouped by the number of stops:
+        <codeblock>SELECT stops, ( DISTINCT ARRAY v.flight FOR v IN schedule end) FROM `travel-sample` 
+        WHERE type = "route" AND stops >= 0 GROUP BY stops; 
+      
+{
+    "requestID": "32af49be-5163-4460-b696-7ca328c91077",
+    "signature": {
+        "$1": "array",
+        "stops": "json"
+    },
+    "results" : [
+        {
+             "$1": [
+                  "2L372",
+                  "2L037",
+                  "2L086",
+                  "2L379",
+                  "2L622",
+                  "2L335",
+                  "2L537",
+                  "2L160",
+                  "2L431",
+                  "2L948",
+                  "2L259",
+                  "2L566",
+                  "2L156",
+                  "2L033",
+                  "2L000",
+                  "2L813",
+                  "2L599",
+                  "2L793",
+                  "2L006",
+                  "2L975",
+                  "2L470",
+                  "2L687"
+             ],
+             "stops": 0
+         }, 
+         {
+             "$1": [
+                 "FL692",
+                 "FL925",
+                 "FL798",
+                 "FL743",
+                 "FL380",
+                 "FL023",
+                 "FL515",
+                 "FL924",
+                 "FL403",
+                 "FL711",
+                 "FL870",
+                 "FL926",
+                 "FL514",
+                 "FL570",
+                 "FL316",
+                 "FL825",
+                 "FL156"
+            ],
+            "stops": 1
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "26.227097179s",
+        "executionTime": "26.227073598s",
+        "resultCount": 2,
+        "resultSize": 1111
+    }
+}     </codeblock></p>
       <p><b>Compound indexing with individual elements of an array and other attributes</b></p>
       <p>Use the ALL clause when creating an index to combine non-array elements with array elements. In such cases, the ALL clause iterates over the individual elements of an array and indexes each element. For example,  <!--<codeblock>CREATE INDEX i1 ON default(ALL b, a) USING GSI; </codeblock>--> <codeblock>CREATE INDEX cfi1 ON Food (DISTINCT ARRAY {I, f.type} FOR i IN Food.items  END);</codeblock></p>
       <!--<p>Given b is [1, {"A":1, "B":2},[0,1,2]], the index (i1) leaf contains 3 separate elements (b[1],a), (b[2],a), (b[3],a) respectively and a doc Id per index element. </p>
