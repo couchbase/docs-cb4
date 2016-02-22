@@ -61,52 +61,21 @@
           format="html" scope="external">CREATE INDEX</xref> statement for more details on the
         syntax. </p> </section>
     <section><title>Examples</title>
-      <p>Consider the following sample documents: <ul id="ul_yn3_y5w_y5">
-        <li>Food:
-            <codeblock>"freefood_DocID" : 
-{ 
-    "type" :  "juice",
-    "items" : ["tomato", "cranberry", "mango"] , 
-    "airline_ids" : ["AI444", "AI333", "AI222"]  
-} ,    
-{ 
-    "type" :  "snack",
-    "items" : ["peanuts", "crackers"],
-    "airline_ids" : ["AI444", "UA123", "SW111"]   
-}     </codeblock></li>
-        <li>Airlines_info<codeblock>"AI444_DocID":  
-{
-    "id" : "AI 444", 
-    "schedule" : { 
-        "source"          : "SFO",
-        "source-time" : "8:44 AM", 
-        "dest"               :  "JFK",
-        "dest-time"     : "00:04 AM" 
-    }
-}</codeblock></li>
-        <li>Passenger_trips
-            <codeblock>"John Smith_docID" :   
-{
-    "Name" : "John Smith",
-    "Trips"  : [ 
-        { "purpose" :  "Business",
-          "flight_segments" : [ 
-              [ { "day"    : "Jan 4, 2016", "flight" : "AA444_DocID" }, 
-                { "day"    : "Jan 4, 2016", "flight" : "AA333_DocID"} ], 
-              [ { "day"    : "Jan 10, 2016", "flight" : "XY222_DocID"} ] 
-          ]
-        }, 
-    …  ]
-}</codeblock></li>
-      </ul></p>
+      <p>The following samples use the <codeph>travel-sample</codeph> bucket. </p>
       <p><b>Indexing individual elements in an array</b></p>
       <p>Create an index on all schedules:
         <codeblock>CREATE INDEX isched 
         ON `travel-sample` ( DISTINCT ARRAY v FOR v IN schedule END );</codeblock></p>
+      <p><b>Indexing individual attributes of an array of documents</b></p>
       <p>Create an index on flight IDs scheduled in the first 4 days of the week:
         <codeblock>CREATE INDEX iflight_day 
-        ON `travel-sample` ( DISTINCT ARRAY v.flight FOR v IN schedule WHEN v.day &lt; 4 END )
-        WHERE type = "route" ;</codeblock></p>
+       ON `travel-sample` ( DISTINCT ARRAY v.flight FOR v IN schedule WHEN v.day &lt; 4 END )
+       WHERE type = "route" ;</codeblock></p>
+      <p><b>Compound indexing with individual elements of an array and other attributes</b></p>
+      <p>Create an index on scheduled flight IDs and number of stops:
+        <codeblock>CREATE INDEX iflight_stops 
+       ON `travel-sample` ( stops, DISTINCT ARRAY v.flight FOR v IN schedule END )
+       WHERE type = "route" ;</codeblock></p>
       <p>The following query finds the list of scheduled flights grouped by the number of stops:
         <codeblock>SELECT stops, ( DISTINCT ARRAY v.flight FOR v IN schedule end) FROM `travel-sample` 
         WHERE type = "route" AND stops >= 0 GROUP BY stops; 
@@ -176,49 +145,19 @@
         "resultSize": 1111
     }
 }     </codeblock></p>
-      <p><b>Compound indexing with individual elements of an array and other attributes</b></p>
-      <p>Use the ALL clause when creating an index to combine non-array elements with array elements. In such cases, the ALL clause iterates over the individual elements of an array and indexes each element. For example,  <!--<codeblock>CREATE INDEX i1 ON default(ALL b, a) USING GSI; </codeblock>--> <codeblock>CREATE INDEX cfi1 ON Food (DISTINCT ARRAY {I, f.type} FOR i IN Food.items  END);</codeblock></p>
-      <!--<p>Given b is [1, {"A":1, "B":2},[0,1,2]], the index (i1) leaf contains 3 separate elements (b[1],a), (b[2],a), (b[3],a) respectively and a doc Id per index element. </p>
-      <codeblock>CREATE INDEX i1 ON default(a, ALL b) USING GSI;</codeblock>
-      <p>Given b is [1, {"A":1, "B":2},[0,1,2]], the index (i1) leaf contains 3 separate elements (a, b[1]), (a, b[2]), (a, b[3]) respectively and a doc Id per index element. </p>-->
-      <p>The following queries can take advantage of the index created above: 
-        <!--<codeblock>//uses each element of the index to test i=?
-select * from default 
-  WHERE any i in b satisfies i=1 end AND a=1;
-
-//uses each element of the index to test t2=?
-select * from default t1 UNNEST t1.b t2 
-  WHERE t2={"A":1, "B":2} and t1.a=1;
-        </codeblock>--><codeblock>
-//Find all airlines that serve tomato juice 
-SELECT airline_ids FROM Food  WHERE  ANY i IN Food.items SATISFIES i = "tomato" AND Food.type = "juice";
-
-//Get all food served in airlines and group by the airlineID
-Select  aID, food.type  from Food where UNNEST Food.airline_id  aID  GROUP BY aID
-</codeblock></p>
-      <p><b>Indexing individual attributes of an array of documents</b></p>
-      <p>Use the ALL clause to index specific attributes of a document when the array contains documents. For example, attribute d in the sample document "foo". In this case, when you create an index, the ALL clause iterates over the individual elements of an array and indexes each element.</p> <p>For example, <!--<codeblock>CREATE INDEX i1 ON default(ALL da, db IN d) USING GSI;</codeblock>Given d is "d":[{"da":5,"db":6, "dc":6.5},{"da":7,"db":8}], the index leaf contains 2 elements (da, db) and a docID per index element.</p>-->
-        <!--<p><codeblock>CREATE INDEX i1 ON default(ALL dc IN d) USING GSI;</codeblock> Given d is "d":[{"da":5,"db":6, "dc":6.5},{"da":7,"db":8}], the index leaf contains 1 element (dc) and a docID per index element.--> <codeblock>CREATE INDEX pi2 ON Passenger_trips p (DISTINCT ARRAY t.purpose FOR t IN p.trips END) USING GSI  </codeblock></p>
-      <p>The following queries can take advantage of the index created above:
-        <!--<codeblock>//uses each element of the index to test i=?
-select * from default 
-  WHERE every i IN d satisfies i.da>=5 end;
-
-select * from default 
-  WHERE any i IN d satisfies i.dc=5 AND i.db=6 end;</codeblock>--> <codeblock>//Find all passenger names who made business trips
-Select  name  FROM Passenger_trips  p   where  ANY t in p.trips  satisfies t.purpose = "Business" </codeblock></p>
+      
+      
       <p><b>Indexing the individual elements of nest arrays</b></p>
-      <p>Use the ALL clause to index specific attributes of a document when the array contains other arrays or documents that contain arrays. <!--For example, attribute f and e in the sample document "foo".--> In this case, when you create an index, the ALL clause iterates over the individual elements of the outer array. Use a nested ALL clause to iterate on additional arrays.</p> 
-      <p>For example, <!--<codeblock>CREATE INDEX i1 ON default(e[].{ea,eb[].{ebb, ebc}}) USING GSI;</codeblock> Given d as "e":[{"ea":9,"eb":[10,11,12]},{"ea":13,"eb":[14,NULL,16]}] the index leaf contains 6 elements (ea, eb) and a docID per index element.-->
-        <codeblock> CREATE INDEX  na1 from Passenger_trips p 
-        ( DISTINCT ARRAY 
-                  ( DISTINCT ARRAY leg.flight  FOR leg IN s END ) 
-                    FOR s IN flight_segments  END ); </codeblock></p>
-      <!--<p><codeblock>CREATE INDEX i1 ON default(ALL (ALL f)) USING GSI;</codeblock> Given d as "f":[[17,18],[19,20,21]] the index leaf contains 5 elements (f..) and a docID per index element.</p>-->
-      <p>The following query takes advantage of the index created above:
-        <codeblock>SELECT * FROM Passenger_Trips p 
-          WHERE ANY leg IN s SATISFIES day(leg.flight) = "AI444" END 
-          UNNEST p.flight_segments  s;</codeblock></p>
+      <p>Use the DISTINCT ARRAY clause in a nested fashion to index specific attributes of a
+        document when the array contains other arrays or documents that contain arrays. For example, <codeblock>cbq> UPDATE `travel-sample` 
+SET schedule[0] = {"day" : 7, "special_flights" : 
+                    [ {"flight" : "AI444", "utc" : "4:44:44"}, 
+                      {"flight" : "AI333", "utc" : "3:33:33" } 
+                    ] } 
+WHERE type = "route" AND destinationairport = "CDG" AND sourceairport = "TLV";</codeblock>
+        <codeblock>cbq> CREATE INDEX inested ON `travel-sample`
+( DISTINCT ARRAY (DISTINCT ARRAY y FOR y IN x.special_flights END) FOR x IN schedule END) 
+WHERE type = "route";</codeblock></p>
     </section>
     <section id="array-idx-limitations"><title>Limitations</title>
       <p> Let's use the following sample document with Doc_Id "foo" to explain the limitations:
@@ -248,22 +187,22 @@ Select  name  FROM Passenger_trips  p   where  ANY t in p.trips  satisfies t.pur
                 </thead>
                 <tbody>
                   <row>
-                    <entry><image href="pict/yes-check.png" width="32" height="32"
-                        id="image_mq3_1wr_w5" align="center"/></entry>
+                    <entry><image href="pict/yes-check.png" width="32" height="32" id="image_mq3_1wr_w5" align="center"
+                        placement="break"/></entry>
                     <entry><codeblock>SELECT a 
          FROM default 
          WHERE ANY i IN b SATISFIES i &lt; 5 END;</codeblock></entry>
                   </row>
                   <row>
-                    <entry><image href="pict/yes-check.png" width="32" height="32"
-                      id="image_p2j_cwr_w5" align="center"/></entry>
+                    <entry><image href="pict/yes-check.png" width="32" height="32" id="image_p2j_cwr_w5" align="center"
+                        placement="break"/></entry>
                     <entry><codeblock>SELECT ARRAY_DISTINCT(b) 
         FROM default 
         WHERE a = 5;</codeblock></entry>
                   </row>
                   <row>
-                    <entry><image href="pict/neg-check.png" width="32" height="32"
-                      id="image_phk_dwr_w5" align="center"/></entry>
+                    <entry><image href="pict/neg-check.png" width="32" height="32" id="image_phk_dwr_w5" align="center"
+                        placement="break"/></entry>
                     <entry> <codeblock>SELECT b,a 
        FROM default;</codeblock></entry>
                   </row>
