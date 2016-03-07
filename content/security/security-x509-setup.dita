@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_jn3_fzk_w5">
+  <title>Configuring X.509 certificates</title> 
+  <body>
+    <p>This section explains how to configure X.509 certificates for TLS in Couchbase Server.</p>
+    <note type="note">Choosing a root CA, the CA hierarchy, and obtaining a certificate from that CA
+      chain to set up a Couchbase cluster are not within the scope of this document.</note>
+    <section><title>Certificate Validity Requirements for X.509 on Couchbase</title>
+      <p>Couchbase Server will accept an X.509 certificate as valid if it meets the following
+        requirements:</p>
+      <ul>
+        <li>The certificate must be in available in .pem format</li>
+        <li>The current system time must fall between the times set in the certificate's
+          properties <codeph>valid from</codeph> and <codeph>valid to</codeph>. </li>
+        <li>The node certificate must be designated for server authentication that is set in
+          the optional field of the certificate's property <codeph>enhanced key usage</codeph>
+          as <codeph>Server Authentication</codeph>. </li>
+        <li>Make sure that the certificate meets these requirements: <ul>
+          <li>Common name: This can be a wildcard certificate (<codeph>*.example.com</codeph>),
+              subject alternative name (SAN) certificate (<codeph>example.com</codeph> and
+                <codeph>example.net</codeph>), a certificate with a node name, or an IP
+              address.</li>
+          <li>Key length: 2048 bits or higher.</li>
+        </ul></li>
+      </ul>
+      <p>The certificate chain must be valid from the node certificate up to the root certificate,
+        which can be verified using the <xref
+          href="https://www.openssl.org/docs/manmaster/apps/verify.html" format="html"
+          scope="external">OpenSSL validate certificate test</xref>. </p></section>
+    <section>
+      <title>Couchbase Cluster Certificate</title>
+      <p>The Couchbase cluster certificate is the root CA's public key. 
+        In the configuration steps shown in the following sections, ca.pem 
+        is the CA public key that should be configured in Couchbase as the cluster certificate.</p>
+      <p>When you load the cluster certificate into Couchbase, it is first checked to make sure it
+        is a valid X.509 certificate. Next, if the per-node certificates are not signed by the
+        cluster certificate, a warning is shown for each node during configuration. As the per-node
+        certificates are updated, such that they are signed by the cluster certificate, the warning
+        for each node goes away.</p>
+      
+    </section>
+    
+    <section><title>Per Node Certificate</title>
+      <p>The Couchbase cluster certificate is used to sign per node Couchbase certificates, each containing the following:</p>
+      <ul>
+        <li>The node private key (named <codeph>server.key</codeph> as shown in the configuration
+          steps below)</li>
+        <li>The node public key certificate file (named <codeph>server.pem</codeph> as shown in the
+          configuration steps below)</li>
+        <li>The certificate chain file based on the supported CA hierarchy (named
+            <codeph>chain.pem</codeph> as shown in the configuration steps below)</li>
+      </ul>
+     </section>
+    
+    
+    
+    
+<section><title id="title_eh3_tyj_y5">Generating and Configuring Certificates in Couchbase</title>
+  <note type="note">If your CA authority supports automatic generation of certificates, you can skip
+        this step.</note>
+  <p>Here are the steps to help you generate an X.509 certificate for Couchbase Server using
+        openSSL:</p>
+  <ol>
+    <li>Create a top-level directory called <codeph>SSLCA</codeph> and three sub-directories called
+      <codeph>root</codeph>, <codeph>int</codeph>, and <codeph>node</codeph>.</li>
+    <li><b>Inside the <codeph>root</codeph> sub-directory:</b>
+          <p>
+            <codeblock>openssl genrsa -out ca.key 2048
+openssl req -new -x509  -days 3650 -sha256 -key ca.key -out ca.pem -subj '/C=UA/O=My Company/CN=My Company Root CA' </codeblock>
+          </p></li>
+    <li><b>Inside the <codeph>int</codeph> sub-directory:</b>
+          <p>
+            <codeblock>openssl genrsa -out int.key 2048 
+openssl req -new -x509  -days 3650 -sha256 -key ca.key -out ca.pem -subj '/C=UA/O=My Company/CN=My Company Root CA'</codeblock>
+          </p><ol>
+            <li>Create the configuration file for OpenSSL: <p>
+                <codeblock>cat &lt;&lt;EOF &gt; v3_ca.ext subjectKeyIdentifier=hash authorityKeyIdentifier=keyid:always,issuer:always basicConstraints=CA:true EOF</codeblock>
+              </p></li>
+            <li>Use the Certificate Signing Request (CSR) for the intermediate CA: <p>
+                <codeblock>openssl x509 -req -in int.csr -CA ../root/ca.pem -CAkey ../root/ca.key -CAcreateserial -CAserial rootCA.srl \
+    -extfile v3_ca.ext -out int.pem -days 365 -sha256</codeblock>
+              </p></li>
+            <li>Verify the intermediate-root chain: <p>
+                <codeblock>openssl verify -CAfile ../root/ca.pem int.pem 
+openssl x509 -in int.pem -text</codeblock>
+              </p></li>
+          </ol></li>
+    
+    
+    
+    <li><b>Inside the <codeph>node</codeph> sub-directory (repeated for each node in the cluster):</b> <p>
+            <codeblock>openssl genrsa -out pkey.key 2048
+openssl req -new -key pkey.key -out pkey.csr -subj '/C=UA/O=My Company/CN=<varname>node_ip_address</varname>'
+openssl x509 -req -in pkey.csr -CA ../int/int.pem -CAkey ../int/int.key -CAcreateserial -CAserial \
+    intermediateCA.srl -out pkey.pem -days 365 -sha256</codeblock>
+          </p><ol>
+            <li>Verify the node-intermediate-root chain: <p>
+                <codeblock>openssl verify -verbose pkey.pem
+openssl verify -untrusted ../int/int.pem pkey.pem
+openssl verify -untrusted ../int/int.pem -CAfile ../root/ca.pem pkey.pem   </codeblock>
+              </p></li>
+            <li>Generate a chain file (lowest goes first not including CA). <p>When a client
+                application tries to verify a certificate signed by the intermediate CA, it must
+                also verify the intermediate certificate against the root certificate. To complete
+                the chain of trust, create a certificate chain to present to the application.</p> To
+              create the certificate chain file, concatenate the intermediate and root certificates
+              together, beginning with the lowest one in the chain. <p>If you need to do this
+                manually, you can use:</p><p>
+                <codeblock>cat pkey.pem ../int/int.pem &lt;possibly other intermediate CAs&gt; > chain.pem</codeblock>
+              </p><p>Here is an example:
+                  <codeblock>-----BEGIN CERTIFICATE-----
+                Intermediate certificate 2
+                -----END CERTIFICATE-----
+                -----BEGIN CERTIFICATE-----
+                Intermediate certificate 1
+                -----END CERTIFICATE-----
+               </codeblock><note
+                  type="important">Do not include the root CA’s public key certificate, and
+                  intermediate certificates that are not in the trust path in your chain file.
+                </note></p><note type="note">Couchbase Server requires that you copy the private
+                node key and chain file manually to the <codeph>inbox</codeph> folder on each node.
+                The <codeph>inbox</codeph> folder should be in the Couchbase Data folder path. For
+                example, on Mac OSX by default this is
+                  <filepath>/Users/&lt;username&gt;/Library/Application\
+                  Support/Couchbase/var/lib/couchbase/inbox/</filepath>. <p>The chain file and
+                  private key file have to be in <codeph>.pem </codeph>format. The name of the
+                  private key file should be <codeph>pkey.pem</codeph>, and the name of the chain
+                  file should be <codeph>chain.pem</codeph>.</p></note></li>
+            <li>Copy the chain file and the key to the Couchbase folder <codeph>Inbox</codeph>: <p>
+                <codeblock>cp chain.pem /Users/<varname>username</varname>/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/
+cp pkey.key /Users/<varname>username</varname>/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/pkey.pem</codeblock>
+              </p></li>
+            <li>Change permissions so that Couchbase can read: <p>
+                <codeblock>cd /Users/<varname>username</varname>/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/
+chmod 777 chain.pem
+chmod 777 pkey.pem </codeblock>
+              </p></li>
+          </ol></li>
+   
+  </ol>
+  
+  
+</section>   
+<section><title>Setting up a Cluster CA Certificate</title>
+      
+ <dl>
+   <dlentry>
+     <dt>Using REST API</dt>
+     <dd><codeblock>cd ../root
+curl -X POST --data-binary "@./ca.pem" <xref href="http://127.0.0.1:8091/controller/uploadClusterCA" format="html" scope="external">http://Administrator:password@127.0.0.1:8091/controller/uploadClusterCA</xref></codeblock></dd>
+   </dlentry>
+ </dl>     
+      <dl>
+        <dlentry>
+          <dt>Using CLI</dt>
+          <dd><codeblock>couchbase-cli ssl-manage -c [<varname>ip_of_any_cluster_node</varname>]:8091 -u[admin] -p[password] \
+            --upload-cluster-ca=[<varname>path to pem-encoded root certificate</varname>]</codeblock></dd>
+          <dd>For example:
+            <codeblock>couchbase-cli ssl-manage -c [<varname>ip_of_any_cluster_node</varname>]:8091 \
+            --upload-cluster-ca=./root/ca.pem \
+            -u Administrator -p password         </codeblock></dd>
+        </dlentry>
+      </dl>         
+    </section> 
+    
+    <section><title>Setting up Per Node CA Certificate</title>
+      
+      <dl>
+        <dlentry>
+          <dt>Using REST API</dt>
+          <dd><codeblock>curl -X POST http://Administrator:password@[<varname>nodehost_ip</varname>]:8091/node/controller/reloadCertificate</codeblock></dd>
+        </dlentry>
+      </dl>     
+      <dl>
+        <dlentry>
+          <dt>Using CLI</dt>
+          <dd><codeblock>couchbase-cli ssl-manage -c [<varname>nodehost_ip</varname>]:8091 -u[admin] -p[password] --node-cert</codeblock></dd>
+        </dlentry>
+      </dl>         
+    </section>
+    <section><title>Configuring Client SDKs</title>
+      
+      <p>To take the guesswork out of configuring your driver to use X.509 Certificates, here is an
+        example in Java:</p>
+        
+    <dl>
+      <dlentry>
+        <dt>Load and import a certificate from the cluster into your JVM keystore</dt>
+        <dd>Set up your JVM keystore and install the certificate as explained in <xref
+              href="http://developer.couchbase.com/documentation/server/4.0/sdks/java-2.2/managing-connections.html#story-h2-5"
+              format="html" scope="external">Encryption</xref>.</dd>
+      </dlentry>
+    </dl>    
+    <dl>
+      <dlentry>
+        <dt>Enable encryption on the client side and point it to the keystore</dt>
+        <dd>To enable encryption with the downloaded X.509 certificate, use the following example:
+            <codeblock outputclass="language-java">    //=== You need to correctly set up your JVM keystore first! ===
+    //see instructions in 
+    //<xref href="http://developer.couchbase.com/documentation/server/4.0/sdks/java-2.2/managing-connections.html#story-h2-5" format="html" scope="external"/>
+              
+              protected ConnectingSsl() {
+              //configure the SDK to use SSL and point it to the keystore
+              env = DefaultCouchbaseEnvironment.builder()
+              .sslEnabled(true)
+              .sslKeystoreFile("/path/tokeystore")
+              .sslKeystorePassword("password")
+              .build();    </codeblock>
+          </dd>
+      </dlentry>
+    </dl>    
+    
+      
+    </section>     
+    
+  </body>
+</topic>
