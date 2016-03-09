@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_ffr_mth_t5">
+  <title>Sub-Document API</title>
+  <body>
+    <p>With the sub-document API , you can access and operate on parts of a JSON document. You no
+      longer need to retrieve an entire document to inspect or modify a field. This improves the
+      performance and brings better efficiency to the network IO path, especially when working with
+      large documents. </p>
+    <p>The existing key-value APIs operate on entire documents, which means that inspecting a single
+      field requires the entire document to be retrieved over the network. Modifying a single field
+      involves retrieving the entire document over network, modifying the field locally, and then
+      updating the entire locally modified document. While key-value APIs are well suited for binary
+      values and trivially small JSON documents, this can become a challenge when working with
+      larger JSON documents. <note>The key-value APIs can also operate on binary formats which are
+        not supported by sub-document APIs.</note></p>
+    <p>With the addition of the sub-document API, you can now access and operate on individual JSON
+      components, <term>sub-document fragments</term>, within a larger JSON document. Consider the
+      following example which uses a sub-document API to retrieve just the last name from the JSON
+      document. <image placement="break" href="../images/sub-doc-api-1.png" width="570"
+        id="image_qmy_n4c_1v"/> Note that only the requested or modified fields are sent over the
+      network as opposed to the entire document being sent over the network when using key-value
+      APIs.</p>
+      <p>Atomically modifying a document is typically suited to the following scenarios:<ul>
+        <li>An application does not have the existing document available locally and wishes to make
+          a predetermined change to a specific field as part of a routine operation. For example,
+          incrementing a statistics counter or a login counter.</li>
+        <li>An application already has the existing document available locally, but wishes to use an
+          atomic operation for modifying it, to save bandwidth and be more efficient. For example,
+          an existing web session where the user modifies or stores some data such as an updated
+          profile or an updated score. </li>
+        <li>Cross-referencing scenarios, where an application-defined relationship exists between
+          two documents. In the context of social gaming, this may be thought of as sending messages
+          between inboxes. <ol id="ol_emq_v4b_1v">
+            <li>User #1 sends a message to User #2.</li>
+            <li>This may be implemented as: generate a key for the inbox message, store it
+              somewhere.</li>
+            <li><codeph>docAddValue(‘user:1’, ‘sent’, [‘user:2’, ‘keyToMessage’]</codeph></li>
+            <li><codeph>docAddValue(‘user:2’, ‘inbox’, [‘user:1’, ‘keyToMessage’]</codeph>
+            </li>
+          </ol></li>
+      </ul></p>
+      <note>The following blogs that explain how the sub-document API is expressed using different
+        SDKs: <ul id="ul_qx5_sh4_2v">
+          <li><xref href="http://blog.couchbase.com/2016/february/subdocument-couchbase-java-sdk"
+              format="html" scope="external"/></li>
+          <li><xref
+              href="http://blog.couchbase.com/2016/february/preview-of-the-subdocument-api-using-go"
+              format="html" scope="external"/></li>
+        </ul></note>
+    
+    <p>Consider a simple <xref href="https://gist.github.com/ToddGreenstein/f43559b9ca5fc476f18c"
+        format="html" scope="external">Java</xref> example that uses the sub-document API to connect
+      to the <parmname>travel-sample</parmname> bucket, fetch the <parmname>name</parmname> field
+      from the document “<userinput>airline_13633</userinput>”, and then print it.
+      <codeblock spectitle="Fetch.java">
+        // Fetch and print the name from an airline
+        DocumentFragment&lt;Lookup&gt; resultLookup = bucket.lookupIn("airline_13633").get("name").doLookup();
+        LOGGER.info(resultLookup.content("name", String.class));</codeblock></p>
+    <p>The API uses <xref
+      href="http://developer.couchbase.com/documentation/server/4.1/n1ql/n1ql-intro/queriesandresults.html"
+      format="html" scope="external">N1QL's path syntax</xref> to refer to individual fields in a document. It uses the dot notation syntax to identify the logical location of an attribute within a document. In the example above, the path to the last name field is "<filepath>name.last</filepath>". </p>
+    <p>Updates to a field are atomic and do not collide with updates to a different field on the
+      same key. For example, the following operations do not collide although they are updating the
+      same
+      document.<codeblock>[Thread 1]
+        bucket.mutateIn("user").upsert("name.last","Lennon",false).doMutate();
+[Thread 2]
+        bucket.mutateIn("user").upsert("email","jlennon@abc.com",false).doMutate();</codeblock></p>
+  <section><title>Commands</title> <p>This section lists the available sub-document commands. There
+      are two categories of commands: <ul id="ul_hwt_jqq_1v">
+        <li><term>lookupIn</term> commands which are used to read data from existing documents.</li>
+        <li><term>mutateIn</term> commands which are used to modify documents.</li></ul></p>
+      <p>Sub-document commands are named similar to their full-document counterparts, but
+        they perform the logical key-value
+        operation <i>within</i> a single document rather than operating on the entire document.</p>
+      <p><b>Lookup Commands</b></p>
+      <p>There are two sub-document lookup commands - <cmdname>get</cmdname> and <cmdname>exists</cmdname>.</p><p><cmdname>get</cmdname> returns a specific path from a single document. It can be used to return
+        any JSON primitive, assuming a suitable path is constructed. For example, consider the
+        following document from the <codeph>travel-sample</codeph> dataset:
+        <codeblock>{
+  "id": 55136,
+  "type": "route",
+  "airline": "U2",
+  "airlineid": "airline_2297",
+  "sourceairport": "MAN",
+  "destinationairport": "AMS",
+  "stops": 0,
+  "equipment”: [“320", "319”],
+  “active": true,
+  "schedule": [
+    {
+      "day": 0, "utc": "17:37:00", "flight": "U2219"
+    },
+    {
+      "day": 1, "utc": "07:58:00", "flight": "U2839"
+    }
+  ]
+}</codeblock></p>
+      <p>Using the sub-document <cmdname>get</cmdname> command the following fields of varying
+        types can be returned via these paths:
+        <codeblock>"id"  - 55136
+(number)
+"active"  - true
+(boolean)
+"schedule[0]" - { "day": 0, "utc": "17:37:00", "flight": "U2219"}
+(dictionary)
+"equipment" - ["320", "319"]
+(array)</codeblock></p>
+      <p>The <cmdname>exists</cmdname> command is similar to <cmdname>get</cmdname>, except that
+        it only checks for the <i>existence</i> of a given path, and does not return the document
+        fragment itself. This command can be used to check if a particular path exists in a
+        document, without having to actually receive the fragment.</p>
+        <p><b>Mutation Commands</b></p>
+      <p>Sub-document API supports the addition of new fields, and modification or deletion of existing fields in a JSON document. Different commands are used depending on the type of the field being mutated.</p>
+      <p><i>Mutating Dictionary Fields</i></p>
+      <p>The sub-document API supports four commands on JSON dictionaries (also known as objects): <ul>
+        <li>Creating of a new name/value pair using <cmdname>insert</cmdname>.</li>
+        <li>Replacing an existing name/value pair using <cmdname>replace</cmdname>.</li>
+        <li>Creating a new name/value pair or replacement of an existing one using
+              <cmdname>upsert</cmdname>.</li>
+        <li>Deleting an existing name/value using <cmdname>remove</cmdname>.</li></ul></p><p>The <filepath>MutateDict.java</filepath> example below shows the use of
+          <cmdname>replace</cmdname> to update the <parmname>callsign</parmname> field in for a
+        particular airline document (which is composed of a top-level dictionary):
+        <codeblock spectitle="Mutate.java">
+// Update CallSign for "Pan Am" to "Clipper"
+DocumentFragment&lt;Mutation&gt; resultMutation = bucket.mutateIn("airline_13633").upsert("callsign","CLIPPER",false).doMutate();
+
+// Fetch and print the callsign from an airline
+resultLookup = bucket.lookupIn("airline_13633").get("callsign").doLookup();
+LOGGER.info(resultLookup.content("callsign", String.class));</codeblock></p>
+      <p><i>Mutating Array Fields</i></p>
+      <p>The sub-document API supports a similar set of commands on arrays as on dictionaries. It also adds the ability to push items to the beginning or the end of an array, without having to explicitly check the current length of the array. <ul>
+        <li>Adding a new element to an array at a specific index using <cmdname>arrayInsert</cmdname>.</li>
+        <li>Pushing a new element to the start or the end of an array using <cmdname>pushFront</cmdname>.</li>
+        <li>Replacing an existing index with a new value using <cmdname>replace</cmdname>.</li>
+        <li>Deleting an existing array element (reducing the array size by 1) using <cmdname>remove</cmdname>.</li></ul></p>
+      <p>The <filepath>ArraysAndDicts.java</filepath> example below shows the use of
+          <cmdname>upsert</cmdname> to create a new "<parmname>fleet</parmname>" array in an
+        existing document, and then appends two new aircraft dictionaries (containing the aircraft
+        name and engine count) to the "<parmname>fleet</parmname>" array:
+        <codeblock spectitle="ArraysAndDicts.java">
+// Creates a "fleet" array and pushes aircraft into it
+bucket.mutateIn("airline_13633").upsert("fleet", JsonArray.from(
+    JsonObject.create().put("name", "747-200B").put("heavy",true).put("engines",4),
+    JsonObject.create().put("name", "737-200").put("engines",2)
+), false).doMutate();</codeblock></p>
+      <p>The sub-document API also supports enforcing that values are unique in an array, which
+        allows the construction of <xref href="https://en.wikipedia.org/wiki/Set_(mathematics)"
+          format="html" scope="external">mathematical sets</xref>.</p><ul>
+            <li>Adding a new element only if the value is not already present in the array using <cmdname>addUnique</cmdname>.</li></ul>
+      <p>The <filepath>Unique.java</filepath> example below shows an example of mathematical sets -
+        each airline has a <parmname>models</parmname> array recording what models of aircraft an
+        airline operates. There is a constraint that the elements in <parmname>models</parmname>
+        should be unique (a model shouldn’t appear more than once), so the
+          <cmdname>addUnique</cmdname> command is used when adding new models:
+        <codeblock spectitle="Unique.java">
+// Creates a "models" array and adds UNIQUE values into it
+bucket.mutateIn("airline_13633").upsert("models",JsonArray.empty(),false).doMutate();
+bucket.mutateIn("airline_13633").addUnique("models","747-200B",false).addUnique("models","747-120",false).doMutate();
+
+// This will fail!  The Array already contains the 747-120
+try {
+        bucket.mutateIn("airline_13633").addUnique("models", "747-120", false).doMutate();
+    } 
+catch (PathExistsException ex){
+              LOGGER.info("Whoops!  Model is already part of the models array.");
+}   </codeblock></p>
+      <p><i>Arithmetic commands</i></p>
+      <p>The sub-document API allows basic arithmetic operations (addition and subtraction) to be
+        performed on integer fields in a document using the <cmdname>counter</cmdname>
+        command.</p>
+      <p>This allows simple counters to be implemented server-side, without the client application having to explicitly fetch the field, update the numeric value and then replace it back again. It also prevents the possibility of another client attempting to perform the update at the same time and the increment / decrement being lost.</p>
+      <p>Arithmetic operations can only be performed on integer numeric values which can be represented as a signed 64bit value (i.e. the C type int64_t) and the delta being added / subtracted also needs to be an int64_t.</p>
+      <p>The <filepath>Counter.java</filepath> example below demonstrates the use of
+          <cmdname>counter</cmdname> to increment two fields -
+          <parmname>passengers.served</parmname> and <parmname>passengers.complained</parmname>:
+        <codeblock spectitle="Counter.java">
+// Increment passenger_served counter on the airline
+bucket.mutateIn("airline_13633").counter("passengers.served",1L,true).doMutate();
+
+// Simulate some randomness that a passenger complained while being served
+if (new Random().nextInt() % 2 == 0) {
+    bucket.mutateIn("airline_13633").counter("passengers.complained",1L,true).doMutate();
+    }
+}</codeblock></p>
+
+        </section>
+    <section><title>Maintaining Data Consistency</title>
+      <p>When using key-value APIs, updates to a single field requires CAS to maintain consistency.
+        In case of highly contended documents, if a CAS mismatch occurs the operation needs to be
+        restarted even though the modified field remains the same. Sub-document APIs do not require
+        the use of CAS when updating single fields. However, you can still use the CAS protection
+        for the document if your application requires it.</p>
+      <p>The application logic may require a document modification to be either: <ul
+          id="ul_phc_w3h_1v">
+          <li><term>Locally consistent</term> with regards to the immediate parent object which
+            contains the value being modified. For example, ensure that a specific object key is
+            unique, or ensure that a specific list item is not duplicated.</li>
+          <li><term>Globally consistent</term> with regards to the entire document. For example, if
+            the existence of one field in the document only makes sense when another field is in a
+            specific state.</li>
+        </ul>In Couchbase Server 4.1 or earlier versions, <i>both</i> these scenarios require the
+        application to make use of CAS to ensure consistency. With the sub-document API model, the
+        local consistency requirement does not require CAS as the server can ensure that the data is
+        consistent atomically. For global consistency requirements, the SDKs may employ CAS to
+        ensure that a document's state has not already changed. </p>
+    </section>
+    <p>In addition to retrieving and setting fields, the sub document API allows true "append" and "prepend" operations on arrays, as well as increment and decrement operations on numeric values.</p> <p>For information on using the sub-document API with Couchbase SDK, refer to the individual SDK
+      documentation: <ul id="ul_grv_dry_y5">
+        <li><xref
+          href="http://developer.couchbase.com/documentation/server/4.1/sdks/java-2.2/release-notes.html"
+          format="html" scope="external">Java SDK 2.2.5</xref></li>
+        <li><xref
+            href="http://developer.couchbase.com/documentation/server/4.1/sdks/c-2.4/release-notes.html"
+            format="html" scope="external">C SDK 2.5.6</xref></li>
+        <li><xref
+            href="http://developer.couchbase.com/documentation/server/4.1/sdks/go-beta/release-notes.html"
+            format="html" scope="external">Go SDK 1.0.4</xref></li>
+</ul></p>
+
+<section><title>Sub-Document API Suitability</title>
+      <p>The sub-document API is a trade-off in server resource usage, between CPU and network
+        bandwidth. When using a sub-document command (for example, SUBDOC_DICT_ADD), the client only
+        transmits the key, path and fragment to change, as opposed to sending the key, and complete
+        (whole) value. Depending on the size of the document being operated on and the size of the
+        fragment, this can result in a significant saving of network bandwidth. For example,
+        operating on a 100KB document named "<userinput>user::j.bloggs</userinput>" where a 30 byte
+        fragment is added to a path of length 20 bytes would require sending the following over the
+        network: <table frame="all" rowsep="1" colsep="1" id="table_o2q_1ky_y5">
+          <tgroup cols="6">
+            <colspec colname="c1" colnum="1" colwidth="1.62*"/>
+            <colspec colname="c2" colnum="2" colwidth="1*"/>
+            <colspec colname="c3" colnum="3" colwidth="1*"/>
+            <colspec colname="c4" colnum="4" colwidth="1*"/>
+            <colspec colname="c5" colnum="5" colwidth="1*"/>
+            <colspec colname="c6" colnum="6" colwidth="1*"/>
+            <tbody>
+              <row>
+                <entry/>
+                <entry namest="c2" nameend="c6" align="center"><b>Size (bytes)</b></entry>
+              </row>
+              <row>
+                <entry/>
+                <entry align="center">Header</entry>
+                <entry align="center">Key</entry>
+                <entry align="center">Path</entry>
+                <entry align="center">Value</entry>
+                <entry align="center">Total</entry>
+              </row>
+              <row>
+                <entry><b>Full document</b>
+                  <p>(SET)</p></entry>
+                <entry>24</entry>
+                <entry>14</entry>
+                <entry>-</entry>
+                <entry>100,240</entry>
+                <entry>100,278</entry>
+              </row>
+              <row>
+                <entry><b>Sub-document</b>
+                  <p>(SUBDOC_DICT_ADD)</p></entry>
+                <entry>24</entry>
+                <entry>14</entry>
+                <entry>20</entry>
+                <entry>30</entry>
+                <entry>88</entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table> In this example, there is a saving of 100,190 bytes using sub-document compared to existing full document operations, or a 99.91% saving in network bandwidth.</p>
+      <p>However, this bandwidth saving is only possible because the cluster node performs the additional processing to handle this request. The cluster node needs to parse the current JSON value for "<userinput>user::j.bloggs</userinput>", apply the requested modification (inserting an element into a dictionary in the above example), and then store the result. The exact CPU required for this will vary considerably depending on a number of factors, including: <ul>
+        <li>Size of the existing document.</li>
+        <li>Complexity (different levels of nesting, etc) of the existing document.</li>
+        <li>Type of sub-document operation being performed.</li>
+        <li>Size of the fragment being applied.</li> </ul> In general, sub-document API is a good fit for applications where network bandwidth is at a premium, and at least one of the following is true: <ul>
+        <li>The document being operated on is not very small.</li>
+        <li>The fragment being requested/modified is a small fraction of the total document size.</li></ul></p></section></body>
+</topic>

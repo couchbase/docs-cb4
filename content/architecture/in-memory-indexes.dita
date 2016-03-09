@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_ihy_ddy_w5">
+  <title>Memory-Optimized Global Indexes</title> 
+  <body><p>Memory-optimized global indexes enable in-memory index processing and index scans with
+    the lowest latency. These indexes reside in memory and provide a fresh index that is up to date
+    under aggressive mutation rates without impacting the incoming database workload.</p>
+    <section><title>Enabling Memory-Optimized Global Indexes on the Cluster</title>
+      <p>The storage option for global indexes is set with the configuration of the first node that
+        runs the index service. At the time of setup, you can either use the existing global index
+        storage or can utilize the new memory-optimized global index storage for faster index
+        processing. <image placement="break" href="images/memory-optimized-setup.png" width="570"
+          id="image_ijm_tc3_1v"/></p>
+      <p>The storage option for global indexes cannot be changed after setting up the first node
+        that runs the index service. To change the storage setting, remove all nodes running index
+        service first using remove node operation. If you are running a single node, uninstall and
+        re-install Couchbase Server with the new option. </p>
+<!--      <p>Enable the memory optimized global indexes
+        from the <uicontrol>Settings</uicontrol> tab on the Couchbase Web console. Under the Index
+        Settings section, set <uicontrol>Use Memory-Optimized Indexes</uicontrol> to
+        <userinput>ON</userinput>. The default value is OFF. <note>This value can only be set when
+          adding the first index service node to your cluster.</note> Memory optimized indexes can
+        be disabled only after all the index service nodes in the cluster are removed.</p>-->
+      <p><b>Creating Memory-Optimized Global Indexes</b></p>
+      <p>Once the memory-optimized storage option is enabled for global indexes, you can use the
+        CREATE INDEX statement without any changes to create global indexes in the system. For
+        information on creating global indexes using the CREATE INDEX statement in N1QL, see the
+        N1QL Reference documentation for <xref
+          href="../n1ql/n1ql-language-reference/createindex.dita"
+          >CREATE INDEX</xref> statement. For information on the
+        extended CREATE INDEX statement option that allows fine-grained array indexing, see <xref
+          href="../n1ql/n1ql-language-reference/indexing-arrays.dita#topic_hv4_sbr_w5"/>.</p>
+    </section>
+    <section><title>Monitoring Memory Usage of Global Indexes</title>
+      <p>Memory-optimized global indexes are processed completely in memory. Overloading a single
+        node with indexes could cause the node to run over the Index RAM Quota that is allocated for
+        indexes on the node. To pick the best node for placing your new index, you can look at the
+        new stats under "Server Resources".</p>
+      <p>Max Index RAM Used %: This stat shows the max percentage utilization of the assigned Index
+        RAM Quota across all nodes running the index service. You can view the stat to see if any
+        node is in danger of running out of memory by reaching 100% utilization of the assigned
+        Index RAM Quota.</p>
+      <p>Remaining Index RAM: This stat shows the remaining amount of RAM based on the total Index
+        RAM Quota assigned to the index service nodes in the cluster. You can view this stat per
+        node to look for the node with the largest free RAM for your index placement and use the
+        "nodes" option in the WITH clause with CREATE INDEX to place your index in a specific
+        node.</p>
+    </section>
+    <section><title>Handling Out-of-Memory Conditions</title>
+      <p>Memory-optimized global indexes reside in memory. When a node running the index service
+        runs out of configured Index RAM Quota on the node, indexes on the node can no longer
+        process additional changes to the indexes on the node that has run out of memory. The index
+        service logs an error in the Couchbase Server log indicating the condition. You can also
+        observe how much memory is available on each node running the index service using the index
+        statistic <cmdname>Max Index RAM Used %</cmdname> under "Server Resources" stat section of
+        bucket statistics. </p>
+<p>Memory-optimized indexes on a node that has run out of memory continue to stay in the ONLINE
+        state. However, the round-robin logic routes traffic away from this index node. If an index
+        is in OFFLINE, DEFERRED, or BUILDING state, the index is not transitioned to the ONLINE
+        state.</p>
+      <p>When the node is restarted, indexes stay in the BUILDING state until the last persisted snapshot is read from disk into memory. The additional catchup is done in ONLINE state. Queries with <codeph>stale=false</codeph> or RYOW semantics fail if the timestamp specified exceeds the last timestamp processed by the specific index on the node. However, queries with <codeph>stale=ok</codeph> continue to execute normally. </p>
+<p>To recover from an out of memory situation, use one or more of the following fixes:<ul>
+          <li>Increase the Index RAM Quota sufficiently enough to give indexes the additional memory
+            to process requests.</li>
+          <li>Drop other indexes on the node to free up memory. On nodes with multiple indexes, drop
+            the unimportant indexes to free memory.</li>
+          <li>Drop buckets with indexes. Dropping a bucket automatically drops all the dependent
+            indexes and has the same effect as dropping all indexes on a bucket.</li>
+          <li>Flush buckets with indexes. Flushing a bucket deletes all data in a bucket. Even if
+            there are pending updates that are not processed, flushing a bucket causes all indexes
+            to drop their data. </li>
+        </ul><note type="important">Deleting data selectively from buckets does not help, as
+          mutations are processed in sequence and indexes can not process mutations in an
+          out-of-memory condition.</note></p>
+    </section>
+    <section><title>Limitations</title>
+      <p><ul>
+        <li>Memory-optimized indexes cannot co-exist with normal GSI indexes. This means, for the
+            Developer Preview release, enabling memory-optimized indexes (cluster-wide setting)
+            automatically disables GSI indexes in the cluster. However, you can use MapReduce views
+            to create persisted indexes.</li>
+        <li>Memory-optimized global indexes are supported only for Couchbase buckets.</li>
+        <li>No syntax changes to the N1QL statements, including BUILD INDEX, CREATE INDEX, DROP INDEX.</li>
+      </ul></p>
+    </section>
+    <section><title>Node Failure and Failover</title>
+      <p>Memory-optimized indexes periodically persist their state to disk. When an indexer node with <codeph>Use memory-optimized index=ON</codeph> restarts, it loads the last persisted index snapshot from disk, and applies any further changes necessary prior to going into ONLINE state. Note that nodes with only index service won’t automatically failover, which is the same behavior as in version 4.0/4.1.</p>
+<!--      <p>Nodes with only index service won’t automatically failover, which is the same behavior as in version 4.0/4.1. However, when a node with <codeph>Use memory-optimized index=ON</codeph> restarts, it rebuilds the index starting from the last snapshot. The indexes are marked “ONLINE” while the mutations are processed to catch up.</p>-->
+    </section>
+    
+  </body>
+</topic>
