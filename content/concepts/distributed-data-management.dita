@@ -23,5 +23,131 @@
    node as described in <xref href="multidimensional-scaling.dita#concept_ckt_svy_zs"/> It should be
    noted that configuring those services does negate the behavior described in the previous
    paragraph.</p>
+  
+  <section><title>Architecture of a Single Node</title>
+   <p>A Couchbase Server cluster consists of a group of interchangeable, largely self-sufficient nodes. There is just one Couchbase Server node type; every Couchbase node consists of the same components, services, and interfaces. Having a single node type greatly simplifies the installation, configuration, management and troubleshooting of a Couchbase Server cluster, both in terms of what you, as a human operator, must do and what the automatic management needs to do.</p>
+   <p>The main components of a Couchbase Server node are the cluster manager, the data service, the query service, the index service, and the underlying managed cache and storage components. By dividing up potentially conflicting workloads in this way, a Couchbase Server node can achieve maximum throughput and resource utilization and minimum latency. </p>
+   <p>The <b>Cluster Manager</b> handles the cluster level operations and the coordination between nodes in a Couchbase Server cluster. These management functions include configuring nodes, monitoring nodes, gathering statistics, logging, and controlling data rebalancing among cluster nodes. The cluster manager determines the node’s membership in a cluster, responds to heartbeat requests, monitors its own services and repairs itself if possible. </p>
+   <p>Although each node runs its own local Cluster Manager, there is only one node chosen from among
+    them, called the <i>orchestrator</i>, that supervises the cluster at a given point in time. The
+    orchestrator maintains the authoritative copy of the cluster configuration, and performs the
+    necessary node management functions to avoid any conflicts from multiple nodes interacting. If a
+    node becomes unresponsive for any reason, the orchestrator notifies the other nodes in the
+    cluster and promotes the relevant replicas to active status. This process is called
+    <i>failover</i>, and it can be done automatically or manually. If the orchestrator fails or
+    loses communication with the cluster for any reason, the remaining nodes detect the failure when
+    they stop receiving its heartbeat, so they immediately elect a new orchestrator. This is done
+    immediately and is transparent to the operations of the cluster. </p>
+   <p>The <b>Data Service</b> handles core data management operations, such as Key Value GET/SET. The data service is also responsible for building and maintaining MapReduce views. Note that even though MapReduce views can act as indexes, they are always managed by the data service, not the indexing service.</p>
+   <p>The Data Manager performs data storage and retrieval. It consists of a managed cache (based on memcached), a storage engine, and the view query engine.</p>
+   
+   <p>The <b>Indexing Service</b> efficiently maintains indexes for fast query execution. This involves the creation and deletion of indexes, keeping those indexes up to date based on change notifications from the data service and responding to index-scan requests from the query service.  You can access and manage the indexing service through the query service.
+   </p>
+   <p>The <b>Query Service</b> handles N1QL query parsing, optimization, and execution. This service
+    interacts with both the indexing service and the data service to process and return those queries back to the requesting application. <fig id="fig_zfh_fgz_zs">
+     <title>Couchbase Server cluster showing single node type</title>
+     <image placement="break" href="../architecture/images/server-cluster-single-node-type.png"
+      width="570" id="image_agh_fgz_zs"/>
+    </fig></p>
+   
+   <p>The <b>Storage Layer</b> persists data from RAM to disk and reads data back into memory when needed. Couchbase Server’s storage engines are responsible for persisting data to disk. They write every change operation that a node receives to an append-only file (AOF), meaning that mutations go to the end of the file and in-place updates are forbidden. This file is replayed if necessary at node startup to repopulate the locally managed cache.</p>
+   <p>Couchbase Server periodically compacts its data files and index files to save space (<i>auto-compaction</i>). During compaction, each node remains online and continues to process read and write requests.  Couchbase Server performs compaction in parallel, both across the many nodes of a cluster as well as across the many files in persistent storage. This highly parallel processing allows very large datasets to be compacted incrementally. </p>
+   <p>Each data node relies on a built-in multithreaded <b>Managed Cache</b> that is used both for the data service and separately for the indexing service.  These caches are actively managed as opposed to relying upon the operating system’s file buffer cache and/or memory-mapped files.</p>
+   <p>The data service’s integral managed cache is an object-managed cache based on memcached.  All key-value operations are performed via the cache.  Applications can access Couchbase using memcached compatible APIs such as get, set, delete, append, and prepend. Because this API is complete and transparent to the application, Couchbase Server can be used as a drop in replacement for memcached. </p>
+   <p>Couchbase Server overcomes many challenges that are faced with memcached. Couchbase Server handles clustering, online rebalancing, and auto-sharding of data across nodes, so that memory and other resources can be elastically increased or reduced as needed to support the workload. 
+    Because Couchbase Server automatically replicates data, cache availability is greatly improved and end users rarely hit a cold cache even if system components fail. 
+    Finally, Couchbase Server presents a built-in Couchbase Web Console for monitoring and managing the entire cluster.</p>
+   <p>The managed caching layer within the indexing service is built into the underlying storage engine (ForestDB in 4.0). It manages the caching of individual portions of indexes as RAM is available to speed performance both of inserting or updating information as well as servicing index scans.</p>
+  </section>
+  <section><title>Multidimensional Scaling</title>
+   <p>Couchbase Server 4.0 and greater supports multidimensional scaling (MDS). MDS enables users to turn on or off specific services on each Couchbase Server node so that the node in effect becomes specialized to handle a specific workload: document storage (data service), global indexes (index service) or N1QL query processing (query service).</p>
+    <p>Multidimensional scaling has four main advantages: <ul>
+     <li>Each service can be independently scaled to suit an application’s evolution, whether that
+      entails a growing data set, expanding indexing requirements, or increased query processing
+      needs. </li>
+     <li>The index and query services work most quickly and efficiently when a single or small number
+      of machines contain the entire index. </li>
+     <li>You can choose to customize machines to their workloads. For example, by adding more CPUs to
+      a node running queries.</li>
+     <li>Provides workload isolation so that query workloads do not interfere with indexing or data
+      on the same node. </li>
+    </ul> Multidimensional scaling allows specific services to both scale up and scale out without
+     sacrificing ease of administration because they are all managed from within the same cluster and
+     configured at run time, and the software installed on each machine is identical.<fig
+      id="fig_bnx_5jz_zs">
+      <title>Multidimensional scaling optionally disables services to dedicate nodes to certain
+       workloads</title>
+      <image placement="break" href="images/multidimensional-scaling.png" width="570"
+       id="image_cnx_5jz_zs"/>
+     </fig>  </p>
+  </section>
+  <section><title>Buckets and vBuckets</title>
+   <p>A bucket is a logical collection of related documents in Couchbase, just like a database in RDBMS. It is a unique key space.</p>
+   <p>Couchbase administrators and developers work with buckets when performing tasks such as
+    accessing and managing data, checking statistics, and issuing N1QL queries. Unlike a table in an
+    RDBMS, a bucket can and typically does contain documents of varying schemas. Buckets are used to
+    segregate the configuration and operational handling of data in terms of cache allocation,
+    indexing and replication. While buckets can play a role in the concept of multitenancy, they are
+    not necessarily the only component. For more information on buckets, see the blog <xref
+     href="http://blog.couchbase.com/multi-tenancy-couchbase-server" format="html" scope="external"
+     >Multi-tenancy with Couchbase Server</xref>.</p>
+   <p><image href="images/docs-bucket-vBuckets.png" id="image_pv1_fjw_m5" width="570"/></p>
+   
+   <p>Internally, Couchbase Server uses a mechanism called vBuckets (synonymous to shard or
+    partition) to automatically distribute data across nodes, a process sometimes known as
+    “auto-sharding”. vBuckets help enable data replication, failover, and dynamic cluster
+    reconfiguration. Unlike data buckets, users and applications do not manipulate vBuckets directly.
+    Couchbase Server automatically divides each bucket into a 1024 active vBuckets, 1024 replica
+    vBuckets per replica and then distributes them evenly across the nodes running the Data Service
+    within a cluster. vBuckets do not have a fixed physical location on nodes; therefore there is a
+    mapping of vBuckets to nodes known as the cluster map. Through the <xref
+     href="../sdks/intro.dita">Couchbase client libraries,</xref> the application automatically and
+    transparently distributes the data and workload across these vBuckets.</p>
+   <p>For more information on vBuckets, see the technical white paper available <xref
+    href="http://www.couchbase.com/sites/default/files/uploads/all/whitepapers/Technical-Whitepaper-Couchbase-Server-vBuckets.pdf"
+    format="pdf" scope="external">here</xref>. </p>
+  </section>
+  <section><title>Data Change Protocol</title>
+   <p>Data Change Protocol (DCP) is a high-performance streaming protocol that communicates
+    the state of the data using an ordered change log with sequence numbers. It is a generic
+    protocol designed for keeping a consumer of the Data Service up to date.</p>
+   <p>DCP is robust and resilient in the face of transitory errors. For example, if a stream is interrupted, DCP resumes from exactly the point of its last successful update once connectivity resumes. DCP provides version histories and rollbacks that provide a snapshot of the data. Snapshots can be used to create a brand new replica or catch up an interrupted or partially built node.</p>
+   <p>Couchbase Server leverages DCP internally and externally for several different purposes. Within
+    Couchbase Server, DCP is used to create replicas of data within and between clusters, maintain
+    indexes (both local and global), backups, etc. DCP also feeds most <xref
+     href="../connectors/intro.dita#concept_iy1_2rg_2s"/>, which are integrations with external
+    systems such as Hadoop, Kafka or Elasticsearch. Some of these connectors leverage DCP directly or
+    connect to Couchbase Server’s <xref
+     href="../ha-dr/ha-dr-intro.dita#concept_rwn_1vf_ps/geo-dist-and-xdcr">XDCR</xref> functionality
+    to keep the external systems in sync by acting like Couchbase Server nodes.</p>
+  </section>
+  <section><title>Replication</title>
+   <p>Within a single cluster, Couchbase Server employs peer-to-peer replication. It automatically creates copies of active data, distributes those replicas across the nodes in the cluster, ensuring that every copy is located on a separate node, and then continues to maintain the replicas over time.</p>
+   <p>Couchbase supports up to 3 replicas (which means up to 4 copies of data). Peer-to-peer
+    replication allows for the best performance and resource utilization as well as eliminating
+    possible bottlenecks and single points of failure. Each node replicates separate slices
+    (vBuckets) of its active data to multiple other nodes so that the no one node is a replica for
+    any other one node. <fig id="fig_cwz_qkz_zs">
+     <title>Intra-cluster replication providing data redundancy</title>
+     <image placement="break" href="images/intra-cluster-replication.png" width="250"
+      id="image_dwz_qkz_zs"/>
+    </fig></p>
+   
+   <p>If a node goes down, Couchbase Server recovers that data  by activating the replicas that already exist elsewhere in the cluster. This  process is known as failover. Failover can be automatic or manual, and failover can be scripted to satisfy specialized requirements.</p>
+   
+   <p>The redundancy that replication provides protects against the loss of data on any single node and helps increase data availability by allowing recovery from hardware failures and service interruptions. Replication also further increases read availability by servicing requests in the short time that an active copy is unavailable before failover takes place. </p>
+   
+   <p>As mentioned earlier, by default replicas are only for the purpose of high availability and are not used in the normal serving of data.  This allows Couchbase to be strongly consistent and applications immediately read their own writes by not ever requesting data from a node that it is not active on.  The managed caching layer of the data service allows for extremely high throughput and low latency with mixed workloads to either a small or large number of documents on a given node.  It is not uncommon to measure response times of under 1ms at the 99th percentile of 100’s of thousands of requests per second to a single node.</p>
+   
+   <p>Replicating data to different data centers using <xref href="../ha-dr/ha-dr-intro.dita#concept_rwn_1vf_ps/geo-dist-and-xdcr">XDCR</xref> provides locality
+    and increased availability of data for applications. </p>
+  </section>
+  <section><title>Client Topology Awareness</title>
+   <p>All Couchbase clients are automatically aware of the topology of the Couchbase Server cluster that they are connected to and transparently maintain this awareness for all 3 services (data, index, query) across any topology change or failure.  An application will typically be configured with the IP addresses of more than one Couchbase Server node for high availability when bootstrapping into the cluster.</p>
+   <p>When interacting with the data service, Couchbase clients directly access any document in a Couchbase Server cluster, without consulting a proxy or external routing entity. This works because they store and transparently update a local copy of the complete cluster map based on topology change notifications from the Couchbase Server. In order to locate the active copy of any stored object, a Couchbase client uses a CRC32 hashing algorithm on the key and the list of vBuckets (1024) to identify which vBucket is responsible for that key. The client then consults its internal cluster map to determine which node is currently active for that vBucket. The access request is then sent directly to the node itself, without needing to lookup the location of that item in any external authority.  This is a faster, more efficient, more robust, and more scalable approach than routing through sharding proxies or performing meta-data lookups each operation.</p> 
+   
+   <p>Similar topology awareness is used to maintain a list of nodes running the N1QL query service, and that service in turn uses the same underlying cluster map when servicing  queries. The query service itself is stateless, so any query node can process any N1QL request. 
+   </p>
+  </section>
  </conbody>
 </concept>
