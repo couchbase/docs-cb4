@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_qqr_l1z_5t">
+ <title>Handling retries and failures</title>
+ <shortdesc>When an operation fails with an error or exception, the application must decide whether
+        the operation is to be retried or failed.</shortdesc>
+ <conbody>
+        <p>Whether (and how) the operation is retried or failed typically depends on the business
+            logic behind the application. In some instances the operation is part of a longer
+            processing pipeline where it may be costly to immediately fail the operation (and
+            therefore the pipeline), while in other instances the operation may be a result of a
+            simple UI query in which case immediate failure is the better choice in order to
+            maintain UI responsiveness.</p>
+        <section><title>Retrying</title><p>If an operation should be retried, it is almost always a
+                good idea to add a delay in between retries. If an operation failed because of some
+                temporary condition (such as resource contention or network outage), then an
+                immediate retry will typically not make the operation succeed. In fact, in the case
+                of resource contention it may indeed have the opposite effect: overloading the
+                cluster or network with even more requests that it cannot handle.</p><p>Retries may
+                be performed using a <i>backoff</i> algorithm: waiting at increasing intervals
+                during each retry attempt. In the case of resource contention, a backoff algorithm
+                helps reduce load on the network by decreasing the rate at which the operation is
+                attempted.</p><p>The example below shows a simple backoff algorithm in Python. As
+                the number of retries increases, so does the amount of time in between each retry
+                attempt (250 milliseconds for the first attempt, 500 milliseconds for the second
+                attempt, 750 for the third, and so on). In addition to employing a backoff delay it
+                also caps the number of retries - so that the application does not try
+                infinitely.<codeblock>num_retries = 0
+last_error = None
+
+RETRIES_MAX = 5
+RETRY_BASE = 0.25 # 250 milliseconds
+
+while num_retries &lt; RETRIES_MAX:
+    if num_retries > 0:
+        print "Sleeping for {0} before trying again".format(num_retries * RETRY_BASE)
+        time.sleep(num_retries * RETRY_BASE)
+    num_retries += 1
+    try:
+        cb.upsert(docid, value)
+        last_error = None
+        break # Success!
+    except CouchbaseTransientError as e:
+        last_error = e
+
+if last_error is not None:
+    print "Failed to complete operation!"
+    raise last_error</codeblock></p>Note
+            that a more robust application may also limit the number of retries based on
+            <i>time</i>. That is, in addition to limiting the <i>count</i> of attempts, it may also
+            limit the total time for all the attempts to be made. This may make a significant
+            difference if the failures are a result of a timeout or slow cluster processing. The
+            snippet below shows the same loop, but also with a time
+            constraint:<codeblock>num_retries = 0
+last_error = None
+
+RETRIES_MAX = 5
+TIME_MAX = 30
+
+time_limit = time.time() + TIME_MAX
+while num_retries &lt; RETRIES_MAX and time.time() &lt; time_limit:
+    if num_retries > 0:
+        # ...</codeblock></section>
+        <section><title>Fast Fail</title>Some SDKs offer the option to <i>fast-fail</i> an
+            operation: Fast-fail is a mechanism by which a given cluster node is heuristically
+            determined as being unavailable (based on prior failure metrics within the SDK for the
+            given node). When an operation is targetted at a node which has been deemed as being
+            failed, the SDK will immediately fail the operation rather than submitting the operation
+            to the network. The SDK will periodically send operations to the node (to determine if
+            it is back up).<p>Fast-failure is available in the Java SDK as an option. It may also be
+                implemented in the C SDK at the application level.</p></section>
+        <section><title>Requeing operations</title>In some applications, the ordering of operations
+            is not important and it is possible to <i>requeue</i> operations to be performed at a
+            later time. Queues may be implemented at the application level and may either be local
+            (a local datastructure containing operations to be sent to Couchbase) or distributed
+            (such as a job server).</section>
+    </conbody>
+</concept>

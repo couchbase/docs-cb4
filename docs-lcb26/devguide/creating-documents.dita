@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_ygh_llm_zs">
+ <title>Updating and creating documents</title>
+ <shortdesc>This section shows how to update documents in Couchbase: using a Couchbase SDK, or through the cbc command line utility.</shortdesc>
+ <conbody>
+        <p>
+            <codeblock>upsert(docid, document)
+insert(docid, document)
+replace(docid, document)</codeblock>
+        </p>
+        <section><p>The first step in using a database involves storing data into it.</p><p>In
+                Couchbase, documents are typically updated using one of the <i>upsert</i>,
+                    <i>insert</i>, and <i>replace</i> methods. These methods will all write a JSON
+                document with a given document ID (key) to the database. The update methods differ
+                in behavior in respect to the existing state of the document:</p>
+            <ul id="ul_wjj_zlm_zs">
+                <li><i>insert</i> will only create the document if the given ID is not found within
+                    the database.</li>
+                <li><i>replace</i> will only replace the document if the given ID already exists
+                    within the database.</li>
+                <li><i>upsert</i> will always replace the document, ignoring whether the ID has
+                    already existed or not.</li>
+            </ul> Since Couchbase’s KV store may be thought of as a distributed hashmap or
+            dictionary, the following code samples are explanatory of Couchbase’ update operations
+            <codeblock outputclass="language-python">KV_STORE = {}
+
+def insert(doc_id, value):
+    if doc_id not in KV_STORE:
+        KV_STORE[doc_id] = value
+    else:
+        raise KeyAlreadyExists()
+
+def replace(doc_id, value):
+    if doc_id in KV_STORE:
+        KV_STORE[doc_id] = value
+    else:
+        raise KeyNotFound()
+
+def upsert(doc_id, value):
+    KV_STORE[doc_id] = value</codeblock></section>
+        <section>
+            <title>Document IDs </title><p>Document IDs are assigned by application. A valid
+                document ID must:</p><p>
+                <ul id="ul_rht_rnm_zs">
+                    <li>Conform to UTF-8 encoding</li>
+                    <li>Be no longer than 250 bytes<note>Note the difference between bytes and
+                            characters. Most non-Latin characters occupy more than a single
+                            byte</note></li>
+                </ul>
+            </p>You are free to choose any ID for your document, so long as they conform to the
+            above restrictions. Unlike some other database, Couchbase does not automatically
+            generate IDs for you (but see [counter pattern]).</section>
+        <section><title>Updating documents via an SDK</title><p>Couchbase SDKs feature APIs
+                reflecting the different ways to update documents.</p><p>Any update operation
+                requires the document itself and document’s ID as
+                input.<codeblock>cb.upsert('docid', {'property': 'value'})
+cb.insert('docid', {'property': 'value'})
+cb.replace('docid', {'property': 'value'})</codeblock></p>Examples
+            of these operations in other SDKs:<p><xref
+                    href="https://github.com/couchbaselabs/devguide-examples/blob/master/nodejs/updating.js"
+                    format="html" scope="external">node.js</xref> | <xref
+                    href="https://github.com/couchbaselabs/devguide-examples/blob/master/java/src/main/java/com/couchbase/devguide/Updating.java"
+                    format="html" scope="external">Java</xref> | <xref
+                    href="https://github.com/couchbaselabs/devguide-examples/blob/master/go/updating.go"
+                    format="html" scope="external">Go</xref> | .NET | <xref
+                    href="https://github.com/couchbaselabs/devguide-examples/blob/master/c/updating.c"
+                    format="html" scope="external">C</xref> | <xref
+                    href="https://github.com/couchbaselabs/devguide-examples/blob/master/python/updating.py"
+                    format="html" scope="external">Python</xref></p></section>
+        <section><title>Document format</title>Most SDKs will automatically convert the document to
+            JSON before storing it on the server (and will return an error if the document cannot be
+            converted to JSON). Additional options are available if you wish to store non-JSON data.
+            Refer to the documentation of the SDK you are using for more details on how to store
+            JSON and non-JSON values. </section>
+        <section>
+            <title>Additional options</title>
+            <p>
+                <ul id="ul_gfq_mhg_45">
+                    <li><xref href="expiry.dita#concept_o53_kps_zs">TTL</xref> or Expiry value which
+                        will instruct the server to delete the document after a given amount of
+                        time. This option is useful for transient data (such as sessions). By
+                        default documents do not expire. See <xref
+                            href="expiry.dita#concept_o53_kps_zs">TTL</xref> for more information on
+                        expiration.</li>
+                    <li><xref href="cas-concurrency.dita#concept_iq4_bts_zs">CAS</xref> value to
+                        protect against concurrent updates to the same document. See <xref
+                            href="cas-concurrency.dita#concept_iq4_bts_zs">CAS</xref> for a
+                        description on how to use CAS values in your application.</li>
+                    <li><xref href="durability.dita#concept_gyg_14s_zs">Persistence and replication
+                            requirements</xref>.</li>
+                </ul>
+            </p>
+        </section>
+        <section><title>Return values</title>If an update completed successfully, a success
+            indicator along with the document’s current <xref
+                href="cas-concurrency.dita#concept_iq4_bts_zs">CAS</xref> value is
+            returned.</section>
+        <section><title>SDK-specific documentation</title>SDK-Specific documentation about creating
+            documents may be found below: Python, Ruby, C, node.js, .NET, Java, Go</section>
+        <section>
+            <title>Updating documents via the command line</title> Documents may be updated using
+            the <xref href="cli-overview.dita#concept_lg3_dhm_zs">cbc</xref> utility.<note>The
+                following examples assume the cbc command is being executed on one of the cluster
+                nodes. If run on another machine, refer to the <xref
+                    href="connecting.dita#concept_fbg_xjm_zs">documentation</xref> to see how to
+                specify the cluster
+            address.</note><screen># When storing JSON data using cbc, ensure it is properly quoted for your shell:
+$ cbc create docid -V '{"json":"value"}' -M upsert
+docid               Stored. CAS=0x8234c3c0f213</screen></section>
+    </conbody>
+    </concept>

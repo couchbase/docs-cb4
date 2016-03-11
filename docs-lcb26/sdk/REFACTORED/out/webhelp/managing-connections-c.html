@@ -1,0 +1,143 @@
+
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html xml:lang="en-us" lang="en-us">
+<head><meta name="description" content="Creating a handle A library handle is created using the lcb_create() function which accepts an out-pointer to a handle and a parameters structure specifying some core options. lcb_t instance = NULL; ..."></meta><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></meta><meta name="copyright" content="(C) Copyright 2005"></meta><meta name="DC.rights.owner" content="(C) Copyright 2005"></meta><meta name="DC.Type" content="concept"></meta><meta name="DC.Title" content="Managing connections"></meta><meta name="DC.Format" content="XHTML"></meta><meta name="DC.Identifier" content="concept_ppz_lhq_44"></meta><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/css/commonltr.css"><!----></link><title>Managing connections</title><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></meta><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/css/webhelp_topic.css"><!----></link><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/skins/skin.css"><!----></link><script type="text/javascript"><!--
+          
+          var prefix = "index.html";
+          
+          --></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery-1.8.2.min.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery.cookie.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery-ui.custom.min.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery.highlight-3.js"><!----></script><script type="text/javascript" charset="utf-8" src="oxygen-webhelp/resources/js/webhelp_topic.js"><!----></script></head>
+<body onload="highlightSearchTerm()" class="frmBody" id="concept_ppz_lhq_44">
+<table class="nav"><tbody><tr><td colspan="2"><div id="printlink"><a href="javascript:window.print();" title="Print this page"></a></div><div id="permalink"><a href="#" title="Link to this page"></a></div></td></tr><tr><td width="75%"></td><td><div class="navheader"></div></td></tr></tbody></table>
+
+ <h1 class="title topictitle1">Managing connections</h1>
+
+ <div class="body conbody">
+        <div class="section"><h2 class="title sectiontitle">Creating a handle</h2>
+            
+            <p class="p">A library handle is created using the <span class="keyword apiname">lcb_create()</span> function which
+                accepts an out-pointer to a handle and a parameters structure specifying some core
+                options.</p>
+
+            <pre class="pre codeblock">lcb_t instance = NULL;
+lcb_create_st options;
+memset(&amp;options, 0, sizeof options);
+options.version = 3;
+options.v.v3.connstr = "couchbase://10.3.53.2/my-bucket";
+options.v.v3.passwd = "s3cr3t";
+lcb_error_t rc = lcb_create(&amp;instance, &amp;options);
+if (rc != LCB_SUCCESS) {
+    printf("Couldn't create handle: %s\n", lcb_strerror(NULL, rc));
+}</pre>
+
+            <p class="p">The <span class="keyword parmname">connstr</span> contains a <em class="ph i">connection string</em> (this is similar
+                to the concept of a <em class="ph i">DSN</em> in other database systems). The connection string
+                allows you to specify the host(s) of the cluster nodes, the name of the bucket and
+                additional library settings. The connection string also allows you to specify SSL
+                connections (if applicable).</p>
+
+            <div class="p">Because the C SDK is used as a foundation for other SDKs, it allows for a common
+                connection specification over all those other SDKs.<div class="note note"><span class="notetitle">Note:</span> See: Connection String
+                    reference</div>
+</div>
+
+            <p class="p">If the bucket is password protected, the <span class="keyword parmname">passwd</span> field may be
+                set. Note that the bucket password (set when creating a bucket) is not the same as
+                the administrative password for Couchbase.</p>
+
+            <p class="p">When creating a new handle, you can also specify an alternate event loop plugin to
+                use. This is required if you want to use your library in non-blocking mode with your
+                existing non-blocking application.</p>
+
+            <p class="p">Once your handle has been instantiated you may configure it additionally using the
+                    <span class="keyword apiname">lcb_cntl()</span> family of functions.</p>
+
+            <p class="p">Note that a successful <span class="keyword apiname">lcb_create</span> invocation does not mean the
+                handle has been connected to the bucket, but rather that memory has been allocated
+                for the handle so that it may be connected in subsequent calls.</p>
+
+        </div>
+
+        <div class="section"><h2 class="title sectiontitle">Connecting a handle</h2><div class="p">Once a handle has been instantiated it should
+                be connected. Connecting a handle involves performing the following steps:<ol class="ol" id="concept_ppz_lhq_44__ol_tyf_gnl_gv">
+                    <li class="li">Calling <span class="keyword apiname">lcb_connect</span> to schedule the connection.</li>
+
+                    <li class="li">Yielding to network I/O, either explicitly via <span class="keyword apiname">lcb_wait</span>
+                        or implicitly by returning control to the event loop</li>
+
+                    <li class="li">Retrieving the connection status via
+                            <span class="keyword apiname">lcb_get_bootstrap_status</span>. If running in non-blocking
+                        mode, installing the bootstrap callback
+                            (<span class="keyword apiname">lcb_get_bootstrap_callback</span>) should have a similar
+                        effect<pre class="pre codeblock">lcb_error_t rc;
+rc = lcb_connect(instance);
+if (rc != LCB_SUCCESS) {
+    /* Couldn't schedule connection. Internal issue or problem with the socket */
+    printf("Couldn't schedule bootstrap!: %s\n", lcb_strerror(NULL, rc));
+    lcb_destroy(instance);
+}
+lcb_wait(instance);
+rc = lcb_get_bootstrap_status(instance);
+if (rc != LCB_SUCCESS) {
+    printf("Bootstrapping failed: %s\n", lcb_strerror(NULL, rc));
+    lcb_destroy(instance);
+}</pre>
+</li>
+
+                </ol>
+</div>
+Always check the return value of
+                <span class="keyword apiname">lcb_get_bootstrap_status</span> to ensure the handle is properly
+            connected. Performing operations on a non-bootstrapped handle will fail with
+                <span class="keyword apiname">LCB_CLIENT_ETMPFAIL</span>.</div>
+
+        <div class="section"><h2 class="title sectiontitle">Handle lifetime</h2><p class="p">The <span class="keyword apiname">lcb_t</span> object (commonly
+                referred to as <em class="ph i">instance</em>) represents a connection between your application and
+                a Couchbase bucket. Because the bucket itself may consist of several TCP
+                connections, and because there is a substantial amount of CPU and kernel overhead in
+                creating and destroying these connections, it is recommended that
+                    <span class="keyword apiname">lcb_t</span> objects be kept alive for the lifetime of the
+                application rather than creating and destroying them frequently.</p>
+Once the
+                <span class="keyword apiname">lcb_t</span> is no longer required, you can call
+                <span class="keyword apiname">lcb_destroy()</span> on it. The handle should not be destroyed within a
+            callback as it will likely cause it to crash. Additionally, memory leaks may occur if
+            there are pending uncompleted operations (e.g. <span class="keyword apiname">lcb_get3</span>,
+                <span class="keyword apiname">lcb_store3</span>).</div>
+
+        <div class="section"><h2 class="title sectiontitle">Configuring the handle</h2>
+            
+        </div>
+
+        <div class="section"><h2 class="title sectiontitle">Connecting with SSL</h2>
+            
+            <p class="p">Couchbase Sever features the ability to have clients communicate securely via
+                SSL.</p>
+
+            <p class="p">To use SSL, you need Couchbase Server Enterprise 3.0 or later</p>
+
+            <ol class="ol">
+                <li class="li">Obtain the SSL certificate used by the Cluster (...). </li>
+
+                <li class="li">Make the certificate available to the file system of the client host.</li>
+
+                <li class="li">Employ the <samp class="ph codeph">couchbases://</samp> scheme for the
+                        <samp class="ph codeph">connstr</samp> field.</li>
+
+                <li class="li">Specify the local path to the certificate as the value for the
+                        <samp class="ph codeph">certpath</samp> field.</li>
+
+            </ol>
+
+            <div class="p">To connect to the <samp class="ph codeph">mybucket</samp> bucket on SSL-enabled Cluster at the node
+                10.3.4.33, with the certificate saved as <samp class="ph codeph">/var/cbcert.pem</samp>:
+                <pre class="pre codeblock language-c">cropts.v.v3.connstr = <span class="hl-string" style="color:#2a00ff">"couchbases://10.3.4.33/mybucket?certpath=/var/cbcert.pem"</span>;</pre>
+</div>
+
+        </div>
+
+    </div>
+
+  <div class="navfooter"><!----></div><div class="footer">WebHelp output generated by<a href="http://www.oxygenxml.com" target="_blank"><span class="oXygenLogo"><img src="oxygen-webhelp/resources/img/LogoOxygen100x22.png" alt="Oxygen"></img></span><span class="xmlauthor">XML Author</span></a> - Trial Edition</div>
+</body>
+</html>

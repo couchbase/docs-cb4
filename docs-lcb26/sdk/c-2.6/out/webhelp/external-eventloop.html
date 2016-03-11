@@ -1,0 +1,237 @@
+
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html xml:lang="en-us" lang="en-us">
+<head><meta name="description" content="You can use the library in a non-blocking fashion through integrating with an existing event loop created by your application. The C SDK makes use of its own I/O abstraction layer known as IOPS (I/O ..."></meta><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></meta><meta name="copyright" content="(C) Copyright 2005"></meta><meta name="DC.rights.owner" content="(C) Copyright 2005"></meta><meta name="DC.Type" content="concept"></meta><meta name="DC.Title" content="Using external event loops"></meta><meta name="abstract" content="You can use the library in a non-blocking fashion through integrating with an existing event loop created by your application."></meta><meta name="description" content="You can use the library in a non-blocking fashion through integrating with an existing event loop created by your application."></meta><meta name="DC.Relation" scheme="URI" content="blocking-and-nonblocking.html"></meta><meta name="DC.Relation" scheme="URI" content="blocking-and-nonblocking.html"></meta><meta name="DC.Relation" scheme="URI" content="resources.html"></meta><meta name="DC.Format" content="XHTML"></meta><meta name="DC.Identifier" content="concept_nf3_kz4_p4"></meta><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/css/commonltr.css"><!----></link><title>Using external event loops</title><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></meta><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/css/webhelp_topic.css"><!----></link><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/skins/skin.css"><!----></link><script type="text/javascript"><!--
+          
+          var prefix = "index.html";
+          
+          --></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery-1.8.2.min.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery.cookie.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery-ui.custom.min.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery.highlight-3.js"><!----></script><script type="text/javascript" charset="utf-8" src="oxygen-webhelp/resources/js/webhelp_topic.js"><!----></script></head>
+<body onload="highlightSearchTerm()" class="frmBody">
+<table class="nav"><tbody><tr><td colspan="2"><div id="printlink"><a href="javascript:window.print();" title="Print this page"></a></div><div id="permalink"><a href="#" title="Link to this page"></a></div></td></tr><tr><td width="75%"><a class="navheader_parent_path" href="c-intro.html" title="C SDK 2.6">C SDK 2.6</a> / <a class="navheader_parent_path" href="blocking-and-nonblocking.html" title="You can use libraries in various ways with respect to I/O and application models.">Blocking and non-blocking I/O</a></td><td><div class="navheader">
+<span class="navparent"><a class="link" href="blocking-and-nonblocking.html" title="You can use libraries in various ways with respect to I/O and application models."><span class="navheader_label">Parent topic</span><span class="navheader_separator">: </span><span class="navheader_linktext">Blocking and non-blocking I/O</span></a></span>  
+<span class="navprev"><a class="link" href="blocking-and-nonblocking.html" title="You can use libraries in various ways with respect to I/O and application models."><span class="navheader_label">Previous topic</span><span class="navheader_separator">: </span><span class="navheader_linktext">Blocking and non-blocking I/O</span></a></span>  
+<span class="navnext"><a class="link" href="resources.html" title="Additional resources include Release Notes and Issue Tracker."><span class="navheader_label">Next topic</span><span class="navheader_separator">: </span><span class="navheader_linktext">Resources</span></a></span>  </div></td></tr></tbody></table>
+
+  <div class="nested0" id="concept_nf3_kz4_p4">
+    <h1 class="title topictitle1">Using external event loops</h1>
+
+    
+    <div class="body conbody"><p class="shortdesc">You can use the library in a non-blocking fashion through
+			integrating with an existing event loop created by your application.</p>
+
+      <div class="p">The C SDK makes use of its own I/O abstraction layer known as <span class="ph">IOPS</span> (I/O
+        OperationS) to communicate with the underlying platform and I/O frameworks. This abstraction
+        layer provides an API which is used to perform common event loop operations, such as:<ul class="ul" id="concept_nf3_kz4_p4__ul_qcl_yz4_p4">
+          <li class="li">Creating a new socket</li>
+
+          <li class="li">Performing reads and writes from and to the socket</li>
+
+          <li class="li">Scheduling a callback to be invoked when a socket is available for writing or
+            reading</li>
+
+          <li class="li">Scheduling a callback to be invoked after a certain period has elapsed</li>
+
+        </ul>
+</div>
+
+      <div class="section"><h2 class="title sectiontitle">Using a Built-In I/O implementation</h2>
+        
+      <div class="p">The library contains predefined implementations of this API for common event libraries,
+          such as <em class="ph i">libevent</em>, <em class="ph i">libev</em>, and <em class="ph i">libuv</em>. If your application makes use of
+          any of these libraries for its purposes, integrating with the library is as simple as
+          providing an instance of such an implementation to the <samp class="ph codeph">lcb_create_st</samp>
+          structure. Here is an example using
+          <span class="keyword apiname">libevent</span>:<pre class="pre codeblock language-c">#include &lt;stdio.h&gt;
+<span class="hl-directive" style="color:#8b26c9">#include &lt;stdlib.h&gt;</span>
+<span class="hl-directive" style="color:#8b26c9">#include &lt;string.h&gt;</span>
+<span class="hl-directive" style="color:#8b26c9">#include &lt;event2/event.h&gt;</span>
+<span class="hl-directive" style="color:#8b26c9">#include &lt;libcouchbase/couchbase.h&gt;</span>
+
+<strong class="hl-keyword" style="color:#7f0055">static</strong> <strong class="hl-keyword" style="color:#7f0055">void</strong> bootstrap_callback(lcb_t instance, lcb_error_t err)
+{
+    lcb_store_cmd_t cmd = { <span class="hl-number">0</span> };
+    <strong class="hl-keyword" style="color:#7f0055">const</strong> lcb_store_cmd_t *cmdlist = &amp;cmd;
+
+    <strong class="hl-keyword" style="color:#7f0055">if</strong> (err != LCB_SUCCESS) {
+        fprintf(stderr, <span class="hl-string" style="color:#2a00ff">"ERROR: %s\n"</span>, lcb_strerror(instance, err));
+        exit(EXIT_FAILURE);
+    }
+
+    <em class="hl-comment" style="color:#006400">// The client is now connected. We may start performing operations</em>
+    cmd.v.v0.key = <span class="hl-string" style="color:#2a00ff">"foo"</span>;
+    cmd.v.v0.nkey = <span class="hl-number">3</span>;
+    cmd.v.v0.bytes = <span class="hl-string" style="color:#2a00ff">"bar"</span>;
+    cmd.v.v0.nbytes = <span class="hl-number">3</span>;
+    cmd.v.v0.operation = LCB_SET;
+    lcb_store(instance, NULL, <span class="hl-number">1</span>, &amp;cmdlist);
+}
+
+<strong class="hl-keyword" style="color:#7f0055">static</strong> <strong class="hl-keyword" style="color:#7f0055">void</strong> get_callback(lcb_t instance, <strong class="hl-keyword" style="color:#7f0055">const</strong> <strong class="hl-keyword" style="color:#7f0055">void</strong> *cookie, lcb_error_t error,
+                         <strong class="hl-keyword" style="color:#7f0055">const</strong> lcb_get_resp_t *resp)
+{
+    <strong class="hl-keyword" style="color:#7f0055">if</strong> (error != LCB_SUCCESS) {
+        fprintf(stderr, <span class="hl-string" style="color:#2a00ff">"Failed to get key: %s\n"</span>, lcb_strerror(instance, error));
+        exit(EXIT_FAILURE);
+    }
+
+    fprintf(stdout, <span class="hl-string" style="color:#2a00ff">"I stored and retrieved the key 'foo'. Terminate program\n"</span>);
+    event_base_loopbreak((<strong class="hl-keyword" style="color:#7f0055">void</strong> *)lcb_get_cookie(instance));
+}
+
+<strong class="hl-keyword" style="color:#7f0055">static</strong> <strong class="hl-keyword" style="color:#7f0055">void</strong> store_callback(lcb_t instance, <strong class="hl-keyword" style="color:#7f0055">const</strong> <strong class="hl-keyword" style="color:#7f0055">void</strong> *cookie, lcb_storage_t operation,
+                           lcb_error_t error, <strong class="hl-keyword" style="color:#7f0055">const</strong> lcb_store_resp_t *resp)
+{
+    lcb_get_cmd_t cmd = { <span class="hl-number">0</span> };
+    <strong class="hl-keyword" style="color:#7f0055">const</strong> lcb_get_cmd_t *cmdlist = &amp;cmd;
+
+    <strong class="hl-keyword" style="color:#7f0055">if</strong> (error != LCB_SUCCESS) {
+        fprintf(stderr, <span class="hl-string" style="color:#2a00ff">"Failed to store key: %s\n"</span>, lcb_strerror(instance, error));
+        exit(EXIT_FAILURE);
+    }
+
+    cmd.v.v0.key = <span class="hl-string" style="color:#2a00ff">"foo"</span>;
+    cmd.v.v0.nkey = <span class="hl-number">3</span>;
+    lcb_get(instance, NULL, <span class="hl-number">1</span>, cmds);
+}
+
+<strong class="hl-keyword" style="color:#7f0055">static</strong> lcb_io_opt_t create_libevent_io_ops(<strong class="hl-keyword" style="color:#7f0055">struct</strong> event_base *evbase)
+{
+    <strong class="hl-keyword" style="color:#7f0055">struct</strong> lcb_create_io_ops_st ciops;
+    lcb_io_opt_t ioops;
+    lcb_error_t error;
+
+    memset(&amp;ciops, <span class="hl-number">0</span>, <strong class="hl-keyword" style="color:#7f0055">sizeof</strong>(ciops));
+    ciops.v.v0.type = LCB_IO_OPS_LIBEVENT;
+    ciops.v.v0.cookie = evbase;
+
+    error = lcb_create_io_ops(&amp;ioops, &amp;ciops);
+    <strong class="hl-keyword" style="color:#7f0055">if</strong> (error != LCB_SUCCESS) {
+        fprintf(stderr, <span class="hl-string" style="color:#2a00ff">"Failed to create IOPS: %s\n"</span>, lcb_strerror(NULL, error));
+        exit(EXIT_FAILURE);
+    }
+
+    <strong class="hl-keyword" style="color:#7f0055">return</strong> ioops;
+}
+
+<strong class="hl-keyword" style="color:#7f0055">static</strong> lcb_t create_libcouchbase_handle(lcb_io_opt_t ioops)
+{
+    lcb_t instance;
+    lcb_error_t error;
+    <strong class="hl-keyword" style="color:#7f0055">struct</strong> lcb_create_st copts = { <span class="hl-number">0</span> };
+
+    copts.version = <span class="hl-number">3</span>;
+    copts.v.v3.connstr ;
+    copts.v.v3.io = ioops;
+    lcb_create(&amp;instance, &amp;copts);
+    lcb_connect(instance);
+    lcb_set_bootstrap_callback(instance, bootstrap_callback);
+    lcb_set_get_callback(instance, get_callback);
+    lcb_set_store_callback(instance, store_callback);
+    <strong class="hl-keyword" style="color:#7f0055">return</strong> instance;
+}
+
+<strong class="hl-keyword" style="color:#7f0055">int</strong> main(<strong class="hl-keyword" style="color:#7f0055">void</strong>)
+{
+    <strong class="hl-keyword" style="color:#7f0055">struct</strong> event_base *evbase = event_base_new();
+    lcb_io_opt_t ioops = create_libevent_io_ops(evbase);
+    lcb_t instance = create_libcouchbase_handle(ioops);
+
+    <em class="hl-comment" style="color:#006400">// Store the evbase structure as the 'cookie' for this instance</em>
+    lcb_set_cookie(instance, evbase);
+
+    <em class="hl-comment" style="color:#006400">// Run the event loop. The rest of the program will be executed from this</em>
+    <em class="hl-comment" style="color:#006400">// function.</em>
+    event_base_loop(evbase, <span class="hl-number">0</span>);
+
+    <em class="hl-comment" style="color:#006400">// Cleanup</em>
+    event_base_free(evbase);
+    lcb_destroy(instance);
+    exit(EXIT_SUCCESS);
+}
+</pre>
+</div>
+
+      <div class="p"><div class="note note"><span class="notetitle">Note:</span> The previous example has some error checking left out for brevity. A fuller example
+						can be found inside the <span class="ph filepath">example/ibeventdirect</span> directory
+						within the source tree.</div>
+In the above example, the
+						<span class="keyword apiname">lcb_create_io_opts()</span> function is used to instantiate the
+					built-in <em class="ph i">libevent</em> implementation of the <span class="ph">IOPS</span> API. Note that the
+						<samp class="ph codeph">lcb_create_io_ops_st</samp> structure contains a <samp class="ph codeph">cookie</samp>
+					field which should contain a pointer to an implementation-defined object; in the case
+					of the <em class="ph i">libevent</em> implmentation this should be a pointer to an existing
+						<samp class="ph codeph">struct event_base</samp> (which is an instance of the libevent loop
+					itself). Each of the built-in implementations contains its own header file that
+					provides more detail about what the cookie field is supposed to contain. The header
+					files are named in the form of <samp class="ph codeph">${TYPE}_io_opts.h</samp>, where
+						<samp class="ph codeph">${TYPE}</samp> is the name of the implementation. They are located
+					inside the <span class="ph filepath">libcouchbase</span> include directory upon installation, and
+					are located in the <span class="ph filepath">plugins</span> directory within the source tree.</div>
+
+      <p class="p">After the IOPS instance has been created, it is set in the <samp class="ph codeph">io</samp> field of the
+						<samp class="ph codeph">lcb_create_st</samp> structure and the <samp class="ph codeph">lcb_t</samp> object is
+					created.</p>
+</div>
+
+      <div class="section"><h2 class="title sectiontitle">Creating a custom I/O implementation</h2>
+				
+				<div class="note note"><span class="notetitle">Note:</span> The I/O interface is a work in progress and subject to change</div>
+ A custom I/O
+				implementation can be created by implementing the interface, featured in
+					<span class="ph filepath">&lt;libcouchbase/iops.h&gt;</span>. The interface is a work in progress
+				and is considered to be volatile.</div>
+
+      <div class="section"><h2 class="title sectiontitle">Usage Differences in Non-Blocking mode</h2>
+        
+        <div class="p">For the most part, programming with libcouchbase is the same regardless of whether you're
+          using it in a blocking or non-blocking application. There are some key differences to
+          note, however:<ul class="ul" id="concept_nf3_kz4_p4__ul_t5m_vdp_p4">
+            <li class="li">l<span class="keyword apiname">cb_wait()</span> should not be called in non-blocking mode. By
+							definition, the <span class="keyword apiname">lcb_wait()</span> routine will block the
+							application until all pending I/O completes. In non-blocking mode the pending
+							I/O is completed when control is returned back to the event loop.</li>
+
+            <li class="li">You must not schedule operations until the bootstrap callback,
+								<span class="keyword apiname">lcb_set_bootstrap_callback()</span>, has been invoked. This is
+							because operations must be forwarded to a destination node in the cluster
+							depending on the key specified within the operation. Until the client has been
+							bootstrapped it does not know how to forward keys to any nodes.<div class="p">Unlike
+								blocking mode where you may simply
+								do:<pre class="pre codeblock language-c">lcb_connect(instance);
+lcb_wait(instance);
+<strong class="hl-keyword" style="color:#7f0055">if</strong> (lcb_get_bootstrap_status(instance) == LCB_SUCCESS)) {
+  <em class="hl-comment" style="color:#006400">// Start operations</em>
+}</pre>
+You
+								need to use the callback variant that notifies your application when the
+								library is ready.</div>
+</li>
+
+            <li class="li">You are responsible for ensuring that the <samp class="ph codeph">iops</samp> structure passed to
+							the library remains valid until <span class="keyword apiname">lcb_destroy</span> is invoked.
+							Likewise, you are responsible for freeing the <samp class="ph codeph">iops</samp> structure
+							via <span class="keyword apiname">lcb_destroy_io_opts()</span> when it is no longer
+							required.</li>
+
+            <li class="li">Currently the library does blocking DNS lookups via the standard
+								<span class="keyword apiname">getaddrinfo()</span> call. Typically this should not take a long
+							time but may potentially block your application if an invalid host name is
+							detected or the DNS server in use is slow to respond.</li>
+
+          </ul>
+</div>
+
+      </div>
+
+    </div>
+
+  <div class="related-links"></div>
+</div>
+
+<div class="navfooter"><!---->
+<span class="navparent"><a class="link" href="blocking-and-nonblocking.html" title="You can use libraries in various ways with respect to I/O and application models."><span class="navheader_label">Parent topic</span><span class="navheader_separator">: </span><span class="navheader_linktext">Blocking and non-blocking I/O</span></a></span>  
+<span class="navprev"><a class="link" href="blocking-and-nonblocking.html" title="You can use libraries in various ways with respect to I/O and application models."><span class="navheader_label">Previous topic</span><span class="navheader_separator">: </span><span class="navheader_linktext">Blocking and non-blocking I/O</span></a></span>  
+<span class="navnext"><a class="link" href="resources.html" title="Additional resources include Release Notes and Issue Tracker."><span class="navheader_label">Next topic</span><span class="navheader_separator">: </span><span class="navheader_linktext">Resources</span></a></span>  </div><div class="footer">WebHelp output generated by<a href="http://www.oxygenxml.com" target="_blank"><span class="oXygenLogo"><img src="oxygen-webhelp/resources/img/LogoOxygen100x22.png" alt="Oxygen"></img></span><span class="xmlauthor">XML Author</span></a> - Trial Edition</div>
+</body>
+</html>

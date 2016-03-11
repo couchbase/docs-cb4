@@ -1,0 +1,367 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_ltm_4n5_2v">
+    <title>SDK Operations</title>
+    <body>
+        <section><title>Command Structure</title>Operations in the C SDK are scheduled using command
+            structures, all following a similar structure to <apiname>lcb_CMDBASE</apiname>.<p>The
+                command structure contains the <i>document ID</i> for the specific item and
+                additional per-command data, as required. The document ID indicates which document
+                should be accessed and is necessary for any data access operation.</p><note>
+                <p>Command structures only serve as a way to pass parameters to scheduling
+                    operations and are therefore able to live on the stack, and do not need to be
+                    allocated using dynamic memory allocation functions such as
+                        <codeph>malloc</codeph> and <codeph>free</codeph>.</p>
+            </note>All fields in <apiname>lcb_CMDBASE</apiname> are <i>overlayed</i> in other
+            command structure types, so that any command type (e.g. <apiname>lcb_CMDSTORE</apiname>)
+            can be seen as a <i>subclass</i>). This is done by specifying the fields of
+                <apiname>lcb_CMDBASE</apiname> as a macro (<codeph>LCB_CMD_BASE</codeph>) and
+            expanding the macro at the beginning of each command.<p>The contents of
+                    <apiname>lcb_CMDBASE</apiname> include:<ul id="ul_ixv_w2d_gv">
+                    <li><option>key</option>: Complex structure containing the ID of the document
+                        being accessed. Should be set using <apiname>LCB_CMD_SET_KEY</apiname></li>
+                    <li><option>exptime</option>: The <xref href="google.com" format="com"
+                            scope="external">new expiration time</xref> for the document to be set
+                        with this operation</li>
+                    <li><option>cas</option>: Check-and-set value used with <xref href="google.com"
+                            format="com" scope="external">optimistic locking</xref></li>
+                </ul></p><p>Document IDs may be set on command structures using the
+                    <apiname>LCB_CMD_SET_KEY()</apiname>
+            macro:</p><codeblock>lcb_CMDGET gcmd = { 0 }
+LCB_CMD_SET_KEY(&amp;gcmd, "hello", 5);
+// ...</codeblock>The
+            macro receives the buffer and length of the document ID and sets the appropriate field
+            in the command structure.<note>The contents of the buffer for the document ID are copied
+                into the library when the operation is scheduled.</note>The contents of documents in
+            Couchbase are typically JSON, as this format allows other SDKs as well as the query
+            service to interact with the documents. The C SDK does not come with a JSON encoder;
+            though many exist and vary in their features and performance.</section>
+        <section>
+            <title>Operation requests</title>
+            <p>All Key-Value operations follow a common pattern in the C SDK. Because the first step
+                in using a database is actually populating it with data, performing operations will
+                be demonstrated first through storing a document.</p>
+            <p>A document can be created using the <apiname>lcb_store3()</apiname> function. This
+                function accepts an <apiname>lcb_CMDSTORE</apiname> structure that contains the
+                document ID and the value that should serve as the document itself, and the
+                    <codeph>operation</codeph> which places various preconditions storing the
+                document:<codeblock>lcb_CMDSTORE scmd = { 0 };
+LCB_CMD_SET_KEY(&amp;scmd, "some_key", strlen("some_key"));
+LCB_CMD_SET_VALUE(&amp;scmd, "[1,2,3]", strlen("[1,2,3]");
+scmd.operation = LCB_ADD;
+lcb_store3(instance, NULL, &amp;scmd);
+lcb_wait(instance);</codeblock></p>
+            <p>The above will store a JSON array using the document ID <codeph>some_key</codeph>.
+                The <apiname>lcb_store3()</apiname> function <i>schedules</i> the operation to be
+                performed the next time the library performs I/O, which in this case is at the
+                    <apiname>lcb_wait()</apiname> function.</p>
+            <p>
+                <note>The success or failure of an operation is only available within the callback.
+                    Though <apiname>lcb_store3()</apiname> (or similar) returns a status code, the
+                    status code determines if the command was successfully scheduled, and not if the
+                    server successfully executed the command.</note>
+            </p>
+            <title>Operation results</title>
+            <p>All operations receive results in designated callbacks. The result contains the
+                status of the operation and an optional pointer associating the request with a
+                response. The result will also contain additional operation-specific operation such
+                as values and subcodes.</p>
+            <p>Callbacks are installed using the <apiname>lcb_install_callback3</apiname>, which is
+                supplied with the type of operation and the callback to be invoked whenever a
+                response for such an operation is
+                received:<codeblock>lcb_install_callback3(instance, LCB_CALLBACK_GET, get_handler);
+lcb_install_callback3(instance, LCB_CALLBACK_STORE, store_handler);</codeblock>The
+                callback is passed a pointer to an <apiname>lcb_RESPBASE</apiname> structure which
+                represents the common in-memory layout of all Couchbase responses. The response
+                structure can be subclassed to an operation-specific type (for example,
+                    <apiname>lcb_RESPGET</apiname> or <apiname>lcb_RESPSTORE</apiname>) to obtain
+                more information specific to the operation type. Here is an example of handling a
+                response for <apiname>lcb_get3()</apiname></p>
+            <p>
+                <codeblock>void get_handler(lcb_t instance, int cbtype, const lcb_RESPBASE *rb)
+{
+    if (rb->rc != LCB_SUCCESS) {
+        printf("Error in getting response: %s\n", lcb_strerror(NULL, rb->rc));
+    } else {
+        const lcb_RESPGET *resp = (const lcb_RESPGET*)rb;
+        printf("Got value: %.*s\n", (int)resp->nvalue, resp->value);
+    }
+}</codeblock>
+            </p>
+        </section>
+        <section><title>User data in responses</title>In most cases, you will need a way to
+            associated a response with user (application) data; this is necessary, for example, if
+            you wish to actually make use of the value or status received in the response. The SDK
+            allows you to pass an application pointer in the request and read it in the response;
+            this pointer is known as a <codeph>cookie</codeph> and is opaque to the SDK and is thus
+            never dereferenced by it; here's an example of the above handler making use of a
+                <codeph>cookie</codeph>:<codeblock>typedef struct {
+    const char *value;
+    size_t nvalue;
+    lcb_error_t status;
+} GetInfo;
+
+void get_handler(lcb_t instance, int cbtype, const lcb_RESPBASE *rb)
+{
+    GetInfo *gi = rb->cookie;
+    gi->status = rb->rc;
+    if (rb->rc == LCB_SUCCESS) {
+        const lcb_RESPGET *resp = (const lcb_RESPGET*)rb;
+        gi->value = malloc(resp->nvalue);
+        gi->nvalue = resp->nvalue;
+        memcpy(gi->value, resp->value, resp->nvalue);
+    }
+}
+
+GetInfo* get_item(lcb_t instance, const char *key)
+{
+    lcb_CMDGET gcmd = { 0 };
+    GetInfo *retval = calloc(1, sizeof *retval);
+    LCB_CMD_SET_KEY(&amp;gcmd, key, strlen(key));
+    lcb_get3(instance, retval, &amp;gcmd);
+    lcb_wait(instance);
+    return retval;
+}</codeblock><note>The
+                    <codeph>cookie</codeph> does not have any memory requirements. It can be
+                automatic memory, dynamic memory, or <codeph>NULL</codeph>, depending on application
+                constraints.</note><note>The SDK owns the memory of the response structure and all
+                pointers it contains. Copy out any relevant fields (such as the value or status) if
+                access to them are needed beyond the scope of the callback.</note></section>
+        <section><title>Generic response handling</title>For many types of operations, simple,
+            generic handling can suffice: this means simply checking whether the operation succeeded
+            or
+            failed:<codeblock>void generic_handler(lcb_t instance, int cbtype, const lcb_RESPBASE *resp) {
+    printf("Operation %s: %s\n", lcb_strcbtype(cbtype), lcb_strerror(NULL, resp->rc);
+    if (resp->rc == LCB_SUCCESS) {
+        handle_success(cbtype, resp);
+    } else {
+        handle_failure(cbtype, resp);
+    }
+}</codeblock>The
+            above example shows a callback function which prints the type and status operation to
+            the screen and then invokes either the application-defined
+                <codeph>handle_success()</codeph> or <codeph>hande_failure()</codeph> function
+            depending on whether or not the operation succeeded. The second argument to the
+            callback, <varname>cbtype</varname>, contains the actual <codeph>LCB_CALLBACK_*</codeph>
+            type being invoked, so that the same callback can be installed for multiple operation
+            types; for example using the same callback for <codeph>LCB_CALLBACK_STORE</codeph> and
+                <codeph>LCB_CALLBACK_REMOVE</codeph>.<p>You can install a default callback which may
+                be invoked if no operation-specific callback has been
+                installed:<codeblock>lcb_install_callback3(instance, LCB_CALLBACK_DEFAULT, generic_handler);
+lcb_install_callback3(instance, LCB_CALLBACK_GET, get_handler);</codeblock>In
+                the above block, the <codeph>generic_handler</codeph> is installed as the default
+                callback, and the <codeph>get_handler</codeph> is the callback for
+                    <apiname>lcb_get3()</apiname> operations: All operations except
+                    <apiname>lcb_get3()</apiname> (<codeph>LCB_CALLBACK_GET</codeph>) will be passed
+                to the default callback.</p></section>
+        <section><title>Storing documents</title><p><note>This describes <i>full-document</i>
+                    mutation functionality which alters the <i>entire</i> contents of the document.
+                    See <xref href="google.com" format="com" scope="external">sub-document
+                        mutations</xref> for when you only need to modify <i>parts</i> of a
+                    document.</note>Documents can be stored using the <apiname>lcb_store3</apiname>
+                function, and populate it with the document ID (<codeph>LCB_CMD_SET_KEY(&amp;cmd,
+                    "key", strlen("key"));</codeph>), value (<codeph>LCB_CMD_SET_VALUE(&amp;cmd,
+                    "value", strlen("value"))</codeph>) and the <codeph>operation</codeph>
+                    (<codeph>cmd.operation = LCB_SET</codeph>).</p><p>The <codeph>operation</codeph>
+                dictates conditions (or lack thereof) which must be satisfied before the document
+                may be stored. Possible values include:<ul id="ul_kvk_dbb_fv">
+                    <li><option>LCB_SET</option>: Unconditionally store the item, and don't set any
+                        conditions. This option is also known as <i>upsert</i>. If an existing
+                        document exists with the same ID, it is overwritten with the contents
+                        (value) of the new operation. If no document exists with the same ID, it is
+                        created and set to the value of the new operation.</li>
+                    <li><option>LCB_ADD</option>: Only store the item if no other document exists
+                        with the given ID. If an existing document is precent with the same document
+                        ID then the operation will fail with <codeph>LCB_KEY_EEXISTS</codeph>.</li>
+                    <li><option>LCB_REPLACE</option>: Only store the item if an existing document
+                        already exists with the same ID. In this case the existing document's
+                        contents are replaced with the new contents. If no document already exists
+                        the operation will fail with <codeph>LCB_KEY_ENOENT</codeph></li>
+                    <li><option>LCB_APPEND</option>, <option>LCB_PREPEND</option>: These options
+                        allow <xref href="google.cmo" format="cmo" scope="external">raw byte
+                            concatenation</xref></li>
+                </ul></p>You can also add concurrency control and document expiration when using
+                <apiname>lcb_store3()</apiname><p>You can install a callback to receive the status
+                of <apiname>lcb_store3</apiname> operations using
+                    <codeph>lcb_install_callback3(instance, LCB_CALLBACK_STORE,
+                    store_handler)</codeph>.</p><p>When a store operation is successful, you may
+                check the operation's <xref href="google.com" format="com" scope="external"
+                    >durability</xref>. In the C SDK this is done using the distinct
+                    <apiname>lcb_endure3_ctxnew</apiname>:<codeblock>void store_handler(lcb_t instance, int cbtype, const lcb_RESPBASE *resp) {
+    if (resp->rc != LCB_SUCCESS) {
+        return;
+    }
+    lcb_MULTICMD_CTX *ctx;
+    lcb_durability_opts_t opts = { 0 };
+    opts.version = 0;
+    opts.v.v0.persist_to = -1;
+    opts.v.v0.replicate_to = -1;
+    opts.v.v0.cap_max = 1;
+    lcb_error_t err_out;
+    mctx = lcb_endure3_ctxnew(instance, &amp;opts, &amp;err_out);
+    lcb_CMDENDURE dcmd = { 0 };
+    LCB_CMD_SET_KEY(&amp;dcmd, resp->key, resp->nkey);
+    dcmd.cas = resp->cas;
+    mctx->addcmd(dcmd);
+    mctx->done(mctx, NULL);
+}</codeblock>Setting
+                the <varname>persist_to</varname> and <varname>replicate_to</varname> fields to
+                    <codeph>-1</codeph> and the <varname>cap_max</varname> to a true value instructs
+                the client to use the maximum-available durability</p><title>Retrieving
+                documents</title><note>This describes the <i>full-document</i> retrieval
+                functionality which retrieves the <i>entire</i> document. See <xref
+                    href="google.com" format="com" scope="external">sub-document retrievals</xref>
+                for when you only need to retrieve <i>parts</i> of a document.</note>Documents can
+            be retrieved using the <apiname>lcb_get3</apiname> function. The server will attempt to
+            fetch the document if it
+            exists:<codeblock>lcb_CMDGET gcmd = { 0 };
+LCB_CMD_SET_KEY(&amp;gcmd, "key", 3);
+lcb_get3(instance, NULL, &amp;gcmd);
+lcb_wait(instance);</codeblock>The
+            actual contents of the document will be available in the response structure, which is
+            passed to the callback you installed via <codeph>lcb_install_callback3(instance,
+                LCB_CALLBACK_GET,
+                get_handler)</codeph>:<codeblock>void get_handler(lcb_t instance, int cbtype, const lcb_RESPBASE *rb)
+{
+    const lcb_RESPGET *resp = (const lcb_RESPGET *)rb;
+    if (resp->rc == LCB_SUCCESS) {
+        printf("Got value: %.*s\n", (int)resp->nvalue, resp->value));
+    }
+}</codeblock><p>The
+                    <codeph>value</codeph> field is a buffer of bytes representing the contents of
+                the document. This can be a JSON string or non-JSON data (see <xref
+                    href="google.com" format="com" scope="external">non-JSON documents</xref> for
+                more information on how to distinguish between them). The <codeph>value</codeph>
+                field actually points directly into the library's network buffers.</p>When
+            retrieving a document, you can also specify the <xref href="google.com" format="com"
+                scope="external">document expiration</xref> (<apiname>lcb_CMDGET::exptime</apiname>)
+            and settings for <xref href="google.com" format="com" scope="external">pessimistic
+                locking</xref> (<apiname>lcb_CMDGET::lock</apiname>). Refer to the API documentation
+            for specific usage details.<hazardstatement>
+                <messagepanel id="messagepanel_arr_twx_fv">
+                    <typeofhazard>The memory of the value is owned by the library</typeofhazard>
+                    <howtoavoid>If the contents of the value are required outside of the callback,
+                        ensure that it is copied out. You may also wish to decode the value itself
+                        within the callback, eliminating the need of copying the original
+                        value.</howtoavoid>
+                </messagepanel>
+            </hazardstatement></section>
+        <section><title>Removing documents</title><p><note>This describes the functionality of
+                    removing an <i>entire document</i>. See <xref href="google.com" format="com"
+                        scope="external">sub-document deletion</xref> on removing only <i>parts</i>
+                    of a document.</note>Documents can be removed manually by using the
+                    <apiname>lcb_remove3</apiname> function. A <apiname>lcb_CMDREMOVE</apiname>
+                structure should be populated with the ID of the document you wish to remove. The
+                command is passed to the <apiname>lcb_remove3()</apiname> function which schedules
+                the document to be removed. When the document has been removed (or a negative reply
+                from the server is received), the callback installed using
+                    <codeph>lcb_install_callback3(instance, LCB_CALLBACK_REMOVE, cb)</codeph> is
+                invoked:<codeblock>lcb_CMDREMOVE cmd = { 0 };
+LCB_CMD_SET_KEY(&amp;cmd, "key", 3);
+lcb_remove3(instance, NULL, &amp;cmd);
+lcb_wait(instance);</codeblock></p><codeblock>void remove_handler(lcb_t instance, int cbtype, const lcb_RESPBASE *rb) {
+    if (rb->rc == LCB_SUCCESS) {
+        printf("Removed successfully");
+    } else if (rb->rc == LCB_KEY_ENOENT) {
+        printf("Item did not exist!");
+    } else {
+        printf("Other error: %.*s\n", lcb_strerror(NULL, rb->rc));
+    }
+}
+lcb_install_callback3(instance, LCB_CALLBACK_REMOVE, remove_handler);</codeblock>Note
+            that in the above example the simple "base" <apiname>lcb_RESPBASE</apiname> is utilized
+            as we do not use any special response fields specific to the removal
+            operation.</section>
+        <section><title>Modifying expiration</title><p>
+                <codeblock>lcb_CMDTOUCH cmd = { 0 };
+LCB_CMD_SET_KEY(&amp;cmd, "key", 3);
+cmd.exptime = 300;
+lcb_touch3(instance, NULL, &amp;cmd);
+lcb_wait(instance);</codeblock>
+                <note>The expiry value is specified as a relative offset (in seconds) from the time
+                    the server receives the operation. The expiry value can also be specified as an
+                    absolute Unix timestamp. The server will assume that any value larger than
+                        <codeph>2592000</codeph> (i.e. one year, in seconds) is a Unix timestamp and
+                    anything lower is a relative offset.</note>
+                <codeblock>lcb_install_callback3(instance, LCB_CALLBACK_TOUCH, touch_handler);</codeblock>
+            </p>You can also use the <codeph>generic_handler</codeph> defined above. There is no
+            special response data for <apiname>lcb_touch3</apiname>.<p>Expiration can also be set
+                with <apiname>lcb_get3</apiname>, sometimes known as a
+                <i>get-and-touch</i>:<codeblock>lcb_CMDGET cmd = { 0 };
+LCB_CMD_SET_KEY(&amp;cmd, "key", 3);
+cmd.exptime = 300;
+lcb_get3(instance, NULL, &amp;cmd);
+lcb_wait(instance);</codeblock></p><p>And
+                with <apiname>lcb_store3()</apiname><codeblock>lcb_CMDSTORE cmd = { 0 };
+LCB_CMD_SET_KEY(&amp;cmd, "key", 3);
+LCB_CMD_SET_VALUE(&amp;cmd, "value", 5);
+cmd.exptime = 300;
+cmd.operation = LCB_SET;
+lcb_wait(instance);</codeblock><hazardstatement>
+                    <messagepanel id="messagepanel_xx4_h4d_gv">
+                        <typeofhazard>When using <apiname>lcb_store3()</apiname> the server will
+                            clear the expiry value if none is specified.</typeofhazard>
+                        <howtoavoid>Ensure that the desired expiration time is <i>always</i> set in
+                            the <apiname>lcb_CMDSTORE</apiname> command when the mode is one of
+                                <option>LCB_SET</option>, <option>LCB_ADD</option>, or
+                                <option>LCB_REPLACE</option>.</howtoavoid>
+                    </messagepanel>
+                </hazardstatement></p></section>
+        <section><title>Non-JSON Documents</title><p>At the SDK and API level, there is no
+                distinction between JSON and non-JSON documents. For the SDK, any sequence of bytes
+                is a valid document.</p><p>If you wish to interact with other SDKs and are using
+                non-JSON document formats, refer to the Flags section. You will need to set the
+                appropriate format flags in the <apiname>lcb_CMDSTORE::flags</apiname> field in
+                order for other SDK implementations to decode the
+                data:<codeblock>lcb_CMDSTORE cmd = { 0 };
+const uint8_t bb[] = { 0x34, 0x10, 0x00, 0x94, 0xf5 };
+LCB_CMD_SET_KEY(&amp;cmd, "id", 2);
+LCB_CMD_SET_VALUE(&amp;cmd, bb, sizeof bb);
+cmd.operation = LCB_SET;
+cmd.flags = 0x3000000 /* FMT_RAW */</codeblock></p>Likewise,
+            when reading data stored by other SDKs, you can check the
+                <apiname>lcb_RESPGET::itmflags</apiname> to determine the proper value
+            format:<codeblock>void decode_data(const lcb_RESPGET *resp) {
+    uint32_t flags = resp->itmflags >> 0x24;
+    if (flags == 0x02) {
+        decode_json(resp->value, resp->nvalue);
+    } else if (flags == 0x04) {
+        decode_utf8(resp->value, resp->nvalue);
+    } else if (flags == 0x03) {
+        decode_raw(resp->value, resp->nvalue);
+    } else if (flags == 0x01) {
+        printf("Cannot decode foreign SDK format!\n");
+    } else {
+        printf("Unknown format: 0x%x\n", resp->itmflags);
+    }
+}</codeblock></section>
+        <section>
+            <title>Batching Operations</title>
+            <p>You can schedule many operations at once with the C SDK. When the SDK will enter the
+                I/O-wait phase (<apiname>lcb_wait</apiname> or implicit event loop return) all the
+                scheduled operations will be efficiently submitted to the server with as little
+                latency and fragmentation as possible.</p>
+            <p>Scheduling multiple operations with the C SDK typically requires no special syntax.
+                Simply perform multiple scheduling
+                calls<codeblock>std::map&lt;std::string,std::string> to_store;
+lcb_CMDSTORE cmd = { 0 };
+scmd.operation = LCB_SET;
+
+for (auto it = to_store.begin(); it != to_store.end(); ++it) {
+    LCB_CMD_SET_KEY(&amp;cmd, it->first.c_str(), it->first.size());
+    LCB_CMD_SET_VALUE(&amp;cmd, it->second.c_str(), it->second.size());
+    lcb_store3(instance, NULL, &amp;cmd);
+}
+lcb_wait(instance);</codeblock></p>
+            <p>You can schedule different <i>types</i> of operations as well, for example an
+                    <apiname>lcb_get3</apiname> followed by an <apiname>lcb_store3</apiname>.</p>
+            <p>Some scheduling commands return an <apiname>lcb_MULTICMD_CTX</apiname>. This is a
+                special context used to batch multiple logical operations into a single
+                protocol-level packet. For these operations the packet format allows for multiple
+                operations, and thus placing multiple operations in a single protocol packet is more
+                efficient bandwidth-wise than sending one packet per operation. Note that this is
+                the exception and that most commands do not have any special <i>multi</i> packet
+                format.</p>
+        </section>
+    </body>
+</topic>

@@ -1,0 +1,2423 @@
+<?xml version='1.0' ?><!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA 1.1 Topic//EN" "http://docs.oasis-open.org/dita/v1.1/OS/dtd/topic.dtd">
+<topic id="release-notes">
+	<title>Release Notes</title>
+<shortdesc>C SDK</shortdesc>
+<body>
+    <section>
+        <title>2.5.6 (February 18 2016)</title>
+            <ul>
+                <li>
+                    <p>Sub-Document API ( <i>experimental</i>).</p>
+                    <p>The client-side sub-document API has been implemented. Sub-document is a
+                        feature which vastly reduces network usage when operating on parts of
+                        documents. The API as it appears in this version is highly experimental and
+                        may (and likely will) change. Examples of use can be found in the
+                        <codeph>examples/subdoc</codeph> directory.</p>
+                    <ul>
+                        <li>Priority: Major</li>
+                    </ul>
+                </li>
+                <li>Make <codeph>lcb_sched_enter</codeph> and <codeph>lcb_sched_leave</codeph> optional. When
+                    scheduling an operation (e.g. <codeph>lcb_get3()</codeph>), the scheduling
+                    function will implicitly create a scheduling context and submit the operation if
+                    none exists already. A scheduling context is explicitly created by calling
+                    <codeph>lcb_sched_enter()</codeph> and finished by calling
+                    <codeph>lcb_sched_leave()</codeph> or <codeph>lcb_sched_fail()</codeph>.<ul>
+                        <li>Issues: <xref format="html" scope="external"
+                            href="https://issues.couchbase.com/browse/CCBC-664"
+                            >CCBC-664</xref></li>
+                        <li>Priority: Major</li>
+                    </ul></li>
+                <li><p>API3 is now stable. The scheduling based API, introduced in version 2.4.0 and known as
+                    'api3', is now stable and considered the API for use with the library. The
+                    previous API (i.e. 'api2') is considered deprecated.</p>While API3 has been
+                    promoted to stable in this version, it has been available in its current form
+                    (and in a mostly compatible manner, <i>except</i> the implicit scheduling
+                    feature - CCBC-664) since 2.4.0.
+                    <codeblock spectitle=" Storing an item in API2">lcb_get_store_t cmd = { 0 }, *cmd_p = &amp;cmd;
+cmd.v.v0.key = "key";
+cmd.v.v0.nkey = 3;
+cmd.v.v0.bytes = "value";
+cmd.v.v0.nbytes = 5;
+cmd.v.v0.operation = LCB_SET;
+lcb_store(instance, NULL, 1, &amp;cmd_p); </codeblock><codeblock spectitle="Storing an item in API3">lcb_CMDSTORE cmd = { 0 };
+LCB_CMD_SET_KEY(&amp;cmd, "key", 3);
+LCB_CMD_SET_VALUE(&amp;cmd, "value", 5);
+cmd.operation - LCB_SET;
+lcb_store3(instance, NULL, &amp;cmd);</codeblock></li>
+                <li>Add <codeph>libcouchbase/</codeph> string to version identification to Memcached.
+                    Connections to memcached will now be identified as
+                    <codeph>libcouchbase/version</codeph> rather than <codeph>version</codeph>.
+                    This increases readability for server logs.<ul>
+                        <li>Issues: <xref format="html" scope="external"
+                            href="https://issues.couchbase.com/browse/CCBC-656"
+                            >CCBC-656</xref></li>
+                        <li>Priority: Minor</li>
+                    </ul></li>
+                <li>Hide <codeph>mutation_token</codeph> field from API3 mutation respones. The
+                    <codeph>mutation_token</codeph> field has never been part of the API itself
+                    (it was previously present when api3 was marked as "experimental"). The mutation
+                    token for any operation must now be retrieved using the
+                    <codeph>lcb_resp_get_mutation_token()</codeph> to retrieve the actual
+                    mutation token. <ul>
+                        <li>Issues: <xref format="html" scope="external"
+                            href="https://issues.couchbase.com/browse/CCBC-671"
+                            >CCBC-671</xref></li>
+                        <li>Priority: Minor</li>
+                    </ul></li>
+                <li>Server's <codeph>PROTOCOL_BINARY_RESPONSE_EINTERNAL</codeph> is no longer mapped to
+                    <codeph>LCB_EINTERNAL</codeph>. <codeph>LCB_UNKNOWN_MEMCACHED_ERROR</codeph>
+                    will be returned instead<ul id="ul_yjb_byx_1v">
+                        <li>Priority: Minor</li>
+                    </ul></li>
+                <li>Allow get-and-touch with an expiry of 0. Clearing a document's expiry with
+                    <codeph>get</codeph> is now possible, using the new
+                    <codeph>LCB_CMDGET_F_CLEAREXP</codeph> in
+                    <codeph>lcb_CMDGET::cmdflags</codeph>.<ul>
+                        <li>Issues: <xref format="html" scope="external"
+                            href="https://issues.couchbase.com/browse/CCBC-667"
+                            >CCBC-667</xref></li>
+                        <li>Priority: Major</li>
+                    </ul></li>
+                <li>Allow multiple buckets when using sequence number consistency with N1QL This uses the new
+                    internal <codeph>scan_vector</codeph> protocol supporting multiple buckets, each
+                    providing their own <codeph>lcb_MUTATION_TOKEN</codeph> objects.<ul>
+                        <li>Issues: <xref format="html" scope="external"
+                            href="https://issues.couchbase.com/browse/CCBC-658"
+                            >CCBC-658</xref></li>
+                        <li>Priority: Major</li>
+                    </ul></li>
+            </ul>
+    </section>
+    <section>
+        <title>2.5.5 (January 12, 2016)</title>
+        
+        <ul>
+            <li>Add <codeph>retry_interval</codeph> string option to adjust retry interval. This
+                    allows the setting to be modified via <codeph>lcb_cntl_string()</codeph> and
+                    specified in the connection string.<ul>
+                        <li>Priority: Major</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-654"
+                            >CCBC-654</xref></li>
+                    </ul></li>
+            <li>Handle backslashes in view row ID fields. This would previously not be handled
+					correctly as the backslashes would not be removed. For example, an ID of
+						<codeph>has_a_"quote</codeph> would appear in the API as
+						<codeph>has_a_\"quote</codeph>. This has been fixed, and document IDs are
+					now properly processed as JSON.<ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="https://issues.couchbase.com/browse/CCBC-649"
+							>CCBC-649</xref></li>
+					</ul></li>
+            <li>Allow 'file-only' configuration mode. This allows applications to make the library
+                    instance exclusively configured from a file on the local filesystem rather than
+                    through network bootstrap. This feature is undocumented and unsupported but may
+                    still be useful in some cases. It may be enabled using the
+                        <codeph>bootstrap_on=file_only</codeph> connection string directive.u<ul>
+                        <li>Priority: Major</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-652"
+                            >CCBC-652</xref></li>
+                    </ul></li>
+            <li>Log when squashing network errors. This will make the library log the original error
+                    whenever a network error is translated from a more detailed description into
+                        <codeph>LCB_NETWORK_ERROR</codeph> (in case
+                        <codeph>detailed_errcodes</codeph> is not enabled), or if an OS-level error
+                    is found which cannot be translated into a more specific library error.<ul>
+                        <li>Priority: Major</li>
+                    </ul></li>
+            <li>Fix memcached/ketama hashing. This fixes a bug in the ketama hashing code, which
+					caused a key to be mapped to an effectively arbitrary server for the library
+					instance. In practice, the node a key was mapped to depended on the order in
+					which the hosts were specified in the connection string. This has been fixed
+					always to use hashing based on the lexical sort order of each server node. It is
+					highly recommended that applications upgrade to this version (2.5.5) for proper
+					memcached (cache) bucket functionality.<ul>
+						<li>Priority: Critical</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="https://issues.couchbase.com/browse/CCBC-653"
+							>CCBC-653</xref></li>
+					</ul></li>
+            <li>Add <codeph>cbc-touch</codeph> subcommand. This now allows the simple "touching", or
+					modifying expiration time via the <codeph>cbc</codeph> command-line client.<ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="https://issues.couchbase.com/browse/CCBC-651"
+							>CCBC-651</xref></li>
+					</ul></li>
+        </ul>
+    </section>
+    <section>
+        <title>2.5.4 (November 25 2015)</title>
+            <ul>
+                <li>Validate vBucket master nodes for bounds when receiving new configuration. This
+                    ensures that invalid configurations (addressing nodes which do not exist) do not
+                    make their way to KV routing operations.<ul>
+                        <li>Priority: Major</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-643"
+                            >CCBC-643</xref></li>
+                    </ul></li>
+                <li>Add <codeph>lcb_strcbtype</codeph> to print the name of the callback type. This
+                    small convenience function is added to pretty-print the type of callback being
+                    invoked. The second argument to the callback can be passed to this function.<ul>
+                        <li>Priority: Minor</li>
+                    </ul></li>
+                <li>Disallow using <codeph>certpath</codeph> connection string option without
+                    explicit SSL ( <codeph>couchbases://</codeph>) scheme. Since the SSL and non-SSL
+                    schemes are similar, a typo can let a user mistakenly think that SSL is being
+                    used. This is fixed by disallowing the other SSL option (
+                        <codeph>certpath</codeph>) when SSL is not enabled.<ul>
+                        <li>Priority: Minor</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-644"
+                            >CCBC-644</xref></li>
+                    </ul></li>
+                <li>Add convenience function to retrieve hostname for key. This is an alternative to
+                    retrieving the vBucket configuration (via <codeph>lcb_cntl()</codeph>) and
+                    mapping the key to an index, and mapping the index to a node. Note that
+                    hostnames are sufficient for most but not all configurations. Those running
+                    multiple server instances on the same host (for example,
+                        <codeph>cluster_run</codeph>) will still need to use the full set of steps
+                    as this function does not return a port. This function is provided both as a
+                    vBucket API ( <codeph>lcbvb_get_hostname()</codeph>) which retrieves the
+                    hostname for an index as well as a top-level instance ( <codeph>lcb_t</codeph>)
+                    function ( <codeph>lcb_get_keynode()</codeph>) which accepts a key buffer and length.<ul>
+                        <li>Priority: Minor</li>
+                    </ul></li>
+                <li>Ensure embedded jsoncpp does not throw exceptions. This caused some build issues
+                    with other build systems. This has been fixed by replacing any exception
+                    throwing code with <codeph>abort()</codeph> and <codeph>assert()</codeph> statements.<ul>
+                        <li>Priority: Minor</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-634"
+                            >CCBC-634</xref></li>
+                    </ul></li>
+                <li>Log vBucket configuration parsing failures. This logs vBucket configuration
+                    parsing failures when a given config received could not be parsed. Parsing
+                    failures include both JSON syntax errors as well as improper fields or values
+                    within the config itself.<ul>
+                        <li>Priority: Major</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-647"
+                            >CCBC-647</xref></li>
+                    </ul></li>
+                <li>Allow per-request N1QL timeouts to exceed global timeouts. This scans the
+                        <codeph>"timeout"</codeph> property of the N1QL request and if set, will
+                    make the value of this property the timeout value for the request. A small
+                    parser was implemented which converted the N1QL timeout values (
+                        <codeph>s</codeph>, <codeph>h</codeph>, etc.) into microseconds.<ul>
+                        <li>Priority: Major</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-660"
+                            >CCBC-660</xref></li>
+                    </ul></li>
+                <li>Request configuration refresh when HTTP API redirects are received. Redirects in
+                    Couchbase Server are sent when a node is about to exit the cluster. We should
+                    take this as a sign to refresh the config since it indicates a node is about to
+                    be removed.<ul>
+                        <li>Priority: Major</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-646"
+                            >CCBC-646</xref></li>
+                    </ul></li>
+            </ul>
+    </section>
+  <section>
+        <title>2.5.3 (August 27 2015)</title>
+            <ul>
+                <li>Add N1QL timeout feature. This allows an independent timeout setting for N1QL.
+                    Previously this would use the views timeout.<ul>
+                        <li>Priority: Major</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-631">CCBC-631</xref>
+                        </li>
+                    </ul></li>
+                <li>Add N1QL prepared statements. This allows prepared statements to be used with
+                    N1QL. The library will maintain an internal <i>prepared statement cache</i>
+                    which contains cached responses for internal <codeph>PREPARE</codeph> requests.
+                    To use a prepared statement, an application can simply set the
+                        <codeph>LCB_CMDN1QL_F_PREPCACHE</codeph> bit in the
+                        <codeph>cmdflags</codeph> field within the <codeph>lcb_CMDN1QL</codeph>
+                    structure. All the rest is handled internally within the library.<ul>
+                        <li>Priority: Major</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-633"
+                            >CCBC-633</xref></li>
+                    </ul></li>
+            </ul>
+  </section>
+    
+	<section>
+		<title>2.5.2 (July 23 2015)</title>
+		
+			<ul>
+				<li>Fix off-by-one error when populating documents with pillowfight. Previously pillowfight
+                    would only populate <i>N</i>-1 documents where <i>N</i> is the (
+                        <codeph>-I</codeph>, <codeph>--num-items</codeph>) option. This has been
+                    fixed. <ul>
+                        <li>Priority: Minor</li>
+                    </ul></li>
+				<li>Don't generate negative keys for pillowfight. For certain option configurations, pillowfight
+                    would generate negative keys (some keys were in the format of -nnnnnn).<ul>
+                        <li>Priority: Minor</li>
+                    </ul></li>
+				<li>Allow in-progress N1QL requests to be cancelled. This allows in-progress N1QL requests to be
+					canceled by adding a new API, <codeph>lcb_n1ql_cancel()</codeph>. Invoking this
+					function on an <codeph>lcb_N1QLHANDLE</codeph> handle (obtained via an <i>out</i>
+					parameter in the command structure) will effectively stop the request and stop
+					delivering callbacks to the user.<ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="https://issues.couchbase.com/browse/CCBC-619">CCBC-619</xref></li>
+					</ul></li>
+				<li>Rename <codeph>lcb_SYNCTOKEN</codeph> to <codeph>lcb_MUTATION_TOKEN</codeph>. This
+                    experimental (volatile) API has been renamed to "Mutation Token" to better
+                    reflect naming conventions found in other client libraries.<ul>
+                        <li>Priority: Minor</li>
+                    </ul></li>
+				<li>Implement histogram/timings information for N1QL queries via <codeph>cbc-n1qlback</codeph>.
+					This adds support for the ( <codeph>-T</codeph>, <codeph>--timings</codeph>) option
+					in the <codeph>cbc-n1qlback</codeph> benchmark/stress-test utility. These timings
+					reflect the latency between issuing the query and the receipt of the first row of the
+					result set.<ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="https://issues.couchbase.com/browse/CCBC-624">CCBC-624</xref></li>
+					</ul></li>
+				<li>Add ( <codeph>-M</codeph>, <codeph>--mode</codeph>) option to <codeph>cbc-create</codeph> to
+                    allow for upsert, insert, etc. This allows <codeph>cbc-create</codeph> to use
+                    the full gamut of storage options available via the SDK by allowing an
+                    insert/upsert/replace mode as an argument to the new <codeph>--mode</codeph>
+                    option. <codeph>append</codeph> and <codeph>prepend</codeph> are now also
+                    provided as options, though not documented.<ul>
+                        <li>Priority: Major</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-625"
+                            >CCBC-625</xref></li>
+                    </ul></li>
+				<li>Support <codeph>CBC_CONFIG</codeph> environment variable for command line tools. This
+                    variable specifies a path to an alternate <codeph>cbcrc</codeph> file which may
+                    be used to provide cluster/bucket settings. This new option allows multiple
+                    configurations to coexist, without forcing any one of them to be inside the
+                    user's home directory.<ul>
+                        <li>Priority: Minor</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-626"
+                            >CCBC-626</xref></li>
+                    </ul></li>
+			</ul>
+	</section>
+	<section>
+	
+		<title>2.5.1 (June 17 2015)</title>
+		
+			<p>Bug fixes and improvements in 2.5.1</p>
+			<ul>
+				<li>Fix hanging in durability operations if node is not present and constraints include failed
+					node. This condition may be triggered when only a single node remains in the
+					broadcast probe and a command sent to it could not be scheduled. A symptom of
+					this bug was durability operations 'hanging' <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-607">CCBC-607</xref>
+						</li>
+					</ul></li>
+				<li>Improved handling of topology changes when non-data (N1QL, Index) nodes are part of the
+					cluster. This fixes some issues (mainly crashes) when non-data nodes are found
+					inside the cluster during a topology change. While the library since version
+					2.4.8 was able to handle initial bootstrapping with non-data nodes, it would
+					still crash when such nodes were encountered during configuration changes. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-609">CCBC-609</xref>,
+								<xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-612">CCBC-612</xref>
+						</li>
+					</ul></li>
+				<li>Improved random host selection algorithm for REST services This new algorithm ensures that
+					the distribution is even among all <i>eligible</i> nodes for a given service.
+					The old algorithm would only distribute evenly when the assumption that all
+					nodes contained the same services were true. However this assumption is no
+					longer necessarily true with Couchbase 4.0. In this case the algorithm ensures
+					that the random selection inspects only the pool of nodes which are known to
+					have a given service enabled. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-611">CCBC-611</xref>
+						</li>
+					</ul></li>
+				<li>Ensure ketama/Memcached-bucket hashing works correctly when non-data nodes are part of the
+					cluster. In previous versions, ketama hashing would incorrectly consider all
+					nodes as candidates for keys, which would result in some items being routed to
+					non-data nodes, resulting in odd errors and inaccessible data. This is only an
+					issue for the still-unreleased Couchbase 4.0. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-613">CCBC-613</xref>
+						</li>
+					</ul></li>
+				<li>Set 
+					<codeph>TCP_NODELAY</codeph> as a server side option, if it's enabled on the client.  This uses the 
+					<codeph>HELLO</codeph> protocol functionality to enable this feature, if  this feature is also enabled on the client (enabled by default).
+				</li>
+			</ul>
+			<p>New features in 2.5.1</p>
+			<ul>
+				<li>Add 
+					<codeph>cmake/configure</codeph> option for enabling the embedding of the libevent  plugin. This option, named 
+					<codeph>--enable-embedded-libevent-plugin</codeph>, will cause  the plugin to be linked in with the core library (
+					<i>libcouchbase</i>) rather  than built as its own object
+					<ul>
+						<li>Priority: Minor</li>
+					</ul>
+				</li>
+				<li>Add new combined "Store-with-durability" operation. This new API, called
+						<codeph>lcb_storedur3()</codeph> allows specifying the storage input options
+					as well as the associated durability options in a single command. Likewise, the
+					status of the operation (including durability) is returned in the operation's
+					callback. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-616">CCBC-616</xref>
+						</li>
+					</ul></li>
+			</ul>
+	</section>
+	<section>
+		<title>2.5.0 (May 12 2015)</title>
+		
+			<p>This change in the major version number signals the addition of new features
+				for Couchbase Server 4.0; most of the actual new functionality for Couchbase
+				4.0 has already been included (incrementally) in prior 2.4.x versions. The
+				new 2.5 version is built on the 2.4.x codebase.</p>
+			<ul>
+				<li>Add <codeph>cbc-n1qlback</codeph> - a simple benchmark for N1QL queries. This functions by
+					executing a line-delimited file containing query bodies using multiple threads
+					if possible. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-604">CCBC-604</xref>
+						</li>
+					</ul></li>
+				<li>
+					<codeph>TCP_NODELAY</codeph> functionality has now been placed into effect. This
+					functionality was nominally present in prior versions, but would not work
+					because of a typo. <ul>
+						<li>Priority: Minor</li>
+					</ul></li>
+				<li>Add 'tick' or 'pump' mode for I/O As an alternative to <codeph>lcb_wait()</codeph>,
+					applications may call <codeph>lcb_tick_nowait()</codeph> to incrementally
+					perform (non-blocking) I/O. This may provide a performance boost when
+					batching/scheduling many operations. <codeph>lcb_wait()</codeph> itself must be
+					called to guarantee completion of all operations, and the
+						<codeph>lcb_tick_nowait()</codeph> functionality is only available on some
+					I/O plugins. See the API docs for more information. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-598">CCBC-598</xref>
+						</li>
+					</ul></li>
+				<li>Allow "console logger" to log to a file  As a convenience, it is now possible to direct the library to write to  a log file rather than standard error. This is possible using the
+					<codeph>LCB_CNTL_CONLOGGER_FP</codeph> (to programmatically set a 
+					<codeph>FILE*</codeph> value via
+					<codeph>lcb_cntl()</codeph>) or 
+					<codeph>console_log_file</codeph> to set the path of the file (which  will be overwritten) via 
+					<codeph>lcb_cntl_string()</codeph> or the connection string.
+				</li>
+				<li>Make 
+					<codeph>lcb_N1QLPARAMS</codeph> repeatable/debuggable  This allows the 
+					<codeph>lcb_n1p_mkcmd()</codeph> call to be invoked multiple times without  actually modifying internal state. Previously calling this function twice  would result in corruption of the internal parameter state. In this version,  a new function, 
+					<codeph>lcb_n1p_encode()</codeph> has been added (which 
+					<codeph>lcb_n1p_mkcmd()</codeph>  wraps) which may be used to inspect the encoded form of the query.
+				</li>
+			</ul>
+	
+	</section>
+	
+	<section>
+		<title>2.4.9 (April 14 2015)</title>
+		
+			<ul>
+				<li>Disable HTTP provider when any CCCP config is received. This makes the assumption that CCCP
+					will always be available if even a single node provides an HTTP configuration.
+					This change may break some corner-case upgrade scenarios from version 2.2 to 2.5
+					where a newly added 2.5 node is subsequently removed. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-526">CCBC-526</xref>,
+								<xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-589">CCBC-589</xref>
+						</li>
+					</ul></li>
+				<li>Fix additional missing defines for UV's <codeph>EAI_*</codeph> symbols This was not entirely
+					fixed in 2.4.8, since some undefined macros still remained. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-596">CCBC-596</xref>
+						</li>
+					</ul></li>
+				<li>Make connection string timeout parameters (e.g. <codeph>operation_timeout</codeph>) always
+					specify seconds; this will no longer require the decimal point to be used, but
+					will break any prior usages of this value for microseconds. <ul>
+						<li>Priority: Minor</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-597">CCBC-597</xref>
+						</li>
+					</ul></li>
+				<li>Add <codeph>cbc n1ql</codeph> subcommand, which executes N1QL queries. This subcommand is
+					still a bit rough around the edges, mainly because of server-side support for
+					"pretty=false" (which makes the rows display rather weirdly). <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-595">CCBC-595</xref>
+						</li>
+					</ul></li>
+				<li>Allow usage of <codeph>-D</codeph> option in <codeph>cbc</codeph> and
+						<codeph>cbc-pillowfight</codeph> tools. This flag allows specifying
+					connection string options in a more concise form on the commandline. The
+						<codeph>-D</codeph> option may be specified multiple times in the form of
+						<codeph>-Doption=value</codeph>. <ul>
+						<li>Priority: Minor</li>
+					</ul></li>
+				<li>Interpret <codeph>couchbase://host:8091</codeph> connection string as
+						<codeph>couchbase://host</codeph> Previously the library would treat
+						<codeph>8091</codeph> as a memcached port. While technically correct
+					according to the connection string semantics, would often be a source of
+					confusion for users migrating from older versions of the library (or other SDKs)
+					when using the form <codeph>http://host:8091</codeph>. A special provision is
+					thus made for such a cas. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-599">CCBC-599</xref>
+						</li>
+					</ul></li>
+				<li>Implement enhanced durability using sequence numbers. This feature is available in Couchbase
+					4.0, and uses sequence numbers (optionally specified in the response packet of
+					each mutation). sequence-based durability constraints help resolve some
+					ambiguity in the case of checking the durability of items which have since been
+					mutated, or in the case of a cluster failover. Using this functionality requires
+					the <codeph>LCB_CNTL_FETCH_SYNCTOKENS</codeph> (or
+						<codeph>fetch_synctokens</codeph>) and the
+						<codeph>LCB_CNTL_DURABILITY_SYNCTOKENS</codeph> (or
+						<codeph>dur_synctokens</codeph>) settings to be enabled (using
+						<codeph>lcb_cntl()</codeph> or <codeph>lcb_cntl_string()</codeph>, or in the
+					connection string). Enabling <codeph>LCB_CNTL_FETCH_SYNCTOKENS</codeph> will
+					cause mutation response packets from the server to return an additional 16 bytes
+					of sequence data, and enabling <codeph>LCB_CNTL_DURABILITY_SYNCTOKENS</codeph>
+					will cause <codeph>lcb_durability_poll()</codeph> to transparently use this
+					information (rather than the CAS) to check for persistence/replication. <b>Only
+						available in Couchbase 4.0</b>. As a result of this feature, much of the
+					durability subsystem itself has been rewritten, making durability overall more
+					performant, even for CAS-based durability. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-569">CCBC-569</xref>
+						</li>
+					</ul></li>
+				<li>Add <codeph>lcb_version_g</codeph> extern symbol as alternative to
+						<codeph>lcb_get_version()</codeph>. This symbol is an extern global which
+					allows simple runtime checking of the library version. This is more convenient
+					than <codeph>lcb_get_version()</codeph> as it avoids the requirement to create a
+					temporary variable on the stack ( <codeph>lcb_get_version()</codeph> returns a
+					string, and requires an <codeph>lcb_U32</codeph> pointer as its first argument
+					to get the actual numeric version). <ul>
+						<li>Priority: Minor</li>
+					</ul></li>
+			</ul>
+	</section>
+	
+	<section>
+		<title>2.4.8 (Mar. 8 2015)</title>
+	
+			<ul>
+				<li>Retry next nodes on initial bootstrap, even if first node says bucket does not exist (or
+					auth error), as this might be a recently removed node <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-577">CCBC-577</xref>
+						</li>
+					</ul></li>
+				<li>The <codeph>cbc</codeph> and <codeph>cbc-pillowfight</codeph> binaries on Windows are now
+					distributed in both <i>release</i> and <i>debug</i> variants. Previously they
+					would be clobbered by one or the other depending on the build host. This fixes
+					some issues in performance and dependency resolution when using these libraries. <ul>
+						<li>Priority: Minor</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-581">CCBC-581</xref>
+						</li>
+					</ul></li>
+				<li>Provide Read-Only config cache mode. In this mode the configuration cache file is read but
+					never updated. Additionally, a missing file in this mode results in a hard
+					error. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-584">CCBC-584</xref>
+						</li>
+					</ul></li>
+				<li>Keep vBucket heuristic guesses for limited periods of time. This will allow
+					previously-learned vBucket master locations to persist over a configuration
+					change, providing these changes were discovered recently. This allows the
+					reduction of not-my-vbucket responses while allowing new configs to overwrite
+					our heuristic info, if the heuristic is too old. <ul>
+						<li>Priority: Major</li>
+					</ul></li>
+				<li>Fix potential crashes in get-with-replica ( <codeph>lcb_rget3</codeph>,
+						<codeph>lcb_get_replica</codeph>) when there are no replicas available, or
+					if there is an error in retrieving from one of the replicas. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-586">CCBC-586</xref>
+						</li>
+					</ul></li>
+				<li>Do not wait between not-my-vbucket retries This behavior restores the pre 2.4.0 behavior of
+					retrying not-my-vbucket responses, with a more intelligent retry/rotation
+					algorithm (see the release note about "vbucket map heuristics"). Previously a
+					wait-time was introduced because of potential busy loops in retrying to the same
+					node. The <codeph>LCB_CNTL_RETRY_NMV_IMM</codeph> setting can be used to disable
+					this functionality (by disabling it, i.e. setting it to 0). This may also be
+					disabled in the connection string via <codeph>retry_nmv_imm=0</codeph>. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-588">CCBC-588</xref>
+						</li>
+					</ul></li>
+				<li>Fix compilation error with UV when <codeph>EAI_BADHINTS</codeph> is not defined in the
+					system. This is primarily an issue with newer UV versions and some versions of
+					Linux <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-590">CCBC-590</xref>
+						</li>
+					</ul></li>
+				<li>Allow means to disable C++ behavior on public library structures, allowing them to be
+					initialized via C-style static initializers. This allows the zeroing of
+					structures such as <codeph>lcb_get_cmd_t cmd = { 0 }</codeph>, which would
+					ordinarily fail under C++ compilation because of that structure having a defined
+					C++ constructor. Applications can take advantage of this feature by defining the
+						<codeph>LCB_NO_DEPR_CXX_CTORS</codeph> preprocessor macro when compiling. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-591">CCBC-591</xref>
+						</li>
+					</ul></li>
+				<li>Fix some bugs in timing behavior ( <codeph>lcb_enable_timings</codeph>). Timings between
+					1000-2000ms are now reported accurately. Additionally for more common handling,
+					second timing ranges (between 1-9s) are reported in ms range (i.e. timings of 4
+					seconds are reported as 3000-4000ms ). <ul>
+						<li>Priority: Minor</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-582">CCBC-582</xref>
+						</li>
+					</ul></li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.4.7 (Feb. 17 2015)</title>
+		
+			<ul>
+				<li>Fix SSL connection failures with <codeph>SSL_UNDEFINED_CONST_FUNCTION</codeph>. This would
+					sometimes cause failures during early connection/negotiation stages. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-571">CCBC-571</xref>
+						</li>
+					</ul></li>
+				<li>Add <i>experimental</i> support for N1QL queries. This adds support for contacting N1QL
+					endpoints and retrieving their result sets. The support at both the client and
+					server components is still a work in progress. The API is similar to the view
+					api (see <codeph>lcb_view_query()</codeph>) added in version 2.4.6. See details
+					in <codeph>&lt;libcouchbase/n1ql.h&gt;</codeph>
+					<ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-572">CCBC-572</xref>
+						</li>
+					</ul></li>
+				<li>Add <i>experimental</i> support for geospatial view queries. GeoSpatial views are available
+					as an experimental feature in the current releases of the server. This will soon
+					be offered as a stable feature in future releases. Applications may now use the
+						<codeph>lcb_RESPVIEWQUERY::geometry</codeph> field and the
+						<codeph>LCB_CMDVIEWQUERY_F_SPATIAL</codeph> to utilize geospatial views. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-573">CCBC-573</xref>
+						</li>
+					</ul></li>
+				<li>Fix memory leak for retried commands. In cases where a given command needs to be retried
+					more than once, a memory leak was fixed in which the previous instance of the
+					pacekt was not properly freed. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-574">CCBC-574</xref>
+						</li>
+					</ul></li>
+			</ul>
+	</section>
+	
+	
+	<section>
+		<title>2.4.6 (January 20 2015)</title>
+		
+			<ul>
+				<li>Fix floating point exception on OS X.  A floating point exception would sometimes be thrown on OS X sytems due  to bad time structure initialization. The installation provided with  homebrew for 2.4.5 fixed this issue. This is completely fixed in 2.4.6  Priority: Major</li>
+				<li>Improve warning messages when using deprecated options in <codeph>cbc</codeph>. This
+					provides less ambiguous help messages when using deprecated options, showing a
+					full and complete example for proper usage (when possible). <ul>
+						<li>Priority: Minor</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-562">CCBC-562</xref>
+						</li>
+					</ul></li>
+				<li>Add patch/micro version to DLL information on Windows. This lets the user see the exact
+					version of the library on windows (via right clicking on the DLL and inspecting
+					the details). Previously this information contained only the major and minor
+					versions. <ul>
+						<li>Priority: Minor</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-563">CCBC-563</xref>
+						</li>
+					</ul></li>
+				<li>Provide 
+					<i>pkgconfig</i> (
+					<codeph>.pc</codeph>) file with installation.  This may help third party applications and libraries link against libcouchbase  in some environments.
+				</li>
+				<li>Provide one-off <codeph>unsafe_optimize</codeph> option for connection string/
+						<codeph>lcb_cntl</codeph>. This provides a shorter way to enable some
+					potentially unsafe optimizations which may make the client perform better in
+					some scenarios. <ul>
+						<li>Priority: Minor</li>
+					</ul></li>
+				<li>Allow prompting for password in <codeph>cbc</codeph>. The <codeph>cbc</codeph> and
+						<codeph>cbc-pillowfight</codeph> utilities will now securely prompt for the
+					password if the password specified on the commandline is a hyphen (
+						<codeph>-</codeph>). <ul>
+						<li>Priority: Minor</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-565">CCBC-565</xref>
+						</li>
+					</ul></li>
+				<li>Fix timeouts in some durability when not all replicas are online. The library will now fail
+					the operation with <codeph>LCB_DURABILITY_ETOOMANY</codeph> rather than allowing
+					the operation to timeout. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-560">CCBC-560</xref>
+						</li>
+					</ul></li>
+				<li>Add high level row-based view functionality. This adds a new API (currently considered
+						<i>volatile</i>) which allows intelligently querying views. This builds atop
+					the basic HTTP interface, and exposes a row-based callback API based upon
+					streaming JSON parsing. The new API is defined in
+						<codeph>&lt;libcouchbase/views.h&gt;</codeph>. This API will become more
+					stable over time. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://issues.couchbase.com/browse/CCBC-100">CCBC-100</xref>
+						</li>
+					</ul></li>
+				<li>Parse configuration service locations for experimental services  This exposes the N1QL and indexing services via the 
+					<i>lcbvb</i> API. See
+					<codeph>libcouchbase/vbucket.h</codeph> for more information.
+				</li>
+			</ul>
+	</section>
+	
+	
+<section>
+		<title>2.4.5 (December 17 2014)</title>
+		
+			<ul>
+				<li>Fix <codeph>pillowfight</codeph> ignoring <codeph>set-ratio</codeph> values above 50 The
+					program would ignore these values and act as if 100 was specified, thus never
+					issuing any GET operations <ul>
+						<li>Priority: Minor</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-550">CCBC-550</xref>
+						</li>
+					</ul></li>
+				<li>Building with autotools is no longer supported. If building the library from source, you
+						<i>must</i> use <xref format="html" scope="external"
+						href="http://cmake.org/download">CMake</xref> version 2.8.9 or greater. If
+					unfamiliar with CMake, the README describes the process. Included also is a
+					top-level script called <codeph>configure.pl</codeph> which functions with an
+					autoconf-like interface. <ul>
+						<li>Priority: Major</li>
+					</ul></li>
+				<li>Fix customized IOPS crashes in some usage cases This fixes scenarios where applications
+					assume that the built-in IOPS version is 0, and attempt to "Subclass" the IOPS
+					structure. The internal version of the library structure is now 3, with some
+					extra heuristics in place to ensure that the older code will still function.
+					This issue was most visible in the Python SDK when using the gevent or Twisted
+					plugins. This issue was first introduced with version 2.4.4 <ul>
+						<li>Priority: Critical</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-557">CCBC-557</xref>
+						</li>
+					</ul></li>
+				<li>Allow raw 
+					<codeph>certpath</codeph> to be passed without need for percent-encoding (in most cases)  This allows for a common pattern fo passing 
+					<codeph>certpath</codeph> in the connection string as  a raw, unencoded path. This allows a user to do
+					<codeph>couchbases://host/bucket?certpath=/foo/bar/baz</codeph>.
+				</li>
+				<li>Fix missing installation UV plugin headers and source In 2.4.4 this was accidentally left
+					out, and would only be installed if the plugin itself was built and installed.
+					This affected building the Node.JS SDK using an existing libcouchbase install. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-558">CCBC-558</xref>
+						</li>
+					</ul></li>
+			</ul>
+</section>
+	
+	<section>
+	
+		<title>2.4.4 (Nov. 19 2014)</title>
+		
+			<ul>
+				<li>Detect disconnected pooled sockets This allows the connection pool to detect dead sockets
+					which were closed by a server when they were idle. Sometimes servers will close
+					connections to open idle sockets to save resources, or because of bugs in their
+					implementations. This will fix some issues experienced with views where queries
+					would randomly fail with <codeph>LCB_NETWORK_ERROR</codeph> or
+						<codeph>LCB_ESOCKSHUTDOWN</codeph>, by first checking if the socket is alive
+					before returning it back to the library's core. Note that the
+						<codeph>libuv</codeph> plugin does not implement this functionality yet. <ul>
+						<li>Priority: Critical</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-546">CCBC-546</xref>
+						</li>
+					</ul></li>
+				<li>Fix <i>pillowfight</i>
+					<codeph>--min-size</codeph> bug This fixes a bug where pillowfight would
+					sometimes compare the <codeph>min-size</codeph> option to an uninitialized
+						<codeph>max-size</codeph> option and round it down to that value; then would
+					set the <codeph>max-size</codeph> option. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-542">CCBC-542</xref>
+						</li>
+					</ul></li>
+				<li>Don't ignore <codeph>LCB_CNTL_DURABILITY_INTERVAL</codeph> Fix a bug where this interval
+					would be ignored, if modified by the user; always reverting to 100ms. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-543">CCBC-543</xref>
+						</li>
+					</ul></li>
+				<li>Fix memory leak with HTTP requests using a request body Requests (such as
+						<codeph>PUT</codeph>, <codeph>POST</codeph>, etc) which contained a request
+					body would cause a memory leak as the library forgot to free them when the
+					request object was destroyed. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-538">CCBC-538</xref>
+						</li>
+					</ul></li>
+				<li>Fix errneous <codeph>LCB_SUCCESS</codeph> return when passed duplicate keys to
+						<codeph>lcb_durability_poll()</codeph>. This would cause applications to
+					mistakenly wait for a callback to arrive, when in fact the command had failed. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-535">CCBC-536</xref>
+						</li>
+					</ul></li>
+				<li>Add option to preserve vbucket ownership heuristics across config updates This allows the
+					learned configuration settings to persist between configuration updates. The
+					default behavior (up to, and including this change) is to discard any "learned"
+					configuration in favor of the explicitly new config passed to the server. This
+					new option allows this information to be persisted when a new configuration
+					update is received. This behavior is considered experimental, and is primarily
+					intended to reduce the time it takes for the client to relearn the current node
+					(which is typically under 1-2 seconds). <ul>
+						<li>Priority: Minor</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-530">CCBC-530</xref>
+						</li>
+					</ul></li>
+				<li>Relocate memcached packets on topology changes for memcached buckets This enhances the
+					behavior of the client when operating with a memcached bucket during a topology
+					change. Previously the library would not relocate packets to new servers,
+					resulting in errors for items which were now mapped to wrong nodes. The new
+					behavior remaps the key to the new server using the updated ketama hashing. Note
+					that as a current restriction, the remapping will be performed based on the key
+					of the item, not any <codeph>hashkey</codeph> parameter being employed. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-331">CCBC-331</xref>
+						</li>
+					</ul></li>
+				<li>Return error if ignored/conflicting options are found This changes the behavior of the
+					library to throw an error if a specific option field was filled in which did not
+					make sense for a given command, for example, specifying a <codeph>cas</codeph>
+					value using a <codeph>LCB_ADD</codeph> operation with
+					<codeph>lcb_store</codeph>. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-529">CCBC-529</xref>
+						</li>
+					</ul></li>
+				<li>Fix issue when sending out large <i>OBSERVE</i> command. This would cause a partial command
+					to be sent out if the size of the output packet was greater than 512 bytes. This
+					has been fixed by dynamically growing the output buffer for <i>OBSERVE</i>
+					<ul>
+						<li>Priority: Minor</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-528">CCBC-528</xref>
+						</li>
+					</ul></li>
+				<li>Fix spurious timeouts when using <codeph>lcb_durability_poll</codeph> This fixes an issue
+					where sometimes the durability poll operation would prematurely time out. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-527">CCBC-527</xref>
+						</li>
+					</ul></li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.4.3 (Oct. 21 2014)</title>
+	
+			<ul>
+				<li>Disable support for SSLv3 This works around the <i>POODLE</i> SSLv3 vulnerability by
+					disabling support for anything below TLSv1. <ul>
+						<li>Priority: Critical</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-523">CCBC-523</xref>
+						</li>
+					</ul></li>
+				<li>Pillowfight enhancements Several behavior changes were made to pillowfight in this version.
+					These are: <ul>
+						<li>The <codeph>-l</codeph> or <codeph>-c -1</codeph> option is in effect by
+							default. This means that by default <codeph>pillowfight</codeph> will
+							run an infinite number of cycles. The previous behavior was to default
+							to a single cycle, requiring an explicit <codeph>--loop</codeph> to
+							ensure the workload ran for a considerable amount of time. </li>
+						<li>When multiple threads are used, the workload is divided among the
+							threads, thus making it that each thread only operates on a subset of
+							the data.</li>
+						<li>A <codeph>--sequential</codeph> option has been added to allow the
+							workload to operate in <i>sequence</i> on the total number of items.
+							This is useful when wishing to load a bucket with many items. </li>
+						<li>A <codeph>--start-at</codeph> option has been added to allow the
+							workload to specify an alternate range of keys; effectively allowing
+							resumption of a previous run. The <codeph>--start-at</codeph> flag
+							allows to specify the lower bound number which will be used to generate
+							keys. Thus a <codeph>--num-items=20000</codeph> and a
+								<codeph>--start-at=10000</codeph> will generate keys from 10000
+							through 30000. </li>
+						<li>The <i>population</i> phase has now been merged with the general
+							workload implementation. This means that all worker threads will
+							participate in the population phase. The previous behavior limited the
+							populate phase to a single thread. </li>
+						<li>If <codeph>stdout</codeph> is detected to be a terminal, a simple
+							"OPS/SEC" meter will periodically write the estimated throughput to the
+							screen. </li>
+					</ul></li>
+				<li>Fix memory leak when using large read buffers In the case where large read buffers are used
+					(and the <codeph>iovec</codeph> elements becomes sizable, the library may end up
+					incorrectly caching some memory blocks for future use. This fix makes the blocks
+					be cached at the allocator level, so that they are properly (re) utilized. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issue/browse/CCBC-519">CCBC-519</xref>
+						</li>
+					</ul></li>
+				<li>Use forward map (and other heuristics) to get a next node for an item after a not-my-vbucket
+					reply. Since the server (see bug attached) does not always guarantee that a
+					given config is the most <i>correct</i>, the client must do some guesswork in
+					order to properly map a node when it gets a not-my-vbucket; especially if the
+					config says that the node is the correct one. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/MB-12268">MB-12268</xref>
+						</li>
+					</ul></li>
+			</ul>
+	</section>
+	
+	<section>
+		<title>2.4.2 (Sep. 23 2014)</title>
+		
+			<ul>
+				<li>Mark the <codeph>hashkey</codeph> fields as being <i>volatile</i>. Usage of this field is
+					not supported in many cluster systems and is thus not supported functionality.
+					It exists primarily as a legacy from an older API <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-508">CCBC-508</xref>
+						</li>
+					</ul></li>
+				<li>Add "key stats" mode to <codeph>lcb_CMDDSTATS</codeph>. This adds an additional key stats
+					mode to the <codeph>lcb_stats3()</codeph> API which interprets the
+						<codeph>key</codeph> field as being a document ID for which information
+					(such as expiry, status) should be retrieved, rather than a system statistics
+					key. Similar functionality already exists in the Java client library as
+						<codeph>getKeyStats()</codeph>. In addition to this feature, a <codeph>cbc
+						stats --keystats</codeph> option is also provided to employ this
+					functionality from the command line. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/CCBC-318">CCBC-318</xref>
+						</li>
+					</ul></li>
+				<li>Add more details about replica nodes in the <codeph>cbc hash</codeph> command. <ul>
+						<li>Priority: Minor</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-504">CCBC-504</xref>
+						</li>
+					</ul></li>
+				<li>Add <codeph>lcb_cntl()</codeph> setting to retrieve bucket name. Previously the library did
+					not have a means by which the bucket name could be retrieved. Using the
+						<codeph>LCB_CNTL_BUCKETNAME</codeph> setting, the bucket name will now be
+					returned. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/CCBC-502">CCBC-502</xref>
+						</li>
+					</ul></li>
+			</ul>
+	</section>
+	
+	<section>
+		<title>2.4.1</title>
+		
+			<ul>
+				<li>Implement <codeph>mcflush</codeph> subcommand for <codeph>cbc</codeph>. This was removed in
+					the cbc rewrite as the previous <codeph>flush</codeph> command. <ul>
+						<li>Priority: Minor</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-486">CCBC-486</xref>
+						</li>
+					</ul></li>
+				<li>Requests issued to an invalid replica via <codeph>lcb_get_replica()</codeph> should fail
+					with the <codeph>LCB_NO_MATCHING_SERVER_CODE</codeph>. Previously this sometimes
+					went through due to an incorrect bounds checking in the
+						<codeph>lcbvb_vbreplica()</codeph> function. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-488">CCBC-488</xref>
+						</li>
+					</ul></li>
+				<li>Fixed a memory leak in <codeph>lcb_get_replica()</codeph> when the operation would fail. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-489">CCBC-489</xref>
+							<xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-490">CCBC-490</xref>
+						</li>
+					</ul></li>
+				<li>Fix memory leak in <codeph>lcb_sched_fail()</codeph> when extended commands are in the
+					pipeline <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-474">CCBC-474</xref>
+						</li>
+					</ul></li>
+				<li>Provide <codeph>lcb_dump()</codeph> function call to dump state information about a client
+					handle. The function call itself is currently marked as volatile and the output
+					format is very much likely to change. <ul>
+						<li>Priority: Minor</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-490">CCBC-491</xref>
+						</li>
+					</ul></li>
+				<li>Fix <codeph>ratio</codeph> argument in <codeph>cbc-pillowfight</codeph>. This ensures that
+					the <codeph>ratio</codeph> argument will truly determine the ratio of gets to
+					sets. <ul>
+						<li>Priority: Minor</li>
+					</ul></li>
+				<li>Fix crash when HTTP request is retried. This may take place during topology changes <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-497">CCBC-497</xref>
+						</li>
+					</ul></li>
+				<li>Allow simple host-port string in connection string, giving it an implicit
+						<codeph>http://</codeph> scheme. This allows easier backwards compatibility
+					with some application <ul>
+						<li>Priority: Minor</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-500">CCBC-500</xref>
+						</li>
+					</ul></li>
+				<li>Update some SSL options to better reflect server 3.0 functionality The old
+						<codeph>capath</codeph> option has been renamed to <codeph>certpath</codeph>
+					to indicate that the path is not to the signing authority, but to the
+					self-signed server certificate generated by the server itself. Additionally the
+						<codeph>no_verify</codeph> option has been hidden. <ul>
+						<li>Priority: Major</li>
+						<li>Issues: <xref format="html" scope="external"
+								href="http://couchbase.com/issues/browse/CCBC-501">CCBC-501</xref>
+						</li>
+					</ul></li>
+			</ul>
+	</section>
+	
+	<section>
+		<title>2.4.0 GA</title>
+		
+			<ul>
+				<li>[major] Attempt to retry items that are mapped to a non-existent node in a degraded cluster.
+					Rather than returning <codeph>LCB_NO_MATCHING_SERVER</codeph> the behavior
+					should be to wait for the item to succeed and attempt to fetch a new cluster
+					configuration.  In order to control how such 'orphaned' commands are handled, a
+					new value has been added to the <codeph>lcb_RETRYMODEOPTS</codeph> called
+						<codeph>LCB_RETRY_ON_MISSINGNODE</codeph> which dictates how commands should
+					be rescheduled if the associated vbucket has no master. The default is to retry
+					the command until it times out, but by setting this value to <codeph>0</codeph>
+					(See <codeph>LCB_CNTL_RETRYMODE</codeph>) it may only be attempted once, causing
+					'fail fast' behavior in such a case. </li>
+				<li>[major] Don't throttle config requests based on initial file-based config.  This allows the client to quickly recover from a stale config cache without  waiting for the 
+					<codeph>LCB_CNTL_CONFDELAY_THRESH</codeph> interval to elapse. Prior to this  fix, a client would appear to "not recover" if bootstrapping from a stale cache.  In reality the client would eventually recover but was waiting for the delay  threshold to elapse.
+				</li>
+				<li>[major] Ignore 
+					<codeph>NOT_MY_VBUCKET</codeph> config payloads if CCCP provider is disabled.  This allows the client to circumvent any possible bugs in the CCCP response  payload and rely entirely on the HTTP config. It also allows 'rewriting'  proxies like confsed to function.
+				</li>
+			</ul>
+	</section>
+	<section>
+		<title>2.4.0-beta</title>
+		
+			<ul>
+				<li>[major] Better error reporting for SSL failures.  This adds new error codes (
+					<codeph>LCB_SSL_ERROR</codeph>, 
+					<codeph>LCB_SSL_CANTVERIFY</codeph>)  which are returned on initialization and verification failures  respectively.
+				</li>
+				<li>[minor] Communication via legacy memcached servers is possible  by using the 
+					<codeph>memcached://</codeph> scheme in the connection string.
+				</li>
+				<li>[minor] Environment variables understood by the library are now  documented in their own section.</li>
+				<li>[major] Add 
+					<codeph>lcb_get_node()</codeph> function to retrieve addresses for  various nodes in the cluster. This deprecates the 
+					<codeph>lcb_get_host()</codeph>,
+					<codeph>lcb_get_port()</codeph> and 
+					<codeph>lcb_get_server_list()</codeph> functions as they are  constrained to only return information about the administrative API.  The new function is configurable to return information about various  ports.
+				</li>
+				<li>[major] The 
+					<codeph>dsn</codeph> field in the 
+					<codeph>lcb_create_st</codeph> structure has been  renamed to 
+					<codeph>connstr</codeph>.
+				</li>
+				<li>[major] An HTTP request which has followed redirects will cause the
+					<codeph>lcb_wait()</codeph> function to never return. This bug was introduced in  2.4.0-DP1 and has now been fixed.
+				</li>
+				<li>[minor] 
+					<codeph>lcb_get_server_list()</codeph> function now returns updated information  from the current cluster configuration. Previously this would only return  a node from the list specified during initial creation.
+				</li>
+				<li>[minor] Provide additional error classifiers. Two error classifiers have been added, they
+					are: <ul>
+						<li>
+							<codeph>LCB_ERRTYPE_SRVLOAD</codeph> which indicates that the server is
+							likely under high load. </li>
+						<li>
+							<codeph>LCB_ERRTYPE_SRVGEN</codeph> which indicates that the error is a
+							direct reply from the server. This code can help distinguish between
+							client and server generated return codes. </li>
+					</ul></li>
+				<li>[major] Provide HTTP keepalive and connection pooling for HTTP requests. This allows the
+					client to reuse an HTTP connection for multiple requests rather than creating a
+					new connection and closing it for each operation.  The functionality may be
+					controlled via the <codeph>LCB_CNTL_HTTP_POOLSIZE</codeph> setting which limits
+					how many open connections (per server) to maintain inside the client. Setting
+					this value to <codeph>0</codeph> will disable pooling and restore old behavior. </li>
+				<li>[major] Properly schedule next invocations for retry queue. A bug was introduced  in 2.4.0-dp1 which would cause the next tick callback to be invoked in what is  effectively a busy loop. This would be reflected in higher CPU load and less  throughput during topology changes.</li>
+				<li>[major] Return error if empty key is passed to an operation. Empty keys will  cause the server to drop the connection.  The error code returned is the newly added 
+					<codeph>LCB_EMPTY_KEY</codeph>
+				</li>
+				<li>[minor] Provide setting to disable refreshing the configuration when an HTTP  API error is encountered (from one of the HTTP callback functions). This  adds the 
+					<codeph>LCB_CNTL_HTTP_REFRESH_CONFIG_ON_ERROR</codeph> setting.
+				</li>
+				<li>[major] Fix bug where the CCCP provider may prematurely fail, activating the  HTTP provider</li>
+			</ul>
+	</section>
+	<section>
+	
+	
+		<title>2.4.0-dp1 (2014-06-18)</title>
+		
+			<p>
+				<b>Changes affecting older APIs</b>
+			</p>
+			<ul>
+				<li>[minor] Make 
+					<codeph>run_event_loop</codeph> and 
+					<codeph>stop_event_loop</codeph> private.  These functions may no longer be used from within an application to  start/stop the event loop. 
+					<codeph>lcb_wait()</codeph> and 
+					<codeph>lcb_wait3()</codeph> should be  used instead.
+				</li>
+				<li>[major] Deprecate the 
+					<codeph>lcb_set_XXX</codeph> functions. 
+					<codeph>lcb_set_timeout</codeph>  and some other calls have been deprecated in favor of the 
+					<codeph>lcb_cntl()</codeph>  interface. These functions will still work but will cause the compiler  to print a deprecation warning.
+				</li>
+				<li>[minor] 
+					<codeph>lcb_socket_t</codeph> is typedefed to a 
+					<codeph>DWORD</codeph> on windows. In  previous versions this was an 
+					<codeph>int</codeph>.
+				</li>
+				<li>[minor] Connecting to a standalone memcached instance is currently no longer  supported.</li>
+				<li>[major] 
+					<codeph>lcb_set_error_callback()</codeph> has been deprecated. Applications should  use the new 
+					<codeph>lcb_set_bootstrap_callback()</codeph> and/or operation callbacks  to determine success/failure status.
+				</li>
+				<li>[major] 
+					<codeph>lcb_get_last_error()</codeph> has been deprecated. Error information is always  returned in the operation callback
+				</li>
+				<li>[major] Disable the sending of 
+					<codeph>GETQ</codeph> packets. The format of this command  is cumbersome to deal with and in most uses cases is actually slightly
+					<i>less</i> efficient on the network. Note that this does not change the API  of the actual 
+					<codeph>lcb_get()</codeph> call, but simply changes the format of the  packets sent over the wire.
+				</li>
+				<li>[major] The IOPS API has been changed. This is considered volatile interface  and may subsequently change in the future as well.</li>
+			</ul>
+			<p>
+				<b>New APIs added in 2.4.0 extending existing functionality</b>
+			</p>
+			<p>These changes extend existing features with enhanced APIs</p>
+			<ul>
+				<li>[major] Additional APIs for 
+					<codeph>lcb_cntl()</codeph>. These consist of helper functions  to make it easier to use simple types or strings rather than pointers, if  possible. These functions are 
+					<codeph>lcb_cntl_string()</codeph>, 
+					<codeph>lcb_cntl_setu32()</codeph> and
+					<codeph>lcb_cntl_getu32()</codeph>
+				</li>
+				<li>[minor] Provide extended version of 
+					<codeph>lcb_wait()</codeph>.  A new function called 
+					<codeph>lcb_wait3()</codeph> has been added which offers additional  options with respect to running the event loop. Specifically it offers to  bypass the check for pending operations which 
+					<codeph>lcb_wait()</codeph> executes. This  is both more performant and allows us to wait for operations which are  not explicitly scheduled.
+				</li>
+				<li>[major] Provide API to request a configuration refresh.  Sometimes it is necessary to force the client to request a new configuration,  for example in certain failover conditions. A new API called 
+					<codeph>lcb_config_refresh()</codeph>  has been added, and should be used in conjunction with 
+					<codeph>lcb_wait3()</codeph>.
+				</li>
+				<li>[major] Provide bootstrapping notification callback  This provides an explicit 
+					<codeph>lcb_set_bootstrap_callback()</codeph> to definitively  determine whether the client has received its initial configuration (and  thus may now start performing operations) or whether it failed (and thus  must be reinitialized). This deprecates the common use case of
+					<codeph>lcb_set_error_callback()</codeph>.
+				</li>
+				<li>[major] New vBucket interface/API. This API is used internally and exposed  as 
+					<i>volatile</i> inside the public header files. It provides extended features,  a more concise API, and is compatible with the upcoming Couchbase 3.0 config  format. Note that file-based configuration caches written by this version of  the library are incompatible with previous versions, however this version may  read caches generated by previous versions. This is because this version generates  a stripped-down version of the "terse" configuration style.
+				</li>
+				<li>[major] Extended detailed error codes.  These error codes expose more detail about the 
+					<codeph>NETWORK_ERROR</codeph> and
+					<codeph>CONNECT_ERROR</codeph> codes returned by previous versions of the library. The extended  codes are not returned by default and must be explicitly enabled in order to  retain backwards compatibility with applications which rely on the older  error codes.
+				</li>
+			</ul>
+			<p>
+				<b>New Features in 2.4.0</b>
+			</p>
+			<ul>
+				<li>[major] Connection Strings (aka "dsn") feature for instance creation. This adds a new  version of the 
+					<codeph>lcb_create_st</codeph> structure which is passed a URI-like string  rather than a semicolon-delimited list of hosts. This string is used to  provide options and the list of hosts that the library should connect to.  For example, 
+					<codeph>couchbase://default/localhost&amp;compression=off</codeph>
+				</li>
+				<li>[major] SSL transport support for Couchbase 3.0 Enterprise.  Couchbase 3.0 enterprise features the ability to encrypt communications  between the client and the server using the SSL protocol. SSL protocol  support in 
+					<i>libcouchbase</i>.
+				</li>
+				<li>[major] Retry queue for failed operations. The retry queue is used  as a place to place operations which have failed internally and which  should be retried within a certain amount of time. This also provides  options on which commands should be retried.</li>
+				<li>[minor] Compression/JSON flag (aka Datatype) support  This adds support for a future feature of Couchbase server which will  feature transparent compression. This feature also allows the server  to signal to the library if a document is JSON or not. The compression  feature may be disabled at compile-time, and may also be modified at  runtime by setting 
+					<codeph>compression=off</codeph> in either the connection string  or via 
+					<codeph>lcb_cntl_setstring(instance, "compression", "off")</codeph>
+				</li>
+				<li>[major] Experimental <i>scheduling</i> API. This API replaces most of the older operation
+					APIs with a scheduling API. These APIs are called with one command at a time and
+					insert the resultant packet into a pipeline. The user may "schedule" the
+					commands or "fail" the pipeline if a certain request has failed to be scheduled.
+					This API also provides a common ABI header for commands so that they may easily
+					be used via type-punning, or wrapped as a class hierarchy in C++.  This API is
+					currently considered volatile but will be the basis of the upcoming libcouchbase
+					3.0 API. The header file is <codeph>&lt;libcouchbase/api3.h&gt;</codeph>
+				</li>
+				<li>[major] Raw memcached packets may be sent to the library and have a callback  invoked when their responses have been received.  This adds an 
+					<codeph>lcb_pktfwd3()</codeph> API. This requires the new scheduling API.
+				</li>
+			</ul>
+			<p>
+				<b>Bug Fixes in 2.4.0</b>
+			</p>
+			<ul>
+				<li>[major] 
+					<i>select</i> plugin may endlessly loop in some cases  The plugin may loop if there was a long timeout from the  future .
+				</li>
+				<li>[major] Do not break TCP connections on topology changes unless ejected from  cluster. This ensures that nodes which are still part of the cluster have their  TCP connections remain in tact despite being shifted in their server index values.  Packets which have been sent to the wrong vBucket are silently ignored and  rescheduled to their appropriate destination. This decreases load significantly  on the client, network, and cluster during topology changes.</li>
+				<li>[major] Use new-style "Terse" URI format when requesting a configuration over HTTP.  This uses the HTTP configuration format over the new 
+					<codeph>/pools/default/bs/default</codeph>  rather than the older 
+					<codeph>/pools/default/bucketsStreaming/default</codeph> form. The former  form is much more efficient on the cluster side. If the new URI form is not  supported (i.e. the server responds with an HTTP 404) the older form will be  used instead. You may modify this behavior by setting the 
+					<codeph>LCB_CNTL_HTCONFIG_URLTYPE</codeph>  setting via 
+					<codeph>lcb_cntl()</codeph>.
+				</li>
+				<li>[minor] The 
+					<codeph>cmake/configure</codeph> script now accepts the 
+					<codeph>LDFLAGS</codeph>, 
+					<codeph>CPPFLAGS</codeph>, 
+					<codeph>CFLAGS</codeph>,
+					<codeph>CXXFLAGS</codeph>, 
+					<codeph>CC</codeph>, and 
+					<codeph>CXX</codeph> settings both within the environment 
+					<i>and</i> the  commandline, so the forms of 
+					<codeph>CC=clang ./cmake/configure</codeph> and
+					<codeph>./cmake/configure CC=clang</codeph> are equivalent.
+				</li>
+				<li>[minor] The 
+					<codeph>pillowfight</codeph> tool will now print latencies between 1-10ms in resolutions  of 100us.
+				</li>
+			</ul>
+			<p>
+				<b>Metadata and Packaging Changes in 2.4.0</b>
+			</p>
+			<ul>
+				<li>[major] Use Doxygen for API documentation.  This replaces the 
+					<i>manpages</i> for API documentation with Doxygen. Doxygen  is a free and portable documentation system which may be obtained from your  distribution or at 
+					<xref format="html" scope="external" href="http://doxygen.org"></xref>. To generate the documentation  from the source tree, simply run 
+					<codeph>doxygen</codeph> from the source root directory.  To generate internal documentation, run 
+					<codeph>./docs/gen_internal_apidoc.sh</codeph>.
+				</li>
+				<li>[major] Add interface attributes to all API calls  This properly documents all API calls with a certain API stability level  such as 
+					<i>committed</i> (for stable APIs), 
+					<i>uncomitted</i> for APIs which may, but  are not likely to change, and 
+					<i>volatile</i> for APIs which are likely to be  changed or removed.
+				</li>
+				<li>[major] Public header files have been reorganized This changes the layout of the header
+					files from previous versions. This should not affect applications as
+					applications should only ever include the main
+						<codeph>&lt;libcouchbase/couchbase.h&gt;</codeph> file.  the following files
+					have been <i>removed</i> from the <codeph>&lt;libcouchbase/*&gt;</codeph> header
+					directory:
+					<codeblock>* `types.h` - Merged into other header files
+* `arguments.h` - now a part of `couchbase.h`
+* `callbacks.h` - now a part of `couchbase.h`
+* `debug.h` - unused and obsolete
+* `durability.h` - now a part of `couchbase.h`
+* `behavior.h` - Merged into `deprecated.h`
+* `sanitycheck.h` - Merged into `deprecated.h`
+* `timings.h` - Part of `couchbase.h`
+* `compat.h` - Part of `deprecated.h`</codeblock>
+					The following files have been <i>added</i> into the
+						<codeph>&lt;libcouchbase/*&gt;</codeph> directory. Unless otherwise noted,
+					these files are included by <codeph>&lt;libcouchbase/couchbase.h&gt;</codeph>:
+					<codeblock>* `api3.h` - Volatile proposed 3.0 API. **Not included by default**
+* `cxxwrap.h` - Contains the implementation for the deprecated C++ wrappers
+* `deprecated.h` - Contains deprecated APIs
+* `iops.h` - Contains the IO integration APIs
+* `pktfwd.h` - Contains the packet forwarding API. **Not included by default**
+* `vbucket.h` - Contains the vBucket mapping API. **Not included by default**</codeblock>
+				</li>
+				<li>OpenSSL is now a base dependency for the library. This may be disabled at configure  time via 
+					<codeph>--enable-ssl=no</codeph>. See 
+					<codeph>./configure --help</codeph>.
+				</li>
+				<li>Snappy compression library is bundled and optionally compiled. This is left out by  default as the configure script will search for a system installed 
+					<codeph>libsnappy</codeph>.  Snappy provides the compression feature needed for compressing and inflating data  between client and server. It may be disabled at compile-time via 
+					<codeph>--enable-snappy=no</codeph>
+				</li>
+				<li>[minor] 
+					<i>libvbucket</i> has been fully integrated into libcouchbase from the forked
+					<i>libvbucket</i> package and, lives fully as part of the  library. The public vBucket API may be found in 
+					<codeph>&lt;libcouchbase/vbucket.h&gt;</codeph>.
+				</li>
+				<li>[minor] As an alternative to the cross-platform 
+					<codeph>lcb_uintNN_t</codeph> typedefs, a shorter  (and more standards compliant) alternative 
+					<codeph>lcb_UNN</codeph> typedefs are provided, thus  instead of 
+					<codeph>lcb_uint32_t</codeph> you may use 
+					<codeph>lcb_U32</codeph>. The full listing of cross platform  typdefs may be found inside 
+					<codeph>&lt;libcouchbase/sysdefs.h&gt;</codeph>
+				</li>
+			</ul>
+	</section>
+	
+	
+	<section>
+		<title>2.3.1 (2014-05-08)</title>
+	
+			<ul>
+				<li>[major] CCBC-404: Segfault in 
+					<codeph>connmgr_invoke_request</codeph>  Occasionally a segmentation fault would happen when a connection was being  released as a result of a connection failure. This was because of invalid  list tracking.
+				</li>
+				<li>[major] CCBC-395: Add 
+					<codeph>lcb_cntl()</codeph> interface for configuration cache  Configuration cache options may be set after instantiation using 
+					<codeph>lcb_cntl()</codeph>  with the new 
+					<codeph>LCB_CNTL_CONFIGCACHE</codeph> operation. The old-style 
+					<codeph>lcb_create_compat</codeph>  creation path is deprecated.
+				</li>
+				<li>[major] CCBC-394: Get-with-replica occasionally crashes on Windows and UV  during topology changes. This was due to not allocating a buffer if one did  not exist.</li>
+				<li>[major] CCBC-392: ABI compatibility broken between 2.x and 2.3 for
+					<codeph>lcb_create_compat</codeph>. This has been fixed by symbol aliasing between versions.  Developers are recommended to use the 
+					<codeph>lcb_cntl()</codeph> API to set the  configuration cache, as specified in CCBC-395
+				</li>
+				<li>[major] CCBC-385: Failed assertion on get-with-replica when connection fails.  If a connection fails with a 
+					<codeph>CMD_GET_REPLICA</codeph> command still in the queue an  assertion failure will crash the library. This has been fixed by handling the  opcode in the 
+					<codeph>failout_single_request</codeph> function.
+				</li>
+				<li>[major] CCBC-384: Unknown Winsock error codes crash application. This was fixed  by providing proper handlers for Winsock codes which were not explicitly  converted into their POSIX equivalents.</li>
+				<li>[major] CCBC-376: Fix memory leak in configuration parsing. A leak was  introduced in version 2.3.0 by not freeing the JSON pool structure. This has  been fixed in 2.3.1</li>
+				<li>[minor] CCBC-370: 
+					<codeph>lcb_get_host</codeph> and 
+					<codeph>lcb_get_port</codeph> may return host-port  combinations from different servers. If multiple servers are listening on  different ports this may result in yielding an invalid endpoint by combining  the output from those two functions. This has been fixed in 2.3.1 by returning  the host and port from the first host, in lieu of a currently-connected REST  endpoint.
+				</li>
+				<li>[minor] CCBC-368: Initial bootstrapping failure may mask 
+					<codeph>LCB_BUCKET_ENOENT</codeph>  calls with 
+					<codeph>LCB_ETIMEDOUT</codeph>. This has been fixed by not retrying configuration  retrieval if an explicit HTTP 404 code is received. Note that when using  bootstrap over memcached, a missing bucket may still be manifest as
+					<codeph>LCB_AUTH_ERROR</codeph>.
+				</li>
+				<li>[minor] CCBC-367: Ensure 
+					<codeph>lcb_get_host</codeph> does not return 
+					<codeph>NULL</codeph> when the  associated 
+					<codeph>lcb_t</codeph> is of 
+					<codeph>LCB_TYPE_CLUSTER</codeph>. This would cause crashes in some  applications which relied on this function to not return 
+					<codeph>NULL</codeph>.
+				</li>
+				<li>[major] CCBC-389: Fixed Spurious timeouts being delivered in asynchronous  use cases.  In applications which do not use 
+					<codeph>lcb_wait()</codeph> the library will potentially  time out commands internally triggering an erroneous configuration refresh.  While this issue would not end up failing operations it will cause unnecessary  network traffic for retrieving configurations. Applications using 
+					<codeph>lcb_wait()</codeph>  are not affected as that function resets the timeout handler.
+				</li>
+				<li>[major] CCBC-332, CCBC-364: Compare configuration revision information  for memcached cluster bootstrap. Previously we would refresh the  configuration upon receipt  of any new configuration update from memcached. This is fixed in 2.3.1 where  the configuration will only be applied if it is deemed to be newer than the  current configuration. With memcached bootstrap this is only true if the  configuration's 
+					<codeph>rev</codeph> field is higher than the current one.
+				</li>
+			</ul>
+	</section>
+	<section>
+	
+		<title>2.3.0 GA (2014-04-07)</title>
+		
+			<ul>
+				<li>[major] CCBC-152: Provide a master-only observe option. This adds a new  struct version to the 
+					<codeph>lcb_observe_cmd_t</codeph> which allows to select only the  master node. One can use this to efficiently check if the key exists (without  retrieving it). It also allows one to get the CAS of the item without fetching  it.
+				</li>
+				<li>[major] CCBC-281: Fix partial scheduling during multi operations. Previously  the library would deliver spurious callbacks  if multiple operations were  scheduled with a single command and one of the operations could not be mapped  to a server. This fixes this behavior and ensures that callbacks are only  invoked for items if the entire API call succeeded.</li>
+				<li>[major] CCBC-150: Multi-packet commands will no longer deliver spurious  callbacks on failure. Previously these commands would be relocated to the  same server during a configuration change, resulting in multiple callbacks  for the same command. In this case the client would think all the commands  had been completed, and when the next response arrived it would incorrectly  map it to a different request.</li>
+				<li>[minor] CCBC-327: Fix assumption of 
+					<codeph>vbucket_compare()</codeph> only returning if  a diff exists. This function actually returns a non-NULL pointer always  unless it cannot allocate more memory. This bug was introduced with the
+					<i>DP1</i> release.
+				</li>
+				<li>[minor] CCBC-326: Memcached buckets should use streaming config. This was  left unchecked in the 
+					<i>DP1</i> release and has now been fixed.
+				</li>
+				<li>[major] CCBC-351: Enhance performance for configuration parsing. In previous  versions receiving multiple configurations at once would cause CPU spikes on  slower systems. The configuration parser code has been optimized to alleviate  this issue.</li>
+				<li>[minor] CCBC-350: Provide 
+					<codeph>lcb_cntl()</codeph> API to retrieve the SCM changeset used  by the currently loaded binary. This is a more effective way to get the  revision as it does not depend on the specific headers the library was  compiled with.
+				</li>
+				<li>[major] CCBC-340: Correctly parse 
+					<codeph>""</codeph>, 
+					<codeph>"0"</codeph> and 
+					<codeph>"1"</codeph> for environment  variables. In previous versions having the entry set to an empty string  or 
+					<codeph>0</codeph> would still be treated by the library as a true value for various  environment variables. This has been fixed so that clear "False" values  such as the empty string or 0 are treated as such.
+				</li>
+			</ul>
+	</section>
+	<section>
+	
+		<title>2.3.0-dp1 (2014-02-04)</title>
+		
+			<ul>
+				<li>[major] CCBC-234: Implementation of[Cluster Configuration Carrier Publication][cccp-wiki].
+					This is the new and more efficient way to bootstrap from a cluster using the
+					native memcached protocol and is quicker than the previous HTTP bootstrap
+					mechanism, dramatically improving startup times and reducing load on the server.
+					This feature is available in server verions 2.5 and greater. The existing HTTP
+					configuration is still supported and will be employed as a fallback in the event
+					that <codeph>CCCP</codeph> is not supported.  In conjunction with this, a new
+					struct version has been added to the <codeph>lcb_create_st</codeph> parameters
+					structure for use with <codeph>lcb_create</codeph>. This allows you to get more
+					control over how the client is initialized: <codeblock>lcb_t instance;
+struct lcb_create_st options;
+lcb_config_transport_t enabled_transports = {
+    LCB_CONFIG_TRANSPORT_CCCP,
+    LCB_CONFIG_TRANSPORT_LIST_END
+};</codeblock>
+					<codeblock>memset(&amp;options, 0, sizeof(options));
+options.version = 2;
+options.v.v2.mchosts = "example.com:11210";
+options.v.v2.transports = enabled_transports;</codeblock>
+					<codeblock>lcb_error_t rc = lcb_create(&amp;instance, &amp;options);
+if (rc != LCB_SUCCESS) {
+    fprintf(stderr, "Failed to create instance: %s\n", lcb_strerror(instance, rc));
+}</codeblock>
+					The above snippet will configure a client to <i>always</i> use the
+						<codeph>CCCP</codeph> protocol and never attempt to fall back on HTTP  The
+					CCCP implementation required a significant rewrite in how sockets were created
+					and re-used. Particularly, a connection pooling feature was implemented.
+					Additionally, the <codeph>cbc</codeph> command now has an additional
+						<codeph>-C</codeph> option which accepts the preferred configuration
+					mechanism to use. </li>
+				<li>[major] CCBC-305: Implement logging hooks.  This improvements adds various levels of
+					diagnostic logging with the library itself. It may be utilized via the
+					environment (by setting the <codeph>LCB_LOGLEVEL</codeph> environment variable
+					to a positive integer -- the higher the number the more verbose the logging).
+					Integrators may also use the logging API specified in
+						<codeph>&lt;libcouchbase/types.h&gt;</codeph> to proxy the library's logging
+					messages into your own application.  Current events logged include connection
+					initialization, destruction, connection pool management, configuration changes,
+					and timeouts.  By default the library is silent. </li>
+				<li>[major] CCBC-316: Allow per-node bootstrap/config timeouts.  This change allows more finer grained control over how long to wait per-node  to receive updated configuration info. This setting helps adjust the initial  and subsequent bootstrap processes to help ensure each node gets a slice of  time.</li>
+				<li>[major] CCBC-297: Handle spurious EWOULDBLOCK on UV/Win32  This issue caused odd errors on Windows when large amounts of data  would be received on the socket.</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.2.0 (2013-10-05)</title>
+		
+			<ul>
+				<li>[major] CCBC-169 Handle 302 redirects in HTTP (views, administrative  requests). By default the library will follow up to three redirects.  Once the limit reached the request will be terminated with code
+					<codeph>LCB_TOO_MANY_REDIRECTS</codeph>. Limit is configurable through
+					<codeph>LCB_CNTL_MAX_REDIRECTS</codeph>. If set to -1, it will disable redirect  limit.
+					<codeblock>  int new_value = 5;
+  lcb_cntl(instance, LCB_CNTL_SET, LCB_CNTL_MAX_REDIRECTS, &amp;new_value);</codeblock>
+				</li>
+				<li>[major] CCBC-243 Replace isasl with cbsasl, the latter has implemented both PLAIN and
+					CRAM-MD5 authentication mechanisms. <ul>
+						<li>
+							<codeph>LCB_CNTL_MEMDNODE_INFO</codeph> command updated to include
+							effective SASL mechanism:
+							<codeblock>    cb_cntl_server_t node;
+    node.version = 1;
+    node.v.v1.index = 0; /* first node */
+    lcb_cntl(instance, LCB_CNTL_GET, LCB_CNTL_MEMDNODE_INFO, &amp;node);
+    if (node.v.v1.sasl_mech) {
+        printf("authenticated via SASL '%s'\n",
+               node.v.v1.sasl_mech);
+    }</codeblock>
+						</li>
+						<li>It is also possible to force specific authentication mechanism for the
+							connection handle using <codeph>LCB_CNTL_FORCE_SASL_MECH</codeph>
+							command:
+							<codeblock>    lcb_cntl(instance, LCB_CNTL_SET, LCB_CNTL_FORCE_SASL_MECH, "PLAIN");</codeblock>
+						</li>
+					</ul></li>
+				<li>[major] CCBC-286 libuv plugin: use same CRT for free/malloc</li>
+				<li>[major] CCBC-288 Fail 
+					<codeph>NOT_MY_VBUCKET</codeph> responses on timeout
+				</li>
+				<li>[major] CCBC-275 Do a full purge when negotiation times out. In this  case we must purge the server from all commands and not simply pop  individual items.</li>
+				<li>[major] CCBC-275 Reset the server's buffers upon reconnection. This  fixes a crash experienced when requesting a new read with the  previous buffer still in tact. This was exposed by calling
+					<codeph>lcb_failout_server</codeph> on a timeout error while maintaining the same  server struct.
+				</li>
+				<li>[major] CCBC-282 Make server buffers reentrant-safe. When purging  implicit commands, we invoke callbacks which may in turn cause other  LCB entry points to be invoked which can shift the contents and/or  positions of the ringbuffers we're reading from.</li>
+				<li>[major] CCBC-204, CCBC-205 Stricter/More inspectable behavior for  config cache. This provides a test and an additional 
+					<codeph>lcb_cntl</codeph>  operation to check the status of the configuration cache. Also it  switches off config cache with memcached buckets.
+					<codeblock>  int is_loaded;
+  lcb_cntl(instance, LCB_CNTL_GET, LCB_CNTL_CONFIG_CACHE_LOADED, &amp;is_loaded);
+  if (is_loaded) {
+      printf("Configuration cache saved us a trip to the config server\n");
+  } else {
+      printf("We had to contact the configuration server for some reason\n");
+  }</codeblock>
+				</li>
+				<li>[major] CCBC-278 Use common config retry mechanism for bad  configcache. This uses the same error handling mechanism as when a  bad configuration has been received from the network. New
+					<codeph>LCB_CONFIG_CACHE_INVALID</codeph> error code to notify the user of such a  situation
+				</li>
+				<li>[major] CCBC-274 Handle getl/unl when purging the server (thanks  Robert Groenenberg)</li>
+				<li>[major] Don't failout all commands on a timeout. Only fail those  commands which are old enough to have timed out already.</li>
+				<li>[major] CCBC-269 Don't record and use TTP/TTR from observe. Just  poll at a fixed interval, as the responses from the server side can  be unreliable.</li>
+				<li>[minor] Allow hooks for mapping server codes to errors. This also  helps handle sane behavior if a new error code is introduced, or  allow user-defined logging when a specific error code is received.
+					<codeblock>  lcb_errmap_callback default_callback;</codeblock>
+					<codeblock>  lcb_error_t user_map_error(lcb_t instance, lcb_uint16_t in)
+  {
+    if (in == PROTOCOL_BINARY_RESPONSE_ETMPFAIL) {
+      fprintf(stderr, "temporary failure on server\n");
+    }
+    return default_callback(instance, in);
+  }</codeblock>
+					<codeblock>  ...</codeblock>
+					<codeblock>  default_callback = lcb_set_errmap_callback(conn, user_map_error);</codeblock>
+				</li>
+				<li>[minor] Add an example of a connection pool. See
+					<codeph>example/instancepool</codeph> directory
+				</li>
+				<li>[minor] CCBC-279 Force 
+					<codeph>lcb_wait</codeph> return result of wait operation  instead of 
+					<codeph>lcb_get_last_error</codeph>. It returns 
+					<codeph>last_error</codeph> if and only  if the handle is not yet configured
+				</li>
+				<li>[minor] CCBC-284 
+					<codeph>cbc-pillowfight</codeph>: compute item size correctly  during set If 
+					<codeph>minSize</codeph> and 
+					<codeph>maxSize</codeph> are set to the same value it  can sometimes crash since it may try to read out of memory bounds  from the allocated data buffer.
+				</li>
+				<li>[minor] CCBC-283 Apply key prefix CLI option in cbc-pillowfight</li>
+				<li>[minor] Add 
+					<codeph>--enable-maintainer-mode</codeph>. Maintainer mode enables
+					<codeph>--enable-werror --enable-warnings --enable-debug</codeph>, forces all  plugins to be installed and forces all tests, tools, and examples to  be built
+				</li>
+				<li>[minor] CCBC-255 Expose 
+					<codeph>LCB_MAX_ERROR</codeph> to allow user-defined codes
+				</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.1.3 (2013-09-10)</title>
+		
+			<ul>
+				<li>[minor] Updated gtest to version 1.7.0. Fixes issue with building  test suite with new XCode 5.0 version being released later this  month.</li>
+				<li>[major] CCBC-265 Do not try to parse config for 
+					<codeph>LCB_TYPE_CLUSTER</codeph>  handles. It fixes timouts for management operations (like 'cbc  bucket-create', 'cbc bucket-flush', 'cbc bucket-delete' and 'cbc  admin')
+				</li>
+				<li>[major] CCBC-263 Skip unfinished SASL commands on rebalance. During  rebalance, it is possible that the newly added server doesn't have  chance to finish SASL auth before the cluster will push config  update, in this case packet relocator messing cookies. Also the  patch makes sure that SASL command/cookie isn't mixing with other  commands</li>
+				<li>[major] Use cluster type connection for cbc-bucket-flush. Although  flush command is accessible for bucket type connections,  cbc-bucket-flush doesn't use provided bucket name to connect to,  therefore it will fail if the bucket name isn't "default".</li>
+				<li>[major] Allow to make connect order deterministic. It allows the  user to toggle between deterministic and random connect order for  the supplied nodes list. By default it will randomize the list.</li>
+				<li>[major] Do not allow to use Administrator account for
+					<codeph>LCB_TYPE_BUCKET</codeph>
+				</li>
+				<li>[major] CCBC-258 Fig segmentation faults during tests load of  node.js. Sets 
+					<codeph>inside_handler</codeph> on 
+					<codeph>socket_connected</codeph>. Previously we  were always using SASL auth, and as such, we wouldn't flush packets  from the 
+					<codeph>cmd_log</codeph> using 
+					<codeph>server_send_packets</codeph> (which calls
+					<codeph>apply_want</codeph>). 
+					<codeph>apply_want</codeph> shouldn't be called more than once per  event loop entry -- so this sets and unsets the 
+					<codeph>inside_handler</codeph>  flag.
+				</li>
+				<li>[major] Added support of libuv 0.8</li>
+				<li>[major] Close config connection before trying next node. It will fix  asserts in case of the config node becomes unresponsive, and the  threshold controlled by 
+					<codeph>LCB_CNTL_CONFERRTHRESH</codeph> and 
+					<codeph>lcb_cntl(3)</codeph>
+				</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.1.2 (2013-08-27)</title>
+		
+			<ul>
+				<li>[major] CCBC-253, CCBC-254 Use bucket name in SASL if username  omitted. Without this fix, you can may encounter a segmentation  faults for buckets, which are not protected by a password.</li>
+				<li>[major] Preserve IO cookie in 
+					<codeph>options_from_info</codeph> when using v0  plugins with user-provided IO loop instance. This issue was  introduced in 2.1.0.
+				</li>
+				<li>[minor] Display the effective IO backend in 'cbc-version'. This is  helpful to quickly detect what is the effective IO plugin on a given  system.</li>
+			</ul>
+	</section>
+	
+	
+	<section>
+		<title>2.1.1 (2013-08-22)</title>
+		
+			<ul>
+				<li>[minor] Use provided credentials for authenticating to the data  nodes. With this fix, it is no longer possible to use Administrator  credentials with a bucket. If your configuration does so, you must  change the credentials you use before applying this update. No  documentation guides use of Administrator credentials, so this  change is not expected to affect few, if any deployments.</li>
+				<li>[major] CCBC-239 Do not use socket after failout. Fixes segmentation  faults during rebalance.</li>
+				<li>[minor] CCBC-245 Distribute debug information with release binaries  on Windows</li>
+				<li>[minor] CCBC-248 Do not disable config.h on UNIX-like platforms. It  fixes build issue, when application is trying to include plugins  from the tarball.</li>
+				<li>[major] CCBC-192 Skip misconfigured nodes in the list. New  lcb_cntl(3couchbase) added to control whether the library will skip  nodes in initial node list, which listen on configuration port (8091  usually) but doesn't meet required parameters (invalid  authentication or missing bucket). By default report this issue and  stop trying nodes from the list, like all previous release. Read  more at man page lcb_cntl(3couchbase) in section  LCB_CNTL_SKIP_CONFIGURATION_ERRORS_ON_CONNECT</li>
+				<li>[major] CCBC-246 Fallback to 'select' IO plugin if default plugin <p> cannot be loaded. On
+						UNIX-like systems, default IO backend is 'libevent', which uses third-party
+						library might be not available at the run-time. Read in lcb_cntl(3couchbase)
+						man page in section LCB_CNTL_IOPS_DEFAULT_TYPES about how to determine
+						effective IO plugin, when your code chose to use LCB_IO_OPS_DEFAULT during
+						connection instantiation. The fallback mode doesn't affect application which
+						specify IO backend explicitly. </p></li>
+			</ul>
+	</section>
+	
+	<section>
+		<title>2.1.0 (2013-08-17)</title>
+		
+			<ul>
+				<li>[major] New backend 
+					<codeph>select</codeph>. This backend is based on the select(2)  system call and its Windows version. It could be considered the most  portable solution and is available with the libcouchbase core.
+				</li>
+				<li>[major] CCBC-236 New backend 
+					<codeph>libuv</codeph>. This backend previously was  part of the 
+					<codeph>couchnode</codeph> project and is now available as a plugin.  Because libuv doesn't ship binary packages there is no binary  package 
+					<codeph>libcouchbase2-libuv</codeph>. You can build plugin from the source  distribution, or through the 
+					<codeph>libcouchbase-dev</codeph> or
+					<codeph>libcouchbase-devel</codeph> package on UNIX like systems.
+				</li>
+				<li>[major] New backend 
+					<codeph>iocp</codeph>. This is a Windows specific backend,  which uses "I/O Completion Ports". As a part of the change, a new  version of plugin API was introduced which is more optimized to this  model of asynchronous IO.
+				</li>
+				<li>[major] CCBC-229 Fixed bug when REPLICA_FIRST fails if first try  does not return key</li>
+				<li>[major] CCBC-228 Fixed bug when REPLICA_SELECT didn't invoke  callbacks for negative error codes</li>
+				<li>[major] CCBC-145 API for durability operations. This new API is  based on 
+					<codeph>lcb_observe(3)</codeph> and allows you to monitor keys more  easily. See the man pages 
+					<codeph>lcb_durability_poll(3)</codeph> and
+					<codeph>lcb_set_durability_callback(3)</codeph> for more info.
+				</li>
+				<li>[major] New configuration interface lcb_cntl(3) along with new tunable options of the
+					library and connection instances. In this release the following settings are
+					available. See the man page for more information and examples.: <ul>
+						<li>LCB_CNTL_OP_TIMEOUT operation timeout (default 2.5 seconds)</li>
+						<li>LCB_CNTL_CONFIGURATION_TIMEOUT time to fetch cluster configuration. This
+							is similar to a connection timeout (default 5 seconds)</li>
+						<li>LCB_CNTL_VIEW_TIMEOUT timeout for couchbase views (default 75
+							seconds)</li>
+						<li>LCB_CNTL_HTTP_TIMEOUT timeout for other HTTP operations like RESTful
+							flush, bucket creating etc. (default 75 seconds)</li>
+						<li>LCB_CNTL_RBUFSIZE size of the internal read buffer (default 32768
+							bytes)</li>
+						<li>LCB_CNTL_WBUFSIZE size of the internal write buffer (default 32768
+							bytes)</li>
+						<li>LCB_CNTL_HANDLETYPE type of the <codeph>lcb\_t</codeph> handler
+							(readonly) </li>
+						<li>LCB_CNTL_VBCONFIG returns pointer to VBUCKET_CONFIG_HANDLE
+							(readonly)</li>
+						<li>LCB_CNTL_IOPS get the implementation of IO (lcb_io_opt_t)</li>
+						<li>LCB_CNTL_VBMAP get vBucket ID for a given key</li>
+						<li>LCB_CNTL_MEMDNODE_INFO get memcached node info</li>
+						<li>LCB_CNTL_CONFIGNODE_INFO get config node info</li>
+						<li>LCB_CNTL_SYNCMODE control synchronous behaviour (default
+							LCB_ASYNCHRONOUS)</li>
+						<li>LCB_CNTL_IP6POLICY specify IPv4/IPv6 policy (default
+							LCB_IPV6_DISABLED)</li>
+						<li>LCB_CNTL_CONFERRTHRESH control configuration error threshold (default
+							100)</li>
+						<li>LCB_CNTL_DURABILITY_TIMEOUT durability timeout (default 5 seconds)</li>
+						<li>LCB_CNTL_DURABILITY_INTERVAL durability polling interval (default 100
+							milliseconds)</li>
+						<li>LCB_CNTL_IOPS_DEFAULT_TYPES get the default IO types</li>
+						<li>LCB_CNTL_IOPS_DLOPEN_DEBUG control verbose printing of dynamic loading
+							of IO plugins.</li>
+					</ul></li>
+			</ul>
+	</section>
+	<section>
+	
+		<title>2.0.7 (2013-07-10)</title>
+		
+			<ul>
+				<li>[major] CCBC-183 Improve <codeph>lcb_get_replica()</codeph>. Now it is possible to choose
+					between three strategies: <ol>
+						<li>
+							<codeph>LCB_REPLICA_FIRST</codeph>: Previously accessible and now the
+							default, the caller will get a reply from the first replica to
+							successfully reply within the timeout for the operation or will receive
+							an error. </li>
+						<li>
+							<codeph>LCB_REPLICA_ALL</codeph>: Ask all replicas to send
+							documents/items back. </li>
+						<li>
+							<codeph>LCB_REPLICA_SELECT</codeph>: Select one replica by the index in
+							the configuration starting from zero. This approach can more quickly
+							receive all possible replies for a given topology, but it can also
+							generate false negatives. </li>
+					</ol>  Note that applications should not assume the order of the replicas
+					indicates more recent data is at a lower index number. It is up to the
+					application to determine which version of a document/item it may wish to use in
+					the case of retrieving data from a replica. </li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.0.6 (2013-05-07)</title>
+		
+			<ul>
+				<li>[major] CCBC-188 Fix segfault when rebalancing  When a (!connected) server is reconnected, the tasks in its  "pending" buffer will be moved into "output" buffer. If its  connection is broken again immediately, 
+					<codeph>relocate_packets()</codeph> will go  to wrong path.
+				</li>
+				<li>[major] CCBC-202 Don't try to switch to backup nodes when timeout is  reached</li>
+				<li>[major] CCBC-188 Check if SASL struct is valid before disposing</li>
+				<li>[major] Fix compile error with sun studio  "src/event.c", line 172: error: statement not reached (
+					<codeph>E_STATEMENT_NOT_REACHED</codeph>)
+				</li>
+				<li>[major] Don't invoke HTTP callbacks after cancellation, because  user code might assume a previously-freed resource is still valid</li>
+				<li>[minor] CCBC-179 Added an example to properly use the bucket  credentials for authentication instead of administrator credentials</li>
+				<li>[minor] example/yajl/couchview.c: pass cookie to the command  Fixes coredump when executing ./examples/yajl/couchview</li>
+				<li>[minor] CCBC-201 Add Host header in http request  http://cbugg.hq.couchbase.com/bug/bug-555 points out that Host is a  required field in HTTP 1.1</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.0.5 (2013-04-05)</title>
+		
+			<ul>
+				<li>[minor] Try to search the --libdir for modules if dlopen  fails to find the module in the default library path</li>
+				<li>[minor] CCBC-190 New compat mode (experimental) for configuration  caching. See man 
+					<codeph>lcb_create_compat()</codeph>
+				</li>
+				<li>[minor] Manpage fixes</li>
+				<li>[minor] Fix build on FreeBSD (http://review.couchbase.org/25289)</li>
+				<li>[minor] Fix reconnecting issues on windows (http://review.couchbase.org/25170 and <p>
+						http://review.couchbase.org/25155)</p></li>
+				<li>[minor] pillowfight example updated to optionally use threads</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.0.4 (2013-03-06)</title>
+		
+			<ul>
+				<li>[minor] CCBC-185 The bootstrap URI is not parsed correctly</li>
+				<li>[minor] CCBC-175 Work properly on systems where EWOULDBLOCK != EAGAIN</li>
+				<li>[critical] CCBC-180 Segmentation fault when the hostname resolved  into several addresses and first of them reject couchbase  connections.</li>
+				<li>[major] CCBC-182 The library stops iterating backup nodes list if  the next one isn't accessible.</li>
+				<li>[major] CCBC-147 Fixed illegal memory access in win32 plugin</li>
+				<li>[minor] CCBC-178 Build error on solaris/sparc: -Werror=cast-align</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.0.3 (2013-02-06)</title>
+		
+			<ul>
+				<li>[minor] bypass SASL LIST MECH</li>
+				<li>[minor] Shrink internal lookup tables (and reduce the size of
+					<codeph>lcb_t</codeph>)
+				</li>
+				<li>[minor] Add a new library: 
+					<codeph>libcouchbase_debug.so</codeph> (see  include/libcouchbase/debug.h) which is a new library that contains  new debug functionality.
+				</li>
+				<li>[minor] Added manual pages for the library</li>
+				<li>[major] CCBC-153 Reset internal state on 
+					<codeph>lcb_connect()</codeph>. Allow caller  to use 
+					<codeph>lcb_connect()</codeph> multiple times to implement reconnecting using  the same 
+					<codeph>lcb_t</codeph> instance. Also it sets up the initial-connection  timer for users who don't use 
+					<codeph>lcb_wait()</codeph> and drive IO loop manually.
+				</li>
+				<li>[major] CCBC-171 Invalid read in libevent plugin, when the plugin  compiled in 1.x mode</li>
+				<li>[critical] CCBC-155 Observe malfunctions in the case of multiple  keys and server failure</li>
+				<li>[major] CCBC-156 The ep-engine renders meaningful body for observe  responses only if status code is 0 (
+					<codeph>PROTOCOL_BINARY_RESPONSE_SUCCESS</codeph>).  We shouldn't interpret response body in other cases, just decode &amp;  failout request instead. Also we shouldn't retry observe commands on
+					<codeph>PROTOCOL_BINARY_RESPONSE_NOT_MY_VBUCKET</codeph>, because it can cause the  client to loop infinitely
+				</li>
+				<li>[major] CCBC-145 KV Durability operation API. Async APIs added to  allow the checking of the durability (replication and persistence)  status of a key, and to notify the user when a specific criteria has  been satisfied.</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.0.2 (2013-01-04)</title>
+		
+			<ul>
+				<li>[major] CCBC-150 commands sent to multiple servers fail to detect  the respose if mixed with other commands.</li>
+				<li>[minor] CCBC-143 'cbc version' reports that uses 2.0.0, but really  installed with 2.0.1. Minor but confusing issue.</li>
+				<li>[major] CCBC-151 Cancellation of the HTTP request might lead to  memory leaks or to segfaults (2e3875c2).</li>
+				<li>[minor] Document 
+					<codeph>LCB_SERVER_BUG</codeph> and 
+					<codeph>LCB_PLUGIN_VERSION_MISMATCH</codeph>.  Enhance the the 
+					<codeph>lcb_strerror()</codeph> test to detect undocumented error  codes.
+				</li>
+				<li>[critical] CCBC-153 Under high load the library could generate
+					<codeph>LCB_ETIMEDOUT</codeph> errors without reason owing to internal limitations.
+				</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.0.1 (2012-12-11)</title>
+		
+			<p>50 files changed, 1009 insertions(+), 274 deletions(-)</p>
+			<ul>
+				<li>libev-plugin: delay all timers while the loop isn't active. It will fix
+						<codeph>LCB_ETIMEOUT</codeph> in the following scenario: <ul>
+						<li>connect the instance</li>
+						<li>sleep for time greater than default timeout (e.g. 3 seconds)</li>
+						<li>schedule and execute a command (it will be timed out immediately)</li>
+					</ul></li>
+				<li>libev-plugin: reset IO event on delete. We need to reset it,  because it might be re-used later</li>
+				<li>CCBC-136: do not abort when purging SASL commands</li>
+				<li>Make library C89 friendly again</li>
+				<li>CCBC-132, CCBC-133: Ensure HTTP works even when the network may be  unreliable. This changeset encompasses several issues which had been  found with HTTP requests during network errors and configuration  changes. Specifically some duplicate code paths were removed, and  the process for delivering an HTTP response back to the user is more  streamlined.</li>
+				<li>CCBC-130: Fix a memory leak on the use of http headers</li>
+				<li>CCBC-131: Compensate for cluster nodes lacking couchApiBase</li>
+				<li>Fix possible SEGFAULT. Not-periodic timers are destroyed after  calling user's callback, after that library performed read from  freed pointer.</li>
+				<li>SystemTap and DTrace integration</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.0.0 (2012-11-27)</title>
+		
+			<p>12 files changed, 50 insertions(+), 12 deletions(-)</p>
+			<ul>
+				<li>Install unlock callback in synchronous mode</li>
+				<li>Add the CAS to the delete callback</li>
+				<li>Minor update of the packaging layout: <ul>
+						<li>libcouchbase-all package comes without version</li>
+						<li>extract debug symbols from libcouchbase-{bin,core} to libcouchbase-dbg
+							package </li>
+					</ul></li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.0.0beta3 (2012-11-21)</title>
+		
+			<p>64 files changed, 3641 insertions(+), 735 deletions(-)</p>
+			<ul>
+				<li>CCBC-104 Fix illegal memory access. Reconnect config listener if the  config connection was gone without proper shutdown.</li>
+				<li>Check for EWOULDBLOCK/EINTR on failed send</li>
+				<li>Allow to use gethrtime() from C++</li>
+				<li>Fix using freed memory (was introduced in 4397181)</li>
+				<li>Use dynamic versioning for plugins</li>
+				<li>Remove libtool version from the plugins</li>
+				<li>Allow to use 'cbc-hash' with files</li>
+				<li>CCBC-120 Purge stale OBSERVE packets</li>
+				<li>CCBC-120 Reformat and refactor <codeph>lcb_server_purge_implicit_responses</codeph>: <ul>
+						<li>move packet allocation out of GET handler</li>
+						<li>dropping NOOP command shouldn't return error code</li>
+					</ul></li>
+				<li>CCBC-122 Try to switch another server from backup list on timeout</li>
+				<li>CCBC-119: Allow the user to specify a different hash key. All of the  data operations contains a hashkey and nhashkey field. This allows  you to "group" items together in your cluster. A typical use case  for this is if you're storing lets say data for a single user in  multiple objects. If you want to ensure that either all or none of  the objects are available if a server goes down, it could be a good  idea to locate them on the same server. Do bear in mind that if you  do try to decide where objects is located, you may end up with an  uneven distribution of the number of items on each node. This will  again result in some nodes being more busy than others etc. This is  why some clients doesn't allow you to do this, so bear in mind that  by doing so you might not be able to get your objects from other  clients.</li>
+				<li>Create man pages for cbc and cbcrc</li>
+				<li>CCBC-118 
+					<codeph>lcb_error_t</codeph> member in the http callbacks shouldn't reflect  the HTTP response code. So the error code will be always 
+					<codeph>LCB_SUCCESS</codeph>  if the library managed to receive the data successfully.
+				</li>
+				<li>Timer in libev uses double for interval. Ref:
+					<xref format="html" scope="external" href="http://pod.tst.eu/http://cvs.schmorp.de/libev/ev.pod#code_ev_timer_code_relative_and_opti"></xref>
+				</li>
+				<li>CCBC-115 Return zero from 
+					<codeph>do_read_data()</codeph> if 
+					<codeph>operations_per_call</codeph>  reached. The `operations
+					<i>per</i>call' limit was introduced to prevent  from freezing event loop. But in the function variable rv could  store two different results and in case of reaching this limit it is  returning number of the processed records, which is wrong. The  function should return either zero (success) or non-zero (failure).
+				</li>
+				<li>Do not allow admin operations without authentication</li>
+				<li>Fix cbc-bucket-create. `sasl-password' is misspelled, and it fails  to parse the command line option.</li>
+				<li>CCBC-114 Lookup the plugin symbol also in the current executable  image.</li>
+				<li>CCBC-113 Remove unauthorized asserion (d344037). The
+					<codeph>lcb_server_send_packets()</codeph> function later check if the server object  connected and establish connection if not (with raising possible  errors)
+				</li>
+				<li>Try all known plugins for 
+					<codeph>LCB_IO_OPS_DEFAULT</codeph> in run time
+				</li>
+				<li>Don't use the 
+					<codeph>time_t</codeph> for win32. When compiling from php it turns out  that it gets another size of the 
+					<codeph>time_t</codeph> type, causing the struct  offsets to differ.
+				</li>
+				<li>Add 
+					<codeph>lcb_verify_compiler_setup()</codeph>. This function allows the "user" of  the library to verify that the compiler use a compatible struct  packing scheme.
+				</li>
+				<li>CCBC-87: Add documentation about the error codes</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.0.0beta2 (2012-10-12)</title>
+	
+			<p>81 files changed, 2822 insertions(+), 1353 deletions(-)</p>
+			<ul>
+				<li>Search ev.h also in ${includedir}/libev</li>
+				<li>Fix SEGFAULT if IO struct is allocated not by the 
+					<codeph>lcb_create()</codeph>
+				</li>
+				<li>Allow libcouchbase to connect to an instance without specifying bucket. It is useful  when the bucket not needed, e.g. when performing administration  tasks.</li>
+				<li>Fix memory leak after an unsuccessful connection</li>
+				<li>Fix invalid memory access in cbc tool. Affected command is  cbc-bucket-create</li>
+				<li>
+					<codeph>lcb_create</codeph>: replace 
+					<codeph>assert()</codeph> with error code
+				</li>
+				<li>CCBC-105 breakout event loop in default 
+					<codeph>error_callback</codeph>. This provides  better default behaviour for users who haven't defined global error  callback.
+				</li>
+				<li>Allow users to build the library without dependencies. For example,  without plugins at all. This may be useful if the plugin is  implemented by or built into the host application.</li>
+				<li>Allow users to install both libraries (2.x and 1.x) on the same system.</li>
+				<li>Make the content type optional for 
+					<codeph>lcb_make_http_request()</codeph>
+				</li>
+				<li>Fix password memory leak in http.c (7e71493)</li>
+				<li>Add support for raw http requests. libcouchase already contains all  the bits to execute a raw http request, except for the possibility  to specify a host:port, username and password.</li>
+				<li>Cleanup HTTP callbacks. Use the same callbacks both for Management  and View commands, and rename them to 
+					<codeph>lcb_http_complete_callback</codeph> and
+					<codeph>lcb_http_data_callback</codeph>.
+				</li>
+				<li>Allow users to use environment variables to pick the event plugin</li>
+				<li>Add a new interface version for creating IO objects via plugins</li>
+				<li>Implement a new libev plugin. It is compatible with both libev3 and  libev4.</li>
+				<li>CCBC-103: Fix linked event/timer lists for win32</li>
+				<li>Allow to disable CXX targets</li>
+				<li>
+					<codeph>lcb_connect()</codeph> should honor the syncmode setting. Automatically call
+					<codeph>lcb_wait()</codeph> when in synchronous mode
+				</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>2.0.0beta (2012-09-13)</title>
+		
+			<p>123 files changed, 13753 insertions(+), 8264 deletions(-)</p>
+			<ul>
+				<li>Refactor the API. This is a full redesign of the current  libcouchbase API that'll allow us to extend parts of the API without  breaking binary compatibility. Also it renames all functions to have
+					<codeph>lcb_</codeph> prefix instead of 
+					<codeph>libcouchbase_</codeph> and 
+					<codeph>LCB</codeph>/
+					<codeph>LIBCOUCHBASE</codeph> in macros.
+				</li>
+				<li>Added --enable-fat-binary. Helps to solve issues when linking with  fat binaries on MacOS.</li>
+				<li>Implement getter for number of nodes in the cluster:
+					<codeph>lcb_get_num_nodes()</codeph>
+				</li>
+				<li>Implement RESTful flush in the cbc toolset</li>
+				<li>Bundle Windows packages as zip archives</li>
+				<li>CCBC-98 Differentiate between TMPFAILs. This allows a developer  to know if the temporary condition where the request cannot be  handled is due to a constraint on the client or the server.</li>
+				<li>Don't try to put the current node last in the backup list. This may  cause "duplicates" in the list if the REST server returns another  name for the server than you used.  Ex: you specify "localhost" and  the REST response contains 127.0.0.1</li>
+				<li>Fix locking keys in multi-get mode</li>
+				<li>Fix bug where HTTP method is not set</li>
+				<li>CCBC-96 Correct buffer length for POST/PUT headers</li>
+				<li>Add 
+					<codeph>lcb_get_server_list</codeph>
+				</li>
+				<li>Merge 
+					<codeph>lcb_get_locked</codeph> into 
+					<codeph>lcb_get</codeph> function
+				</li>
+				<li>Fix Windows build</li>
+				<li>Include sys/uio.h. Needed by OpenBSD</li>
+				<li>Fix mingw build (c394a1c)</li>
+				<li>CCBC-80: Default to IPv4 only</li>
+				<li>Sync 
+					<codeph>memcached/protocol_binary.h</codeph>. Pull extra
+					<codeph>protocol_binary_datatypes</codeph> declarations.
+				</li>
+				<li>Deliver HTTP headers via callbacks</li>
+				<li>Unify HTTP interface. This means massive rename of the symbols</li>
+				<li>CCBC-92 release ringbuffer in 
+					<codeph>lcb_purge_single_server</codeph>
+				</li>
+				<li>CCBC-91 Fix switching to backup node in case of server outage</li>
+				<li>CCBC-91 Reset timer for commands with 
+					<codeph>NOT_MY_VBUCKET</codeph> response
+				</li>
+				<li>Fix alignment for sparc platforms</li>
+				<li>Fix win32 build (Add strings.h)</li>
+				<li>Fix build with libyajl available</li>
+				<li>Bundle libvbucket</li>
+				<li>Fix a problem with allocating too few slots in the 
+					<codeph>backup_nodes</codeph>. Fixes  illegal memory access.
+				</li>
+				<li>CCBC-90 Fix initialization of backup nodes array. The code switching  nodes relies on NULL terminator rather than 
+					<codeph>nbackup_nodes</codeph> variable.  Fixes illegal memory access.
+				</li>
+				<li>CCBC-89: Release the memory allocated by the http parser</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>1.0.6 (2012-08-30)</title>
+		
+			<p>5 files changed, 18 insertions(+), 5 deletions(-)</p>
+			<ul>
+				<li>CCBC-92 release ringbuffer in 
+					<codeph>libcouchbase_purge_single_server</codeph>
+				</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>1.0.5 (2012-08-15)</title>
+		
+			<p>6 files changed, 23 insertions(+), 15 deletions(-)</p>
+			<ul>
+				<li>CCBC-91 Fix switching to backup node in case of server outage</li>
+				<li>CCBC-91 Reset timer for commands with 
+					<codeph>NOT_MY_VBUCKET</codeph> response
+				</li>
+			</ul>
+	</section>
+	
+	
+	<section>
+	
+		<title>1.1.0dp9 (2012-07-27)</title>
+		
+			<p>5 files changed, 18 insertions(+), 11 deletions(-)</p>
+			<ul>
+				<li>Render auth credentials for View requests.
+					<codeph>libcouchbase_make_http_request()</codeph> won't accept credentials anymore.  It will pick them bucket configuration.
+				</li>
+			</ul>
+	</section>
+	
+	
+	<section>
+	
+		<title>1.1.0dp8 (2012-07-27)</title>
+	
+			<p>36 files changed, 2093 insertions(+), 704 deletions(-)</p>
+			<ul>
+				<li>Allow the client to specify the verbosity level on the servers using
+					<codeph>lcb_set_verbosity()</codeph> function.
+				</li>
+				<li>Bind timeouts to server sockets instead of commands. This means that  from this point timeout interval will be started from the latest IO  activity on the socket. This is a behavior change from the 1.0 series.</li>
+				<li>Allow the user to get the number of replicas using
+					<codeph>libcouchbase_get_num_replicas()</codeph>
+				</li>
+				<li>Allow a user to breakout from the event loop in callbacks using
+					<codeph>libcouchbase_breakout()</codeph>
+				</li>
+				<li>Make 
+					<codeph>libcouchbase_wait()</codeph> re-entrable
+				</li>
+				<li>Let users detect if the event loop running already using
+					<codeph>libcouchbase_is_waiting()</codeph> function.
+				</li>
+				<li>CCBC-77 Use separate error code for ENOMEM on the client</li>
+				<li>CCBC-82 Implement read replica</li>
+				<li>CCBC-85 Implement general purpose timers. It is possible for users  to define their own timers using 
+					<codeph>libcouchbase_timer_create()</codeph>  function. (See headers for more info)
+				</li>
+				<li>Implement multiple timers for windows</li>
+				<li>CCBC-15 Add OBSERVE command</li>
+				<li>Allow users to specify content type for HTTP request</li>
+				<li>Fix to handle the case when View base doesn't have URI schema</li>
+				<li>Separate HTTP callbacks for couch and management requests</li>
+				<li>Claim that server has data in buffers if there are HTTP requests  pending. Without this patch the event loop can be stopped  prematurely.</li>
+				<li>Add new cbc commands and options: <ul>
+						<li>cbc-view (remove couchview example)</li>
+						<li>cbc-verbosity</li>
+						<li>cbc-admin</li>
+						<li>cbc-bucket-delete</li>
+						<li>cbc-bucket-create</li>
+						<li>Add -p and -r options to cbc-cp to control persistence (uses OBSERVE
+							internally) </li>
+					</ul></li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>1.1.0dp7 (2012-06-19)</title>
+		
+			<p>18 files changed, 266 insertions(+), 115 deletions(-)</p>
+			<ul>
+				<li>Add support for notification callbacks for configuration changes.  Now it is possible to install a hook using function
+					<codeph>libcouchbase_set_configuration_callback()</codeph>, and be notified about all  configuration changes.
+				</li>
+				<li>Implement function to execution management requests. Using
+					<codeph>libcouchbase_make_management_request()</codeph> function you can configure  the cluster, add/remove buckets, rebalance etc. It behaves like
+					<codeph>libcouchbase_make_couch_request()</codeph> but works with another endpoint.
+				</li>
+				<li>Extract HTTP client. Backward incompatible change in Couchbase View  subsystem</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>1.1.0dp6 (2012-06-13)</title>
+		
+			<p>20 files changed, 201 insertions(+), 127 deletions(-)</p>
+			<ul>
+				<li>CCBC-70 Close dynamic libraries. Fixes small memory leak</li>
+				<li>CCBC-72 Fix compilation on macosx with gtest from homebrew</li>
+				<li>CCBC-71 Implement 'help' command for cbc tool</li>
+				<li>Undefine NDEBUG to avoid asserts to be optimized out</li>
+				<li>Fix win32 builds: <ul>
+						<li>Add suffix to cbc command implementations</li>
+						<li>Fix guards for socket errno macros</li>
+						<li>Define <codeph>size_t</codeph> types to fix MSVC 9 build </li>
+						<li>MSVC 9 isn't C99, but has stddef.h, so just include it</li>
+					</ul></li>
+				<li>CCBC-63 Include types definitions for POSIX systems. Fixes C++  builds on some systems.</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>1.1.0dp5 (2012-06-06)</title>
+		
+			<p>7 files changed, 65 insertions(+), 9 deletions(-)</p>
+			<ul>
+				<li>The library doesn't depend on pthreads (eliminates package lint  warnings)</li>
+				<li>Implement 'cbc-hash' to match server/vbucket for given key</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>1.1.0dp4 (2012-06-05)</title>
+		
+			<p>8 files changed, 54 insertions(+), 7 deletions(-)</p>
+			<ul>
+				<li>cbc: strtoull doesn't exist on win32, therefore use C++ equivalent.</li>
+				<li>integration with Travis-CI</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>1.1.0dp3 (2012-06-03)</title>
+		
+			<p>54 files changed, 1874 insertions(+), 824 deletions(-)</p>
+			<ul>
+				<li>CCBC-68 Implement 
+					<codeph>UNLOCK_KEY</codeph> (
+					<codeph>UNL</codeph>) command
+				</li>
+				<li>CCBC-68 Implement 
+					<codeph>GET_LOCKED</codeph> (
+					<codeph>GETL</codeph>) command
+				</li>
+				<li>hashset.c: iterate over whole set on rehashing. Fixes memory leaks  related to hash collisions (905ef95)</li>
+				<li>Destroy view requests items when server get destroyed</li>
+				<li>Do not call View callbacks for cancelled requests</li>
+				<li>Fix 
+					<codeph>ringbuffer_memcpy()</codeph> (36afdb2)
+				</li>
+				<li>CCBC-62 A hang could occur in 
+					<codeph>libcouchbase_wait()</codeph> after the timeout  period. Check for breakout condition after purging servers
+				</li>
+				<li>CCBC-65 A small memory leak can occur with frequent calls to
+					<codeph>libcouchbase_create()</codeph> and 
+					<codeph>libcouchbase_destroy()</codeph>
+				</li>
+				<li>CCBC-64. Timeouts can occur during topology changes, rather than be  correctly retried. Send the retry-packet to new server</li>
+				<li>
+					<codeph>vbucket_found_incorrect_master()</codeph> returns server index
+				</li>
+				<li>Fix 
+					<codeph>ringbuffer_is_continous()</codeph>
+				</li>
+				<li>Pick up cookies from pending buffer unless node connected</li>
+				<li>RCBC-33 A fix for a buffer overflow with the supplied password as  has been integrated. While it is a buffer overflow issue, this is  not considered to be a possible security issue because the password  to the bucket is not commonly supplied by an untrusted source</li>
+			</ul>
+	</section>
+	
+	
+	<section>
+	
+		<title>1.0.4 (2012-06-01)</title>
+		
+			<p>15 files changed, 330 insertions(+), 76 deletions(-)</p>
+			<ul>
+				<li>CCBC-65 A small memory leak can occur with frequent calls to
+					<codeph>libcouchbase_create()</codeph> and 
+					<codeph>libcouchbase_destroy()</codeph>
+				</li>
+				<li>CCBC-62 A hang could occur in 
+					<codeph>libcouchbase_wait()</codeph> after the timeout  period. Check for breakout condition after purging servers
+				</li>
+				<li>CCBC-64. Timeouts can occur during topology changes, rather than be  correctly retried. Send the retry-packet to new server</li>
+				<li>[backport] 
+					<codeph>vbucket_found_incorrect_master()</codeph> returns server index.  (orig: c32fdae)
+				</li>
+			</ul>
+	</section>
+	
+	
+	<section>
+	
+		<title>1.0.3 (2012-05-02)</title>
+		
+			<p>6 files changed, 44 insertions(+), 7 deletions(-)</p>
+			<ul>
+				<li>[backport] Fix 
+					<codeph>ringbuffer_is_continous()</codeph> (orig: 9cfda9d)
+				</li>
+				<li>[backport] Pick up cookies from pending buffer unless node connected  (orig: 463958d)</li>
+				<li>RCBC-33 A fix for a buffer overflow with the supplied password as  has been integrated. While it is a buffer overflow issue, this is  not considered to be a possible security issue because the password  to the bucket is not commonly supplied by an untrusted source</li>
+			</ul>
+	</section>
+	
+	
+	<section>
+	
+		<title>1.1.0dp2 (2012-04-10)</title>
+		
+			<p>10 files changed, 54 insertions(+), 20 deletions(-)</p>
+			<ul>
+				<li>CCBC-59 Don't wait for empty buffers. If called with no operations  queued, 
+					<codeph>libcouchbase_wait()</codeph> will block forever. This means that a  single threaded application that calls 
+					<codeph>libcouchbase_wait()</codeph> at  different times to make sure operations are sent to the server runs  the risk of stalling indefinitely. This is a very likely scenario.
+				</li>
+				<li>Don't define 
+					<codeph>size_t</codeph> and 
+					<codeph>ssize_t</codeph> for VS2008
+				</li>
+				<li>Fix segfault while authorizing on protected buckets (211bb04)</li>
+			</ul>
+	</section>
+	
+	
+	<section>
+	
+		<title>1.1.0dp (2012-04-05)</title>
+		
+			<p>59 files changed, 4374 insertions(+), 1205 deletions(-)</p>
+			<ul>
+				<li>This release adds new functionality to directly access Couchbase  Server views using the 
+					<codeph>libcouchbase_make_couch_request()</codeph> function.  See the associated documentation and header files for more details
+				</li>
+				<li>Check for newer libvbucket</li>
+				<li>MB-4834: Request the tap bytes in a known byte order (adf2b30)</li>
+			</ul>
+	</section>
+	
+	
+	<section>
+	
+		<title>1.0.2 (2012-03-06)</title>
+		
+			<p>83 files changed, 4095 insertions(+), 654 deletions(-)</p>
+			<ul>
+				<li>Implement VERSION command from binary protocol</li>
+				<li>Allow use of libcouchbase to pure memcached clusters by using
+					<codeph>libcouchbase_create_compat()</codeph> function
+				</li>
+				<li>Always sign deb packages and allow to pass PGP key</li>
+				<li>Bundle the protocol definitions for memcached  (
+					<codeph>memcached/protocol_binary.h</codeph> and 
+					<codeph>memcached/vbucket.h</codeph>) to make it  easier to build
+				</li>
+				<li>Bundle sasl client implementation</li>
+				<li>Fix windows build for MS Visual Studio 9 <ul>
+						<li>define <codeph>E*</codeph> if missing </li>
+						<li>stdint header</li>
+					</ul></li>
+				<li>Add support for multiple hosts for the bootstrap URL. A list of  hosts:port separated by ';' to the administration port of the  couchbase cluster. (ex: "host1;host2:9000;host3" would try to  connect to host1 on port 8091, if that fails it'll connect to host2  on port 9000 etc)</li>
+				<li>Raise error if &lt;stdint.h&gt; missing</li>
+				<li>Add JSON support for cbc-cp command</li>
+				<li>Add option to set timeout for cbc</li>
+				<li>Added support for '-' to cp</li>
+				<li>Added cbc-verify: verify content in cache with files</li>
+				<li>Now cbc supports better usage messages</li>
+			</ul>
+	</section>
+	
+	
+	<section>
+	
+		<title>1.0.1 (2012-02-13)</title>
+		
+			<p>65 files changed, 3275 insertions(+), 1329 deletions(-)</p>
+			<ul>
+				<li>CCBC-38 Use alternate nodes when current is dead. A fix to allow the  client library to failover automatically to other nodes when the  initial bootstrap node becomes unavailable has been added. All users  are recommended to upgrade for this fix.</li>
+				<li>Fix connect timeouts. Timeouts are per-operation and only set if  there is any I/O. The special exception to this is initial  connections, which do not necessarily have a data stream or write  buffer associated wiht them yet.</li>
+				<li>Update to new MT-safe libvbucket API</li>
+				<li>Add option for embedding libevent IO plugin</li>
+				<li>Fix multi-{get,touch} requests handling when nkeys &gt; 1</li>
+				<li>Allow to build without tools which require C++ compiler</li>
+				<li>Destroy event base if we created it</li>
+				<li>CCBC-51 Check server index before using</li>
+				<li>Handle 
+					<codeph>PROTOCOL_BINARY_RESPONSE_NOT_MY_VBUCKET</codeph> and retry it until  success or another error, which can be handled by caller
+				</li>
+				<li>Do not attempt SASL when SASL already in progress</li>
+				<li>Finer grained error reporting for basic REST errors: <ul>
+						<li>return <codeph>LIBCOUCHBASE_AUTH_ERROR</codeph> on HTTP 401 </li>
+						<li>return <codeph>LIBCOUCHBASE_BUCKET_ENOENT</codeph> on HTTP 404 </li>
+						<li>event loop is stopped (via <codeph>maybe_breakout</codeph>) on REST
+							error </li>
+					</ul></li>
+				<li>Fixed segfaults and memory access errors on libevent1.4</li>
+				<li>Allow for notification on initial vbucket config. This makes  libcouchbase 
+					<codeph>stop_event_loop</codeph> and libcouchbase maybe breakout work  properly in cooperative asynchronous event loops. the wait flag is  set by 
+					<codeph>libcouchbase_wait()</codeph> and unset by 
+					<codeph>maybe_breakout</codeph>.  Additionally, 
+					<codeph>breakout_vbucket_state_listener</codeph> will call
+					<codeph>maybe_breakout</codeph> as well, instead of having synchronous behavior  assumed by 
+					<codeph>libcouchbase_wait()</codeph>
+				</li>
+				<li>Fix 
+					<codeph>sasl_list_mech_response_handler()</codeph>. 
+					<codeph>sasl_client_start()</codeph> expects  null-terminated string
+				</li>
+				<li>Refactor: use 
+					<codeph>libcouchbase_xxxx</codeph> for the datatypes
+				</li>
+				<li>Do not notify user about the same error twice. Use command callback  when it's possible. (e.g. where the 
+					<codeph>libcouchbase_server_t</codeph> is  accessible and we can 
+					<codeph>libcouchbase_failout_server()</codeph>)
+				</li>
+				<li>Install configuration.h for win32</li>
+				<li>CCBC-20 Implement operation timeouts. Timeouts applies for all  operations, and the timer starts running from the moment you call  the libcouchbase operation you want. The timer includes times for  connect/send/ receive, and all of the time our application spend  before letting the event loop call callbacks into libcouchbase.</li>
+				<li>Fix double free() error when reading key from packet in handler.c  (b5d485a)</li>
+			</ul>
+	</section>
+	
+	
+	<section>
+	
+		<title>1.0.0 (2012-01-22)</title>
+		
+			<p>170 files changed, 6048 insertions(+), 7553 deletions(-)</p>
+			<ul>
+				<li>Allow the user to specify sync mode on an instance</li>
+				<li>Empty string as bucket name should be treated as NULL</li>
+				<li>Bail out if you can't find memcached/vbucket.h and  libvbucket/vbucket.h</li>
+				<li>New command cbc. This command intended as the analog of <codeph>mem*</codeph> tools from
+					libmemcached distribution. Supported commands: <ul>
+						<li>cbc-cat</li>
+						<li>cbc-cp</li>
+						<li>cbc-create</li>
+						<li>cbc-flush</li>
+						<li>cbc-rm</li>
+						<li>cbc-stats</li>
+						<li>cbc-send</li>
+						<li>cbc-receive</li>
+					</ul></li>
+				<li>CCBC-37 allow config for cbc tool to be read from .cbcrc</li>
+				<li>Convert flags to network byte order</li>
+				<li>Remove &lt;memcached/vbucket.h&gt; dependency</li>
+				<li>Use the error handler instead of printing to stderr</li>
+				<li>Disable Views code</li>
+				<li>Don't accept NULL as a valid "callback"</li>
+				<li>Add make targets to build RPM and DEB packages</li>
+				<li>Allow download memcached headers from remote host</li>
+				<li>Added docbook-based manual pages</li>
+				<li>Gracefully update vbucket configuration. This means that the  connection listener, could reconfigure data sockets on the fly</li>
+				<li>Allow libcouchbase build with libevent 1.x (verified for 1.4.14)</li>
+				<li>Aggregate flush responses</li>
+				<li>Add stats command</li>
+			</ul>
+	</section>
+	
+	
+	<section>
+	
+		<title>0.3.0 (2011-11-02)</title>
+		
+			<p>102 files changed, 6188 insertions(+), 1531 deletions(-)</p>
+			<ul>
+				<li>Add flush command from binary protocol</li>
+				<li>Remove packet filter</li>
+				<li>Use ringbuffers instead 
+					<codeph>buffer_t</codeph>
+				</li>
+				<li>Win32 build fixes</li>
+				<li>Allow to specify IO framework but using IO plugins</li>
+				<li>CCBC-11 The interface to access views</li>
+				<li>Initial man pages</li>
+				<li>Extend the test suite</li>
+			</ul>
+	</section>
+	
+	<section>
+	
+		<title>0.2.0 (2011-09-01)</title>
+		
+			<p>85 files changed, 12144 insertions(+)</p>
+			<ul>
+				<li>Simple bootstapping which builds HTTP packet and listens  /pools/default/buckets/BUCKETNAME directly. Allowed usage of  defaults (bucket name, password)</li>
+				<li>Support basic set of binary protocol commands: <ul>
+						<li>get (get and touch)</li>
+						<li>set</li>
+						<li>increment/decrement</li>
+						<li>remove</li>
+						<li>touch</li>
+					</ul></li>
+				<li>MB-3294 Added 
+					<codeph>_by_key</codeph> functions
+				</li>
+				<li>CCBC-5 Fixed abort in 
+					<codeph>do_read_data</codeph> (c=0x7b09bf0) at src/event.c:105
+				</li>
+				<li>Added timings API. It might be possible to turn on timing collection  using 
+					<codeph>libcouchbase_enable_timings()</codeph>/
+					<codeph>libcouchbase_disable_timings()</codeph>,  and receive the data in timings callback.
+				</li>
+				<li>Basic TAP protocol implementation</li>
+				<li>Initial win32 support</li>
+			</ul>
+	</section>
+</body>
+</topic>

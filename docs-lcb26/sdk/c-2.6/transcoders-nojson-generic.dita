@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="devguide_nonjson">
+  <title>Non-JSON Documents</title>
+  <body>
+        <p>Couchbase is a document database and functions best when document contents are JSON.
+            Nevertheless Couchbase may be used to store non-JSON data for various use cases.</p>
+        <p>Non-JSON formats may be more efficient in terms of memory and processing power (for
+            example, if storing only flat strings, JSON adds an additional syntactical overhead of
+            two bytes per string). Non-JSON documents may be desirable if migrating a legacy
+            application which is using a customized binary format.</p>
+        <p>Note that only JSON documents can be accessed using Query (N1QL). Limited support for
+            non-JSON documents is available for MapReduce views. Additionally, non-JSON documents
+            will not be accessible using the <xref href="webui.dita#concept_j3z_zhm_zs">Web
+                UI</xref> (the contents will be shown in their Base64 equivalent).</p>
+        <section>
+            <title>Using non-JSON documents</title>
+            <p>It's important to note that a JSON document can also refer to a simple integer
+                    (<codeph>42</codeph>), string (<codeph>"hello"</codeph>), array
+                    (<codeph>[1,2,3]</codeph>), boolean (<codeph>true</codeph>,
+                    <codeph>false</codeph>) and the JSON <codeph>null</codeph> value. Nevertheless
+                if your application requires a non-JSON format, the SDK may still support it
+                natively. <note>See: Supported formats</note>If there is no native support for your
+                format, you can write a <i>transcoder</i> which handles the encoding and decoding of
+                your documents to and from the server.</p>
+        </section>
+        <section id="devguide_nonjson_itmflags">
+            <title>Item flags</title>
+            <p>Every item (record) in Couchbase contains metadata stored along with it in the
+                server. One of the metadata fields is a 32 bit "flag" value.</p>
+            <p>Couchbase SDKs accept native object types (integers, strings, arrays, dictionaries)
+                as valid inputs for a Document and internally convert them to JSON before sending
+                them to the server to be stored. When the SDK serializes the Document, it notes the
+                type of serialization performed (JSON) and sends a corresponding type code along
+                with the serialized document to the server to be stored. This type code is stored in
+                the flags field within the item’s metadata.</p>
+            <p>Later, when retrieving the document from the server, the SDK checks the type code
+                which informs it about the type of serialization used to encode the document, and
+                thus how the SDK should de-serialize the document.</p>
+            <p>By default, SDKs will only accept document types which can serialize to JSON and will
+                only serialize them to JSON. However applications can configure the SDK to use
+                non-JSON serialization and accept other types of inputs as documents. Note that
+                using non-JSON serialization will prevent the document from being accessible via
+                Query and MapReduce.</p>
+            <p>The table below shows the built-in formats available in most SDKs. The <i>name</i>
+                column displays the format name; the <i>native type</i> column displays the native
+                language type which is used as input and output for the document, the
+                    <i>description</i> contains the properties of such a type, and the <i>flags
+                    value</i> contains the actual code used for the format. The format code is
+                discussed more in depth below.</p>
+            <p>
+                <table frame="all" rowsep="1" colsep="1" id="table_wrc_2nb_bt">
+                    <title>Built-in format types</title>
+                    <tgroup cols="4">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="1.75*"/>
+                        <colspec colname="c3" colnum="3" colwidth="5.15*"/>
+                        <colspec colname="c4" colnum="4" colwidth="1.05*"/>
+                        <thead>
+                            <row>
+                                <entry>Name</entry>
+                                <entry>Native Type</entry>
+                                <entry>Description</entry>
+                                <entry>Flags value (see below)</entry>
+                            </row>
+                        </thead>
+                        <tbody>
+                            <row>
+                                <entry>JSON</entry>
+                                <entry>Dictionary, Array, Number, String, Integer</entry>
+                                <entry>Default serialization. Serializes document to JSON. Document
+                                    can be used with Query</entry>
+                                <entry>0x02 &lt;&lt; 24</entry>
+                            </row>
+                            <row>
+                                <entry>UTF-8</entry>
+                                <entry>Unicode or String</entry>
+                                <entry>Indicates the document is a UTF-8 string. This may be more
+                                    space-efficient than JSON for documents that are a simple
+                                    string, as JSON requires strings to be encapsulated by quotes.
+                                    Using this serialization format may save two bytes for each
+                                    string value</entry>
+                                <entry>0x04 &lt;&lt; 24</entry>
+                            </row>
+                            <row>
+                                <entry>RAW</entry>
+                                <entry>ByteArray, buffer, etc.</entry>
+                                <entry>Indicates this value is a raw sequence of bytes. It is the
+                                    simplest encoding form and indicates that the application will
+                                    process and interpret its contents as it sees fit.</entry>
+                                <entry>0x03 &lt;&lt; 24</entry>
+                            </row>
+                            <row>
+                                <entry>PRIVATE</entry>
+                                <entry>SDK/Language dependent</entry>
+                                <entry>This indicates that a language-specific serialization format
+                                    is being used. The serialization format depends on the language
+                                    (for example, Pickle for Python, Marshal for Ruby, Java
+                                    Serialization for Java, etc). <i>Using this format will make
+                                        your documents inaccessible from other-language
+                                    SDKs</i>.</entry>
+                                <entry>0x01 &lt;&lt; 24</entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table>
+            </p>
+        </section>
+        <section>
+            <title>Custom formats</title>
+            <p>If your application must store data that cannot be handled by any of the built-in SDK
+                formats (for example, if the application wishes to store data as UTF-16), there are
+                generally two options:</p>
+        </section>
+        <section>
+            <title>Using the <i>RAW</i> format</title>
+            <p>Manually serialize your document to a raw buffer, store the document using the
+                    <i>RAW</i> format, and manually deserialize your document upon retrieval,
+                reading and decoding the retrieved buffer manually. Here is an example in Python of
+                manually encoding and decoding a UTF-16 string (note that the Python SDK names the
+                    <i>RAW</i> format as
+                <parmname>FMT_BYTES</parmname>):<codeblock>>>> from couchbase import FMT_BYTES
+>>> cb.upsert('utf16_doc',
+              'Hello, UTF-16 World!'.encode('utf16'),
+              format=FMT_BYTES)
+OperationResult&lt;RC=0x0, Key=u'utf16_doc', CAS=0x35cc17c7f213>
+>>> raw_buf = cb.get('utf16_doc').value
+>>> raw_buf
+'\xff\xfeH\x00e\x00l\x00l\x00o\x00,\x00 \x00U\x00T\x00F\x00-\x001\x006\x00 \x00W\x00o\x00r\x00l\x00d\x00!\x00'
+>>> utf16_doc = raw_buf.decode('utf16')
+>>> utf16_doc
+u'Hello, UTF-16 World!'</codeblock></p>
+        </section>
+        <section>
+            <title>Using transcoders</title>
+            <p>
+                <note>Not all SDKs support transcoders. Refer to your SDK documentation to determine
+                    whether and how transcoders are supported.</note>
+            </p>
+            <p>A Transcoder refers to a pair of functions which are responsible for serializing
+                (encoding) a document before sending it to the server and de-serializing (decoding)
+                a document to a suitable application type when it is retrieved.</p>
+            <p>Using transcoders is preferred over RAW serialization when possible, as it provides a
+                cleaner interface as well as allows it to work in a mixed type environment (if there
+                are multiple custom types) without having to encode the document type within the
+                document itself.</p>
+            <p>The <i>encoding</i> function in the transcoder accepts a native Document type as
+                input (as created by your application), encodes it as a byte buffer, and returns the
+                byte buffer along with a type code.</p>
+            <p>The <i>decoding</i> function accepts a buffer (as fetched from the server) and a type
+                code (the flags from the metadata) and returns the intended type to be used for the
+                Document within the application.</p>
+            <p>The following shows an implementation of the encoding
+                    (<apiname>encode_value</apiname>) and decoding (<apiname>decode_value</apiname>)
+                functions in
+                Python:<codeblock>from couchbase.transcoder import Transcoder
+UTF16_TYPECODE = 0x0A000000
+class Utf16Transcoder(Transcoder):
+    def encode_value(self, value, format):
+        if (format == UTF16_TYPECODE):
+            return value.encode('utf16'), UTF16_TYPECODE
+        else:  # Call default implementation
+            return super(Utf16Transcoder, self).encode_value(value, format)
+
+    def decode_value(self, value, flags):
+        if flags == UTF16_TYPECODE:
+            return value.decode('utf16')
+        else:  # Call default implementation
+            return super(Utf16Transcoder, self).decode_value(value, flags)
+
+cb.transcoder = Utf16Transcoder()
+cb.upsert('utf16_doc', 'Hello, UTF-16 World!', format=UTF16_TYPECODE)
+cb.get('utf16_doc')</codeblock></p>
+        </section>
+        <section>
+            <title>Format flags (type codes) and SDK interoperability</title>
+            <p>Modern Couchbase SDKs have standardized type codes for the various built-in document
+                formats. This has not always been the case however, and older, legacy SDKs would use
+                different flag values for typecodes (so for example, the code for a string value
+                could be 100 or 4 depending on the SDK used).</p>
+            <p>In order to remain backwards-compatible with legacy SDKs and to retain
+                interoperability with current SDKs, the standard typecodes follow the following
+                format. Note that typecodes are stored under the flags field in the server’s
+                metadata, which is a 32 bit field.</p>
+            <p>Current SDKs set the flags value using these two factors:</p>
+            <p>
+                <ul id="ul_zfw_34b_bt">
+                    <li>The <i>modern</i> or <i>common</i> typecode: This is the modern SDK code for
+                        a given type, and is standard across all SDKs.</li>
+                    <li>The legacy or compat typecode: This is the code which was used by older
+                        versions of a given SDK. It is valid only for that language’s SDK. It is
+                        important to note that all legacy typecodes (regardless of language) are
+                        under 24 bits in width. Legacy SDKs will also often have a mask value
+                        (typically no wider than 16 bits).</li>
+                </ul>
+            </p>
+            <p>The resultant typecode (actually stored as the <i>flags</i> value is a bitwise OR of
+                the modern typecode and the legacy typecode. For example, the older legacy Python
+                code for <i>JSON</i> was <codeph>0x00</codeph> and the unified typecode for
+                    <i>JSON</i> is <codeph>0x02</codeph>. The resultant typecode is
+                thus:<screen>(0x02 &lt;&lt; 24) | (0x00)
+0x02000000</screen>Another example: The
+                legacy typecode for the <i>RAW</i> format in Python is <codeph>0x02</codeph>, and
+                the common type code is <codeph>0x03</codeph>. The resultant typecode
+                is:<screen>(0x03 &lt;&lt; 24) | (0x02)
+0x03000002</screen></p>
+            <p>When defining a new type code using the transcoder, ensure to keep the above
+                information in mind, so as not to clash with any existing ones.</p>
+        </section>
+    </body>
+</topic>

@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "generalTask.dtd">
+<concept id="concept_ppz_lhq_44">
+ <title>Managing connections</title>
+ <conbody>
+        <section>
+            <title>Creating a handle</title>
+            <p>A library handle is created using the <apiname>lcb_create()</apiname> function which
+                accepts an out-pointer to a handle and a parameters structure specifying some core
+                options.</p>
+            <codeblock>lcb_t instance = NULL;
+lcb_create_st options;
+memset(&amp;options, 0, sizeof options);
+options.version = 3;
+options.v.v3.connstr = "couchbase://10.3.53.2/my-bucket";
+options.v.v3.passwd = "s3cr3t";
+lcb_error_t rc = lcb_create(&amp;instance, &amp;options);
+if (rc != LCB_SUCCESS) {
+    printf("Couldn't create handle: %s\n", lcb_strerror(NULL, rc));
+}</codeblock>
+            <p>The <parmname>connstr</parmname> contains a <i>connection string</i> (this is similar
+                to the concept of a <i>DSN</i> in other database systems). The connection string
+                allows you to specify the host(s) of the cluster nodes, the name of the bucket and
+                additional library settings. The connection string also allows you to specify SSL
+                connections (if applicable).</p>
+            <p>Because the C SDK is used as a foundation for other SDKs, it allows for a common
+                connection specification over all those other SDKs.<note>See: Connection String
+                    reference</note></p>
+            <p>If the bucket is password protected, the <parmname>passwd</parmname> field may be
+                set. Note that the bucket password (set when creating a bucket) is not the same as
+                the administrative password for Couchbase.</p>
+            <p>When creating a new handle, you can also specify an alternate event loop plugin to
+                use. This is required if you want to use your library in non-blocking mode with your
+                existing non-blocking application.</p>
+            <p>Once your handle has been instantiated you may configure it additionally using the
+                    <apiname>lcb_cntl()</apiname> family of functions.</p>
+            <p>Note that a successful <apiname>lcb_create</apiname> invocation does not mean the
+                handle has been connected to the bucket, but rather that memory has been allocated
+                for the handle so that it may be connected in subsequent calls.</p>
+        </section>
+        <section><title>Connecting a handle</title><p>Once a handle has been instantiated it should
+                be connected. Connecting a handle involves performing the following steps:<ol
+                    id="ol_tyf_gnl_gv">
+                    <li>Calling <apiname>lcb_connect</apiname> to schedule the connection.</li>
+                    <li>Yielding to network I/O, either explicitly via <apiname>lcb_wait</apiname>
+                        or implicitly by returning control to the event loop</li>
+                    <li>Retrieving the connection status via
+                            <apiname>lcb_get_bootstrap_status</apiname>. If running in non-blocking
+                        mode, installing the bootstrap callback
+                            (<apiname>lcb_get_bootstrap_callback</apiname>) should have a similar
+                        effect<codeblock>lcb_error_t rc;
+rc = lcb_connect(instance);
+if (rc != LCB_SUCCESS) {
+    /* Couldn't schedule connection. Internal issue or problem with the socket */
+    printf("Couldn't schedule bootstrap!: %s\n", lcb_strerror(NULL, rc));
+    lcb_destroy(instance);
+}
+lcb_wait(instance);
+rc = lcb_get_bootstrap_status(instance);
+if (rc != LCB_SUCCESS) {
+    printf("Bootstrapping failed: %s\n", lcb_strerror(NULL, rc));
+    lcb_destroy(instance);
+}</codeblock></li>
+                </ol></p>Always check the return value of
+                <apiname>lcb_get_bootstrap_status</apiname> to ensure the handle is properly
+            connected. Performing operations on a non-bootstrapped handle will fail with
+                <apiname>LCB_CLIENT_ETMPFAIL</apiname>.</section>
+        <section><title>Handle lifetime</title><p>The <apiname>lcb_t</apiname> object (commonly
+                referred to as <i>instance</i>) represents a connection between your application and
+                a Couchbase bucket. Because the bucket itself may consist of several TCP
+                connections, and because there is a substantial amount of CPU and kernel overhead in
+                creating and destroying these connections, it is recommended that
+                    <apiname>lcb_t</apiname> objects be kept alive for the lifetime of the
+                application rather than creating and destroying them frequently.</p>Once the
+                <apiname>lcb_t</apiname> is no longer required, you can call
+                <apiname>lcb_destroy()</apiname> on it. The handle should not be destroyed within a
+            callback as it will likely cause it to crash. Additionally, memory leaks may occur if
+            there are pending uncompleted operations (e.g. <apiname>lcb_get3</apiname>,
+                <apiname>lcb_store3</apiname>).</section>
+        <section>
+            <title>Configuring the handle</title>
+        </section>
+        <section>
+            <title>Connecting with SSL</title>
+            <p>Couchbase Sever features the ability to have clients communicate securely via
+                SSL.</p>
+            <p>To use SSL, you need Couchbase Server Enterprise 3.0 or later</p>
+            <ol>
+                <li>Obtain the SSL certificate used by the Cluster (...). </li>
+                <li>Make the certificate available to the file system of the client host.</li>
+                <li>Employ the <codeph>couchbases://</codeph> scheme for the
+                        <codeph>connstr</codeph> field.</li>
+                <li>Specify the local path to the certificate as the value for the
+                        <codeph>certpath</codeph> field.</li>
+            </ol>
+            <p>To connect to the <codeph>mybucket</codeph> bucket on SSL-enabled Cluster at the node
+                10.3.4.33, with the certificate saved as <codeph>/var/cbcert.pem</codeph>:
+                <codeblock outputclass="language-c">cropts.v.v3.connstr = "couchbases://10.3.4.33/mybucket?certpath=/var/cbcert.pem";</codeblock></p>
+        </section>
+    </conbody>
+  </concept>

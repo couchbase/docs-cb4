@@ -1,0 +1,267 @@
+
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html xml:lang="en-us" lang="en-us">
+<head><meta name="description" content="Overview To greatly improve performance, normal SDK mutation operations such as store receive a positive reply (meaning that the operation was successful) as soon as the node has managed to store the ..."></meta><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></meta><meta name="copyright" content="(C) Copyright 2005"></meta><meta name="DC.rights.owner" content="(C) Copyright 2005"></meta><meta name="DC.Type" content="topic"></meta><meta name="DC.Title" content="Durability requirements for mutations"></meta><meta name="DC.Format" content="XHTML"></meta><meta name="DC.Identifier" content="topic_inc_2js_zr"></meta><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/css/commonltr.css"><!----></link><title>Durability requirements for mutations</title><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></meta><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/css/webhelp_topic.css"><!----></link><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/skins/skin.css"><!----></link><script type="text/javascript"><!--
+          
+          var prefix = "index.html";
+          
+          --></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery-1.8.2.min.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery.cookie.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery-ui.custom.min.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery.highlight-3.js"><!----></script><script type="text/javascript" charset="utf-8" src="oxygen-webhelp/resources/js/webhelp_topic.js"><!----></script></head>
+<body onload="highlightSearchTerm()" class="frmBody" id="topic_inc_2js_zr">
+<table class="nav"><tbody><tr><td colspan="2"><div id="printlink"><a href="javascript:window.print();" title="Print this page"></a></div><div id="permalink"><a href="#" title="Link to this page"></a></div></td></tr><tr><td width="75%"></td><td><div class="navheader"></div></td></tr></tbody></table>
+
+  <h1 class="title topictitle1">Durability requirements for mutations</h1>
+
+  <div class="body">
+      <div class="section"><h2 class="title sectiontitle">Overview</h2>
+          
+          <p class="p">To greatly improve performance, normal SDK mutation operations such as store receive a
+				positive reply (meaning that the operation was successful) as soon as the node has
+				managed to store the value in its RAM. The item is then asynchronously written to the
+				disk and sent to any applicable replica servers (in no specific order). </p>
+
+          <p class="p">While the process of replication and persistence is extremely fast, there is
+				nevertheless a small risk of data loss if the server which received the mutation replies
+				with success, but then immediately afterward goes offline. For some critical mutations,
+				the application may desire to choose to wait until the item has attained a given
+				redundancy before continuing. </p>
+
+          <p class="p">
+                <em class="ph i">Durability Requirements</em> provide a means for the user to declare to the
+                library to not continue until a given mutation has been replicated or persisted to a
+                given amount of nodes. </p>
+
+      </div>
+
+      <div class="section"><h2 class="title sectiontitle">Durability Requirements</h2><div class="p"> A durability requirement is a declaration
+				made by the application to the library to wait until the item has been made redundant to
+				some degree. The degree of redundancy is configurable. For example: <ul class="ul">
+					<li class="li">Wait until the item is stored on the disk of the master node</li>
+
+					<li class="li">Wait until the item is propagated to the disk and memory of at least one replica
+						node</li>
+
+					<li class="li">Wait until the item is propagated to the memory of all nodes</li>
+
+				</ul>
+ This allows applications to balance their fault-tolerance and performance demands
+				in a manner they see fit </div>
+<div class="p"> In the C library, durability operations may be
+				performed by using the <span class="keyword apiname">lcb_durability_poll()</span>. To use durability
+				requirements, the CAS of a successful mutation operation (retrieved from its callback)
+				should be placed into an <span class="keyword apiname">lcb_durability_cmd_t</span>; additionally, a
+				general setting structure (<span class="keyword apiname">lcb_durability_settings_t</span>) should be
+				populated with the persistence and replication requirements.
+				<pre class="pre codeblock language-c">lcb_durability_cmd_t cmd, *cmdp = { &amp;cmd };
+lcb_durability_opts_t opts;
+lcb_error_t err;
+
+memset(&amp;opts, <span class="hl-number">0</span>, <strong class="hl-keyword" style="color:#7f0055">sizeof</strong>(opts);
+memset(&amp;cmd, <span class="hl-number">0</span>, <strong class="hl-keyword" style="color:#7f0055">sizeof</strong>(cmd);
+
+opts.persist_to = <span class="hl-number">2</span>;
+opts.replicate_to = <span class="hl-number">1</span>;
+cmd.v.v0.key = resp-&gt;v.v0.key;
+cmd.v.v0.nkey = resp-&gt;v.v0.nkey;
+cmd.v.v0.cas = resp-&gt;v.v0.cas;
+<em class="hl-comment" style="color:#006400">//schedule the command --</em>
+err = lcb_durability_poll(instance, cookie, &amp;opts, &amp;cmdp, <span class="hl-number">1</span>);
+<em class="hl-comment" style="color:#006400">// error checking omitted --</em>
+<em class="hl-comment" style="color:#006400">// later on, in the callback. resp is now a durability_resp_t* --</em>
+<strong class="hl-keyword" style="color:#7f0055">if</strong> (resp-&gt;v.v0.err == LCB_SUCCESS) {
+     printf(<span class="hl-string" style="color:#2a00ff">"Key was endured!\n"</span>);
+} <strong class="hl-keyword" style="color:#7f0055">else</strong> {
+     printf(<span class="hl-string" style="color:#2a00ff">"Key did not endure in time\n"</span>);
+     printf(<span class="hl-string" style="color:#2a00ff">"Replicated to: %u replica nodes\n"</span>, resp-&gt;v.v0.nreplicated);
+     printf(<span class="hl-string" style="color:#2a00ff">"Persisted to: %u total nodes\n"</span>, resp-&gt;v.v0.npersisted);
+     printf(<span class="hl-string" style="color:#2a00ff">"Did we persist to master? %u\n"</span>, resp-&gt;v.v0.persisted_master);
+     printf(<span class="hl-string" style="color:#2a00ff">"Does the key exist in the master's cache? %u\n"</span>, resp-&gt;v.v0.exists_master);
+     <strong class="hl-keyword" style="color:#7f0055">switch</strong> (resp-&gt;v.v0.err) {
+     <strong class="hl-keyword" style="color:#7f0055">case</strong> LCB_KEY_EEXISTS:
+         printf(<span class="hl-string" style="color:#2a00ff">"Seems like someone modified the key already...\n"</span>);
+         <strong class="hl-keyword" style="color:#7f0055">break</strong>;
+     <strong class="hl-keyword" style="color:#7f0055">case</strong> LCB_ETIMEDOUT:
+         printf(<span class="hl-string" style="color:#2a00ff">"Either key does not exist, or the servers are too slow\n"</span>);
+         printf(<span class="hl-string" style="color:#2a00ff">"If persisted_master or exists_master is true, then the"</span>
+             <span class="hl-string" style="color:#2a00ff">"server is simply slow."</span>,
+             <span class="hl-string" style="color:#2a00ff">"otherwise, the key does not exist\n"</span>);
+         <strong class="hl-keyword" style="color:#7f0055">break</strong>;
+     <strong class="hl-keyword" style="color:#7f0055">default</strong>:
+         printf(<span class="hl-string" style="color:#2a00ff">"Got other error. This is probably a network error\n"</span>);
+         <strong class="hl-keyword" style="color:#7f0055">break</strong>;
+     }
+ }              </pre>
+
+			</div>
+Durability requirements are implemented by the client periodically polling the active
+			and replica nodes to retrieve the current status of an item until the status indicates that
+			the given constraints have been satisfied. This means that even if durability fails, it is
+			not a tell-tale indicator that the operation will never persist or replicate to the given
+			nodes, it is merely an indicator that it failed to be replicated or persisted within the
+			given time frame. </div>
+
+      <div class="section" id="topic_inc_2js_zr__lcb_enhanced_dur"><h2 class="title sectiontitle">Enhanced Durability (Couchbase 4.0)</h2>
+            
+            <p class="p">In traditional CAS-based durability, constraints checking is done using the CAS. The
+				CAS is a value that is randomly changes each time the item has been mutated and is
+				intended to be used in compare-and-swap operations (this means that if the local version
+				of the CAS differs from the one on the server, the item has changed). </p>
+
+            <p class="p">CAS-based durability might sometimes report indeterminate results, specifically in
+				the case of server failover or for highly contended items. Specifically, if the
+				durability polling operation detects a CAS mismatch, it does not know if this mismatch
+				is due the item not having been replicated, or if this is due to a highly contended item
+				being changed since the last mutation. </p>
+
+            <p class="p">Couchbase 4.0 and later allows the usage of monotonically incrementing sequence
+				numbers (and an additional identifier) that can be used instead of CAS to check the
+				persistence and replication status of a given mutation. Using the sequence number it is
+				possible to distinguish failovers from highly contended items. This additional mutation
+				metadata is abstracted in the library in the form of a new structure called
+					<samp class="ph codeph">lcb_SYNCTOKEN</samp>.</p>
+
+            <div class="p"> To enable sequence-number based durability, two settings should be enabled. <ul class="ul">
+                    <li class="li"><span class="keyword option">LCB_CNTL_FETCH_SYNCTOKENS</span>, or
+							<span class="keyword option">fetch_synctokens</span>. <p class="p">This setting enables the server to return
+							sequence information (which is different than CAS) for each operation. Note
+							that this increases the size of each response by 16 bytes. </p>
+
+					</li>
+
+                    <li class="li"><span class="keyword option">LCB_CNTL_DURABILITY_SYNCTOKENS</span> or
+							<span class="keyword option">dur_synctokens</span>. <div class="p">This allows
+								<span class="keyword apiname">lcb_durability_poll()</span> to transparently use this sequence
+							number information (cached internally within the client) rather than CAS values
+							for durability requirement checking. In this mode, CAS values passed are
+							actually ignored. Note that it is still possible to manually pass the sequence
+							information to the <span class="keyword apiname">lcb_durability_poll()</span> (the necessary
+							fields are mentioned in the API documentation). This mode also allows existing
+							applications to transparently use enhanced durability.<div class="note note"><span class="notetitle">Note:</span> If
+									<samp class="ph codeph">FETCH_SYNCTOKENS</samp> is enabled <em class="ph i">and</em> you are
+								performing durability checks across multiple client instances (that is,
+								calling <span class="keyword apiname">lcb_durability_poll()</span> on a mutation performed by
+								another client instance), then this setting should either be disabled or the
+									<span class="keyword apiname">lcb_SYNCTOKEN</span> object should be explicitly passed to
+								the command structure
+							(<span class="keyword apiname">lcb_durability_cmd_t</span>)</div>
+</div>
+<p class="p"> This mode is enabled by
+							default if <span class="keyword option">fetch_synctokens</span> is enabled.</p>
+</li>
+
+                </ul>
+</div>
+
+        </div>
+
+        <div class="section"><h2 class="title sectiontitle">Differences between <span class="keyword apiname">SYNCTOKEN</span> and CAS</h2>
+            
+            <div class="note note"><span class="notetitle">Note:</span> This section explains the differences between <samp class="ph codeph">SYNCTOKEN</samp> and CAS
+                values. This is written from a higher level architectural perspective. From a
+                programming perspective, both of these values are opaque.</div>
+
+            <p class="p"><samp class="ph codeph">SYNCTOKEN</samp> values are per-bucket and reflect a given bucket's state
+                moving forward. A given <samp class="ph codeph">SYNCTOKEN</samp> can be logically <em class="ph i">greater
+                    then</em> or <em class="ph i">less than</em> another <samp class="ph codeph">SYNCTOKEN</samp>. These values
+                are used internally by Couchbase's replication functionality to create checkpoints
+                and determine to which point a bucket has been replicated to a given node.
+                Durability checking works by querying replica nodes about the current
+                    <samp class="ph codeph">SYNCTOKEN</samp> they contain, and comparing that to the
+                    <samp class="ph codeph">SYNCTOKEN</samp> value returned from the point at which the given
+                mutation (the one the application wishes to <em class="ph i">endure</em>), and ensuring the
+                    <samp class="ph codeph">SYNCTOKEN</samp> value from the replica is at least equal to the state
+                of the given mutation. Note that the relationship between various
+                    <samp class="ph codeph">SYNCTOKEN</samp> values is abstracted in the library, and for
+                programming purposes, are to be treated as opaque (<samp class="ph codeph">lcb_SYNCTOKEN</samp>
+                objects themselves are not simple integer values).</p>
+
+            <p class="p">CAS values on the other hand are bound to specific items and do not have a <em class="ph i">less
+                    than</em> or <em class="ph i">greater than</em> relationship to other CAS values. CAS values may
+                only be checked for <em class="ph i">equality</em>: if an item's CAS value is equal to the CAS
+                value known to the application, then the application may assume the item has not
+                been modified since the last CAS value was retrieved; if the CAS value differs, then
+                the item no longer contains the same value.</p>
+
+            <p class="p"><samp class="ph codeph">SYNCTOKEN</samp> values are not suited for CAS-like comparisons (checking
+                whether the value is the same or has changed) since the <samp class="ph codeph">SYNCTOKEN</samp>
+                is modified on each mutation within the bucket. As such, if a
+                    <samp class="ph codeph">SYNCTOKEN</samp> value is higher on the server than it was when the
+                client performed its last mutation on a given item, it is unknown whether this is
+                because the item has changed, or because another item has changed. Differing CAS
+                values for the same item however guarantee that the item has since been
+                modified.</p>
+
+            <p class="p">While theoretically speaking, an equal <samp class="ph codeph">SYNCTOKEN</samp> value is also a
+                positive indicator that an item has <em class="ph i">not</em> changed, it is not suitable for
+                general purpose use, since the value will change when <em class="ph i">any</em> item is mutated
+                (not just the one the application is dealing with). CAS values on the other hand are
+                per-item.</p>
+
+            <div class="p">The following sequence will show a simplified version of how CAS and
+                    <samp class="ph codeph">SYNCTOKEN</samp> values may change:
+<div class="tablenoborder"><table cellpadding="4" cellspacing="0" summary="" id="topic_inc_2js_zr__table_mfy_ppm_1s" class="table" frame="border" border="1" rules="all"><caption><span class="tablecap">Table 1. Mutation Flow</span></caption>
+                        
+                        
+                        
+                        <thead class="thead" align="left">
+                            <tr class="row">
+                                <th class="entry" valign="top" width="33.33333333333333%" id="d15886e243">Action</th>
+
+                                <th class="entry" valign="top" width="33.33333333333333%" id="d15886e246">CAS Value</th>
+
+                                <th class="entry" valign="top" width="33.33333333333333%" id="d15886e249"><samp class="ph codeph">SYNCTOKEN</samp> Value</th>
+
+                            </tr>
+
+                        </thead>
+
+                        <tbody class="tbody">
+                            <tr class="row">
+                                <td class="entry" valign="top" width="33.33333333333333%" headers="d15886e243 "><samp class="ph codeph">STORE("foo", "first foo value")</samp></td>
+
+                                <td class="entry" valign="top" width="33.33333333333333%" headers="d15886e246 ">589</td>
+
+                                <td class="entry" valign="top" width="33.33333333333333%" headers="d15886e249 ">1</td>
+
+                            </tr>
+
+                            <tr class="row">
+                                <td class="entry" valign="top" width="33.33333333333333%" headers="d15886e243 "><samp class="ph codeph">STORE("bar", "first bar value")</samp></td>
+
+                                <td class="entry" valign="top" width="33.33333333333333%" headers="d15886e246 ">foo=589, bar=943 </td>
+
+                                <td class="entry" valign="top" width="33.33333333333333%" headers="d15886e249 ">2</td>
+
+                            </tr>
+
+                            <tr class="row">
+                                <td class="entry" valign="top" width="33.33333333333333%" headers="d15886e243 "><samp class="ph codeph">STORE("foo", "second foo value")</samp></td>
+
+                                <td class="entry" valign="top" width="33.33333333333333%" headers="d15886e246 ">foo=436, bar=943</td>
+
+                                <td class="entry" valign="top" width="33.33333333333333%" headers="d15886e249 ">3</td>
+
+                            </tr>
+
+                            <tr class="row">
+                                <td class="entry" valign="top" width="33.33333333333333%" headers="d15886e243 "><samp class="ph codeph">STORE("bar", "second bar value")</samp></td>
+
+                                <td class="entry" valign="top" width="33.33333333333333%" headers="d15886e246 ">foo=436, bar=216</td>
+
+                                <td class="entry" valign="top" width="33.33333333333333%" headers="d15886e249 ">4</td>
+
+                            </tr>
+
+                        </tbody>
+
+                    </table>
+</div>
+</div>
+
+        </div>
+
+  </div>
+
+<div class="navfooter"><!----></div><div class="footer">WebHelp output generated by<a href="http://www.oxygenxml.com" target="_blank"><span class="oXygenLogo"><img src="oxygen-webhelp/resources/img/LogoOxygen100x22.png" alt="Oxygen"></img></span><span class="xmlauthor">XML Author</span></a> - Trial Edition</div>
+</body>
+</html>

@@ -1,0 +1,221 @@
+
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html xml:lang="en-us" lang="en-us">
+<head><meta name="description" content="Execute multiple operations in batches to gain higher performance and better network utilization Batching operations allows you to make better utilization of your network and speed up your application ..."></meta><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></meta><meta name="copyright" content="(C) Copyright 2005"></meta><meta name="DC.rights.owner" content="(C) Copyright 2005"></meta><meta name="DC.Type" content="concept"></meta><meta name="DC.Title" content="Batching operations"></meta><meta name="abstract" content="Execute multiple operations in batches to gain higher performance and better network utilization"></meta><meta name="description" content="Execute multiple operations in batches to gain higher performance and better network utilization"></meta><meta name="DC.Relation" scheme="URI" content="managing-data-toplevel.html"></meta><meta name="DC.Format" content="XHTML"></meta><meta name="DC.Identifier" content="concept_qfq_5jg_1t"></meta><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/css/commonltr.css"><!----></link><title>Batching operations</title><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></meta><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/css/webhelp_topic.css"><!----></link><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/skins/skin.css"><!----></link><script type="text/javascript"><!--
+          
+          var prefix = "index.html";
+          
+          --></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery-1.8.2.min.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery.cookie.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery-ui.custom.min.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery.highlight-3.js"><!----></script><script type="text/javascript" charset="utf-8" src="oxygen-webhelp/resources/js/webhelp_topic.js"><!----></script></head>
+<body onload="highlightSearchTerm()" class="frmBody" id="concept_qfq_5jg_1t">
+<table class="nav"><tbody><tr><td colspan="2"><div id="printlink"><a href="javascript:window.print();" title="Print this page"></a></div><div id="permalink"><a href="#" title="Link to this page"></a></div></td></tr><tr><td width="75%"><a class="navheader_parent_path" href="managing-data-toplevel.html" title="Managing Data">Managing Data</a></td><td><div class="navheader">
+<span class="navparent"><a class="link" href="managing-data-toplevel.html" title="Managing Data"><span class="navheader_label">Parent topic</span><span class="navheader_separator">: </span><span class="navheader_linktext">Managing Data</span></a></span>  </div></td></tr></tbody></table>
+
+    <h1 class="title topictitle1">Batching operations</h1>
+
+    
+    <div class="body conbody"><p class="shortdesc">Execute multiple operations in batches to gain higher performance and better network
+        utilization</p>
+
+        <p class="p">Batching operations allows you to make better utilization of your network and speed up your
+            application by increasing network throughput and reducing latency.</p>
+
+        <p class="p">You can batch operations via the Couchbase SDK. Batching operations is done either via
+            explicit <em class="ph i">multi</em> methods, or by scheduling multiple operations in sequence.</p>
+
+        <p class="p">Batched operations work by <em class="ph i">pipelining</em> requests over the network. When requests are
+            pipelined, they are send in one large group to the cluster. The cluster in turn
+            <em class="ph i">pipelines</em> responses back to the client. When operations are batched, there
+            are fewer IP packets to be sent over the network (since there are fewer individual TCP
+            segments).</p>
+
+        <p class="p">All key-value operations may be batched.</p>
+
+        <div class="section"><h2 class="title sectiontitle">Asynchronous batching</h2>
+            
+            <p class="p">Asynchronous clients inherently batch operations: because the application receives
+                the response at a later stage in the application, it may attain batching via issuing
+                many requests in sequence.</p>
+
+            <p class="p">See <a class="xref" href="async-clients.html#concept_lln_jlg_1t">Asynchronous Clients</a>
+                for an overview on asynchronous programming.</p>
+
+        </div>
+
+        <div class="section"><h2 class="title sectiontitle">Performance benefits</h2>
+            
+            <p class="p">IP packets and TCP segments carry their own overhead, so no matter how small the
+                contents, there is still a 20 byte overhead for IP, a 10 byte overhead for TCP, and
+                a 26 byte overhead for Ethernet for each TCP packet; making the total overhead for
+                each request close to 60 bytes. When multiple requests are batched into a single IP
+                header or TCP segment, the IP/TCP overhead is incurred only when a new TCP segment
+                (or IP packet) is actually needed to accommodate more requests.</p>
+
+            <p class="p">Reducing the number of packets is also more efficient for the CPU, as it requires
+                fewer system calls to send/receive data over the network: Since the data is in a
+                single buffer, it can be sent at once using a single system call and its responses
+                received with a single system call. When using non-batched operations, each request
+                and response will need to make its own system call.</p>
+
+            <p class="p">Due to Couchbase’ distributed architecture, multi-item access may result in multiple
+                servers being contacted. For instance, when accessing 15 items on a 4 node cluster,
+                roughly 3 items will exist on each node. When operations are batched, the SDK can
+                efficiently parallelize requests to each involved server, allowing all items to be
+                access quicker. On a per-server basis, batching requests allows each individual node
+                to fetch relevant items in parallel from its memory.</p>
+
+        </div>
+
+        <div class="section"><h2 class="title sectiontitle">Error handling</h2>
+            
+            <p class="p">Operation batching is done purely on the <em class="ph i">client</em> and <em class="ph i">network</em>. Couchbase
+                does not have a concept of <em class="ph i">transactional</em> batched operations - in which all
+                operations either succeed or fail. As such, some operations may succeed and some may
+                fail when batching commands.</p>
+
+            <p class="p">Consult your SDK documentation on how to distinguish successes and failures in
+                batched operation.</p>
+
+        </div>
+
+        <div class="section"><h2 class="title sectiontitle">Batching guidelines</h2>
+            
+            <p class="p">Batching improves network utilization. However there is a batching threshold at which
+                the maximum network efficiency is gained - and batching beyond this amount will
+                simply increase memory and CPU usage on the client, and in some cases cause
+                operations to prematurely time-out or otherwise fail.</p>
+
+            <p class="p">As a guideline, applications should batch no more than 1MB before sending to the
+                server. Calculating the 1 MB value is dependent on the length of the key and value
+                (where applicable) of each operation.</p>
+
+            <p class="p">Note that this is just a guideline. The limit may be higher for extremely efficient
+                networks (such as 10-gigabit ethernet). It is recommended you benchmark your network
+                to get ideal performance numbers. The limit may be lower for congested networks or
+                slow server nodes (for example, a shared development VM with low resources).</p>
+
+            <p class="p">The [cbc-pillowfight] utility may be used to appropriately determine the correct
+                batch size for a cluster.</p>
+
+            <p class="p">When calculating the batch size, also consider that each operation has a 24 byte
+                overhead at the protocol level:</p>
+
+        </div>
+
+        <div class="section"><h2 class="title sectiontitle">Sizing batches: examples</h2>
+            
+            <div class="p">When storing items, with each key being approximately 10 bytes long and each value
+                being approximately 4000 bytes long, estimate the following:<ol class="ol" id="concept_qfq_5jg_1t__ol_evf_mkg_1t">
+                    <li class="li">Calculate Bytes per operation:<ul class="ul" id="concept_qfq_5jg_1t__ul_pd1_nkg_1t">
+                        <li class="li">10 (Key)</li>
+
+                        <li class="li">4000 (Value)</li>
+
+                        <li class="li">24 (Memcached Packet)</li>
+
+                        <li class="li">Total: 4034. </li>
+
+                    </ul>
+</li>
+
+                    <li class="li">Divide 1 megabyte by the total size of an operation:<ul class="ul" id="concept_qfq_5jg_1t__ul_bpm_pkg_1t">
+                        <li class="li">1048576 / 4034</li>
+
+                        <li class="li">Batch Size: 259</li>
+
+                    </ul>
+</li>
+
+                </ol>
+The 24 byte overhead becomes more evident when dealing with smaller values.
+                Assuming an average key size of 5 and an average value size of 50:</div>
+
+            <div class="p">
+                <ol class="ol">
+                    <li class="li">Calculate bytes per operaton: <ul class="ul">
+                        <li class="li">5 (Key)</li>
+
+                        <li class="li">50 (value)</li>
+
+                        <li class="li">24 (Packet)</li>
+
+                        <li class="li">Total: 74</li>
+
+                    </ul>
+</li>
+
+                    <li class="li">Divide 1 megabyte by the total size of an operation:
+                        <ul class="ul"><li class="li">Batch Size: 14169</li>
+</ul>
+</li>
+
+                </ol>
+
+            </div>
+
+        </div>
+
+        <div class="section"><h2 class="title sectiontitle">Batching operations using SDK</h2>
+            
+            <p class="p">The following example is written in Python, and demonstrates properly splitting
+                operations for batch sizes. It uses a 256K batch size and handles errors:</p>
+
+            <pre class="pre codeblock">#!/usr/bin/env python
+from couchbase.bucket import Bucket
+from couchbase.exceptions import CouchbaseTransientError
+
+cb = Bucket('couchbase://10.0.0.31/default')
+
+BYTES_PER_BATCH = 1024 * 256 # 256K
+
+# Generate our data:
+all_data = {}
+for x in xrange(100000):
+    key = "Key_" + str(x)
+    value = { 'value': x }
+    all_data[key] = value
+
+
+batches = []
+cur_batch = {}
+cur_size = 0
+batches.append(cur_batch)
+
+for key, value in all_data.items():
+    cur_batch[key] = value
+    cur_size += len(key) + len(value) + 24
+    if cur_size &gt; BYTES_PER_BATCH:
+        cur_batch = {}
+        batches.append(cur_batch)
+        cur_size = 0
+
+print "Have {} batches".format(len(batches))
+num_completed = 0
+while batches:
+    batch = batches[-1]
+    try:
+        cb.upsert_multi(batch)
+        num_completed += len(batch)
+        batches.pop()
+    except CouchbaseTransientError as e:
+        print e
+        ok, fail = e.split_results()
+        new_batch = {}
+        for key in fail:
+            new_batch[key] = all_data[key]
+        batches.pop()
+        batches.append(new_batch)
+        num_completed += len(ok)
+        print "Retrying {}/{} items".format(len(new_batch), len(ok))
+
+    print "Completed {}/{} items".format(num_completed, len(all_data))</pre>
+
+        </div>
+
+    </div>
+
+<div class="related-links"></div>
+<div class="navfooter"><!---->
+<span class="navparent"><a class="link" href="managing-data-toplevel.html" title="Managing Data"><span class="navheader_label">Parent topic</span><span class="navheader_separator">: </span><span class="navheader_linktext">Managing Data</span></a></span>  </div><div class="footer">WebHelp output generated by<a href="http://www.oxygenxml.com" target="_blank"><span class="oXygenLogo"><img src="oxygen-webhelp/resources/img/LogoOxygen100x22.png" alt="Oxygen"></img></span><span class="xmlauthor">XML Author</span></a> - Trial Edition</div>
+</body>
+</html>

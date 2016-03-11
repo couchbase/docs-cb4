@@ -1,0 +1,422 @@
+
+<!DOCTYPE html
+  SYSTEM "about:legacy-compat">
+<html xml:lang="en-us" lang="en-us">
+<head><meta name="description" content="Command Structure Operations in the C SDK are scheduled using command structures, all following a similar structure to lcb_CMDBASE . The command structure contains the document ID for the specific ..."></meta><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></meta><meta name="copyright" content="(C) Copyright 2005"></meta><meta name="DC.rights.owner" content="(C) Copyright 2005"></meta><meta name="DC.Type" content="topic"></meta><meta name="DC.Title" content="SDK Operations"></meta><meta name="DC.Relation" scheme="URI" content="managing-data.html"></meta><meta name="DC.Format" content="XHTML"></meta><meta name="DC.Identifier" content="topic_ltm_4n5_2v"></meta><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/css/commonltr.css"><!----></link><title>SDK Operations</title><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></meta><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/css/webhelp_topic.css"><!----></link><link rel="stylesheet" type="text/css" href="oxygen-webhelp/resources/skins/skin.css"><!----></link><script type="text/javascript"><!--
+          
+          var prefix = "index.html";
+          
+          --></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery-1.8.2.min.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery.cookie.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery-ui.custom.min.js"><!----></script><script type="text/javascript" src="oxygen-webhelp/resources/js/jquery.highlight-3.js"><!----></script><script type="text/javascript" charset="utf-8" src="oxygen-webhelp/resources/js/webhelp_topic.js"><!----></script></head>
+<body onload="highlightSearchTerm()" class="frmBody" id="topic_ltm_4n5_2v">
+<table class="nav"><tbody><tr><td colspan="2"><div id="printlink"><a href="javascript:window.print();" title="Print this page"></a></div><div id="permalink"><a href="#" title="Link to this page"></a></div></td></tr><tr><td width="75%"><a class="navheader_parent_path" href="c-intro.html" title="C SDK 2.6">C SDK 2.6</a> / <a class="navheader_parent_path" href="managing-data.html" title="Managing Data">Managing Data</a></td><td><div class="navheader">
+<span class="navparent"><a class="link" href="managing-data.html" title="Managing Data"><span class="navheader_label">Parent topic</span><span class="navheader_separator">: </span><span class="navheader_linktext">Managing Data</span></a></span>  </div></td></tr></tbody></table>
+
+    <h1 class="title topictitle1">SDK Operations</h1>
+
+    <div class="body">
+        <div class="section"><h2 class="title sectiontitle">Command Structure</h2>Operations in the C SDK are scheduled using command
+            structures, all following a similar structure to <span class="keyword apiname">lcb_CMDBASE</span>.<p class="p">The
+                command structure contains the <em class="ph i">document ID</em> for the specific item and
+                additional per-command data, as required. The document ID indicates which document
+                should be accessed and is necessary for any data access operation.</p>
+<div class="note note"><span class="notetitle">Note:</span> 
+                <p class="p">Command structures only serve as a way to pass parameters to scheduling
+                    operations and are therefore able to live on the stack, and do not need to be
+                    allocated using dynamic memory allocation functions such as
+                        <samp class="ph codeph">malloc</samp> and <samp class="ph codeph">free</samp>.</p>
+
+            </div>
+All fields in <span class="keyword apiname">lcb_CMDBASE</span> are <em class="ph i">overlayed</em> in other
+            command structure types, so that any command type (e.g. <span class="keyword apiname">lcb_CMDSTORE</span>)
+            can be seen as a <em class="ph i">subclass</em>). This is done by specifying the fields of
+                <span class="keyword apiname">lcb_CMDBASE</span> as a macro (<samp class="ph codeph">LCB_CMD_BASE</samp>) and
+            expanding the macro at the beginning of each command.<div class="p">The contents of
+                    <span class="keyword apiname">lcb_CMDBASE</span> include:<ul class="ul" id="topic_ltm_4n5_2v__ul_ixv_w2d_gv">
+                    <li class="li"><span class="keyword option">key</span>: Complex structure containing the ID of the document
+                        being accessed. Should be set using <span class="keyword apiname">LCB_CMD_SET_KEY</span></li>
+
+                    <li class="li"><span class="keyword option">exptime</span>: The <a class="xref" href="google.com" target="_blank">new expiration time</a> for the document to be set
+                        with this operation</li>
+
+                    <li class="li"><span class="keyword option">cas</span>: Check-and-set value used with <a class="xref" href="google.com" target="_blank">optimistic locking</a></li>
+
+                </ul>
+</div>
+<p class="p">Document IDs may be set on command structures using the
+                    <span class="keyword apiname">LCB_CMD_SET_KEY()</span>
+            macro:</p>
+<pre class="pre codeblock">lcb_CMDGET gcmd = { 0 }
+LCB_CMD_SET_KEY(&amp;gcmd, "hello", 5);
+// ...</pre>
+The
+            macro receives the buffer and length of the document ID and sets the appropriate field
+            in the command structure.<div class="note note"><span class="notetitle">Note:</span> The contents of the buffer for the document ID are copied
+                into the library when the operation is scheduled.</div>
+The contents of documents in
+            Couchbase are typically JSON, as this format allows other SDKs as well as the query
+            service to interact with the documents. The C SDK does not come with a JSON encoder;
+            though many exist and vary in their features and performance.</div>
+
+        <div class="section"><h2 class="title sectiontitle">Operation requests</h2>
+            
+            <p class="p">All Key-Value operations follow a common pattern in the C SDK. Because the first step
+                in using a database is actually populating it with data, performing operations will
+                be demonstrated first through storing a document.</p>
+
+            <div class="p">A document can be created using the <span class="keyword apiname">lcb_store3()</span> function. This
+                function accepts an <span class="keyword apiname">lcb_CMDSTORE</span> structure that contains the
+                document ID and the value that should serve as the document itself, and the
+                    <samp class="ph codeph">operation</samp> which places various preconditions storing the
+                document:<pre class="pre codeblock">lcb_CMDSTORE scmd = { 0 };
+LCB_CMD_SET_KEY(&amp;scmd, "some_key", strlen("some_key"));
+LCB_CMD_SET_VALUE(&amp;scmd, "[1,2,3]", strlen("[1,2,3]");
+scmd.operation = LCB_ADD;
+lcb_store3(instance, NULL, &amp;scmd);
+lcb_wait(instance);</pre>
+</div>
+
+            <p class="p">The above will store a JSON array using the document ID <samp class="ph codeph">some_key</samp>.
+                The <span class="keyword apiname">lcb_store3()</span> function <em class="ph i">schedules</em> the operation to be
+                performed the next time the library performs I/O, which in this case is at the
+                    <span class="keyword apiname">lcb_wait()</span> function.</p>
+
+            <div class="p">
+                <div class="note note"><span class="notetitle">Note:</span> The success or failure of an operation is only available within the callback.
+                    Though <span class="keyword apiname">lcb_store3()</span> (or similar) returns a status code, the
+                    status code determines if the command was successfully scheduled, and not if the
+                    server successfully executed the command.</div>
+
+            </div>
+
+            
+            <p class="p">All operations receive results in designated callbacks. The result contains the
+                status of the operation and an optional pointer associating the request with a
+                response. The result will also contain additional operation-specific operation such
+                as values and subcodes.</p>
+
+            <div class="p">Callbacks are installed using the <span class="keyword apiname">lcb_install_callback3</span>, which is
+                supplied with the type of operation and the callback to be invoked whenever a
+                response for such an operation is
+                received:<pre class="pre codeblock">lcb_install_callback3(instance, LCB_CALLBACK_GET, get_handler);
+lcb_install_callback3(instance, LCB_CALLBACK_STORE, store_handler);</pre>
+The
+                callback is passed a pointer to an <span class="keyword apiname">lcb_RESPBASE</span> structure which
+                represents the common in-memory layout of all Couchbase responses. The response
+                structure can be subclassed to an operation-specific type (for example,
+                    <span class="keyword apiname">lcb_RESPGET</span> or <span class="keyword apiname">lcb_RESPSTORE</span>) to obtain
+                more information specific to the operation type. Here is an example of handling a
+                response for <span class="keyword apiname">lcb_get3()</span></div>
+
+            <div class="p">
+                <pre class="pre codeblock">void get_handler(lcb_t instance, int cbtype, const lcb_RESPBASE *rb)
+{
+    if (rb-&gt;rc != LCB_SUCCESS) {
+        printf("Error in getting response: %s\n", lcb_strerror(NULL, rb-&gt;rc));
+    } else {
+        const lcb_RESPGET *resp = (const lcb_RESPGET*)rb;
+        printf("Got value: %.*s\n", (int)resp-&gt;nvalue, resp-&gt;value);
+    }
+}</pre>
+
+            </div>
+
+        </div>
+
+        <div class="section"><h2 class="title sectiontitle">User data in responses</h2>In most cases, you will need a way to
+            associated a response with user (application) data; this is necessary, for example, if
+            you wish to actually make use of the value or status received in the response. The SDK
+            allows you to pass an application pointer in the request and read it in the response;
+            this pointer is known as a <samp class="ph codeph">cookie</samp> and is opaque to the SDK and is thus
+            never dereferenced by it; here's an example of the above handler making use of a
+                <samp class="ph codeph">cookie</samp>:<pre class="pre codeblock">typedef struct {
+    const char *value;
+    size_t nvalue;
+    lcb_error_t status;
+} GetInfo;
+
+void get_handler(lcb_t instance, int cbtype, const lcb_RESPBASE *rb)
+{
+    GetInfo *gi = rb-&gt;cookie;
+    gi-&gt;status = rb-&gt;rc;
+    if (rb-&gt;rc == LCB_SUCCESS) {
+        const lcb_RESPGET *resp = (const lcb_RESPGET*)rb;
+        gi-&gt;value = malloc(resp-&gt;nvalue);
+        gi-&gt;nvalue = resp-&gt;nvalue;
+        memcpy(gi-&gt;value, resp-&gt;value, resp-&gt;nvalue);
+    }
+}
+
+GetInfo* get_item(lcb_t instance, const char *key)
+{
+    lcb_CMDGET gcmd = { 0 };
+    GetInfo *retval = calloc(1, sizeof *retval);
+    LCB_CMD_SET_KEY(&amp;gcmd, key, strlen(key));
+    lcb_get3(instance, retval, &amp;gcmd);
+    lcb_wait(instance);
+    return retval;
+}</pre>
+<div class="note note"><span class="notetitle">Note:</span> The
+                    <samp class="ph codeph">cookie</samp> does not have any memory requirements. It can be
+                automatic memory, dynamic memory, or <samp class="ph codeph">NULL</samp>, depending on application
+                constraints.</div>
+<div class="note note"><span class="notetitle">Note:</span> The SDK owns the memory of the response structure and all
+                pointers it contains. Copy out any relevant fields (such as the value or status) if
+                access to them are needed beyond the scope of the callback.</div>
+</div>
+
+        <div class="section"><h2 class="title sectiontitle">Generic response handling</h2>For many types of operations, simple,
+            generic handling can suffice: this means simply checking whether the operation succeeded
+            or
+            failed:<pre class="pre codeblock">void generic_handler(lcb_t instance, int cbtype, const lcb_RESPBASE *resp) {
+    printf("Operation %s: %s\n", lcb_strcbtype(cbtype), lcb_strerror(NULL, resp-&gt;rc);
+    if (resp-&gt;rc == LCB_SUCCESS) {
+        handle_success(cbtype, resp);
+    } else {
+        handle_failure(cbtype, resp);
+    }
+}</pre>
+The
+            above example shows a callback function which prints the type and status operation to
+            the screen and then invokes either the application-defined
+                <samp class="ph codeph">handle_success()</samp> or <samp class="ph codeph">hande_failure()</samp> function
+            depending on whether or not the operation succeeded. The second argument to the
+            callback, <var class="keyword varname">cbtype</var>, contains the actual <samp class="ph codeph">LCB_CALLBACK_*</samp>
+            type being invoked, so that the same callback can be installed for multiple operation
+            types; for example using the same callback for <samp class="ph codeph">LCB_CALLBACK_STORE</samp> and
+                <samp class="ph codeph">LCB_CALLBACK_REMOVE</samp>.<div class="p">You can install a default callback which may
+                be invoked if no operation-specific callback has been
+                installed:<pre class="pre codeblock">lcb_install_callback3(instance, LCB_CALLBACK_DEFAULT, generic_handler);
+lcb_install_callback3(instance, LCB_CALLBACK_GET, get_handler);</pre>
+In
+                the above block, the <samp class="ph codeph">generic_handler</samp> is installed as the default
+                callback, and the <samp class="ph codeph">get_handler</samp> is the callback for
+                    <span class="keyword apiname">lcb_get3()</span> operations: All operations except
+                    <span class="keyword apiname">lcb_get3()</span> (<samp class="ph codeph">LCB_CALLBACK_GET</samp>) will be passed
+                to the default callback.</div>
+</div>
+
+        <div class="section"><h2 class="title sectiontitle">Storing documents</h2><div class="p"><div class="note note"><span class="notetitle">Note:</span> This describes <em class="ph i">full-document</em>
+                    mutation functionality which alters the <em class="ph i">entire</em> contents of the document.
+                    See <a class="xref" href="google.com" target="_blank">sub-document
+                        mutations</a> for when you only need to modify <em class="ph i">parts</em> of a
+                    document.</div>
+Documents can be stored using the <span class="keyword apiname">lcb_store3</span>
+                function, and populate it with the document ID (<samp class="ph codeph">LCB_CMD_SET_KEY(&amp;cmd,
+                    "key", strlen("key"));</samp>), value (<samp class="ph codeph">LCB_CMD_SET_VALUE(&amp;cmd,
+                    "value", strlen("value"))</samp>) and the <samp class="ph codeph">operation</samp>
+                    (<samp class="ph codeph">cmd.operation = LCB_SET</samp>).</div>
+<div class="p">The <samp class="ph codeph">operation</samp>
+                dictates conditions (or lack thereof) which must be satisfied before the document
+                may be stored. Possible values include:<ul class="ul" id="topic_ltm_4n5_2v__ul_kvk_dbb_fv">
+                    <li class="li"><span class="keyword option">LCB_SET</span>: Unconditionally store the item, and don't set any
+                        conditions. This option is also known as <em class="ph i">upsert</em>. If an existing
+                        document exists with the same ID, it is overwritten with the contents
+                        (value) of the new operation. If no document exists with the same ID, it is
+                        created and set to the value of the new operation.</li>
+
+                    <li class="li"><span class="keyword option">LCB_ADD</span>: Only store the item if no other document exists
+                        with the given ID. If an existing document is precent with the same document
+                        ID then the operation will fail with <samp class="ph codeph">LCB_KEY_EEXISTS</samp>.</li>
+
+                    <li class="li"><span class="keyword option">LCB_REPLACE</span>: Only store the item if an existing document
+                        already exists with the same ID. In this case the existing document's
+                        contents are replaced with the new contents. If no document already exists
+                        the operation will fail with <samp class="ph codeph">LCB_KEY_ENOENT</samp></li>
+
+                    <li class="li"><span class="keyword option">LCB_APPEND</span>, <span class="keyword option">LCB_PREPEND</span>: These options
+                        allow <a class="xref" href="google.cmo" target="_blank">raw byte
+                            concatenation</a></li>
+
+                </ul>
+</div>
+You can also add concurrency control and document expiration when using
+                <span class="keyword apiname">lcb_store3()</span><p class="p">You can install a callback to receive the status
+                of <span class="keyword apiname">lcb_store3</span> operations using
+                    <samp class="ph codeph">lcb_install_callback3(instance, LCB_CALLBACK_STORE,
+                    store_handler)</samp>.</p>
+<div class="p">When a store operation is successful, you may
+                check the operation's <a class="xref" href="google.com" target="_blank">durability</a>. In the C SDK this is done using the distinct
+                    <span class="keyword apiname">lcb_endure3_ctxnew</span>:<pre class="pre codeblock">void store_handler(lcb_t instance, int cbtype, const lcb_RESPBASE *resp) {
+    if (resp-&gt;rc != LCB_SUCCESS) {
+        return;
+    }
+    lcb_MULTICMD_CTX *ctx;
+    lcb_durability_opts_t opts = { 0 };
+    opts.version = 0;
+    opts.v.v0.persist_to = -1;
+    opts.v.v0.replicate_to = -1;
+    opts.v.v0.cap_max = 1;
+    lcb_error_t err_out;
+    mctx = lcb_endure3_ctxnew(instance, &amp;opts, &amp;err_out);
+    lcb_CMDENDURE dcmd = { 0 };
+    LCB_CMD_SET_KEY(&amp;dcmd, resp-&gt;key, resp-&gt;nkey);
+    dcmd.cas = resp-&gt;cas;
+    mctx-&gt;addcmd(dcmd);
+    mctx-&gt;done(mctx, NULL);
+}</pre>
+Setting
+                the <var class="keyword varname">persist_to</var> and <var class="keyword varname">replicate_to</var> fields to
+                    <samp class="ph codeph">-1</samp> and the <var class="keyword varname">cap_max</var> to a true value instructs
+                the client to use the maximum-available durability</div>
+<div class="note note"><span class="notetitle">Note:</span> This describes the <em class="ph i">full-document</em> retrieval
+                functionality which retrieves the <em class="ph i">entire</em> document. See <a class="xref" href="google.com" target="_blank">sub-document retrievals</a>
+                for when you only need to retrieve <em class="ph i">parts</em> of a document.</div>
+Documents can
+            be retrieved using the <span class="keyword apiname">lcb_get3</span> function. The server will attempt to
+            fetch the document if it
+            exists:<pre class="pre codeblock">lcb_CMDGET gcmd = { 0 };
+LCB_CMD_SET_KEY(&amp;gcmd, "key", 3);
+lcb_get3(instance, NULL, &amp;gcmd);
+lcb_wait(instance);</pre>
+The
+            actual contents of the document will be available in the response structure, which is
+            passed to the callback you installed via <samp class="ph codeph">lcb_install_callback3(instance,
+                LCB_CALLBACK_GET,
+                get_handler)</samp>:<pre class="pre codeblock">void get_handler(lcb_t instance, int cbtype, const lcb_RESPBASE *rb)
+{
+    const lcb_RESPGET *resp = (const lcb_RESPGET *)rb;
+    if (resp-&gt;rc == LCB_SUCCESS) {
+        printf("Got value: %.*s\n", (int)resp-&gt;nvalue, resp-&gt;value));
+    }
+}</pre>
+<p class="p">The
+                    <samp class="ph codeph">value</samp> field is a buffer of bytes representing the contents of
+                the document. This can be a JSON string or non-JSON data (see <a class="xref" href="google.com" target="_blank">non-JSON documents</a> for
+                more information on how to distinguish between them). The <samp class="ph codeph">value</samp>
+                field actually points directly into the library's network buffers.</p>
+When
+            retrieving a document, you can also specify the <a class="xref" href="google.com" target="_blank">document expiration</a> (<span class="keyword apiname">lcb_CMDGET::exptime</span>)
+            and settings for <a class="xref" href="google.com" target="_blank">pessimistic
+                locking</a> (<span class="keyword apiname">lcb_CMDGET::lock</span>). Refer to the API documentation
+            for specific usage details.<div class="note hazardstatement note"><span class="notetitle">Note:</span> 
+                <ul class="ul messagepanel" id="topic_ltm_4n5_2v__messagepanel_arr_twx_fv">
+                    <li class="li typeofhazard">The memory of the value is owned by the library</li>
+
+                    <li class="li howtoavoid">If the contents of the value are required outside of the callback,
+                        ensure that it is copied out. You may also wish to decode the value itself
+                        within the callback, eliminating the need of copying the original
+                        value.</li>
+
+                </ul>
+
+            </div>
+</div>
+
+        <div class="section"><h2 class="title sectiontitle">Removing documents</h2><div class="p"><div class="note note"><span class="notetitle">Note:</span> This describes the functionality of
+                    removing an <em class="ph i">entire document</em>. See <a class="xref" href="google.com" target="_blank">sub-document deletion</a> on removing only <em class="ph i">parts</em>
+                    of a document.</div>
+Documents can be removed manually by using the
+                    <span class="keyword apiname">lcb_remove3</span> function. A <span class="keyword apiname">lcb_CMDREMOVE</span>
+                structure should be populated with the ID of the document you wish to remove. The
+                command is passed to the <span class="keyword apiname">lcb_remove3()</span> function which schedules
+                the document to be removed. When the document has been removed (or a negative reply
+                from the server is received), the callback installed using
+                    <samp class="ph codeph">lcb_install_callback3(instance, LCB_CALLBACK_REMOVE, cb)</samp> is
+                invoked:<pre class="pre codeblock">lcb_CMDREMOVE cmd = { 0 };
+LCB_CMD_SET_KEY(&amp;cmd, "key", 3);
+lcb_remove3(instance, NULL, &amp;cmd);
+lcb_wait(instance);</pre>
+</div>
+<pre class="pre codeblock">void remove_handler(lcb_t instance, int cbtype, const lcb_RESPBASE *rb) {
+    if (rb-&gt;rc == LCB_SUCCESS) {
+        printf("Removed successfully");
+    } else if (rb-&gt;rc == LCB_KEY_ENOENT) {
+        printf("Item did not exist!");
+    } else {
+        printf("Other error: %.*s\n", lcb_strerror(NULL, rb-&gt;rc));
+    }
+}
+lcb_install_callback3(instance, LCB_CALLBACK_REMOVE, remove_handler);</pre>
+Note
+            that in the above example the simple "base" <span class="keyword apiname">lcb_RESPBASE</span> is utilized
+            as we do not use any special response fields specific to the removal
+            operation.</div>
+
+        <div class="section"><h2 class="title sectiontitle">Modifying expiration</h2><div class="p">
+                <pre class="pre codeblock">lcb_CMDTOUCH cmd = { 0 };
+LCB_CMD_SET_KEY(&amp;cmd, "key", 3);
+cmd.exptime = 300;
+lcb_touch3(instance, NULL, &amp;cmd);
+lcb_wait(instance);</pre>
+
+                <div class="note note"><span class="notetitle">Note:</span> The expiry value is specified as a relative offset (in seconds) from the time
+                    the server receives the operation. The expiry value can also be specified as an
+                    absolute Unix timestamp. The server will assume that any value larger than
+                        <samp class="ph codeph">2592000</samp> (i.e. one year, in seconds) is a Unix timestamp and
+                    anything lower is a relative offset.</div>
+
+                <pre class="pre codeblock">lcb_install_callback3(instance, LCB_CALLBACK_TOUCH, touch_handler);</pre>
+
+            </div>
+You can also use the <samp class="ph codeph">generic_handler</samp> defined above. There is no
+            special response data for <span class="keyword apiname">lcb_touch3</span>.<div class="p">Expiration can also be set
+                with <span class="keyword apiname">lcb_get3</span>, sometimes known as a
+                <em class="ph i">get-and-touch</em>:<pre class="pre codeblock">lcb_CMDGET cmd = { 0 };
+LCB_CMD_SET_KEY(&amp;cmd, "key", 3);
+cmd.exptime = 300;
+lcb_get3(instance, NULL, &amp;cmd);
+lcb_wait(instance);</pre>
+</div>
+<div class="p">And
+                with <span class="keyword apiname">lcb_store3()</span><pre class="pre codeblock">lcb_CMDSTORE cmd = { 0 };
+LCB_CMD_SET_KEY(&amp;cmd, "key", 3);
+LCB_CMD_SET_VALUE(&amp;cmd, "value", 5);
+cmd.exptime = 300;
+cmd.operation = LCB_SET;
+lcb_wait(instance);</pre>
+<div class="note hazardstatement note"><span class="notetitle">Note:</span> 
+                    <ul class="ul messagepanel" id="topic_ltm_4n5_2v__messagepanel_xx4_h4d_gv">
+                        <li class="li typeofhazard">When using <span class="keyword apiname">lcb_store3()</span> the server will
+                            clear the expiry value if none is specified.</li>
+
+                        <li class="li howtoavoid">Ensure that the desired expiration time is <em class="ph i">always</em> set in
+                            the <span class="keyword apiname">lcb_CMDSTORE</span> command when the mode is one of
+                                <span class="keyword option">LCB_SET</span>, <span class="keyword option">LCB_ADD</span>, or
+                                <span class="keyword option">LCB_REPLACE</span>.</li>
+
+                    </ul>
+
+                </div>
+</div>
+</div>
+
+        <div class="section"><h2 class="title sectiontitle">Non-JSON Documents</h2><p class="p">At the SDK and API level, there is no
+                distinction between JSON and non-JSON documents. For the SDK, any sequence of bytes
+                is a valid document.</p>
+<div class="p">If you wish to interact with other SDKs and are using
+                non-JSON document formats, refer to the Flags section. You will need to set the
+                appropriate format flags in the <span class="keyword apiname">lcb_CMDSTORE::flags</span> field in
+                order for other SDK implementations to decode the
+                data:<pre class="pre codeblock">lcb_CMDSTORE cmd = { 0 };
+const uint8_t bb[] = { 0x34, 0x10, 0x00, 0x94, 0xf5 };
+LCB_CMD_SET_KEY(&amp;cmd, "id", 2);
+LCB_CMD_SET_VALUE(&amp;cmd, bb, sizeof bb);
+cmd.operation = LCB_SET;
+cmd.flags = 0x3000000 /* FMT_RAW */</pre>
+</div>
+Likewise,
+            when reading data stored by other SDKs, you can check the
+                <span class="keyword apiname">lcb_RESPGET::itmflags</span> to determine the proper value
+            format:<pre class="pre codeblock">void decode_data(const lcb_RESPGET *resp) {
+    uint32_t flags = resp-&gt;itmflags &gt;&gt; 0x24;
+    if (flags == 0x02) {
+        decode_json(resp-&gt;value, resp-&gt;nvalue);
+    } else if (flags == 0x04) {
+        decode_utf8(resp-&gt;value, resp-&gt;nvalue);
+    } else if (flags == 0x03) {
+        decode_raw(resp-&gt;value, resp-&gt;nvalue);
+    } else if (flags == 0x01) {
+        printf("Cannot decode foreign SDK format!\n");
+    } else {
+        printf("Unknown format: 0x%x\n", resp-&gt;itmflags);
+    }
+}</pre>
+</div>
+
+    </div>
+
+<div class="related-links"></div>
+<div class="navfooter"><!---->
+<span class="navparent"><a class="link" href="managing-data.html" title="Managing Data"><span class="navheader_label">Parent topic</span><span class="navheader_separator">: </span><span class="navheader_linktext">Managing Data</span></a></span>  </div><div class="footer">WebHelp output generated by<a href="http://www.oxygenxml.com" target="_blank"><span class="oXygenLogo"><img src="oxygen-webhelp/resources/img/LogoOxygen100x22.png" alt="Oxygen"></img></span><span class="xmlauthor">XML Author</span></a> - Trial Edition</div>
+</body>
+</html>

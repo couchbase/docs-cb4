@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE topic
+  PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic xml:lang="en-us" id="topic7568">
+	<title>Views and stored data</title>
+	<shortdesc>This section describes how the views system relates to stored data.</shortdesc>
+	<body>
+		<p>The view system relies on the information stored within your cluster being formatted as a
+			JSON document. The formatting of the data in this form enable the individual fields of the
+			data to be identified and used at the components of the index.</p>
+		<p>Information is stored into your Couchbase database the data stored is parsed, if the
+			information can be identified as valid JSON then the information is tagged and identified
+			in the database as valid JSON. If the information cannot be parsed as valid JSON then it is
+			stored as a verbatim binary copy of the submitted data.</p>
+
+		<fig>
+			<image href="images/view-types-datastore.png" width="600" />
+		</fig>
+
+		<p>When retrieving the stored data, the format of the information depends on whether the data
+			was tagged as valid JSON or not:</p>
+
+		<section>
+			<title>JSON information</title>
+
+			<p>Information identified as JSON data may not be returned in a format identical to that
+				stored. The information will be semantically identical, in that the same fields, data
+				and structure as submitted will be returned. Metadata information about the document is
+				presented in a separate structure available during view processing.</p>
+			<p>The white space, field ordering may differ from the submitted version of the JSON
+				document.</p>
+			<p>For example, the JSON document below, stored using the key <codeph>mykey</codeph> :</p>
+
+			<codeblock>
+{
+   "title" : "Fish Stew",
+   "servings" : 4,
+   "subtitle" : "Delicious with fresh bread"
+}
+</codeblock>
+
+			<p>May be returned within the view processor as:</p>
+			<codeblock>
+{
+    "servings": 4,
+    "subtitle": "Delicious with fresh bread",
+    "title": "Fish Stew"
+}
+    </codeblock>
+		</section>
+
+		<section>
+			<title>Non-JSON information</title>
+
+			<p>Information not parsable as JSON will always be stored and returned as a binary copy of
+				the information submitted to the database. If you store an image, for example, the data
+				returned will be an identical binary copy of the stored image.</p>
+			<p>Non-JSON data is available as a base64 string during view processing. A non-JSON
+				document can be identified by examining the <codeph>type</codeph> field of the metadata
+				structure.</p>
+			<p>The significance of the returned structure can be seen when editing the view within the
+				Web Console.</p>
+		</section>
+
+
+		<section>
+			<title>JSON basics</title>
+			<p>JSON is used because it is a lightweight, easily parsed, cross-platform data
+				representation format. There are a multitude of libraries and tools designed to help
+				developers work efficiently with data represented in JSON format, on every platform and
+				every conceivable language and application framework, including, of course, most web
+				browsers.</p>
+			<p>JSON supports the same basic types as supported by JavaScript, these are:</p>
+			<ul>
+				<li>Number (either integer or floating-point).</li>
+			</ul>
+			<p>JavaScript supports a maximum numerical value of 2<sup>53</sup>. If you are working with
+				numbers larger than this from within your client library environment (for example,
+				64-bit numbers), you must store the value as a string.</p>
+			<ul>
+				<li>
+					<p>String — this should be enclosed by double-quotes and supports Unicode characters
+						and backslash escaping. For example:</p>
+					<codeblock>"A String"</codeblock>
+				</li>
+				<li>
+					<p>Boolean — a <codeph>true</codeph> or <codeph>false</codeph> value. You can use
+						these strings directly. For example:</p>
+					<codeph>{ "value": true}</codeph>
+				</li>
+				<li>
+					<p>Array — a list of values enclosed in square brackets. For example:</p>
+					<codeph>["one", "two", "three"]</codeph>
+				</li>
+				<li>
+					<p>Object — a set of key/value pairs (i.e. an associative array, or hash). The key
+						must be a string, but the value can be any of the supported JSON values. For
+						example:</p>
+					<codeblock>{
+   "servings" : 4,
+   "subtitle" : "Easy to make in advance, and then cook when ready",
+   "cooktime" : 60,
+   "title" : "Chicken Coriander"
+}
+</codeblock>
+				</li>
+			</ul>
+			<p>If the submitted data cannot be parsed as a JSON, the information will be stored as a
+				binary object, not a JSON document.</p>
+		</section>
+
+
+		<section>
+			<title>Document metadata</title>
+			<p>During view processing, metadata about individual documents is exposed through a
+				separate JSON object, <codeph>meta</codeph>, that can be optionally defined as the
+				second argument to the <codeph>map()</codeph>. This metadata can be used to further
+				identify and qualify the document being processed.</p>
+			<p>The <codeph>meta</codeph> structure contains the following fields and associated
+				information:</p>
+			<ul>
+
+				<li><codeph>id</codeph>—The ID or key of the stored data object. This is the same as the
+					key used when writing the object to the Couchbase database.</li>
+
+				<li><codeph>rev</codeph>—An internal revision ID used internally to track the current
+					revision of the information. The information contained within this field is not
+					consistent or trackable and should not be used in client applications.</li>
+
+				<li><codeph>type</codeph>—The type of the data that has been stored. A valid JSON
+					document will have the type <codeph>json</codeph>. Documents identified as binary
+					data will have the type <codeph>base64</codeph>.</li>
+
+				<li><codeph>flags</codeph>—The numerical value of the flags set when the data was
+					stored. The availability and value of the flags is dependent on the client library
+					you are using to store your data. Internally the flags are stored as a 32-bit
+					integer.</li>
+
+				<li><codeph>expiration</codeph>—The expiration value for the stored object. The stored
+					expiration time is always stored as an absolute Unix epoch time value.</li>
+			</ul>
+
+			<p>These additional fields are only exposed when processing the documents within the view
+				server. These fields are not returned when you access the object through the
+				Memcached/Couchbase protocol as part of the document.</p>
+
+		</section>
+
+
+		<section>
+			<title>Non-JSON data</title>
+			<p>All documents stored in Couchbase Server will return a JSON structure, however, only
+				submitted information that could be parsed into a JSON document will be stored as a JSON
+				document. If you store a value that cannot be parsed as a JSON document, the original
+				binary data is stored. This can be identified during view processing by using the
+					<codeph>meta</codeph> object supplied to the <codeph>map()</codeph> function.</p>
+			<p>Information that has been identified and stored as binary documents instead of JSON
+				documents can still be indexed through the views system by creating an index on the key
+				data. This can be particularly useful when the document key is significant. For example,
+				if you store information using a prefix to the key to identify the record type, you can
+				create document-type specific indexes.</p>
+		</section>
+
+
+		<section>
+			<title>Document storage and indexing sequence</title>
+			<p>The method of storage of information into the Couchbase Server affects how and when the
+				indexing information is built, and when data written to the cluster is incorporated into
+				the indexes. In addition, the indexing of data is also affected by the view system and
+				the settings used when the view is accessed.</p>
+
+
+
+
+			<p>The basic storage and indexing sequence is:</p>
+
+
+
+			<ol>
+				<li>A document is stored within the cluster. Initially the document is stored only in
+					RAM.</li>
+				<li>The document is communicated to the indexer through replication to be indexed by
+					views.</li>
+			</ol>
+
+			<p>This sequence means that the view results are eventually consistent with what is stored
+				in memory based on the latency in replication of the change to the indexer. It is
+				possible to write a document to the cluster and access the index without the newly
+				written document appearing in the generated view.</p>
+
+
+			<p>Conversely, documents that have been stored with an expiry may continue to be included
+				within the view until the document has been removed from the database by the expiry
+				pager.</p>
+
+			<p>Couchbase Server supports the Observe command, which enables the current state of a
+				document and whether the document has been replicated to the indexer or whether it has
+				been considered for inclusion in an index. </p>
+			<p>When accessing a view, the contents of the view are asynchronous to the stored
+				documents. In addition, the creation and updating of the view is subject to the
+					<option>stale</option> parameter. This controls how and when the view is updated when
+				the view content is queried. </p>
+		</section>
+
+	</body>
+
+
+</topic>

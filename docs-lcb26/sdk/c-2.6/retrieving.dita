@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_yny_mhq_44">
+  <title>Retrieving documents</title>
+	<shortdesc>You can retrieve documents by using either regular reads or replica reads.</shortdesc>
+  <conbody>
+  	<p>Documents are retrieved by using the <apiname>lcb_get()</apiname> function, which requests the document from the cluster. To request a document from the server, initialize an
+        <apiname>lcb_get_cmd_t</apiname> structure: </p>
+<codeblock outputclass="language-c">
+static void got_document(lcb_t instance, const void *cookie, lcb_error_t err, 
+   const lcb_get_resp_t *resp)
+{
+  if (err == LCB_SUCCESS) {
+    printf("Received document: %.*s\n", (int)resp->v.v0.nbytes, resp->v.v0.bytes);
+  } else {
+    fprintf(stderr, "Couldn’t retrieve item: %s\n", lcb_strerror(instance, err));
+  }
+}
+ 
+static void getDoc() {
+  // ...
+  lcb_set_get_callback(instance, got_document);
+  
+  lcb_get_cmd_t cmd = { 0 };
+  const lcb_get_cmd_t *cmdlist[] = { &amp;cmd };
+  const char *key = “a_simple_key”;
+  cmd.v.v0.key = key;
+  cmd.v.v0.nkey = strlen(key);
+  
+  lcb_error_t err = lcb_get(instance, NULL, 1, &amp;cmdlist);
+  if (err == LCB_SUCCESS) {
+    lcb_wait(instance);
+  } else {
+    fprintf(stderr, "Couldn’t schedule get operation: %s\n", lcb_strerror(instance, err));
+ }
+ </codeblock>
+    <p>The previous block of code shows how to request a document from the cluster. The
+				<codeph>key</codeph> and <codeph>nkey</codeph> fields describe the buffer and length of
+			the key, while the <apiname>lcb_get()</apiname> function actually schedules the request to
+			the server. In order to receive the document you must install a callback that will be
+			invoked with the document as one of its parameters.</p>
+    <section>
+      <title>Reading from replicas</title>
+      <p>In the event that a node fails, all the items hosted on that node will become temporarily
+				unavailable until the node is <i>failed over</i>. The cluster may be configured to
+				automatically fail over a node as early as 30 seconds after a failover is detected;
+				however, some applications might need higher response times and availability in such
+				cases.</p>
+      <p>The replica read functionality allows the application to read data from a replica. The data
+				might be <i>older</i> in case the active copy of the data (on the node which failed) did
+				not replicate in time to the replica. Issuing a replica read operation in the C SDK is
+				similar to issuing a normal get operation. Just use the
+					<apiname>lcb_get_replica_cmd_t</apiname> and l<apiname>cb_get_replica</apiname>
+				APIs:</p>
+      <p><codeblock outputclass="language-c">lcb_get_replica_cmd_t cmd = { 0 };
+lcb_get_replica_cmd_t *cmdlist[] = { &amp;cmd };
+cmd.v.v0.key = "key";
+cmd.v.v0.nkey = strlen("key");
+cmd.v.v0.strategy = LCB_REPLICA_FIRST;
+err = lcb_get_replica(instance, NULL, 1, &amp;cmdlist);</codeblock>The
+				callback for the operation is the same as the one for <apiname>lcb_get()</apiname>. The
+					<varname>strategy</varname> field instructs the library how to fetch from the
+				replica. In this case the library requests a copy from each replica (in sequence) and
+				invoke the callback with the first successful reply.</p>
+    	
+    	<note type="warning">Getting from a replica might return stale data. Use replica reads only in instances where having <i>any</i> copy of the
+    		document (even a potentially stale one) is better than having <i>no
+    			copy</i>.</note>
+    </section>
+  </conbody>
+</concept>
