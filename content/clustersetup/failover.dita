@@ -1,17 +1,150 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_nzk_yln_vs">
-  <title>Failover a node</title><shortdesc>To failover a node means that Couchbase Server removes a node from a cluster and makes
-    replicated data at other nodes available for client requests.</shortdesc>
+  <title>Failover a Node</title><shortdesc>Full Administrators and Cluster Administrators can failover a node, which means that
+    Couchbase Server removes a node from a cluster and makes replicated data at other nodes
+    available for client requests.</shortdesc>
   <body>
-    <section><title>Administrator Authorization</title>
-      <note type="important">To failover a node in  a Couchbase cluster, an administrator must have one of these roles: <ul>
-            <li>Full administrator</li>
-            <li>Cluster administrator</li>
-          </ul>To learn about administrative roles in Couchbase, see <xref
-          href="../security/concepts-rba.dita#concept_ntl_jph_hr"/>. </note>
-      
-    </section>   
+    
     <p>There are three types of failovers: graceful, hard, and automatic failover.</p>
+    <section><title>Graceful Failover</title>
+      <p>Graceful failover fails over a node from the cluster safely and without data loss after
+        all in-flight operations are completed.</p>
+      <p>With the <term>graceful failover</term>, all in-flight operations are completed; for example,
+        data is written to the node and is transferred to the replica vBuckets. The replica vBuckets
+        are promoted to active vBuckets and the active vBuckets on the failed-over node are
+        transitioned to replica vBuckets.</p>
+      
+      <p>Since failover occurs after the replica vBuckets are synchronized with the active vBuckets, 
+        graceful failover can take more time than a hard failover.</p>
+      
+      <p>While the node is being gracefully failed over, you can stop the failover operation. You can
+        also restart the graceful failover. When a node is failed over, you can add it back to the
+        cluster via delta or full recovery.</p>
+      
+      <p> The following conditions must be met for graceful failover; otherwise, hard failover is
+        used.</p>
+      <ul>
+        <li>The node must be healthy.</li>
+        <li> Each active vBucket on the failed over node must have an equivalent replica
+          vBucket.</li>
+        <li> At least one (1) complete replica vBucket set must be available.</li>
+      </ul>
+        <p> For example:</p>
+      <ul>
+        <li>In a 7 node cluster, if a bucket is configured for 1 replica, only 1 node can be
+          gracefully failed over.</li>
+        <li> In a 7 node cluster, if a bucket is configured for 2 replicas, 2 nodes can be gracefully
+          failed over.</li>
+        <li> In a 7 node cluster, if a bucket is configured for 3 replicas, 3 nodes can be gracefully
+          failed over. </li>
+      </ul>
+        <p>Unlike hard failover, graceful failover does not alter the number of active vBuckets.
+        However, the number of replica vBuckets can be reduced and they can be unevenly
+        distributed.</p>
+    
+    
+    </section>
+    
+    <section><title>Hard Failover</title>
+      <p>Hard failover immediately fails over nodes from clusters. Automatic failover is a hard
+        failover.</p>
+      <p>During failover, replica vBuckets are promoted to active vBuckets and active vBuckets on the
+        failed-over node are transitioned to replica vBuckets. </p>
+      <p>After a node is failed over, it can be added back to the cluster via delta or full recovery.
+        When a node is added back to the cluster after the failover, the replica vBuckets on the
+        failed-over node are resynchronized and promoted back to active.</p>
+      
+      <p>Topology changes after a failover, such as adding, removing, or failing over a server,
+        initiate a different rebalance operation. </p>
+      <p>Typically, the hard failover is used when the node is in a bad state. The following
+        conditions are usually present:</p>
+      <ul>
+        <li>The node is not healthy.</li>
+        <li>Each active vBucket does not have an equivalent replica bucket.</li>
+        <li>No replica buckets are present.</li>
+      </ul>
+      
+      
+      
+    </section>  
+    <section><title>Automatic Failover</title>
+      <p>Automatic failover marks a node as failed-over if the node was identified as unresponsive or unavailable.</p>
+      <note type="note"> To avoid cascading failures and split-brain scenarios, only one auto-failover is allowed for Couchbase Server.</note>
+      <p>There are some deliberate limitations to the auto-failover feature. Here are some automatic failover considerations you should become familiar
+        with: </p> 
+      <dl>
+        <dlentry>
+          <dt>Disabled by default</dt>
+          <dd>Automatic failover is disabled by default to prevent Couchbase Server from using
+            automatic failover without the user explicitly enabling it. Enabling auto-failover will
+            enable it for all services except for the Index service. An option is provided in the
+            <codeph>InternalSettings</codeph> API to enable also the auto-failover for Index Only
+            nodes. This option has effect only when auto-failover is enabled. </dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Minimum node</dt>
+          <dd>Automatic failover is available only on clusters that consist of at least three (3)
+            nodes. If two or more nodes go down at the same time within a specified delay period, the
+            automatic failover system will not failover any nodes.</dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Required intervention</dt>
+          <dd>Automatic failover will only fail over one node before requiring human intervention to
+            prevent a chain reaction failure of all nodes in the cluster. </dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Failover delay</dt>
+          <dd>There is a minimum 120-second delay before a node will be failed over. The time can be
+            adjusted, but the software will still perform multiple pings of a node that could be down.
+            Software intervention prevents failover of a functioning but slow node or to prevent
+            network connection issues from triggering failover.</dd>
+        </dlentry>
+      </dl>
+      
+      <p>There are automatic failover policies per service type. The current policies are as follows: </p>
+      <dl>
+        <dlentry>
+          <dt>Data</dt>
+          <dd>Auto-failover Data service node if more than 2 data nodes are in the cluster.</dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Index only</dt>
+          <dd>Auto-failover Index only node if more than 1 Index node is in the cluster.</dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Query only</dt>
+          <dd>Auto-failover Query only node if more than 1 Query node is in the cluster.</dd>
+        </dlentry>
+      </dl>
+      <p>For multiple services co-located on one node, the policies are different:</p>
+      <dl>
+        <dlentry>
+          <dt>Data + Index and / or Query node</dt>
+          <dd>Auto-failover policy is same as for the Data service. </dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Index + Query node</dt>
+          <dd>Both services are treated equally — the auto-failover policy of each service is also
+            taken into consideration.</dd>
+        </dlentry>
+      </dl>
+      
+    </section>
   </body>
+  <related-links>
+    <link href="../security/concepts-rba.dita#concept_ntl_jph_hr"/>
+  </related-links>
 </topic>
