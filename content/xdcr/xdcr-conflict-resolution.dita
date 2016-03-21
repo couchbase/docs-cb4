@@ -1,45 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
-<topic id="topic_zfs_h5q_pq">
-  <title>XDCR conflict resolution</title>
-  <shortdesc>Conflict resolution makes XDCR an ideal solution for high availability use cases. </shortdesc>
+<topic id="topic_dz3_wk4_14">
+  <title>Conflict resolution in XDCR</title>
+  <shortdesc>XDCR automatically performs conflict resolution for different document versions on source and
+    destination clusters.</shortdesc>
   <body>
-    <p>Failing over to a secondary cluster under cluster-wide or partial failures is critical for
-      providing a full availability on the database tier. Therefore, XDCR is often used as an
-      availability solution since the RevID-based model (a model based on a revision ID) behaves
-      ideally under failover conditions. </p>
-<p>In addition to the RevID type of conflict resolution, Couchbase Server implements Timestamp. </p>
-      <dl>
-        <dlentry>
-          <dt>Revision ID</dt>
-          <dd>The default resolution type is Revision ID-based. Enable Revision ID at the Couchbase
-          bucket level during the initial setup and then change it if needed at a later time.</dd>
-        </dlentry>
-      </dl>
 
-    
-    <dl>
-      <dlentry>
-        <dt>Timestamp</dt>
-        <dd>When the system detects  identical
-          revision IDs or identical timestamps while resolving conflicts, it allows the larger value
-          to win after comparing them. </dd>
-        <dd>The order for comparing values in the system is as follows: <ol>
-            <li>CAS (Create and Set) Value</li>
-            <li>Document flag</li>
-            <li>Expiration TTL (Time to Live) value</li>
-          </ol>
-        </dd>
-      </dlentry>
-    </dl>
-    
-    
-     
-    
-    
-    
-    
-    
-  
+      <p>The algorithm is designed to consistently select the same document on
+        either a source or destination cluster. For each stored document, XDCR perform checks of
+        metadata to resolve conflicts. It checks the following:</p><ul>
+          <li><p>Numerical sequence, which is incremented on each mutation</p></li>
+          <li><p>CAS value</p></li>
+          <li><p>Document flags</p></li>
+          <li><p>Expiration (TTL) value</p></li>
+        </ul><p>If a document does not have the highest revision number, changes to this document will
+          not be stored or replicated; instead the document with the highest score will take precedence on
+          both clusters. Conflict resolution is automatic and does not require any manual correction or
+          selection of documents.</p><p>By default XDCR fetches metadata twice from every document before
+            it replicates the document at a destination cluster. XDCR fetches metadata on the source cluster
+            and looks at the number of revisions for a document. It compares this number with the number of
+            revisions on the destination cluster and the document with more revisions is considered the
+            ‘winner.’</p><p>If XDCR determines a document from a source cluster will win conflict
+              resolution, it puts the document into the replication queue. If the document will lose conflict
+              resolution because it has a lower number of mutations, XDCR will not put it into the replication
+              queue. Once the document reaches the destination, this cluster will request metadata once again
+              to confirm the document on the destination has not changed since the initial check. If the
+              document from the source cluster is still the ‘winner’ it will be persisted onto disk at the
+              destination. The destination cluster will discard the document version with the lowest number of
+              mutations.</p><p>The key point is that the number of document mutations is the main factor that
+                determines whether XDCR keeps a document version or not. This means that the document that has
+                the most recent mutation may not be necessarily the one that wins conflict resolution. If both
+                documents have the same number of mutations, XDCR selects a winner based on other document
+                metadata. Precisely determining which document is the most recently changed is often difficult
+                in a distributed system. The algorithm Couchbase Server uses does ensure that each cluster can
+                independently reach a consistent decision on which document wins.</p>
   </body>
 </topic>
