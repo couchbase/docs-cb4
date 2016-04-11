@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_wmm_1ps_pv">
+  <title>Transparent Huge Pages (THP)</title>
+  <shortdesc>The Transparent Huge Pages (THP) feature must be disabled in Couchbase Server. </shortdesc>
+  <body>
+    <p>Huge Pages in Linux-based operating systems create pre-allocated contiguous
+      memory space designed to assist application performance.</p>
+    <p>Transparent Huge Pages (THP) is a Linux OS feature that conceals much of the complexity of using actual 
+      Huge Pages as well as automates the creation of contiguous memory space. 
+      It is enabled by default in some Linux Operating systems, but not all.</p>
+    <p>For most workloads it functions very well, but for databases such as Couchbase it does not.
+      Not only is it not recommended by the OS vendors for databases, but it is detrimental to the
+      performance and function of Couchbase cluster nodes. Such negative influence on the
+      performance is not unique to Couchbase but applies almost to all databases that usually need
+      sparse memory access patterns and rarely have contiguous access patterns.</p>
+    <p>Turning THP off and keeping it off after reboot is not entirely supported by the Linux OS,
+      and you will have to establish a process that is easy to perform and repeat.</p>
+    <p>To disable THP follow these steps:</p>
+    <dl>
+      <dlentry>
+        <dt>Check the THP status</dt>
+        <dd>Check the status of THP by issuing the following
+          commands:<codeblock>cat /sys/kernel/mm/transparent_hugepage/enabled
+cat /sys/kernel/mm/transparent_hugepage/defrag       </codeblock></dd>
+        <dd>On some Red Hat and Red Hat variants, you might have to do
+          this:<codeblock>cat /sys/kernel/mm/redhat_transparent_hugepage/enabled
+cat /sys/kernel/mm/redhat_transparent_hugepage/defrag        </codeblock></dd>
+        <dd>Continue with the procedure described below if in one or both files the output looks as follows:<codeblock>[always] madvise never</codeblock></dd>
+      </dlentry>
+    </dl>
+    <dl>
+      <dlentry>
+        <dt>Copy the init script</dt>
+        <dd>The init script is designed to make sure that the changes are made around the same time
+          as Couchbase Server is loaded on
+          reboot.<codeblock>#!/bin/bash
+          ### BEGIN INIT INFO
+          # Provides:          disable-thp
+          # Required-Start:    $local_fs
+          # Required-Stop:
+          # X-Start-Before:    couchbase-server
+          # Default-Start:     2 3 4 5
+          # Default-Stop:      0 1 6
+          # Short-Description: Disable THP
+          # Description:       disables Transparent Huge Pages (THP) on boot
+          ### END INIT INFO
+          
+          case $1 in
+          start)
+          if [ -d /sys/kernel/mm/transparent_hugepage ]; then
+          echo 'never' > /sys/kernel/mm/transparent_hugepage/enabled
+          echo 'never' > /sys/kernel/mm/transparent_hugepage/defrag
+          elif [ -d /sys/kernel/mm/redhat_transparent_hugepage ]; then
+          echo 'never' > /sys/kernel/mm/redhat_transparent_hugepage/enabled
+          echo 'never' > /sys/kernel/mm/redhat_transparent_hugepage/defrag
+          else
+          return 0
+          fi
+          ;;
+          esac
+        </codeblock></dd>
+      </dlentry>
+    </dl>
+    <dl>
+      <dlentry>
+        <dt>Register the code in the OS</dt>
+        <dd>As root do the following:
+        <ol>
+          <li>Create a file with the above code: <codeblock>$ sudo vi /etc/init.d/disable-thp</codeblock></li>
+          <li>Chmod the file to be executable: <codeblock>$ sudo chmod 755 /etc/init.d/disable-thp</codeblock></li>
+          <li>Execute it so it takes effect right now: <codeblock>$ sudo service disable-thp start</codeblock>
+          </li>
+        </ol></dd>
+      </dlentry>
+    </dl>
+   <dl>
+     <dlentry>
+       <dt>Make sure the Init script starts at boot</dt>
+       <dd>For Red Hat variants: <codeblock>$ sudo chkconfig disable-thp on       </codeblock></dd>
+       <dd>For Ubuntu: <codeblock>$ sudo update-rc.d disable-thp defaults</codeblock></dd>
+     </dlentry>
+   </dl>
+    
+    <dl>
+      <dlentry>
+        <dt>Test the process</dt>
+        <dd>Check the status of THP by issuing the following commands:
+          <codeblock>cat /sys/kernel/mm/transparent_hugepage/enabled
+cat /sys/kernel/mm/transparent_hugepage/defrag          </codeblock></dd>
+        <dd>On some Red Hat or Red Hat variants, you might have to do this instead:
+          <codeblock>cat /sys/kernel/mm/redhat_transparent_hugepage/enabled
+cat /sys/kernel/mm/redhat_transparent_hugepage/defrag</codeblock></dd>
+        <dd>For both files, the output should be like this: <codeblock>always madvise [never]</codeblock>
+        </dd>
+      </dlentry>
+    </dl>
+  </body>
+</topic>
