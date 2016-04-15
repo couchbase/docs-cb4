@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_tvx_nhq_44">
+    <title>MapReduce from the SDK</title>
+    <shortdesc>You can use MapReduce views to create queryable indexes in Couchbase Server. </shortdesc>
+    <conbody>
+        <p>The normal CRUD methods allow you to look up a document by its ID. A MapReduce
+            (<i>view</i> query) allows you to look up one or more documents based on various
+            criteria. MapReduce views are comprised of a <i>map</i> function that is executed once per
+            document (this is done incrementally, so this is not run each time you query the view) and
+            an optional <i>reduce</i> function that performs aggregation on the results of the
+            <i>map</i> function. The <i>map</i> and <i>reduce</i> functions are stored on the server
+            and written in JavaScript.</p>
+        <p>MapReduce queries can be further customized during query time to allow only a subset (or
+            range) of the data to be returned.</p>
+        <p>The following example queries a <codeph>by_name</codeph> view in a beer design document.
+            This view checks whether a document is a beer and has a name. If it does, it emits the
+            beer's name into the index. This view allows beers to be queried for by name.</p>
+        <codeblock outputclass="language-javascript">function (doc, meta) {
+  if (doc.type &amp;&amp; doc.type == "beer" &amp;&amp; doc.name) {    
+     emit(doc.name, null);
+  }
+}</codeblock>
+        <p>Querying a view through the Python client is performed through the
+            <codeph>query()</codeph> method on the <apiname>Bucket</apiname> class. This method
+            returns a Python iterator that yields the results of the query (in the form of a
+            <apiname>ViewRow</apiname> object). The <apiname>ViewRow</apiname> object contains the
+            <codeph>key</codeph> and <codeph>value</codeph> properties (which are the first and
+            second arguments to the view's <codeph>emit()</codeph> function, respectively) as well as
+            the <codeph>docid</codeph> property, which may be passed to the <apiname>get()</apiname>
+            method to return the actual document.</p>
+        <codeblock outputclass="language-python">bkt = Bucket('couchbase://192.168.33.101/beer-sample')
+resiter = bkt.query('beer', 'by_name')
+for row in resiter:
+    print row</codeblock>
+        <p>You can also manually construct a <apiname>couchbase.views.params.Query</apiname> object,
+            which allows you to set various properties on the query:</p>
+        <codeblock outputclass="language-python">from couchbase.bucket import Bucket
+from couchbase.views.params import Query
+
+bkt = Bucket('couchbase://192.168.33.101/beer-sample')
+q = Query()
+q.limit = 5 # Limit to 5 results
+q.mapkey_range = ('A','A'+Query.STRING_RANGE_END)
+
+rows = bkt.query('beer', 'by_name', query=q)
+for row in rows:
+    print row</codeblock>
+        <p>Here's some sample output for the previous query:</p>
+        <codeblock>ViewRow(key=u'A. LeCoq Imperial Extra Double Stout 1999', value=None, 
+   docid=u'harvey_son_lewes-a_lecoq_imperial_extra_double_stout_1999', doc=None)
+ViewRow(key=u'A. LeCoq Imperial Extra Double Stout 2000', value=None, 
+   docid=u'harvey_son_lewes-a_lecoq_imperial_extra_double_stout_2000', doc=None)
+ViewRow(key=u'Aass Brewery', value=None, docid=u'aass_brewery', doc=None)
+ViewRow(key=u'Abana Amber Ale', value=None, docid=u'mickey_finn_s_brewery-abana_amber_ale', doc=None)
+ViewRow(key=u'Abbaye de Floreffe Double', value=None, 
+   docid=u'brasserie_lefebvre-abbaye_de_floreffe_double', doc=None)</codeblock>
+        <p>You can also pass the query string directly. This is useful if you're using the Couchbase
+            Web UI, or if you're more familiar with the direct Apache CouchDB
+            interface:<codeblock outputclass="language-python">rows = bkt.query('beer', 'by_name',
+                 query=Query.from_any("startkey=%22A%22&amp;endkey=%22A%5Cuefff%22&amp;limit=5"))</codeblock></p>
+        <section><title>Querying Geospatial Views</title><note>Geospatial queries are present since
+            Couchbase Server 3.0.1 (as experimental), and since Couchbase Server 4.0.0 (as
+            stable).</note>To query a geospatial view, you will need to construct a
+            <apiname>SpatialQuery</apiname> object
+            (<apiname>couchbase.views.params.SpatialQuery</apiname>). Spatial queries accept a
+            <parmname>start_range</parmname> and an <parmname>end_range</parmname> parameter
+            which allow you to limit the enclosing bounding boxes of the result. The arguments to
+            these parameters are Python lists or tuples, with each element corresponding to a
+            component emitted by the key (the first two components implicitly being the longitude
+            and latitude of the result itself).<p>On output, spatial queries yield instances of
+                <apiname>SpatialRow</apiname> classes. A <apiname>SpatialRow</apiname> is
+                similar to a <apiname>ViewRow</apiname>, with an added <codeph>geometry</codeph>
+                property.<codeblock outputclass="language-python" spectitle="Querying a spatial view">from couchbase.views.params import SpatialQuery
+
+q = SpatialQuery(start_range=[0, -90, None], end_range=[180, 90, None])
+for row in bkt.query('geodesign', 'geoview', query=q):
+    print "Key:", row.key
+    print "Value:", row.value
+    print "Geometry", row.geometry</codeblock></p></section>
+        <section><title>Querying views using the Twisted API</title>Because the normal
+            <codeph>couchbase.bucket</codeph>'s <codeph>query()</codeph> interfaces uses a
+            blocking interface centered around iterators, the <codeph>txcouchbase</codeph> provides
+            two different methods for querying.</section>
+        <section>The first is the <apiname>queryAll()</apiname> method which returns a
+            <apiname>Deferred</apiname> object, which has its callback invoked with a list of all
+            rows:<codeblock outputclass="language-python">from twisted.internet import reactor
+from txcouchbase.bucket import Bucket
+from couchbase.exceptions import CouchbaseError
+
+def on_view_rows(rows):
+    for row in rows:
+        print row
+
+bkt = Bucket('couchbase://192.168.33.101/beer-sample')
+d = bkt.queryAll("beer", "brewery_beers", limit=5)
+d.addCallback(on_view_rows)
+reactor.run()</codeblock><p>A
+    more advanced way to retrieve view results is by using a <apiname>RowHandler</apiname>.
+    The <codeph>RowHandler</codeph> is a class that should be subclassed by the user. The
+    subclass must implement one method that is invoked when new results are available and
+    another method that is invoked when all results have been
+    completed:</p><codeblock outputclass="language-python">from twisted.internet import reactor
+from txcouchbase.bucket import Bucket
+from couchbase.async.view import AsyncViewBase
+
+class MyRowHandler(AsyncViewBase):
+    def on_rows(self, rows):
+        print "Got new set of rows"
+        for row in rows:
+            print "   ROW:", row
+
+    def on_done(self):
+        print "All rows received!"
+
+bkt = Bucket('couchbase://192.168.33.101/beer-sample')
+bkt.queryEx(MyRowHandler, "beer", "brewery_beers", limit=50)
+reactor.run()</codeblock></section>
+    </conbody>
+</concept>
