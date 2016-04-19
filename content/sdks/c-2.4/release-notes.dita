@@ -4,6 +4,138 @@
 <shortdesc>C SDK</shortdesc>
 <body>
     <section>
+        <title>2.5.8 (April 19, 2016)</title>
+        <ul>
+            <li>Fix SSL connectivity errors with views and HTTP bootstrapping. This would cause
+                    network connectivity issues when attempting to bootstrap via
+                        <codeph>https://</codeph> or using views
+                    (<codeph>lcb_view_query()</codeph>). The fix is a workaround to not advertise
+                    older SSL encryption methods. <ul>
+                        <li>Priority: Major</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-688">CCBC-688</xref>
+                        </li>
+                    </ul></li>
+            <li>Do not abort when receiving a memcached EINVAL response. While the client should
+                    never end up in a situation where it receives an <codeph>EINVAL</codeph> from
+                    the server, it should nevertheless not terminate the execution of the current
+                    process. This bug was introduced in 2.5.6 <ul>
+                        <li>Priority: Major</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-689"
+                            >CCBC-689</xref></li>
+                    </ul></li>
+            <li>Fix memory leak when using N1QL prepared statements. Prepared statements would never be freed, even when the client handle was destroyed (<codeph>lcb_destroy()</codeph>) causing a slight memory leak.</li>
+            <li>Append CRLF header after host header. This would sometimes result in odd HTTP
+                    headers being sent out. <ul>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-694"
+                            >CCBC-694</xref></li>
+                        <li>Priority: Minor</li>
+                    </ul></li>
+            <li>Experimental CBFT (Full-Text search API) This version adds a new fulltext api. The
+                    API is a row-based API similar to N1QL and MapReduce. See the
+                        <codeph>&lt;libcouchbase/cbft.h></codeph> header for more details. The API
+                    is experimental and subject to change. <ul>
+                        <li>Priority: Major</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-638"
+                            >CCBC-638</xref></li>
+                    </ul></li>
+            <li>Allow additional client identifier for HELLO command. The SDK sends a version string
+                    to the server when doing initial negotiation. The server then uses this string
+                    in the context of any logging messages pertaining to that connection. In this
+                    version, a new setting has been added to allow 'user-defined' version strings to
+                    be appended to the logs. Note that this feature is intended only for use with
+                    wrapping SDKs such as Python, node.js, and PHP so that their versions can be
+                    present in the log messages as well. This setting is exposed as a string control
+                    (in the connection string, or <codeph>lcb_cntl_string()</codeph> with the name
+                    of <codeph>client_string</codeph>). <ul>
+                        <li> Priority: Minor</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-693"
+                            >CCBC-693</xref></li>
+                    </ul></li>
+            <li><p>vBucket retry logic changes. The client will now retry at constant 100ms rate when receiving not-my-vbucket error replies from the server (adjustable using
+                <codeph>retry_nmv_interval</codeph>). It will also only use fast-forward map to determine the new location for the vbucket, and will not use extended hueristics.
+                </p>
+                <p>The most noteworthy user-visible change is the 100ms retry interval which will
+                        significantly decrease the network traffic used by the SDK during a
+                        rebalance.</p>
+                <p>To restore the pre-2.5.8 behavior (i.e. use extended heuristics and and  exponential retry rate), specify <codeph>vb_noguess=false</codeph>.</p>
+                <ul>
+                    <li>Priority: Major</li>
+                    <li>Issues: <xref format="html" scope="external" href="https://issues.couchbase.com/browse/CCBC-660">CCBC-660</xref></li>
+                </ul>
+            </li>
+            <li>Add interface for multi-bucket authentication. A new API has been added to modify
+                    and add additional bucket/password pairs in the library. This is done using
+                        <codeph>lcb_cntl</codeph> and the <codeph>LCB_CNTL_BUCKET_CRED</codeph>
+                    setting. Note that this functionality is not yet used in N1QL queries due to
+                        <xref format="html" scope="external"
+                        href="https://issues.couchbase.com/browse/MB-16964">MB-16964</xref>
+                    <ul>
+                        <li>Priority: Minor</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-661">CCBC-661</xref>
+                        </li>
+                    </ul></li>
+        </ul>
+    </section>
+    <section>
+        <title>2.5.7 (March 22, 2016)</title>
+        <ul>
+            <li>High-level index management operations. A volatile API for high level index
+                    management operations has been added to assist in common N1QL index operations
+                    such as creating the primary index and removing indexes.<ul>
+                        <li>Priority: Major</li>
+                        <li>Issues: <xref format="html" scope="external"
+                                href="https://issues.couchbase.com/browse/CCBC-662">CCBC-662</xref>
+                        </li>
+                    </ul>
+                </li>
+            <li>Fix N1QL mutation token queries. This fixes some bugs in the previous implementation of the way mutation tokens were handled with 
+                <codeph>lcb_N1QLPARAMS</codeph>. The bugs and fixes only affect consumers of that API. Couchbase SDKs do not consume this API
+                <ul>
+                    <li>Priority: Minor</li>
+                    <li>Issues:
+                        <xref format="html" scope="external" href="https://issues.couchbase.com/browse/CCBC-658">CCBC-658</xref>
+                    </li>
+                </ul>
+            </li>
+            <li>Throttle config request retries on empty NMVB responses. This changes the previous behavior where a new configuration would be retrieved
+                <i>immediately</i> upon a not-my-vbucket reply if a configuration  was not included within the error reply itself. The new behavior is to request a delayed retry (i.e. subject to the default throttle settings) if the current configuration originated from the CCCP (Memcached) provider.
+                <ul>
+                    <li>Priority: Major</li>
+                    <li>Issues:
+                        <xref format="html" scope="external" href="https://issues.couchbase.com/browse/CCBC-681">CCBC-681</xref>
+                    </li>
+                </ul>
+            </li>
+            <li>Rename 
+                <codeph>LCB_CLIENT_ETMPFAIL</codeph> to 
+                <codeph>LCB_CLIENT_ENOCONF</codeph>. This error code is returned only when there is no current client configuration. This error condition is
+                <i>not</i> temporary and is actually fatal; a result of  an initial bootstrapping failure. Note that the older name is still valid  in older code for compatibility purposes.
+                <ul>
+                    <li>Priority: Minor</li>
+                    <li>Issues: 
+                        <xref format="html" scope="external" href="https://issues.couchbase.com/browse/CCBC-679">CCBC-679</xref>
+                    </li>
+                </ul>
+            </li>
+            <li>Include PID in log messages on OS X. This makes the library logs (via
+                <codeph>LCB_LOGLEVEL</codeph> etc.) easier to read on a  mac. Previously this used to display only the thread ID, which was identical for multiple processes. Now the display reads as 
+                <i>pid/tid</i>, making it easier  to read the logs in a multi-process environment.
+                <ul>
+                    <li>Priority: Minor</li>
+                    <li>Issues:
+                        <xref format="html" scope="external" href="https://issues.couchbase.com/browse/CCBC-677">CCBC-677</xref>
+                    </li>
+                </ul>
+            </li>
+        </ul>
+    </section>
+    <section>
         <title>2.5.6 (February 18, 2016)</title>
             <ul>
                 <li>
