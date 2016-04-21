@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_h3x_x4n_qv">
+  <title>Asynchronous Programming</title>
+  <body>
+        <p>The Python SDK supports asynchronous programming by offering integration modules for
+            Twisted, gevent, and Python 3.4 asyncio.</p>
+        <p>Users of any of these frameworks should understand and know how the synchronous API
+            functions before using any asynchronous framework, since the asynchronous functionality
+            is an extension of the synchronous functionality.</p>
+    </body>
+    <topic id="topic_x5z_1pn_qv">
+        <title>Twisted</title>
+        <body>
+            <p><note>Refer to the API reference (<xref
+                        href="http://pythonhosted.org/couchbase/api/txcouchbase.html" format="html"
+                        scope="external"/>) for more information about the
+                        <apiname>txcouchbase</apiname> module.</note><xref
+                    href="http://twistedmatrix.com" format="html" scope="external">Twisted</xref> is
+                a high performance and very mature Python asynchronous framework.</p>
+            <section><title>Key-Value (CRUD) Operations</title>To use the Python SDK with twisted,
+                use the <apiname>txcouchbase</apiname> module (included with the SDK). As opposed to
+                the synchronous SDK methods which wait for completion and return Result objects, the
+                    <apiname>txcouchbase.bucket.Bucket</apiname> object returns a Twisted
+                    <codeph>Deferred</codeph>. You may configure <codeph>Deferred</codeph> with
+                    <i>callback</i> and <i>errback</i> handlers. Result objects are propagated to
+                the <i>callback</i> as seen in the example below.
+                <codeblock outputclass="language-python" spectitle="Twisted - KV Operation">from twisted.internet import reactor
+from txcouchbase.bucket import Bucket
+bucket = Bucket('couchbase://localhost/default')
+
+def on_ok(result):
+    print "Operation succeeded"
+    if hasattr(result, 'value'):
+        print "Value is", result.value
+
+def on_err(err):
+    print "Operation failed", err
+
+bucket.upsert('id', {'some':['value']}).addBeoth(on_ok, on_err)
+bucket.get('id').addBoth(on_ok, on_err)</codeblock></section>
+            <section>
+                <title>N1QL Queries</title>
+                <p>You may issue N1QL queries in the Twisted API using the
+                        <apiname>n1qlQueryAll()</apiname> or <apiname>n1qlQueryEx()</apiname>
+                    methods. The <apiname>n1qlQueryAll()</apiname> method returns an
+                        <apiname>Deferred</apiname> which will invoke the callback with an iterable
+                    of rows. The <apiname>n1qlQueryEx</apiname> accepts a user-defined subclass of
+                        <apiname>couchbase.async.n1ql.AsyncN1QLRequest</apiname>, with several
+                    callbacks implemented, and allows you to handle the rows as they are received
+                    from the cluster, rather than buffering the entire resultset in memory before
+                    invoking the handler.</p>
+                <codeblock spectitle="Twisted - n1qlQueryAll" outputclass="language-python">@inlineCallbacks
+def do_n1ql_query(cb):
+    rvs = yield cb.n1qlQueryAll(
+            N1QLQuery('SELECT * from `travel-sample` LIMIT 10'))
+    for row in rvs:
+        print row</codeblock>
+                <codeblock spectitle="Twisted - n1qlQueryEx" outputclass="language-python">class RowsHandler(AsyncN1QLRequest):
+    def __init__(self, *args, **kwargs):
+        super(RowsHandler, self).__init__(*args, **kwargs)
+        self.deferred = Deferred()
+
+    def on_rows(self, rows):
+        print "Got {} rows".format(len([x for x in rows]))
+    def on_done(self):
+
+        print "Rows complete!"
+        self.deferred.callback(self)
+
+    def on_error(self, ex):
+        self.deferred.errback(ex)
+
+@inlineCallbacks
+def do_n1ql_query(cb):
+    yield cb.n1qlQueryEx(RowsHandler, N1QLQuery('SELECT * FROM `travel-sample` LIMIT 10'))</codeblock>
+            </section>
+            <section>
+                <title>MapReduce Queries</title>
+                <p>Like N1QL queries, MapReduce queries are available via the
+                        <apiname>queryAll()</apiname> and <apiname>queryEx()</apiname> methods, the
+                    former returning all the rows at once, and the latter accepting a subclass of
+                        <apiname>couchbase.async.view.AsyncViewBase</apiname> which defines various
+                    functions.<codeblock spectitle="Twisted - queryAll" outputclass="language-python">@inlineCallbacks
+def do_view_query():
+    rows = yield cb.queryAll(
+            'beer', 'brewery_beers', limit=20, include_docs=True)
+    for row in rows:
+        print row.key, row.doc.value['description'][:10] + '...'</codeblock><codeblock spectitle="Twisted - queryEx" outputclass="language-python">from couchbase.async.view import AsyncViewBase
+
+class RowsHandler(AsyncViewBase):
+    def __init__(self, *args, **kwargs):
+        super(RowsHandler, self).__init__(*args, **kwargs)
+        self.deferred = Deferred()
+
+    def on_rows(self, rows):
+        print '** Got row callback!'
+        for row in rows:
+            print row.key, row.doc.value['description'][:10] + '...'
+
+    def on_error(self, ex):
+        self.deferred.errback(ex)
+
+    def on_done(self):
+        self.deferred.callback(self)
+
+@inlineCallbacks
+def do_view_query(cb):
+    handler = cb.queryEx(
+            RowsHandler, 'beer', 'brewery_beers', limit=20, include_docs=True)
+    yield handler.deferred</codeblock></p>
+            </section>
+        </body>
+    </topic>
+    <topic id="topic_i4t_5st_qv">
+        <title>Gevent</title>
+        <body>
+            <p><xref href="http://www.gevent.org" format="html" scope="external">gevent</xref> is a
+                high performance asynchronous framework. It is very powerful in that it allows for a
+                (mostly) traditional synchronous coding style. It accomplishes this by using
+                coroutines known as <term>greenlets</term> or <term>eventlets</term>.<note>The
+                        <i>Gevent</i> support in the Python SDK is truly <i>native</i>. This means
+                    that it will <i>not</i> block your application while performing I/O. It should
+                    also be noted that the <i>gevent</i> functionality does <i>not</i> depend on
+                        <xref href="http://www.gevent.org/gevent.monkey.html" format="html"
+                        scope="external">monkey-patching functionality</xref>. Because of how gevent
+                    support is implemented.<p>The above is important because the normal synchronous
+                            <apiname>couchbase</apiname> module will also function in gevent,
+                        however unlike <apiname>gcouchbase</apiname>, it will block your application
+                        while running.</p></note></p>
+            <p>The <i>gevent</i> API is almost identical to the simple synchronous API, though it
+                requires that a different module be imported to properly integrate with gevent. So
+                instead
+                of<codeblock outputclass="language-python">from couchbase.bucket import Bucket
+cb = Bucket(connstr)</codeblock>do<codeblock outputclass="language-python">from <b>g</b>couchbase.bucket import Bucket
+cb = Bucket(connstr)</codeblock></p>
+            <section>
+                <title>Key-Value (CRUD) Operations:</title>
+                <p>Key-Value operations using <apiname>gcouchbase</apiname> is exactly the same as
+                    the synchronous <apiname>couchbase</apiname>
+                    <xref href="sdk-operations-py.dita#concept_r4d_bng_vt">counterpart</xref></p>
+                <codeblock outputclass="language-python" spectitle="Gevent - KV Operation">from gcouchbase.bucket import Bucket
+bucket = Bucket('couchbase://localhost/default')
+bucket.upsert('id', {'some':['value']})
+print bucket.get('id').value</codeblock>
+            </section>
+            <section><title>N1QL Queries</title>The API for N1QL queries with <i>gcouchbase</i> is
+                exactly the same as in the synchronous
+                module:<codeblock outputclass="language-python" spectitle="Gevent - N1QL Query">from gcouchbase.bucket import Bucket
+from couchbase.n1ql import N1QLQuery
+
+cb = Bucket('couchbase://localhost/travel-sample')
+it = cb.n1ql_query(N1QLQuery('SELECT * from `travel-sample` LIMIT 10'))
+for row in it:
+    print row</codeblock>Note
+                that if you inspect the returned iterator object, it is actually a different object
+                than the synchronous
+                iterator:<codeblock outputclass="language-python">print it
+# &lt;gcouchbase.bucket.GN1QLRequest object at 0x103694d50></codeblock></section>
+            <section>
+                <title>MapReduce Queries</title>
+                <p>Issuing MapReduce queries with <i>gcouchbase</i> is exactly the same as in the
+                    synchronous module</p>
+                <codeblock outputclass="language-python" spectitle="Gevent - MapReduce">from gcouchbase.bucket import Bucket
+
+cb = Bucket('couchbase://localhost/beer-sample')
+resiter = cb.query('beer', 'brewery_beers', limit=10)
+for row in resiter:
+    print row</codeblock>
+            </section>
+        </body>
+    </topic>
+    <topic id="topic_xr1_f15_qv">
+        <title>Asyncio (Python 3.5+)</title>
+        <body>
+            <p><xref href="https://docs.python.org/3/library/asyncio.html" format="html"
+                    scope="external">asyncio</xref> is another asynchronous module which ships with
+                Python version 3.5 and later. The <i>asyncio</i> module is supported in Couchbase
+                via the experimental <apiname>acouchbase</apiname> module. The
+                    <apiname>acouchbase.bucket.Bucket</apiname> object returns
+                    <apiname>asyncio.Future</apiname> objects rather than actual results.</p>
+            <p>To use a bucket from <apiname>acouchbase</apiname>, you need to enable experimental
+                SDK features. This is essentially an explicit disclaimer which is visible in
+                production code to ensure that potentially unstable code does not accidentally get
+                used in production.</p>
+            <section>
+                <title>Key-Value (CRUD) Operations</title>
+                <p>CRUD operations return <apiname>Future</apiname> objects which can then be used
+                    for <codeph>await</codeph> clauses. The future's result will always be the
+                    relevant <apiname>Result</apiname> object for the operation performed.</p>
+                <codeblock outputclass="language-python" spectitle="Asyncio - KV Operation">import asyncio
+import couchbase.experimental; couchbase.experimental.enable()
+from acouchbase.bucket import Bucket
+
+async def do_crud_op():
+    cb = Bucket('couchbase://localhost/default')
+    await cb.connect()
+    await cb.upsert('id', {'some': 'value'})
+    return await cb.get('id')
+
+loop = asyncio.get_event_loop()
+rv = loop.run_until_complete(do_crud_op())
+print(rv.value)</codeblock>
+            </section>
+            <section>
+                <title>N1QL Queries</title>
+                <p>The API for issuing N1QL queries is almost identical to the synchronous API. The
+                    notable difference is the use of <codeph>async for</codeph> rather than
+                        <codeph>for</codeph> when iterating over the results:</p>
+                <p>
+                    <codeblock outputclass="language-python" spectitle="Asyncio - N1QL Query">async def do_n1ql_query(cb):
+    it = cb.n1ql_query(N1QLQuery('SELECT * from `travel-sample` LIMIT 10'))
+    async for row in it:
+        print(row)</codeblock>
+                </p>
+            </section>
+            <section>
+                <title>MapReduce Queries</title>
+                <p>The API for issuing MapReduce queries is almost identical to the synchronous API.
+                    The notable difference is the use of <codeph>async for</codeph> rather than
+                        <codeph>for</codeph> when iterating over the
+                    results:<codeblock outputclass="language-python" spectitle="Asyncio - MapReduce">async def do_view_query(cb):
+    it = cb.query('beer', 'brewery_beers', limit=20, include_docs=True)
+    async for row in it:
+        print(row.key, row.doc.value['description'][:10] + '...')</codeblock></p>
+            </section>
+        </body>
+    </topic>
+</topic>
