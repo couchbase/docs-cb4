@@ -10,7 +10,7 @@
       <p>Couchbase Server will accept an X.509 certificate as valid if it meets the following
         requirements:</p>
       <ul>
-        <li>The certificate must be in available in the .pem format.</li>
+        <li>The certificate must be in available in the <codeph>.pem</codeph> format.</li>
         <li>The current system time must fall between the times set in the certificate's
           properties <codeph>valid from</codeph> and <codeph>valid to</codeph>. </li>
         <li>The node certificate must be designated for server authentication set in the optional
@@ -75,19 +75,24 @@
               </row>
               <row>
                 <entry><codeph>int.pem</codeph></entry>
-                <entry>Intermediate public key</entry>
+                <entry>Intermediate public key. Intermediate public key. There can be one or more
+                  intermediate public keys in the hierarchy.</entry>
               </row>
               <row>
                 <entry><codeph>pkey.key</codeph></entry>
-                <entry>Node private key per node (private key of the node)</entry>
+                <entry>Node private key per node (private key of the node).  Each node in the
+                  cluster must have its own private key.</entry>
               </row>
               <row>
                 <entry><codeph>pkey.pem</codeph></entry>
-                <entry>Node public key (public key of the node)</entry>
+                <entry>Node public key (public key of the node). Each node in the cluster must have
+                  its own public key.</entry>
               </row>
               <row>
                 <entry><codeph>chain.pem</codeph></entry>
-                <entry>Concatenated chain file (chain file)</entry>
+                <entry>Concatenated chain file (chain file). This file contains the node public key
+                  and the intermediate public keys that signed first the node key (pkey.pem) and
+                  then each other. This files does not contain the CA public key. </entry>
               </row>
               <row>
                 <entry morerows="1">Client-side files</entry>
@@ -117,27 +122,32 @@
     <li>Create a top-level directory called <codeph>SSLCA</codeph> and three sub-directories called
       <codeph>root</codeph>, <codeph>int</codeph>, and <codeph>node</codeph>.</li>
     <li>Inside the <codeph>root</codeph> sub-directory: <p>Generate the root private key file
-              (<codeph>ca.key</codeph>), and CA public key file (<codeph>ca.pem</codeph>):</p><p>
-            <codeblock>openssl genrsa -out <b>ca.key</b> 2048
-openssl req -new -x509  -days 3650 -sha256 -key <b>ca.key</b> -out <b>ca.pem</b> \
--subj '/C=UA/O=My Company/CN=My Company Root CA'</codeblock>
-          </p></li>
+              (<codeph>ca.key</codeph>), and CA public key file (<codeph>ca.pem</codeph>):</p><p><codeblock>openssl genrsa -out <b>ca.key</b> 2048</codeblock>
+           <codeblock>           Generating RSA private key, 2048 bit long modulus
+           ...............................................................................................................+++
+           ....+++ 
+           e is 65537 (0x10001)</codeblock>
+            <codeblock>openssl req -new -x509  -days 3650 -sha256 -key <b>ca.key</b> -out <b>ca.pem</b> \
+-subj '/C=UA/O=My Company/CN=My Company Root CA' </codeblock></p></li>
     <li>Inside the <codeph>int</codeph> sub-directory: <p>Generate the intermediate private key file
               (<codeph>int.key)</codeph> and the intermediate certificate signing request
               (<codeph>int.csr</codeph>) to generate the intermediate public key file
-              (<codeph>int.pem</codeph>):</p><p>
-            <codeblock>openssl genrsa -out <b>int.key</b> 2048 
-openssl req -new -key <b>int.key</b> -out <b>int.csr</b> -subj '/C=UA/O=My Company/CN=My Company Intermediate CA'</codeblock>
-          </p></li>
-            <li>Create the extension file (<codeph>v3_ca.ext)</codeph>  to generate the certificate
-          signing request: <p>
-            <codeblock>cat &lt;&lt;EOF &gt;&gt; v3_ca.ext
-    > subjectKeyIdentifier = hash
+              (<codeph>int.pem</codeph>):
+          </p><codeblock>openssl genrsa -out <b>int.key</b> 2048</codeblock><codeblock>         Generating RSA private key, 2048 bit long modulus
+         ..........................................+++ 
+         .....+++ 
+         e is 65537 (0x10001 </codeblock><codeblock>openssl req -new -key <b>int.key</b> -out <b>int.csr</b> -subj '/C=UA/O=My Company/CN=My Company Intermediate CA' </codeblock></li>
+            <li>Still in the <codeph>int</codeph> directory, create the extension file
+            (<codeph>v3_ca.ext)</codeph> to generate the certificate signing request:
+            <codeblock>cat &lt;&lt;EOF &gt;&gt; v3_ca.ext </codeblock><p>Then add the following:
+            <codeblock> > subjectKeyIdentifier = hash
     > authorityKeyIdentifier = keyid:always,issuer:always
     > basicConstraints = CA:true
-    > EOF</codeblock>
+    > EOF</codeblock></p><p>Your
+            int directory now contains three files:<systemoutput>int.csr int.key
+              v3_ca.ext</systemoutput>
           </p></li>
-    <li>Generate the intermediate public key file (<codeph>int.pem)</codeph> based on the
+    <li>In the same <codeph>int</codeph> directory, generate the intermediate public key file (<codeph>int.pem)</codeph> based on the
           intermediate certificate signing request (<codeph>int.csr</codeph>), and signed by the
           root public key (<codeph>ca.pem</codeph>):<p><ol>
             <li>Enter:<codeblock>openssl x509 -req -in <b>int.csr</b> -CA ../root/<b>ca.pem</b> -CAkey ../root/<b>ca.key</b> -CAcreateserial \
@@ -156,22 +166,43 @@ openssl x509 -in int.pem -text</codeblock></p></li>
             
 <li>Inside the <codeph>node</codeph> sub-directory (repeated for each node in the
             cluster):<ol>
-              <li>Generate the node private key file (<codeph>pkey.key</codeph>), and the node
+              <li>Generate the node private key file (<codeph>pkey.key</codeph>) and the node
               certificate signing request (<codeph>pkey.csr</codeph>) to generate the node public
-              key file (<codeph>pkey.pem</codeph>):
-                <codeblock>openssl genrsa -out <b>pkey.key</b> 2048
+              key file (<codeph>pkey.pem</codeph>). <p>If more than one node is used, make separate
+                folders for each node with its own name, such as “sales” or “HR’. Once in the node
+                directory, use that node's name instead of the variable &lt;node-name&gt; so that a
+                different node private key file and CSR will be generated:
+                </p><codeblock>openssl genrsa -out <b>pkey.key</b> 2048
 openssl req -new -key <b>pkey.key</b> -out <b>pkey.csr</b> -subj '/C=UA/O=My Company/CN=<b>&lt;node-name></b>'
 openssl x509 -req -in <b>pkey.csr</b> -CA ../int/<b>int.pem</b> -CAkey ../int/<b>int.key</b> -CAcreateserial \
--CAserial intermediateCA.srl -out <b>pkey.pem</b> -days 365</codeblock><p>The
+-CAserial intermediateCA.srl -out <b>pkey.pem</b> -days 365 </codeblock><p>For
+                example, in the <codeph>node-sales</codeph> directory:
+                <codeblock>openssl genrsa -out <b>pkey.key</b> 2048
+openssl req -new -key <b>pkey.key</b> -out <b>pkey.csr</b> -subj '/C=UA/O=My Company/CN=<b>sales</b>'
+openssl x509 -req -in <b>pkey.csr</b> -CA ../int/<b>int.pem</b> -CAkey ../int/<b>int.key</b> -CAcreateserial \
+-CAserial intermediateCA.srl -out <b>pkey.pem</b> -days 365</codeblock></p><p>The
                 response should be as follows:
-                <codeblock>Signature ok 
-subject=/C=UA/O=My Company/CN=&lt;Node IP address>
-Getting CA Private Key </codeblock></p></li>
-              <li>Verify the node-intermediate-root chain:
-                <codeblock>openssl verify -verbose <b>pkey.pem</b> </codeblock><p> The response
-                should be similar to the following:
-                <codeblock>pkey.pem: /C=UA/O=My Company/CN=127.0.0.1
-error 20 at 0 depth lookup:unable to get local issuer certificate </codeblock></p><p>This
+                <codeblock>johns-MacBook-Pro-4:node-sales john$ openssl genrsa -out pkey.key 2048
+Generating RSA private key, 2048 bit long modulus
+....................................................................+++
+.............+++
+e is 65537 (0x10001)
+johns-MacBook-Pro-4:node-sales john$ openssl req -new -key pkey.key -out pkey.csr -subj '/C=UA/O=My Company/CN=sales'
+johns-MacBook-Pro-4:node-sales marija$ openssl x509 -req -in pkey.csr -CA ../int/int.pem -CAkey ../int/int.key -CAcreateserial \
+> -CAserial intermediateCA.srl -out pkey.pem -days 365
+Signature ok
+subject=/C=UA/O=My Company/CN=sales
+Getting CA Private Key  </codeblock></p><p>Repeat
+                the same step in each node directory you have. Each time another set of node keys
+                will be generated.
+                <codeblock>johns-MacBook-Pro-4:node-hr john$ ls
+intermediateCA.srl	pkey.csr		pkey.key		pkey.pem                </codeblock></p>
+            </li>
+              <li>Inside the node-sales directory, verify the node-intermediate-root chain:
+                <codeblock>openssl verify -verbose <b>pkey.pem</b> </codeblock><p> The response should be similar to the following:
+                <codeblock>johns-MacBook-Pro-4:node-sales john$ openssl verify -verbose pkey.pem
+pkey.pem: /C=UA/O=My Company/CN=sales
+error 20 at 0 depth lookup:unable to get local issuer certificate</codeblock></p><p>This
                 means that the certificate at <codeph>depth=0</codeph> (intermediate certificate)
                 cannot be looked up. </p><p>Next, let’s try to specify an intermediate certificate:
                 <codeblock>openssl verify -untrusted ../int/<b>int.pem</b> <b>pkey.pem</b> </codeblock></p><p>The
@@ -185,45 +216,50 @@ error 20 at 1 depth lookup:unable to get local issuer certificate</codeblock></p
                 certificate validation has passed.</p></li>
              
             </ol></li>
-    <li>Generate a chain file (lowest goes first not including CA). <p>When a client application
-            tries to verify a certificate signed by the intermediate CA, it must also verify the
-            intermediate certificate against the root certificate. To complete the chain of trust,
-            create a certificate chain to present to the application.</p><p>To create the
-            certificate chain file, concatenate the intermediate and root certificates together,
-            beginning with the lowest one in the chain.</p><p>If you need to do this manually, you can
-            use:<codeblock>cat <b>pkey.pem</b> ../int/<b>int.pem</b> &lt;possibly other intermediate CAs&gt; > <b>chain.pem</b> </codeblock></p><p>Here is an example:
-              <codeblock>-----BEGIN CERTIFICATE-----
-Intermediate certificate 2
------END CERTIFICATE-----
------BEGIN CERTIFICATE-----
-Intermediate certificate 1
-----END CERTIFICATE-----</codeblock><note
-              type="important">Do not include in your chain file the root CA’s public key
-              certificate and intermediate certificates that are not in the trust path.</note><note
-              type="note">Couchbase Server requires that you copy the private node key and chain
-              file manually to the inbox folder on each node. The inbox folder should be in the
-              Couchbase Data folder path. For example, on Mac OSX by default this is
-                <filepath>/Users/&lt;username&gt;/Library/Application\
-                Support/Couchbase/var/lib/couchbase/inbox/</filepath>.</note></p><p>The chain file
-            and private key file have to be in .pem format. The name of the private key file should
-            be <codeph>pkey.pem</codeph>, and the name of the chain file should be
-              <codeph>chain.pem.</codeph></p></li>
-            <li>Copy the chain file and the key to the Couchbase folder <codeph>Inbox</codeph>: <p>
-              
-   <ol>
-     <li>Create an <codeph>inbox</codeph> folder in the Couchbase server path:
-                <codeblock>mkdir /Users/&lt;username&gt;/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox
-cp chain.pem /Users/&lt;username&gt;/Library/Application\ \
-Support/Couchbase/var/lib/couchbase/inbox/chain.pem
-cp pkey.key /Users/&lt;username&gt;/Library/Application\ \
-Support/Couchbase/var/lib/couchbase/inbox/pkey.pem</codeblock></li>
-    
-  <li>Change permissions so that Couchbase can read: <p>
-                <codeblock>cd /Users/&lt;username&gt;/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/
+    <li>Generate a chain file (lowest public key goes first, and doesn’t include the CA public key).
+            <p>When a client application tries to verify a certificate signed by the intermediate
+            CA, it must also verify the intermediate certificate against the root certificate. To
+            complete the chain of trust, create a certificate chain to present to the
+            application.</p><p>To create the certificate chain file, concatenate the intermediate
+            and root certificates together, beginning with the lowest one in the chain. In our
+            example, there is only one intermediate
+            CA.<codeblock>cat <b>pkey.pem</b> ../int/int.pem > <b>chain.pem</b></codeblock></p>If
+          you have several intermediate CAs in your couchbase trust path, you will add them in the
+          command:<codeblock>cat pkey.pem ../int3/int.pem ../int2/int.pem ../int1/int.pem  > chain.pem</codeblock>The
+          order of certificates in an SSL Certificate Chain file is important, and it is as follows:
+              <p><image href="pict/chain-pem.png" id="image_e5g_bcn_sv" align="left" width="500"/>
+          </p><p>In this example: <ul>
+              <li><codeph>pkey.pem</codeph> certificate is signed by intermediate
+                  (<codeph>int2.pem</codeph>) certificate</li>
+              <li><codeph>int2.pem</codeph> is signed by intermediate (<codeph>int1.pem</codeph>).
+              </li>
+            </ul></p><p>Therefore, the order in the chain file that has two intermediate CAs has to
+            be as follows:
+            <codeblock>cat pkey.pem ../int2/int.pem ../int1/int.pem  > chain.pem</codeblock></p><note
+            type="important">Do not include in your chain file the root CA’s public key certificate
+            and intermediate certificates that are not in the trust path.</note><note type="note"
+            >The root certificate is not included in this chain. </note></li>
+            <li>Couchbase Server requires that you copy the node private key
+            (<codeph>pkey.key)</codeph> and the chain file (<codeph>chain.pem</codeph>) manually to
+          the inbox folder on each node. The inbox folder should be in the Couchbase Data folder
+          path. For example, on Mac OSX by default is<filepath>
+            /Users/&lt;username>/Library/Application\
+            Support/Couchbase/var/lib/couchbase/inbox/</filepath>. <p>
+            <ol>
+              <li>Create an <codeph>inbox</codeph> folder in the Couchbase server path:
+                  <codeblock>mkdir /Users/&lt;username&gt;/Library/Application\ Support/Couchbase/var/lib/couchbase/<b>inbox</b> </codeblock><p>Now
+                  go to the directory <filepath>SSLCA/node</filepath> and copy the files
+                    <codeph>chain.pem</codeph> and <codeph>pkey.key</codeph> into the created
+                    <codeph>inbox</codeph> folder:
+                </p><codeblock>cp chain.pem /Users/&lt;username&gt;/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/chain.pem
+cp pkey.key /Users/&lt;username&gt;/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/pkey.pem</codeblock></li>
+              <li>Change permissions so that Couchbase can read: <p>
+                  <codeblock>cd /Users/&lt;username&gt;/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/
 chmod 777 chain.pem
 chmod 777 pkey.pem </codeblock>
-              </p></li></ol>
-            </p></li></ol>
+                </p></li>
+            </ol>
+          </p></li></ol>
 </section>   
 
 <section><title>Setting up a Cluster CA Certificate</title>
@@ -272,14 +308,26 @@ http://Administrator:password@127.0.0.1:8091/controller/uploadClusterCA</codeblo
     </section>
 
 
-
+    <section><title>Troubleshooting Your Configuration</title>
+      <p>Here are some possible error messages that you might encounter during the configuration of X.509 certificates 
+        and solutions to fix them:
+      </p> 
+ <dl>
+   <dlentry>
+     <dt>{"error":"Malformed certificate”}</dt>
+     <dd>TBA</dd>
+   </dlentry>
+ </dl>
+      
+  
+</section>
 
   
 
 
 
 
-    <section><title>Configuring Client SDKs</title>
+   <!-- <section><title>Configuring Client SDKs</title>
       
       <p>To take the guesswork out of configuring your driver to use X.509 Certificates, here is an
         example in Java:</p>
@@ -312,8 +360,8 @@ http://Administrator:password@127.0.0.1:8091/controller/uploadClusterCA</codeblo
     </dl>    
     
       
-    </section>     
-    
+    </section> -->    
+   <draft-comment author="marija">Client SDK content has to be moved to the proper place in the SDK section</draft-comment> 
   </body>
  
 </topic>
