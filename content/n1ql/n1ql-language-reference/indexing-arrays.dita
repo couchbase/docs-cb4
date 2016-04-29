@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_hv4_sbr_w5">
+  <title>Array Indexing</title>
+  <body>
+    <p>Couchbase 4.5 adds the capability to create global indexes on array elements and optimizes
+      the execution of queries involving array elements. This is a huge leap from the previous
+      versions where secondary indexes could only be created and subsequently queried on whole
+      arrays. You can now create an index of array elements ranging from plain scalar values to
+      complex arrays or JSON objects nested deeper in the array. </p>
+    <section> <title>N1QL Syntax</title>
+      <codeblock>CREATE INDEX [ <varname>index_name</varname> ] 
+        ON <varname>named_keyspace_ref</varname> ( <varname>expression</varname> || <varname>distinct_array_expression</varname>, … )
+        [ WHERE <varname>filter_expressions</varname> ]
+        [ USING GSI ]
+        [ WITH { "nodes": [ "<varname>node_name</varname>" ], 
+                "defer_build": true | false
+              }
+        ];</codeblock>
+      <p>
+        <dl>
+          <dlentry>
+            <dt><varname>index_name</varname></dt>
+            <dd>Specify a unique name to identify the index. The index name is optional and there can be one index that is unnamed.</dd>
+          </dlentry>
+          <dlentry>
+            <dt><varname>named_keyspace_ref</varname></dt>
+            <dd><codeblock><varname>named_keyspace_ref</varname> ::= [ <varname>namespace-name</varname> : ] <varname>keyspace-name</varname></codeblock> <p>Specify the name of the keyspace or bucket to create an index on</p></dd>
+          </dlentry>
+          <dlentry>
+            <dt><varname>expression</varname></dt>
+            <dd>Refers to the an attribute name or a function (or expression) that returns a single
+              element.</dd>
+          </dlentry>
+          <dlentry>
+            <dt><varname>distinct_array_expression</varname></dt>
+            <dd><codeblock><varname>distinct_array_expression</varname> ::= 
+[ ALL ] DISTINCT ARRAY <varname>var_expression</varname> FOR <varname>variable1</varname> ( IN | WITHIN ) <varname>expression1</varname>
+                                      [ , <varname>variable2</varname> ( IN | WITHIN ) <varname>expression2</varname> ]
+                                      [ ( WHEN <varname>condition</varname> ) ] END</codeblock>
+              <p>The <cmdname>ARRAY</cmdname> operator lets you map and filter the elements or
+                attributes of a collection, object, or objects. It evaluates to an array of the
+                operand expression that satisfies the WHEN clause, if specified. </p>
+              <p><varname>var_expression</varname> evaluates to a function of
+                  <varname>variable1</varname>/<varname>variable2</varname> etc, and
+                  <varname>expression1/expression</varname> etc evaluate to an array of objects,
+                each of which is represented by the variables. <note>The variables used in query
+                  predicates (<varname>where-clause</varname>) of subsequent
+                  SELECT/UPDATE/UPSERT/DELETE statements must be the same as those used in the above
+                    <varname>distinct_array_expression</varname>. See <xref
+                    href="#topic_hv4_sbr_w5/query-predicate-format" format="dita">Format of Query
+                    Predicate in SELECT, UPDATE, or DELETE</xref> for details.</note></p></dd> 
+          </dlentry>
+          <dlentry>
+            <dt><varname>filter_expression</varname></dt>
+            <dd>Specifies WHERE clause predicates to qualify the subset of documents to include in
+              the index. </dd>
+          </dlentry>
+          <dlentry>
+            <dt>USING GSI</dt>
+            <dd>USING clause specifies the index type to use. </dd>
+          </dlentry>
+          <dlentry>
+            <dt>WITH options</dt>
+            <dd>Use the WITH clause to specify additional options and is fully supported with nodes
+              and <varname>defer_build</varname> expressions.</dd>
+          </dlentry>
+        </dl> </p><p>See the <xref
+          href="http://developer.couchbase.com/documentation/server/4.1/n1ql/n1ql-language-reference/createindex.html"
+          format="html" scope="external">CREATE INDEX</xref> statement for more details on the
+        syntax. </p> 
+      <p id="query-predicate-format"><b>Format of Query Predicate in SELECT, UPDATE, or DELETE</b></p>
+      <p>The query predicate, which must appear in the WHERE clause of a SELECT, UPDATE, or DELETE
+        statement, must have the exact matching format as the variable in the array index key,
+        including the name of the variable <varname>x</varname>. </p>
+      <p>Consider the following expressions used in a CREATE INDEX statement:
+        <codeblock>(a) DISTINCT ARRAY f(x) FOR x IN expr1 END;
+
+(b) DISTINCT ARRAY f(x) FOR x WITHIN expr1 END;</codeblock></p>
+      <p>And the expression used in the SELECT <varname>where-clause</varname>
+        as:<codeblock>(c) ANY x IN expr2 SATISFIES g(x) END;
+
+(d) ANY x WITHIN expr2 SATISFIES g(x) END</codeblock></p>
+      <p>The following dependencies must be satisfied in Couchbase Server 4.5 for N1QL to consider
+        the array index: <ul id="ul_k1w_4y2_cv">
+          <li>The index keys used in CREATE INDEX must be used in the
+              <varname>where-clause</varname>.</li>
+          <li><varname>expr2</varname> in (c) and (d) must be equivalent to <varname>expr1</varname>
+            in (a) and (b). This is a formal notion of equivalence. For example, if they are the
+            same expressions, or equivalent arithmetic expressions such as (x+y) and (y+x).</li>
+          <li>The variable <varname>x</varname> in (c) and (d) must be exactly the same variable
+            name as <varname>x</varname> in (a) and (b).</li>
+          <li>g(x) in (c) and (d) must be sargable for <codeph>f(x)</codeph> in (a) and (b). In
+            other words, if there was a scalar index with key <codeph>f(x)</codeph>, that index
+            would be applicable to the predicate <codeph>g(x)</codeph>. For example, the index key
+              <varname>UPPER(x)</varname> is sargable for the predicate <codeph>UPPER(x) LIKE
+              "John%"</codeph>.</li>
+          <li>IN vs. WITHIN: Index key (a) can be used for query predicate (c). Index key (b) can be
+            used for both query predicates (c) and (d).</li></ul><note> Index key (b) is strictly more expensive than index key (a), for both index maintenance and query processing. Index key (b) and query predicate (d) are very powerful. They can efficiently index and query recursive trees of arbitrary depth.</note></p>
+    </section>
+    <section><title>Examples</title>
+      <p>The following samples use the <codeph>travel-sample</codeph> bucket. </p>
+      <p><b>Indexing individual elements in an array</b></p>
+      <p>Create an index on all schedules:
+        <codeblock>CREATE INDEX isched 
+        ON `travel-sample` ( DISTINCT ARRAY v FOR v IN schedule END );</codeblock></p>
+      <p><b>Indexing individual attributes of an array of documents</b></p>
+      <p>Create an index on flight IDs scheduled in the first 4 days of the week:
+        <codeblock>CREATE INDEX iflight_day 
+       ON `travel-sample` ( DISTINCT ARRAY v.flight FOR v IN schedule WHEN v.day &lt; 4 END )
+       WHERE type = "route" ;</codeblock></p>
+      <p><b>Compound indexing with individual elements of an array and other attributes</b></p>
+      <p>Create an index on scheduled flight IDs and number of stops:
+        <codeblock>CREATE INDEX iflight_stops 
+       ON `travel-sample` ( stops, DISTINCT ARRAY v.flight FOR v IN schedule END )
+       WHERE type = "route" ;</codeblock></p>
+      <p>The following query finds the list of scheduled flights grouped by the number of stops:
+        <codeblock>SELECT * FROM `travel-sample`
+WHERE type = "route" AND ANY v IN schedule SATISFIES v.flight LIKE 'AA%' END AND stops >= 0;     </codeblock></p>
+      
+      
+      <p><b>Indexing the individual elements of nest arrays</b></p>
+      <p>Use the DISTINCT ARRAY clause in a nested fashion to index specific attributes of a
+        document when the array contains other arrays or documents that contain arrays. For example, <codeblock>cbq> UPDATE `travel-sample` 
+SET schedule[0] = {"day" : 7, "special_flights" : 
+                    [ {"flight" : "AI444", "utc" : "4:44:44"}, 
+                      {"flight" : "AI333", "utc" : "3:33:33" } 
+                    ] } 
+WHERE type = "route" AND destinationairport = "CDG" AND sourceairport = "TLV";</codeblock>
+        <codeblock>cbq> CREATE INDEX inested ON `travel-sample`
+( DISTINCT ARRAY (DISTINCT ARRAY y FOR y IN x.special_flights END) FOR x IN schedule END) 
+WHERE type = "route";</codeblock></p>
+    </section>
+    <section id="array-idx-limitations"><title>Limitations</title>
+      <p> Let's use the following sample document with Doc_Id "foo" to explain the limitations:
+        <codeblock>"foo": {
+          "a":1,
+          "b":[1,2],
+          "c":{"ca":[1,2,3], "cb":4},  
+          "d":[{"da":5,"db":6},
+          {"da":7,"db":8}],
+          "e":[{"ea":9,"eb":[10,11,12]},
+          {"ea":13,"eb":[14,NULL,16]}],
+          "f":[[17,18],
+          [19,20,21]]
+          }   </codeblock><ul>
+        <li>Covering indexes with indexed arrays do not cover queries where the array needs to be
+            reconstructed in full form, with duplicates and position of each element placed
+            correctly in the projection. <table frame="all" rowsep="1" colsep="1"
+              id="table_crm_35r_w5">
+              <tgroup cols="2">
+                <colspec colname="c1" colnum="1" colwidth="1*"/>
+                <colspec colname="c2" colnum="2" colwidth="7.33*"/>
+                <thead>
+                  <row>
+                    <entry>Supported</entry>
+                    <entry>Example</entry>
+                  </row>
+                </thead>
+                <tbody>
+                  <row>
+                    <entry><image href="../../introduction/images/yes.png" id="image_mq3_1wr_w5" align="center"
+                        placement="break"/></entry>
+                    <entry><codeblock>SELECT a 
+         FROM default 
+         WHERE ANY i IN b SATISFIES i &lt; 5 END;</codeblock></entry>
+                  </row>
+                  <row>
+                    <entry><image href="../../introduction/images/yes.png" id="image_p2j_cwr_w5" align="center"
+                        placement="break"/></entry>
+                    <entry><codeblock>SELECT ARRAY_DISTINCT(b) 
+        FROM default 
+        WHERE a = 5;</codeblock></entry>
+                  </row>
+                  <row>
+                    <entry><image href="../../introduction/images/no.png" id="image_phk_dwr_w5" align="center"
+                        placement="break"/></entry>
+                    <entry> <codeblock>SELECT b,a 
+       FROM default;</codeblock></entry>
+                  </row>
+                </tbody>
+              </tgroup>
+            </table></li>
+        <li>Indexed arrays do not maintain duplicate elements of an array or the position of the
+            elements within an array in the GSI array index. This means that GSI array indexes do
+            not cover expressions that reference the array attribute itself. For example, the
+            following statements are not
+            supported:<codeblock>SELECT b FROM default;
+SELECT b[*] FROM default;
+SELECT b[1] FROM default;</codeblock></li>
+        <li>Array indexes only support ARRAY, DISTINCT, IN, and WITHIN operators. All other
+            operators such as ALL and EVERY are not supported.  </li>
+        
+      </ul></p>
+    </section>
+  </body>
+</topic>
