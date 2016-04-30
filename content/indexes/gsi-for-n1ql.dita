@@ -4,64 +4,102 @@
  <title>Global Secondary Indexes for N1QL</title>
  <shortdesc>Global Secondary Index (GSI) supports a variety of OLTP like use-cases for N1QL including basic, ad-hoc, and short-running reporting queries that require filtering.  For example, if you have a WHERE clause in a N1QL statement that selects a subset of your data on which the secondary index is defined, you can see a significant speedup in the N1QL query performance by using GSI.</shortdesc>
  <conbody>
- <dl>
-  <dlentry>
-   <dt>Definition</dt>
-   <dd>You can define a primary or secondary index using GSIs in N1QL using the CREATE INDEX statement. </dd>
-  </dlentry>
-  <dlentry>
-   <dt>Distribution</dt>
-   <dd>GSIs reside on the index nodes in the cluster. Every index has an index key (used for lookup), and a partition key (used for sharding). Based on the partition key, the index is partitioned across all the index nodes. Index metadata stored on the index node knows about the distribution of the index. GSI does not use scatter-gather. Instead, based on the index metadata, it only touches the nodes that have the relevant data.</dd>
-  </dlentry>
-  <dlentry>
-   <dt>Latency</dt>
-   <dd>GSIs provide a lower latency compared to view indexes. For the storage layer, GSI uses ForestDB. ForestDB is Couchbase’s state-of-the-art storage engine with a modified data structure to increase read and write performance. ForestDB is written with multi-core processors and solid state drives in mind. GSIs leverage ForestDB’s buffer cache to provide low latency read-write operations. </dd>
-  </dlentry>
-  <dlentry>
-   <dt>Scaling</dt>
-   <dd>Couchbase Server scales indexes independent of data and queries. With multidimensional scaling, you can allocate separate hardware resources for separate services, and avoid resource contention by performing queries, maintaining indexes, and writing data to different nodes. If your application needs more indexing resources, you can either scale out your infrastructure to add more index nodes, or scale up the index services to handle more workload. </dd>
-  </dlentry>
-  <dlentry>
-   <dt>Load-balancing</dt>
-   <dd>To load-balance GSIs, you must manually specify the nodes on which indexes should be built on
-     and alternatively partition based on some range. If there are replica indexes (or indexes with
-     the same definition) available, the N1QL query engine uses the round-robin algorithm between
-     the replicas to distribute the indexing load. <p>For example, create two indexes
-      productName_index1 and productName_index2, using the following commands:
-      <codeblock>      CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) WHERE type="product" USING GSI WITH {"nodes":"node1:8091"};
+  <p>Global secondary indexes are deployed independently into a separate index service within the
+   Couchbase Server cluster, away from the data service that processes key based operations. GSIs
+   provide the following advantages: <ul>
+    <li>Predictable Performance: Core key based operations maintain predictable low latency even in
+     the presence of a large number of indexes. Index maintenance does not compete with key based
+     operations even under heavy mutations to data. </li>
+    <li>Low Latency Queries: GSIs independently partition into the index service nodes and don’t
+     have to follow hash partitioning of data into vBuckets. Queries using GSIs can achieve low
+     latency response times even when the cluster scales out because GSIs don’t require a wide
+     fan-out to all data service nodes.</li>
+    <li>Advanced Scaling Model: GSI can be placed onto independent set of nodes. Administrators can
+     add new indexes and evolve the application performance without stealing cycles from the
+     incoming workload.</li>
+   </ul></p>
+  <section><title>Creating and Placing Global Secondary Indexes</title>
+   <p>You can define a primary or secondary index using GSIs in N1QL using the CREATE INDEX
+    statement. For more information on the syntax and examples, see <xref
+     href="../n1ql/n1ql-language-reference/createindex.dita"/> statement.</p>
+   <p><b>Placement of Indexes</b></p>
+   <p>GSIs reside on the index nodes in the cluster. Each index service node can host multiple indexes. Every index has an index key(s) (used for lookup), and when the index type is not primary index, index can have an index filter.</p> <codeblock>CREATE INDEX index_name ON ( index_key1, ..., index_keyN) 
+    WHERE index_filter 
+    WITH { “nodes”: [ “node1:8091” ] } 
+    USING GSI | VIEW;</codeblock>
+   <p>Based on the index filter, the index can be partitioned across multiple index service nodes using the WITH clause in CREATE INDEX statement.</p>
+   <p>Administrators can place each index partition in a separate node to distribute index maintenance and index scan load. Index metadata stored on the index node knows about the distribution of the index. GSI does not use scatter-gather. Instead, based on the index metadata, it only touches the nodes that have the relevant data.</p>
+  </section>
+  <section><title>Index Performance</title>
+   <p>GSIs provide a lower latency scan compared to view indexes due to its architecture. GSI, as
+    its name suggests is a global index that is independently placed within the cluster as opposed
+    to Views, which are local indexes placed aligned to the data distribution. <fig
+     id="fig_jzj_ms1_vv">
+     <title>Query Execution with Global Indexes</title>
+     <image placement="break" href="images/query-exe-with-global-indexes.png" width="370"
+      id="image_kzj_ms1_vv" align="left"/>
+    </fig></p>
+   <p>GSI comes with two storage settings: <ul>
+    <li>Memory optimized global secondary indexes</li>
+    <li>Standard global secondary indexes. Standard GSIs come with two write modes: <ul>
+     <li>Append-only write mode</li>
+     <li>Circular write mode</li>
+    </ul></li>
+   </ul></p>
+   <p>The default storage setting for GSI is standard GSI. Memory optimized GSI setting can be selected at the time of the initial cluster setup. Write mode can be selected when the storage setting for GSI is standard. You can change the write mode at any time while the cluster is running, however the setting change require a restart of the index service which can cause a short period of unavailability.</p>
+   <p>Global secondary indexes can be placed on a single node. However as the  number of index scans, mutations, the total items indexed, and the total index size increases, it will be necessary to scale the index. You can scale the index in 2 ways: <ul>
+    <li>Load balancing with GSI. You can create multiple copies of the same index to allow scans to be routed to multiple nodes by placing the copies of the same index in separate index service nodes.</li>
+    <li>Partitioning with GSI. You can split the index into multiple partitions, to distribute indexed items, index scan requests, and limit the mutations and size the single index has to handle.</li>
+   </ul>In either approach, you also need to scale the index service to allocate more computational resources to indexes.</p>
+   <dl>
+    <dlentry>
+     <dt>Load Balancing with GSI</dt>
+     <dd>Some of your indexes may become hot as they are utilized more often by N1QL queries required for your application logic. You can create multiple copies of the same index across multiple index service nodes under different index names. N1QL automatically load balances across multiple copies of the same index both for load balancing and availability of queries. <p>To
+      load-balance GSIs, you must manually specify the nodes on which indexes should be built on.</p> <p>
+       For example, create two indexes <varname>productName_index1</varname> and
+        <varname>productName_index2</varname>, using the following commands:
+       <codeblock>CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
+       WHERE type="product" USING GSI WITH {"nodes":"node1:8091"};
       
-      CREATE INDEX productName_index2 ON bucket_name(productName, ProductID) WHERE type="product" USING GSI WITH {"nodes":"node2:8091"};    </codeblock>
-      The indexing load will be distributed equally between the indexes productName_index1 and
-      productName_index2. </p><p>You can also create indexes by partitioning your indexes as shown
-      in the following example.
-      <codeblock>     CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) WHERE type="product" AND productName BETWEEN "A" AND "K" USING GSI WITH {"nodes":"node1:8091"};
-     
-     CREATE INDEX productName_index2 ON bucket_name(productName, ProductID) WHERE type="product" AND productName BETWEEN "K" AND "Z" USING GSI WITH {"nodes":"node2:8091"};     </codeblock></p></dd>
-  </dlentry>
-  <dlentry>
-   <dt>Consistency</dt>
-   <dd>You can specify a query consistency flag per request, similar to the view API. The query consistency flag can be one of the following: <ul>
-    <li><userinput>not_bounded</userinput> (stale=ok) <p>This value has the same characteristics as <userinput>stale=ok</userinput> in the view API.</p></li>
-    <li><userinput>request_plus</userinput> (stale=false) <p>This value has the same characteristics as <userinput>stale=false</userinput> in the view API.</p></li>
-   </ul>When using GSI, the default consistency setting is <userinput>not_bounded</userinput>. </dd>
-  </dlentry>
-  <dlentry>
-   <dt>Replication</dt>
-   <dd>GSIs are not automatically replicated. They must be defined on other indexing nodes for
-     high-availability. <p>To create a replica of a GSI, you can create an identical index
-      definition with unique index names under 2 nodes. Queries will load balance across the indexes and if one of the indexes become unavailable, all requests are rerouted to the available
-      remaining index. You can create more than 2 copies of the index for better redundancy and load balancing.
-     </p><codeblock>CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
-     WHERE type="product" 
-     USING GSI 
-     WITH {"nodes":"node1:8091"};
+CREATE INDEX productName_index2 ON bucket_name(productName, ProductID) 
+WHERE type="product" USING GSI WITH {"nodes":"node2:8091"}; </codeblock> The indexing load will be distributed equally between the indexes <varname>productName_index1</varname> and <varname>productName_index2</varname>. </p></dd>
+    </dlentry>
+    <dlentry>
+     <dt>Partitioning with GSI</dt>
+     <dd>Some of your indexes may no longer fit a single node as the number of mutations, index size, and item count increases. You can partition a single index using a WHERE clause with CREATE INDEX and by placing partitions across multiple index service nodes under different index names. <p>To load-balance GSIs, you must manually specify the nodes on which index partitions should be built on. </p>
+      <p>You can also create indexes by partitioning your indexes as shown in the following example
+       using ranges:
+       <codeblock>CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
+       WHERE type="product" AND productName BETWEEN "A" AND "K" USING GSI 
+       WITH {"nodes":"node1:8091"};
+       
+CREATE INDEX productName_index2 ON bucket_name(productName, ProductID) 
+       WHERE type="product" AND productName BETWEEN "K" AND "Z" USING GSI 
+       WITH {"nodes":"node2:8091"};</codeblock></p></dd>
+    </dlentry>
+    <dlentry>
+     <dt>Scaling the Index Service</dt>
+     <dd>Couchbase Server scales indexes independent of data and queries. With multidimensional scaling, you can allocate separate hardware resources for separate services, and avoid resource contention by performing queries, maintaining indexes, and writing data to different nodes. If your application needs more indexing resources, you can either scale out your infrastructure to add more index nodes, or scale up the index services to handle more workload.</dd>
+    </dlentry></dl>
+  </section>
+  <section><title>Query and Index Consistency</title>
+   <p>In Couchbase Server, mutations to data in the data service is done with full consistency. (All mutations to a given key is done using the same vbucket on a node and is immediately available to anyone reading the latest value for the given key). However indexes are maintained in an eventually consistent manner. This is true for all indexers (GSI, View and Spatial). At query time, you can specify a query consistency flag for each N1QL query request, similar to the view API. The query consistency flag can be one of the following: <ul>
+    <li><parmname>Not_bounded</parmname>: This scan consistency flag executes the query immediately without requiring any consistency for the query. If the index maintenance is running behind, query may return out-of-date results. Not_bounded scan consistency has the same characteristics as <codeph>stale=ok</codeph> in the view API.</li>
+    <li><parmname>At_plus</parmname>: This scan consistency flag executes the query but require the indexes to be updated to the logical timestamp of the last update performed by the application. For example, an application issuing the query may have done its last update 10 msec ago. The logical timestamp of the update is retrieved with the mutation ACK response and is passed to the query request. This behavior achieves consistency, at least or later than the moment of the logical timestamp. If the index maintenance is running behind the logical timestamp, the query waits for the index to catch up to the last updates logical timestamp.  <draft-comment>At_plus scan consistency flag is not yet implemented by the View API.</draft-comment> At_plus scan consistency flag automatically degrades to the same characteristics as <codeph>stale=false</codeph> in the view API.</li>
+    <li>Request_plus: This scan_consistency flag executes the query but require the indexes to be updated to the logical timestamp of the query request. For example, application issuing the query may have done its last update 10 msec ago. Application issuing the query with request_plus scan consistency flag, takes the logical timestamp of query request. This behavior achieves consistency, at least or later than the moment of the request timestamp. If the index maintenance is running behind the request timestamp, query waits for the index to catch up to the request timestamp. At_plus scan consistency flag can yield faster response times if the application can relax its consistency requirements to read-your-own-write, as opposed to stricter request time consistency. Request_plus scan consistency value has the same characteristics as stale=false in the view API.</li>
+   </ul>For N1QL, the default consistency setting is <codeph>not_bounded</codeph>.</p>
+  </section>
+  <section><title>Index Replication and High Availability with N1QL</title>
+   <p>GSIs are not automatically replicated however you can create “replicas” yourself and achieve full high availability.</p>
+   <p>To create a replica of a GSI, you can create an identical index definition with unique index names under 2 or more nodes. Queries will load balance across the indexes and if one of the indexes become unavailable, all requests are automatically rerouted to the available remaining index without application or admin intervention. You can create more than 2 copies of the index for better redundancy and load balancing.</p><codeblock>CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
+    WHERE type="product" 
+    USING GSI 
+    WITH {"nodes":"node1:8091"};
     
 CREATE INDEX productName_index2 ON bucket_name(productName, ProductID) 
-     WHERE type="product" 
-     USING GSI 
-     WITH {"nodes":"node2:8091"}; </codeblock>
-    </dd>
-  </dlentry>
- </dl>
+    WHERE type="product" 
+    USING GSI 
+    WITH {"nodes":"node2:8091"};</codeblock>
+  </section>
  </conbody>
 </concept>
