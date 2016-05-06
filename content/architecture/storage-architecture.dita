@@ -1,57 +1,40 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
 <concept id="concept_x13_xlj_vs">
- <title>Storage architecture</title>
+ <title>Storage Architecture</title>
  <shortdesc>Couchbase Server consists of various services and components that have different storage requirements. Each component uses the optimized storage engine purpose-built and configured for the workload of relevant components. </shortdesc>
  <conbody>
-  <p>As an administrator, you can independently control data and index storage paths within the filesystem on a  per node basis. This ensures data and index storage can utilize separate I/O subsystems to enable independent tuning and isolation. There are multiple storage engines in use in Couchbase Server: <ul>
-   <li><b>Data Service and Couchstore</b>
-     <p>For core data operations, Couchbase Server uses Couchstore. Each vBucket is represented as a
-      separate Couchstore file in the file system. Couchstore uses a B+tree structure to quickly
-      access items through their keys. For efficient writes, Couchstore uses an append-only write
-      model for each file for efficient and safe writes. </p></li>
-   <li><b>Index Service and ForestDB</b>
-     <p>For indexing with GSI in the Index service, Couchbase Server uses ForestDB. With ForestDB,
-      each index is represented as a separate ForestDB file in the file system. Unlike Couchstore,
-      ForestDB uses a B+trie structure to quickly access item through its index key. B+trie provides
-      a more efficient tree structure compared to B+trees and ensures a shallower tree hierarchy to
-      better scale large item counts and very large index keys. ForestDB, like Couchstore, uses an
-      append-only write model for each file for efficient writes which also requires compaction for
-      cleanup. For more information on ForestDB and B+Trie, see <xref
-       href="https://github.com/couchbase/forestdb/wiki.html" format="html" scope="external"
-       >https://github.com/couchbase/forestdb</xref>. </p></li>
+  <p>As an administrator, you can independently control data and index storage paths within the file system on a  per node basis. This ensures data and index storage can utilize separate I/O subsystems to enable independent tuning and isolation. There are multiple storage engines in use in Couchbase Server: <ul>
+   <li><b>Data Service, MapReduce Views, Spatial Views, and Couchstore</b>
+     <p>For core data operations, MapReduce views, and spatial views, Couchbase Server uses Couchstore. Each vBucket is represented as a separate Couchstore file in the file system. Couchstore uses a B+tree structure to quickly access items through their keys. For efficient writes, Couchstore uses an append-only write model for each file for efficient and safe writes. </p></li>
+   <li><b>Index Service, Search Service, and ForestDB</b>
+     <p>For indexing with GSI in the Index service and full-text index in the search service, Couchbase Server uses ForestDB. With ForestDB, each index is represented as a separate ForestDB file in the file system. Unlike Couchstore, ForestDB uses a B+trie structure to quickly access item through its index key. B+trie provides a more efficient tree structure compared to B+trees and ensures a shallower tree hierarchy to better scale large item counts and very large index keys. ForestDB offers multiple options for its writes. ForestDB can be configured to use an append-only write model for each file for efficient writes which also requires regular compaction for cleanup. ForestDB can also be configured to use “circular reuse” which allows incoming writes to reuse the existing orphaned space within the file instead of simply just append only writes. In the “circular reuse” mode, competition is still needed but with much less frequency (typically once a week). For more information on ForestDB and B+Trie, see <xref
+       href="https://github.com/couchbase/forestdb/wiki.html" format="html" scope="external">https://github.com/couchbase/forestdb</xref>. </p></li>
   </ul></p> 
-  <section><title>Couchstore versus ForestDB</title>
+  <section><title>Couchstore Versus ForestDB</title>
    <p>Couchbase Server uses multiple storage engines to optimize specific I/O patterns required by the services. Couchstore is used for storage under data service for both database engine and for view engine. ForestDB is used by the index service for storage of global secondary indexes.</p>
    <p>There are a few similarities between Couchstore and ForestDB. <ul>
-    <li>Both use an append-only write approach.</li>
+    <li>Both come with an append-only write approach. Additionally, ForestDB supports the circular reuse write approach.</li>
     <li>Both storage engines perform compression using the SNAPPY library when persisting.</li>
-    <li>Both storage engines require compaction to periodically clean up orphaned pages. </li></ul></p>
+    <li>Both storage engines require compaction to periodically clean up orphaned pages. However, the ForestDB circular reuse write model requires less frequent compactions. </li></ul></p>
    <p>There are a few important differences between Couchstore and ForestDB. <ul>
     <li><b>Tree Structure</b>: Unlike Couchstore, ForestDB does not maintain a B+tree structure. ForestDB uses an optimized tree structure called B+Trie. B+Trie can handle large keys much more efficiently. This helps in cases where a large set of attributes or a single large attribute in the document need to be indexed. B+tree with large index keys can end up with many levels in the tree. The depth of the tree impacts the write amplification and access times to get to the leaf of the tree during scans. With a B+Trie, the same key size can achieve much shallower tree structure reducing both write amplification and retrieval times.</li>
     <li><b>Caching</b>: Unlike Couchstore, ForestDB maintain its own cache. This cache holds the mutations before they are persisted to disk.</li>
    </ul></p></section>
-  <section><title>Append-only and compaction</title><p>As mutations arrive, the writes append new
-    pages to the end of the file and invalidate links to previous versions of the updated pages.
-    With these append-only write models, a compaction process is needed to clean up the orphaned or
-    fragmented space in the files.</p><p> In Couchbase Server, the compaction process reads the
-    existing file and writes a new contiguous file that no longer contains the orphaned items. The
-    compaction process runs in the background and is designed to minimize the impact on the front
-    end performance.</p><p>The compaction process can be manual, scheduled, or automated based on
-    percentage of fragmentation. Compaction of an entire dataset is parallelized across multiple
-    nodes as well as multiple files within those nodes.</p><p>In the figure below, as A’’, B’ and D
-    is received by Couchbase Server, previous versions such as A’, A and B are orphaned. After
-    compaction, the orphaned references are removed and a continuous file is created. <fig
+  <section id="compaction"><title>Append-only and Compaction</title><p>As mutations arrive, the writes append new pages to the end of the file and invalidate links to previous versions of the updated pages.
+    With these append-only write models, a compaction process is needed to clean up the orphaned or fragmented space in the files.</p>
+    <p> In Couchbase Server, the compaction process reads the existing file and writes a new contiguous file that no longer contains the orphaned items. The compaction process runs in the background and is designed to minimize the impact on the front end performance.</p>
+    <p>The compaction process can be manual, scheduled, or automated based on
+    percentage of fragmentation. Compaction of an entire dataset is parallelized across multiple nodes as well as multiple files within those nodes.</p><p>In the figure below, as A", B', and D are received by Couchbase Server, previous versions such as A’, A, and B are orphaned. After compaction, the orphaned references are removed and a continuous file is created. <fig
      id="fig_hrv_3x3_ws">
      <title>Compaction in Couchbase Server</title>
-     <image placement="break" href="images/compaction.png" width="350" id="image_irv_3x3_ws"/>
-    </fig></p><!--Compaction process can be run automatically by the system or manually by an
-   administrator. You can also configure auto-compaction to trigger compaction based on
-   fragmentation percentage or time interval and can be configured separately for views, indexes, or
-   data files.<fig id="fig_ex1_5x3_ws">
-    <title>Configuring auto-compaction</title>
-    <image placement="break" href="images/auto-compaction-config.png" width="600"
-     id="image_fx1_5x3_ws"/>
-   </fig>--></section>
+     <image placement="break" href="images/compaction.png" width="500" id="image_irv_3x3_ws"/>
+    </fig></p>
+  </section>
+   <section id="circular-reuse"><title>Writes with Circular Reuse</title>
+     <p>When you enable writes with “circular reuse”, as mutations arrive, instead of simply appending new pages to the end of the file, write operations look for reusing the orphaned space in the file. If there is not enough orphaned space available in the file that can accommodate the write, the operation may still do a write with append. With writes with circular reuse, a compaction process is still needed to create a continuous (defragmented) file.</p>
+     <p>With circular reuse, full compaction still operates the same way. The compaction process reads the existing file and writes a new contiguous file that no longer contains the orphaned items, and is written as a contiguous file in order of the keys. The compaction process runs less often with writes with circular reuse. Compaction still runs in the background and is designed to minimize the impact on the front end performance.</p>
+     <p>The compaction process can be manual, scheduled, or automated based on percentage of fragmentation. See <xref href="../settings/configure-compact-settings.dita"></xref> for details. Compaction of an entire dataset is parallelized across multiple nodes as well as multiple files within those nodes. </p>
+   </section>
  </conbody>
 </concept>
