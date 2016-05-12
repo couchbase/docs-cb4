@@ -695,20 +695,1036 @@ jsonStringDoc        CAS=0x84d77eb55f010000, Flags=0x2000000. Size=13
 				applied to it.</p>
 
 		</section>
-    <section><title></title>
-      <p></p>
+  
+  	
+  	
+  	
+  	
+  	
+  	
+  	
+  	
+  	<section id="creatingdocuments"><title>Creating Documents</title>
+  	
+  	<p>	This section describes creating documents by using the <codeph>insert()</codeph> or <codeph>upsert()</codeph> methods.</p>
+  		
+  	
+  			
+  	<sectiondiv>
+  			<p><b>Insert</b></p>
+  				
+  				<p>The <codeph>insert</codeph> method allows you to store a <codeph>Document</codeph> if it does
+  					not already exist in the bucket. If it does exist, the synchronous API throws a
+  					<codeph>DocumentAlreadyExistsException</codeph> (or the
+  					<codeph>Observable</codeph> propagates it to <codeph>onErro</codeph> in the case
+  					of the asynchronous API).</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[JsonObject content = JsonObject.empty().put("name", "Michael");
+JsonDocument doc = JsonDocument.create("docId", content);
+//this will throw DocumentAlreadyExistException:
+JsonDocument inserted = bucket.insert(doc);]]></codeblock>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[JsonObject content = JsonObject.empty().put("name", "Michael");
+JsonDocument doc = JsonDocument.create("docId", content);
+Observable<JsonDocument> inserted = bucket.async().insert(doc);
+inserted.subscribe(
+	System.out::println,
+	//this will be called with DocumentAlreadyExistException:
+	Throwable::printStackTrace
+);]]></codeblock>
+  				
+  				<p>If the <codeph>Document</codeph> also has the <codeph>expiry</codeph> time set, it is
+  					respected and picked up by the server.</p>
+  				
+  				<p>It doesn't matter what type of <codeph>Document</codeph> is inserted because its type is
+  					inferred from the method argument and the corresponding <codeph>Transcoder</codeph> is
+  					used to encode it.</p>
+  				
+  				<p>The <codeph>Document</codeph> returned, as a result, is different from the
+  					<codeph>Document</codeph> passed in. The returned document references some
+  					values like its <codeph>id</codeph> and <codeph>content</codeph> but also has the
+  					<codeph>CAS</codeph> value set.</p>
+  				
+  	</sectiondiv>
+  			
+  		<sectiondiv>
+  				<p><b>Upsert</b></p>
+  				
+  				<p>The <codeph>upsert</codeph> method works similar to <codeph>insert</codeph>, but it also
+  					overrides an already stored <codeph>Document</codeph> (so there is no
+  					<codeph>DocumentAlreadyExistsException</codeph> thrown by the synchronous API
+  					nor propagated by the asynchronous API).</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[JsonObject content = JsonObject.empty().put("name", "Michael");
+JsonDocument doc = JsonDocument.create("docId", content);
+JsonDocument inserted = bucket.upsert(doc);]]></codeblock>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[JsonObject content = JsonObject.empty().put("name", "Michael");
+JsonDocument doc = JsonDocument.create("docId", content);
+Observable<JsonDocument> inserted = bucket.async().upsert(doc);
+inserted.subscribe(
+	System.out::println,
+	//this won't be called:
+	Throwable::printStackTrace
+);]]></codeblock>
+  				
+  				<p>If the <codeph>Document</codeph> also has the <codeph>expiry</codeph> time set, it is
+  					respected and picked up by the server.</p>
+  				
+  				<p>It doesn't matter what type of <codeph>Document</codeph> is upserted because its type is
+  					inferred from the method argument and the corresponding <codeph>Transcoder</codeph> is
+  					used to encode it.</p>
+  				
+  				<p>The <codeph>Document</codeph> returned, as a result, is a different one compared to the
+  					<codeph>Document</codeph> passed in. It references some values like its
+  					<codeph>id</codeph> and <codeph>content</codeph> but also has the
+  					<codeph>CAS</codeph> value set.</p></sectiondiv>
+  			
+  			
+  		<sectiondiv>
+  				<p><b>Durability Requirements</b></p>
+  				
+  				<p>If no durability requirements are set on the <codeph>insert</codeph> or
+  					<codeph>upsert</codeph> methods, the operation will succeed when the server
+  					acknowledges the document in its managed cache layer. While this is a performant
+  					operation, there might be situations where you want to make sure that your document
+  					has been persisted or replicated so that it survives power outages and other node
+  					failures.</p>
+  				
+  				<p>Both methods provide overloads to supply such requirements:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[D insert(D document, PersistTo persistTo);
+D insert(D document, ReplicateTo replicateTo);
+D insert(D document, PersistTo persistTo, ReplicateTo replicateTo);
+
+D upsert(D document, PersistTo persistTo);
+D upsert(D document, ReplicateTo replicateTo);
+D upsert(D document, PersistTo persistTo, ReplicateTo replicateTo);]]></codeblock>
+  				
+  				<note type="tip">The synchronous API also provides the same methods with custom timeouts, whereas the asynchronous API in <codeph>AsyncBucket</codeph> would rely on RxJava's <codeph>timeout</codeph> operator.</note>
+  				
+  				<p>You can configure either just one or both of the requirements when inserting or upserting. From an application point of view nothing needs to be changed when working with the response, although there is something that need to be kept in mind:</p>
+  				
+  				<p>The internal implementation first performs a regular <codeph>insert</codeph> or
+  					<codeph>upsert</codeph> operation and afterward starts polling the specifically
+  					affected cluster nodes for the state of the document. If something fails during this
+  					operation (and failing the <codeph>Observable</codeph>), the original operation
+  					might have succeeded nonetheless.</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[// Insert the document and make sure it is persisted to the master node
+bucket.insert(document, PersistTo.MASTER);
+
+// Insert the document and make sure it is replicate to one replica node
+bucket.insert(document, ReplicateTo.ONE);
+
+// Insert the document and make sure it is persisted to one node and replicated to two
+bucket.insert(document, PersistTo.ONE, ReplicateTo.TWO);]]></codeblock>
+  				
+  		</sectiondiv>
+  			
+  		<sectiondiv>
+  				<p><b>Batching</b></p>
+  				
+  				<p>Because everything is asynchronous internally, batching <codeph>inserts</codeph> or
+  					<codeph>upserts</codeph> can be achieved with the  <codeph>Observable</codeph>
+  					functionality of the <codeph>AsyncBucket</codeph>.</p>
+  				
+  				<p>A combination of <codeph>just()</codeph> and <codeph>flatMap()</codeph> is used to store them without blocking:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[JsonDocument doc1 = JsonDocument.create("id1", content);
+JsonDocument doc2 = JsonDocument.create("id2", content);
+JsonDocument doc3 = JsonDocument.create("id3", content);
+
+Observable
+    .just(doc1, doc2, doc3)
+    .flatMap(new Func1<JsonDocument, Observable<JsonDocument>>() {
+        @Override
+        public Observable<JsonDocument> call(JsonDocument document) {
+            return bucket.async().insert(document);
+        }
+    }).subscribe();]]></codeblock>
+  				
+  				<p>For the blocking API, batching is currently not supported. It is recommended to fall back on the asynchronous API for best performance.</p>
+  				
+  			
+  		</sectiondiv>   
+      
+    </section>
+   
+  		
+  	
+  	
+  	
+  	
+  	
+  	
+  	<section id="updatingdocuments"><title>Updating Documents</title>
+  		
+  	<p>This section describes updating documents by using the <codeph>replace()</codeph> or <codeph>upsert()</codeph> methods.</p>
+  		
+  		
+  			
+  			<sectiondiv>
+  				<p>Replace</p>
+  				
+  				<p>The <codeph>replace</codeph> method replaces the <codeph>Document</codeph> if it exists, but fails with a <codeph>DocumentDoesNotExistException</codeph> otherwise.</p>
+  				
+  				<p>In addition, if the <codeph>CAS</codeph> value is set on the <codeph>Document</codeph> (not
+  					equal to <codeph>0</codeph>), it is respected and passed to the server. If the
+  					<codeph>CAS</codeph> value does not match the current server value, it fails
+  					with a <codeph>CASMismatchException</codeph>.</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[JsonObject content = JsonObject.empty().put("name", "Michael");
+JsonDocument doc = JsonDocument.create("docId", content);
+JsonDocument inserted = bucket.replace(doc)]]></codeblock>
+  				
+  				<p>If the <codeph>Document</codeph> also has the <codeph>expiry</codeph> time set, it will be respected and picked up by the server.</p>
+  				
+  				<p>It doesn't matter what type of <codeph>Document</codeph> is replaced: its type is inferred
+  					from the method argument, and the corresponding <codeph>Transcoder</codeph> is used
+  					to encode it.</p>
+  				
+  				<p>The <codeph>Document</codeph> returned, as a result, is a different one compared to the
+  					<codeph>Document</codeph> passed in. It references some values like its
+  					<codeph>id</codeph> and <codeph>content</codeph> but also has the new
+  					<codeph>CAS</codeph> value set.</p>
+  				
+  				<p>The following asynchronous sample will automatically take the <codeph>CAS</codeph> value into account because it is populated from the <codeph>get()</codeph> call and respected on the <codeph>replace()</codeph> call.</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[bucket.async()
+    .get("id")
+    .map(new Func1<JsonDocument, JsonDocument>() {
+        @Override
+        public JsonDocument call(JsonDocument document) {
+            modifyDocumentSomehow(document);
+            return document;
+        }
+    })
+    .flatMap(new Func1<JsonDocument, Observable<JsonDocument>>() {
+        @Override
+        public Observable<JsonDocument> call(JsonDocument document) {
+            return bucket.async().replace(document);
+        }
+    }).subscribe();]]></codeblock>
+  				
+  				<p>Since this operation can fail if there is a <codeph>CASMismatchException</codeph>, a common pattern is to retry the complete process until it succeeds:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[Observable
+    .defer(() -> bucket.async()get("id"))
+    .map(document -> {
+        document.content().put("modified", new Date().getTime());
+        return document;
+    })
+    .flatMap(doc -> bucket.async().replace(doc))
+    .retryWhen(attempts ->
+        attempts.flatMap(n -> {
+            if (!(n.getThrowable() instanceof CASMismatchException)) {
+                return Observable.error(n.getThrowable());
+            }
+            return Observable.timer(1, TimeUnit.SECONDS);
+        })
+    )
+    .subscribe();]]></codeblock>
+  				<p>This code snippet uses <codeph>defer()</codeph>. This was necessary before SDK 2.2.0 to always do a fresh <codeph>get()</codeph>, but is now already done by the SDK.</p>
+  				<note type="remember">Before version 2.2.0, a Subject was directly used in the SDK internally,
+  					caching the value and, therefore, a resubscribe would just return the same value.
+  					<codeph>defer()</codeph> makes sure to create a new one on every resubscribe. </note>
+  				<p>Afterward, it artificially modifies the document and then tries to store it through a
+  					<codeph>replace()</codeph> call. If it succeeds all is good, if it fails with an
+  					<codeph>Exception</codeph> the <codeph>retryWhen()</codeph> block is executed.
+  					In this block, the code checks if it is a <codeph>CASMismatchException</codeph> and
+  					if so, executes a <codeph>timer</codeph> before retrying. Other errors could be
+  					handled in there as well (even with different retry strategies), but in this
+  					example, other errors are passed along.</p>
+  				
+  				<p>Note that since 2.1.2, such code is easier to write by use of the <codeph>RetryBuilder</codeph>:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[Observable
+    .defer(() -> bucket.async().get("id"))
+    .map(document -> {
+        document.content().put("modified", new Date().getTime());
+        return document;
+    })
+    .flatMap(doc -> bucket.async().replace(doc))
+    .retryWhen(RetryBuilder
+      .anyOf(CASMismatchException.class)
+      .delay(Delay.fixed(1, TimeUnit.SECONDS))
+      .once() //alternatively use max(n) to attempt n times total
+      .build())
+    .subscribe();]]></codeblock>
+  				
+  			</sectiondiv>
+  			
+  		<sectiondiv>
+  			<p><b>Upsert</b></p>
+  				
+  				<p>The <codeph>upsert</codeph> method works similar to <codeph>replace</codeph>, but it also stores the <codeph>Document</codeph> if it does not exist (so there is no <codeph>DocumentDoesNotExistException</codeph> thrown).</p>
+  				
+  				<p>It also does not use the <codeph>CAS</codeph> value to handle concurrent updates, even when set on the document. Use <codeph>replace</codeph> instead.</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[JsonObject content = JsonObject.empty().put("name", "Michael");
+JsonDocument doc = JsonDocument.create("docId", content);
+JsonDocument inserted = bucket.upsert(doc)]]></codeblock>
+  				
+  				<p>If the <codeph>Document</codeph> also has the <codeph>expiry</codeph> time set, it will be respected and picked up by the server.</p>
+  				
+  				<p>It doesn't matter what type of <codeph>Document</codeph> is upserted; its type is inferred
+  					from the method argument, and the corresponding <codeph>Transcoder</codeph> is used
+  					to encode it.</p>
+  				
+  				<p>The <codeph>Document</codeph> returned, as a result, is a different one compared to the
+  					<codeph>Document</codeph> passed in. It references some values like its
+  					<codeph>id</codeph> and <codeph>content</codeph> but also has the
+  					<codeph>CAS</codeph> value set.</p></sectiondiv>
+  			
+  			
+  		<sectiondiv>
+  				<p><b>Durability Requirements</b></p>
+  				
+  				<p>If no durability requirements are set on the <codeph>replace</codeph> or <codeph>upsert</codeph> methods, the operation will succeed when the server acknowledges the document in its managed cache layer. While this is a performant operation, there might be situations where you want to make sure that your document has been persisted and/or replicated so that it survives power outages and other node failures.</p>
+  				
+  				<p>Both methods provide overloads to supply such requirements:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[D replace(D document, PersistTo persistTo);
+D replace(D document, ReplicateTo replicateTo);
+D replace(D document, PersistTo persistTo, ReplicateTo replicateTo);
+
+D upsert(D document, PersistTo persistTo);
+D upsert(D document, ReplicateTo replicateTo);
+D upsert(D document, PersistTo persistTo, ReplicateTo replicateTo);]]></codeblock>
+  				
+  				<p>You can configure either just one or both of the requirements when inserting or upserting. From an application point of view nothing needs to be changed when working with the response, although there is something that need to be kept in mind:</p>
+  				
+  				<p>The internal implementation first performs a regular <codeph>replace</codeph> or
+  					<codeph>upsert</codeph> operation and afterward starts polling the specifically
+  					affected cluster nodes for the state of the document. If something fails during this
+  					operation (and failing the <codeph>Observable</codeph>), the original operation
+  					might have succeeded nonetheless.</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[// Update the document and make sure it is persisted to the master node
+bucket.replace(document, PersistTo.MASTER);
+
+// Update the document and make sure it is replicate to one replica node
+bucket.replace(document, ReplicateTo.ONE);
+
+// Update the document and make sure it is persisted to one node and replicated to two
+bucket.replace(document, PersistTo.ONE, ReplicateTo.TWO);]]></codeblock>
+  		</sectiondiv>
+  			
+  			
+  		<sectiondiv>
+  				<p>Batching</p>
+  				
+  				<p>Because everything is asynchronous internally, batching <codeph>replaces</codeph> or
+  					<codeph>upserts</codeph> can be achieved with the <codeph>Observable</codeph>
+  					functionality of the <codeph>AsyncBucket</codeph>.</p>
+  				
+  				<p>A combination of <codeph>just()</codeph> and <codeph>flatMap()</codeph> is used to store them without blocking:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[JsonDocument doc1 = JsonDocument.create("id1", content);
+JsonDocument doc2 = JsonDocument.create("id2", content);
+JsonDocument doc3 = JsonDocument.create("id3", content);
+
+Observable
+    .just(doc1, doc2, doc3)
+    .flatMap(new Func1<JsonDocument, Observable<JsonDocument>>() {
+        @Override
+        public Observable<JsonDocument> call(JsonDocument document) {
+            return bucket.async().replace(document);
+        }
+    }).subscribe();]]></codeblock>
+  				
+  		</sectiondiv>		
       
       
     </section>
-    <section><title></title>
-      <p></p>
+    
+  	
+  	<section><title>Retrieving Documents</title>
+  		
+  	<p>This section describes how to load documents using the various <codeph>get()</codeph>
+  			methods.</p>
+  	
+  			
+  		<sectiondiv>
+  				<p><b>Regular reads</b></p>
+  				
+  				<p>To read a document use the <codeph>get()</codeph> method. Either pass in the
+  					<codeph>id</codeph> of the <codeph>Document</codeph> or the
+  					<codeph>Document</codeph> from which the <codeph>id</codeph> is taken from.</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[JsonDocument loadedFromId = bucket.get("id");
+JsonDocument loadedFromDoc = bucket.get(JsonDocument.create("id"));]]></codeblock>
+  				
+  				<p>Both methods have the same effect. The latter method is helpful if you are already
+  					dealing with <codeph>Document</codeph> instances in your code and you don't want to
+  					extract the <codeph>ID</codeph> out of them on your own.</p>
+  				
+  				<p>When only the ID is passed in, there is no way to figure out which
+  					<codeph>Document</codeph> type should be used, so <codeph>JsonDocument</codeph> is
+  					selected as a sensible default. If you want to override this, you can pass in a specific
+  					<codeph>Document</codeph> type like this:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[LegacyDocument loaded = bucket.get("legacyId", LegacyDocument.class);]]></codeblock>
+  				
+  				<p>If the document is not found, the blocking API returns null.:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[JsonDocument found = bucket.get("notexisting");
+if (found == null) {
+// doc not found
+} else {
+// doc found
+}]]></codeblock>
+  				
+  				<p>If you are dealing with asynchronous code, an empty <codeph>observable</codeph> is returned
+  					instead. This aligns with how <codeph>Observable</codeph> objects are supposed to
+  					work by contract, but also makes it easier to deal with the implementation later. If
+  					no document is returned, the subsequent operations are just not executed, which
+  					avoids having null checks all over the place (if for example a Document would be
+  					returned but with the content set to <codeph>null</codeph>).</p>
+  				<codeblock outputclass="language-java"><![CDATA[Observable<JsonDocument> updateIfFound = bucket.async().get(potentialNonExistingKey)
+	.map(doc -> doc.content())
+	.filter(jsonObject -> jsonObject.containsKey("test"))
+	.subscribe(
+		//onNext only invoked if the key could be retrieved
+		data -> System.out.println("Data exists and has test key"),
+		error::printStackTrace,
+		() -> System.out.println("Completed"));]]></codeblock>
+  				
+  		</sectiondiv>
+  			
+  		<sectiondiv>
+  				<p><b>Reading from replica</b></p>
+  				
+  				<p>A regular read always reads the document from its master node. If this node is down or
+  					not available, the document cannot be loaded. Reading from replica allows you to load
+  					the document from one or more replica nodes instead.</p>
+  				
+  				<p>
+  					<note>When replica reads are used, always use them under the assumption that the data
+  						returned is stale. There is no way to guarantee that the data is up-to-date on the
+  						replica node unless the proper durability requirements have been set and succeeded on
+  						write operations. Only use replica reads if you understand the implications.</note>
+  				</p>
+  				
+  				<p>You can either read the data from one specific replica or all of the available
+  					replicas:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[// Read from all available replicas and the master node and return all responding
+bucket.getFromReplica("id", ReplicaMode.ALL);
+
+// Read only from the first replica
+bucket.getFromReplica("id", ReplicaMode.FIRST);
+
+// Read only from the second replica
+bucket.getFromReplica("id", ReplicaMode.SECOND);
+
+// Read only from the third replica
+bucket.getFromReplica("id", ReplicaMode.THIRD);]]></codeblock>
+  				
+  				<note type="note">If <codeph>ReplicaMode.ALL</codeph> is used, requests are sent to the master
+  					node and all configured replicas.</note>
+  				
+  				<p>The main goal is to get responses back as fast as possible, but because more requests are
+  					sent, more responses can arrive. You can use this to either compare all of the
+  					responding documents and draw conclusions, or just pick the first one arriving:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[bucket
+	.async()
+    .getFromReplica("id", ReplicaMode.ALL)
+    .first()
+    .subscribe();]]></codeblock>
+  				
+  				<p>In addition, you can add operations to filter based on some of your assumptions. Imagine
+  					you have a <codeph>version</codeph> field in your document and you want to only use the
+  					replica information if it this specific version:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[bucket
+	.async()
+    .getFromReplica("id", ReplicaMode.ALL)
+    .filter(document -> document.content().getInt("version") > 5)
+    .first()
+    .subscribe();]]></codeblock>
+  		</sectiondiv>
+  			
+  		<sectiondiv id="read-and-lock">
+  		<p><b>Reading and locking</b></p>
+  				
+  				<p>Reading and locking works very similar to a regular read, but in addition the
+  					<codeph>Document</codeph> is <b>write locked</b> (not read locked) on the server side
+  					for the given amount of time.</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[// Get and lock for 10 seconds
+JsonDocument doc = bucket.getAndLock("id", 10);]]></codeblock>
+  				
+  				<p>
+  					<note>You can only write lock a document for a maximum of 30 seconds. If an invalid lock
+  						time (less than 0 or greater than 30 seconds) is provided, 15 seconds is used as the
+  						default.</note>
+  				</p>
+  				
+  				<p>The <codeph>Document</codeph> is unlocked under the following conditions:</p>
+  				
+  				<ul>
+  					<li>The <codeph>unlock()</codeph> command is used.</li>
+  					<li>The <codeph>Document</codeph> is replaced with the correct CAS value.</li>
+  					<li>30 seconds are over, and the server unlocks it for you.</li>
+  				</ul>
+  				<p>The following example shows the case with optimistic locking, where the locked document
+  					is automatically released on error so it can be used by other clients.</p>
+  				<codeblock outputclass="language-java"><![CDATA[
+JsonDocument doc = JsonDocument.create(
+	"stats",
+	JsonObject.empty().put("sold", 0).put("bought", 0)
+);
+bucket.upsert(doc);
+
+doc = bucket.getAndLock("stats", 20);
+try {
+    doc.content().put("sold", doc.content().getInt("sold") + 1);
+    // Fake a processing error
+    if (new Random().nextInt(100) < 30) {
+        throw new RuntimeException("processing error");
+    }
+} catch (RuntimeException ex) {
+    bucket.unlock("stats", doc.cas());
+}
+]]></codeblock>
+  		</sectiondiv>
+  			
+  			<sectiondiv>
+  				<p><b>Reading and touching</b></p>
+  				
+  				<p>Reading and touching works very similar to a regular read, but it also refreshes the
+  					expiration time of the document to the specified value.</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[// Get and set the new expiration time to 4 seconds
+JsonDocument doc = bucket.getAndTouch("id", 4);]]></codeblock>
+  				
+  				<p>You can also use the <codeph>touch()</codeph> command if you do not want to read the
+  					document and just refresh its expiration time.</p>
+  				
+  				<note type="important">If you specify an expiration time greater than 30 days in seconds (60
+  					seconds * 60 minutes * 24 hours * 30 days = 2,592,000 seconds), it is considered an
+  					absolute timestamp instead of a relative one.</note>
+  				
+  			</sectiondiv>
       
       
     </section>
-    <section><title></title>
-      <p></p>
-      
-      
-    </section>
+  	
+  	
+  	
+  	
+  	
+  	
+  	
+  	
+  	<section><title>Deleting Documents</title>
+  		
+  		Describes how to delete documents using the <codeph>remove()</codeph> method.
+  	
+  			
+  	<sectiondiv>
+  				<p><b>Removing</b></p>
+  				
+  				<p>You can remove a document by utilizing the <codeph>remove()</codeph> method.</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[// Remove the document by its ID.
+JsonDocument doc = bucket.remove("id");]]></codeblock>
+  				
+  				<p>If you pass in a document which also has the CAS value populated, the SDK will make sure to only delete the document if they match:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[// Create document with some content
+JsonDocument stored = bucket.upsert(JsonDocument.create("mydoc", JsonObject.create()));
+
+// Delete it with the CAS check included
+JsonDocument removed = bucket.remove(stored);]]></codeblock>
+  				
+  				<p>If successful, the returned <codeph>Document</codeph> has the <codeph>id</codeph> and <codeph>cas</codeph> fields populated,
+  					all other fields are set to their default values.</p>
+  				
+  				<p>If the document is not found, a <codeph>DocumentNotFoundException</codeph> is raised.
+  					When the document is found but the <codeph>cas</codeph> values do not match, a <codeph>CASMismatchException</codeph> is raised.</p>
+  				
+  	</sectiondiv>
+  			
+  	<sectiondiv>	
+  				<p><b>Durability Requirements</b></p>
+  				
+  				<p>If no durability requirements are set on the <codeph>remove</codeph> method, the operation
+  					will succeed when the server acknowledges the document delete in its managed cache
+  					layer. While this is a performant operation, there might be situations where you
+  					want to make sure that your document deletion has been persisted or replicated so
+  					that it survives power outages and other node failures.</p>
+  				
+  				<p>The remove method provides overloads to supply such requirements:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[JsonDocument remove(String id, PersistTo persistTo);
+JsonDocument remove(String id, ReplicateTo replicateTo);
+JsonDocument remove(String id, PersistTo persistTo, ReplicateTo replicateTo);
+
+D remove(D document, PersistTo persistTo);
+D remove(D document, ReplicateTo replicateTo);
+D remove(D document, PersistTo persistTo, ReplicateTo replicateTo);]]></codeblock>
+  				
+  				<p>You can configure either just one or both of the requirements when removing.
+  					From an application point of view nothing needs to be changed when working with the response,
+  					although there is something that need to be kept in mind:</p>
+  				
+  				<p>The internal implementation first performs a regular <codeph>remove</codeph> operation and
+  					afterwards starts polling the specifically affected cluster nodes for the state of
+  					the document. If something fails during this operation (and failing the
+  					<codeph>Observable</codeph>), the original operation might have succeeded
+  					nonetheless.</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[// Remove the document and make sure the delete is persisted.
+JsonDocument doc = bucket.remove("id", PersistTo.MASTER);
+
+// Remove the document and make sure the delete is replicated.
+JsonDocument doc = bucket.remove("id", ReplicateTo.ONE);
+
+// Remove the document and make sure the delete is persisted and replicated.
+JsonDocument doc = bucket.remove("id", PersistTo.MASTER, ReplicateTo.ONE);]]></codeblock>
+  				
+  	</sectiondiv>
+  	</section>
+  		
+  		
+  		<section><title>Atomic Operations</title>
+  			<p>The <codeph>CouchbaseBucket</codeph> class provides atomic operations such as
+  				<codeph>counter()</codeph>, <codeph>append()</codeph>, and <codeph>prepend()</codeph>.</p>
+  			<sectiondiv>
+  					<p>Counter</p>
+  					
+  					
+  					<p>The <codeph>counter()</codeph> method allows you to increment or decrement a document with
+  						a numerical content atomically. The method only accepts and returns a
+  						<codeph>JsonLongDocument</codeph>. The value stored in the document is incremented or
+  						decremented depending on the given <codeph>delta</codeph>: if the delta value is a positive
+  						number, the value is incremented, and if it is a negative number, the value is decremented.
+  						You can also pass in an initial value and an expiration time.</p>
+  					
+  					
+  					<codeblock outputclass="language-java"><![CDATA[// Increase the counter by 5 and set the initial value to 0 if it does not exist
+JsonLongDocument doc = bucket.counter("id", 5, 0);]]></codeblock>
+  					
+  					<p>The resulting document contains the new counter value. A very common use case is to implement
+  						an increasing <codeph>AUTO_INCREMENT</codeph> like counter, where every new user just
+  						gets a new ID (here using the asynchronous API):</p>
+  					
+  					<codeblock outputclass="language-java"><![CDATA[bucket.async()
+    .counter("user::id", 1, 1)
+    .map(new Func1<JsonLongDocument, String>() {
+        @Override
+        public String call(JsonLongDocument counter) {
+            return "user::" + counter.content();
+        }
+    })
+    .flatMap(new Func1<String, Observable<JsonDocument>>() {
+        @Override
+        public Observable<JsonDocument> call(String id) {
+            return bucket.insert(JsonDocument.create(id, JsonObject.empty()));
+        }
+    }).subscribe();]]></codeblock>
+  					
+  					
+  					<p>This code increases the counter by one, and then maps the returned number onto a custom
+  						document ID (here the code prefixes <codeph>user::</codeph>). Afterward, the
+  						<codeph>insert</codeph> method is executed with the generated ID and an empty document
+  						content. Because a <codeph>counter</codeph> operation is atomic, the code is guaranteed to
+  						deliver different user IDs, even when called at the same time from multiple threads.</p>
+  					
+  					<p>The counter always needs to be
+  						greater than or equal to zero because negative values are not allowed. If you want to
+  						decrement a counter, make sure to set it to a value greater than zero initially.</p>
+  					
+  					
+  					
+  					<p>If the initial value is omitted and the counter doesn't exists, this is signaled to the
+  						user by propagating a <codeph>DocumentDoesNotExistException</codeph> (since 2.2.0). You can
+  						avoid that by providing an explicit initial value, which could be the same as the delta or
+  						even an arbitrary initial value (the delta won't be added to it at counter creation):</p>
+  					
+  					<codeblock outputclass="language-java"><![CDATA[// Increase the counter by 5 or create the counter with a value of 4 if it does not exist
+JsonLongDocument doc = bucket.counter("id", 5, 4);]]></codeblock>
+  					
+  					<p>If you want to set an expiration time, you need to provide both the initial value and the
+  						expiration time. This constraint is imposed by the API because just exposing the expiration
+  						time would be ambiguous with the initial value (<codeph>long</codeph> and
+  						<codeph>int</codeph>).</p>
+  					
+  					
+  					<codeblock outputclass="language-java"><![CDATA[// Increment by 5, initial 5 and 3 second expiration
+JsonLongDocument doc = bucket.counter("id", 5, 5, 3);]]></codeblock>
+  					
+  			</sectiondiv>
+  				
+  		<sectiondiv>	
+  				<p><b>Append &amp; Prepend</b></p>
+  					
+  					<p>Appending and prepending values to existing documents is also possible. Both the
+  						<codeph>append</codeph> and <codeph>prepend</codeph> operation are atomic so that they can
+  						be used without further synchronization.</p>
+  					
+  					
+  					<p>
+  						<note>Both operations only work on binary documents, ideally strings or byte arrays. It does not
+  							work on JSON documents because it doesn't do any further inspection. Applying
+  							one of those operations on a JSON document will render it invalid.</note>
+  					</p>
+  					
+  					<p>A <codeph>Document</codeph> needs to be created before values can be appended or prepended.
+  						Here is an example that creates a document and then appends a string to it:</p>
+  					
+  					<codeblock outputclass="language-java"><![CDATA[bucket
+    .insert(LegacyDocument.create("doc", "Hello, "))
+    .flatMap(doc ->
+        bucket.append(LegacyDocument.create("doc", "World!"))
+    )
+    .flatMap(bucket::get)
+    .toBlocking()
+    .forEach(doc -> System.err.println(doc.content()));]]></codeblock>
+  					
+  					<p>When executed, this code prints <codeph>Hello, World!</codeph>.</p>
+  		</sectiondiv>
+  				
+  			<sectiondiv>	
+  					<p><b>Durability Requirements</b></p>
+  					
+  					
+  					<p>If no durability requirements are set on the <codeph>append</codeph>, <codeph>prepend</codeph>
+  						or <codeph>counter</codeph> methods, the operation will succeed when the server
+  						acknowledges the document in its managed cache layer. While this is a performant
+  						operation, there might be situations where you want to make sure that your document
+  						has been persisted or replicated so that it survives power outages and other node
+  						failures.</p>
+  					
+  					
+  					<p>All atomic operations provide overloads to supply such durability requirements:</p>
+  					
+  					<codeblock outputclass="language-java"><![CDATA[D append(D document, PersistTo persistTo);
+D append(D document, ReplicateTo replicateTo);
+D append(D document, PersistTo persistTo, ReplicateTo replicateTo);
+
+D prepend(D document, PersistTo persistTo);
+D prepend(D document, ReplicateTo replicateTo);
+D prepend(D document, PersistTo persistTo, ReplicateTo replicateTo);
+
+JsonLongDocument counter(String id, long delta, PersistTo persistTo);
+JsonLongDocument counter(String id, long delta, ReplicateTo replicateTo);
+JsonLongDocument counter(String id, long delta, PersistTo persistTo, ReplicateTo replicateTo);
+
+JsonLongDocument counter(String id, long delta, long initial, PersistTo persistTo);
+JsonLongDocument counter(String id, long delta, long initial, ReplicateTo replicateTo);
+JsonLongDocument counter(String id, long delta, long initial, PersistTo persistTo, ReplicateTo replicateTo);
+
+JsonLongDocument counter(String id, long delta, long initial, int expiry, PersistTo persistTo);
+JsonLongDocument counter(String id, long delta, long initial, int expiry, ReplicateTo replicateTo);
+JsonLongDocument counter(String id, long delta, long initial, int expiry, PersistTo persistTo, ReplicateTo replicateTo);]]></codeblock>
+  					
+  					<p>You can configure either just one or both of the requirements. From an application point of view nothing needs to be
+  						changed when working with the response, although there is something that need to be kept in mind:</p>
+  					
+  					<p>The internal implementation first performs a regular operation and afterward starts polling
+  						the specifically affected cluster nodes for the state of the document. If something
+  						fails during this operation (and failing the <codeph>observable</codeph>), the
+  						original operation might have succeeded nonetheless.</p>
+  					
+  			</sectiondiv>
+  			
+  			
+  		</section>		
+  		
+
+
+  	
+  	<section><title>Bulk Operations</title>
+  	
+  	Bulk operations allow you to operate on more than one document at the same
+  			time.
+  	
+  			
+  			<sectiondiv>
+  			<p><b>Introduction</b></p>
+  				<p>To get better resource utilization, you need to perform all types of operations in
+  					batches. Because of the asynchronous nature of the underlying core package, you can
+  					utilize RxJava's operations to provide implicit batching facilities combined with the
+  					asynchronous operations of the SDK.</p>
+  				
+  				<p>If you understand the general approach to batching, you can apply it to any operation against
+  					the SDK, not just with <codeph>get()</codeph> calls like in the 1.x series SDK.</p>
+  			</sectiondiv>
+  			
+  			<sectiondiv>
+  				<p><b>Batching with RxJava</b></p>
+  				
+  				
+  				<p>Implicit batching is performed by utilizing a few operators: <ul>
+  					<li><codeph>Observable.just()</codeph> or <codeph>Observable.from()</codeph> to
+  						generate an <codeph>observable</codeph> that contains the data you want to batch
+  						on.</li>
+  					<li><codeph>flatMap()</codeph> to send those events against the Couchbase Java SDK
+  						and merge the results asynchronously.</li>
+  					<li><codeph>last()</codeph> if you want to wait until the last element of the batch
+  						is received.</li>
+  					<li><codeph>toList()</codeph> if you care about the responses and want to aggregate
+  						them easily.</li>
+  					<li>If you have more than one subscriber, using <codeph>cache()</codeph> to prevent
+  						accessing the network over and over again with every subscribe.</li>
+  				</ul></p>
+  				
+  				<p>The following example creates an observable stream of 5 keys to load in a batch,
+  					asynchronously fires off <codeph>get()</codeph> requests against the SDK, waits until
+  					the last result has arrived, and then converts the result into a list and blocks at the
+  					very end:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[Cluster cluster = CouchbaseCluster.create();
+Bucket bucket = cluster.openBucket();
+
+List<JsonDocument> foundDocs = Observable
+    .just("key1", "key2", "key3", "key4", "key5")
+    .flatMap(new Func1<String, Observable<JsonDocument>>() {
+        @Override
+        public Observable<JsonDocument> call(String id) {
+            return bucket.async().get(id);
+        }
+    })
+    .toList()
+    .toBlocking()
+    .single();]]></codeblock>
+  				
+  				<p>Note that this always returns a list, but it may contain 0 to 5 documents, depending on how
+  					many are actually found. Also, at the very end the observable is converted into a
+  					blocking one, but everything before that, including the network calls and the
+  					aggregation, is happening completely asynchronously.</p>
+  				
+  				<p>Inside the SDK, this provides much more efficient resource utilization because the requests
+  					are very quickly stored in the internal <codeph>Request RingBuffer</codeph> and the I/O
+  					threads are able to pick batches as large as they can. Afterward, whatever server
+  					returns a result first it is stored in the list, so there is no serialization of
+  					responses going on.</p>
+  				
+  				<p>If you wrap the code in a helper method, you can provide very nice encapsulated batching semantics:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[public List<JsonDocument> bulkGet(final Collection<String> ids) {
+    return Observable
+        .from(ids)
+        .flatMap(new Func1<String, Observable<JsonDocument>>() {
+            @Override
+            public Observable<JsonDocument> call(String id) {
+                return bucket.async().get(id);
+            }
+        })
+        .toList()
+        .toBlocking()
+        .single();
+}]]></codeblock>
+  				
+  			</sectiondiv>
+  			
+  	<sectiondiv>		
+  				<p><b>Batching mutations</b></p>
+  				
+  				<p>The previous Java SDK only provided bulk operations for <codeph>get()</codeph>. With the
+  					techniques shown above, you can perform any kind of operation as a batch operation.</p>
+  				
+  				<p>The following code generates a number of fake documents and inserts them in one batch. Note that you can decide to either collect the results with <codeph>toList()</codeph> as shown above or just use <codeph>last()</codeph> as shown here to wait until the last document is properly inserted.</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[// Generate a number of dummy JSON documents
+int docsToCreate = 100;
+List<JsonDocument> documents = new ArrayList<JsonDocument>();
+for (int i = 0; i < docsToCreate; i++) {
+    JsonObject content = JsonObject.create()
+        .put("counter", i)
+        .put("name", "Foo Bar");
+    documents.add(JsonDocument.create("doc-"+i, content));
+}
+
+// Insert them in one batch, waiting until the last one is done.
+Observable
+    .from(documents)
+    .flatMap(new Func1<JsonDocument, Observable<JsonDocument>>() {
+        @Override
+        public Observable<JsonDocument> call(final JsonDocument docToInsert) {
+            return bucket.async().insert(docToInsert);
+        }
+    })
+    .last()
+    .toBlocking()
+    .single();]]></codeblock>
+  				
+  	</sectiondiv>
+  			
+  			<sectiondiv>
+  			<p><b>Performance</b></p>
+  				
+  				<p>Here are two code samples, both synchronous, that showcase serialized and batched loading of
+  					documents. Note that more important than the absolute operations per second is the
+  					relative improvement with the same workload.</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[// Serialized workload of loading documents
+while(true) {
+    List<JsonDocument> loaded = new ArrayList<JsonDocument>();
+    int docsToLoad = 10;
+    for (int i = 0; i < docsToLoad; i++) {
+        JsonDocument doc = bucket.get("doc-" + i);
+        if (doc != null) {
+            loaded.add(doc);
+        }
+    }
+}]]></codeblock>
+  				
+  				<p>
+  					<image href="images/batching-single.png" id="image_i31_yqb_3p"/>
+  				</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[// Same workload, utilizing batching effects
+while(true) {
+    int docsToLoad = 10;
+    Observable
+        .range(0, docsToLoad)
+        .flatMap(new Func1<Integer, Observable<JsonDocument>>() {
+            @Override
+            public Observable<JsonDocument> call(Integer i) {
+                return bucket.async().get("doc-"+i);
+            }
+        })
+        .toList()
+        .toBlocking()
+        .single();
+        
+}]]></codeblock>
+  				
+  				<p>
+  					<image href="images/batching-bulk.png" id="image_batch_bulk"/>
+  				</p>
+  				
+  				
+  			</sectiondiv>
+  			
+  	<sectiondiv>
+  			<p><b>Error Handling &amp; Recovery</b></p>
+  				
+  				<p>Technically speaking, error handling in bulk operations is similar to generic
+  					<codeph>Observable</codeph> error handling, but because the topic is strongly related
+  					the most important concepts are covered here as well.</p>
+  				
+  				<p>In general, the following questions come up:</p>
+  				
+  				<ul>
+  					<li>How can I implement best effort loading and just return the values that were
+  						successful?</li>
+  					<li>What are <codeph>BackpressureExceptions</codeph> and how can I handle them?</li>
+  					<li>How can I retry individual operations in the batch when they fail?</li>
+  				</ul>
+  				
+  				<p>When handling these situations, an important fact to remember is that as soon as an
+  					error happens inside an <codeph>observable</codeph>, the whole thing is terminated. If
+  					you want the whole stream to complete, error handling needs to be as close as possible
+  					to the original source. Let's take the bulk loading of documents as an example which we
+  					are going to modify to be more resilient:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[Observable
+    .from(docIds)
+    .flatMap(id -> {
+        return bucket
+            .async()
+            .get(id);
+    })
+    .subscribe();]]></codeblock>
+  				
+  				<p>To implement the best effort use case, you can ignore all errors on each
+  					<codeph>get()</codeph> result before it gets merged and flattened into the original
+  					stream. It is strongly recommended to log the error, because otherwise you'll never know
+  					what went wrong in the first place for each failing operation.</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[Observable
+    .from(docIds)
+    .flatMap(id -> {
+        return bucket
+            .async()
+            .get(id)
+            .doOnError(System.err::println) // print the error, log,...
+            .onErrorResumeNext(Observable.empty()); // on error resume with an empty sequence
+    })
+    .subscribe();]]></codeblock>
+  				
+  				<p>There is a slight variation to that which you can use instead. RxJava provides a <xref href="http://reactivex.io/documentation/operators/merge.html" format="html" scope="external">mergeDelayError</xref> operator that merges individual observables, emits all items and then at the very end fails the observable with a <codeph>CompositeException</codeph>. This composite exception contains all errors that have happened so you can do something with them at a later point.</p>
+  				
+  				<p>Very often you want a complete result and therefore you need to retry individual
+  					operations if an error happened. It is recommended to retry based on a defined strategy
+  					for specific exception types and propagate the error for unknown exceptions or those
+  					types which are known to be permanent. For a full list of errors that can happen and
+  					their implications, see the Javadoc API reference for the <codeph>Bucket</codeph>
+  					methods you are using.</p>
+  				
+  				<p>Since the <codeph>BackpressureException</codeph> has been frequently referenced in the past, we are going to use that one as an example. The same logic of course applies to all other types as well.</p>
+  				
+  				<p>The <codeph>BackpressureException</codeph> is used to shed load on the request side
+  					and fails your Observable quickly if the underlying system is in an overload condition.
+  					The reason for this is that somehow requests are produced more quickly than responses
+  					can be generated (because that includes the actual network round trip). This is common
+  					in bulk scenarios since it could be that you are requesting a very large set of
+  					documents at the same time which puts temporary pressure on the client.</p>
+  				
+  				<p>To solve that, we can apply a delayed retry algorithm onto the Observable so it is retried at a later point. We are making use of the <codeph>Delay</codeph> construct shipped with the 2.1 SDK which provides a very convenient way to generated increasing delays. You also want to stop retrying at some point so the operation is not retried forever.</p>
+  				
+  				<p>Since 2.1.2, the <codeph>RetryBuilder</codeph> API has been introduced to help you build retry scenarios. The following code retries with an exponential backoff (with a 100 millisecond
+  					ceiling), but stops after 10 attempts and propagates the error.</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[
+Observable
+    .from(docIds)
+    .flatMap(id -> {
+        return bucket
+            .async()
+            .get(id)
+            .retryWhen(RetryBuilder
+                .anyOf(BackpressureException.class)
+                .delay(Delay.exponential(TimeUnit.MILLISECONDS, 100))
+                .max(10)
+                .build()
+            );
+    })
+    .subscribe();]]></codeblock>
+  				
+  				<p>For reference, this is how you would have written the retry feature prior to 2.1.2:</p>
+  				
+  				<codeblock outputclass="language-java"><![CDATA[final Delay delay = Delay.exponential(TimeUnit.MILLISECONDS, 100);
+  					
+Observable
+    .from(docIds)
+    .flatMap(id -> {
+        return bucket
+            .async()
+            .get(id)
+            .retryWhen(notification ->
+                notification
+                    .zipWith(Observable.range(1, 11), Tuple::create)
+                    .flatMap(att ->
+                        att.value2() == 9 || !(att.value1() instanceof BackpressureException)
+                            ? Observable.error(att.value1())
+                            : Observable.timer(delay.calculate(att.value2()), delay.unit())
+                    )
+            );
+    })
+    .subscribe();]]></codeblock>
+  				
+  				<p>This code zips the error with a range that indicates the number of attempts we want
+  					to retry. If this is over 10 attempts or the error is not a backpressure exception, the
+  					error will be propagated.</p>
+  				
+  				<p>Finally, you always want to chain in <codeph>timeout()</codeph> calls so you have a
+  					last resort error and you can be sure that the code you're relying on isn't stuck
+  					forever. You can also use methods like <codeph>onErrorReturn()</codeph> to return a
+  					stubbed object or a fixed entity that you know will never fail (so in the worst case you
+  					can provide a reduced user experience instead of failing completely).</p>
+  	</sectiondiv>
+  			</section>
+  		
+  		
+
+  
   </body>
 </topic>
