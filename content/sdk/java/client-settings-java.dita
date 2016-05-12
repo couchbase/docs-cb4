@@ -2,7 +2,681 @@
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_rwk_h3v_xv">
   <title>Client Settings</title>
-  <body>
-    <p>TBA</p>
-  </body>
+	<shortdesc>The <codeph>CouchbaseEnvironment</codeph> class enables you to configure Java SDK
+		options for bootstrapping, timeouts, reliability, and performance.</shortdesc>
+
+	<body>
+		<section>
+			<title>The environment builder</title>
+
+			<p>Because <codeph>CouchbaseEnvironment</codeph> is an immutable class, you need to configure it
+				by using its embedded <codeph>Builder</codeph> class. It is designed to apply the
+				builder arguments in a fluent fashion and then create the
+					<codeph>CouchbaseEnvironment</codeph> at the very end:</p>
+
+<codeblock outputclass="language-java"><![CDATA[CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+    .builder()
+    .mutationTokenEnabled(true)
+    .computationPoolSize(5)
+    .build();
+
+Cluster cluster = CouchbaseCluster.create(env, "localhost");]]></codeblock>
+
+			<p>Alternatively, most options are tunable through system properties as well. If a system property is set, it always takes precedence over the builder setting:</p>
+
+<codeblock outputclass="language-java"><![CDATA[System.setProperty("com.couchbase.kvEndpoints", "3");
+CouchbaseEnvironment environment = DefaultCouchbaseEnvironment
+    .builder()
+    .kvEndpoints(2)
+    .build();
+CouchbaseCluster cluster = CouchbaseCluster.create(environment);]]></codeblock>
+
+			<p>All system properties start with the <codeph>com.couchbase</codeph> prefix.</p>
+
+		</section>
+
+		<section>
+			<title>Configuration Options</title>
+
+			<p>The following tables cover all possible configuration options and explain their usage and
+				default values. The tables categorize the options into groups for bootstrapping,
+				timeout, reliability, performance, and advanced options.</p>
+		</section>
+
+		<section><title>Bootstrapping options</title>
+
+<dl>
+	<dlentry>
+					<dt>Name: <b>Enabling Encryption</b></dt>
+					<dd>Method: <codeph>sslEnabled(boolean)</codeph></dd>
+					<dd>Default: <codeph>false</codeph></dd>
+					<dd>System Property: <codeph>sslEnabled</codeph></dd>
+					<dd>If encrypted communication should be enabled. This feature is only available
+						against a Couchbase Server 3.0 EE cluster or later,
+						and setting it to true implies you also set a
+						value for <codeph>sslKeystoreFile</codeph> and
+						<codeph>sslKeystorePassword</codeph>. Please see the
+						"Connection Management" section for more details on how to set it up
+						properly.</dd>
+				</dlentry>
+</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>SSL Keystore Location</b></dt>
+					<dd>Method: <codeph>sslKeystoreFile(String)</codeph></dd>
+					<dd>Default:<codeph>[empty]</codeph></dd>
+					<dd>System Property: <codeph>sslKeystoreFile</codeph></dd>
+					<dd>The location to the JVM keystore where the certificates are stored. This feature is only
+						available against a Couchbase Server 3.0 EE cluster or later. See the
+						"Connection Management" section for more details on how to set it up
+						properly.</dd>
+				</dlentry>
+			</dl>
+
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>SSL Keystore Password</b></dt>
+					<dd>Method: <codeph>sslKeystorePassword(String)</codeph></dd>
+					<dd>Default: <codeph>[empty]</codeph></dd>
+					<dd>System Property: <codeph>sslKeystorePassword</codeph></dd>
+					<dd>The password of the JVM keystore where the certificates are stored. This feature is only
+						available against a Couchbase Server 3.0 EE cluster or later. Please see the
+						"Connection Management" section for more details on how to set it up
+						properly.</dd>
+				</dlentry>
+			</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>N1QL Enabled</b></dt>
+					<dd>Method: <codeph>queryEnabled(boolean)</codeph></dd>
+					<dd>Default: <codeph>false</codeph></dd>
+					<dd>System Property: <codeph>queryEnabled</codeph></dd>
+					<dd>If experimental support for N1Ql should be enabled. Note that this setting is going to be
+						deprecated as soon as the server comes with N1QL embedded, because it will
+						be advertised and picked up by the SDK automatically. This setting should
+						only be used to explicitly enable the N1QL service against a standalone
+						N1QL. In addition, every Couchbase Server node in the cluster is expected to
+						run a N1QL instance when this flag is enabled.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name: <b>N1QL Port</b></dt>
+					<dd>Method: <codeph>queryPort(int)</codeph></dd>
+					<dd>Default: <codeph>8093</codeph></dd>
+					<dd>System Property: <codeph>queryPort</codeph></dd>
+					<dd> Defines the port for the experimental N1QL support when enabled. Every node in the cluster
+						is expected to run a N1QL service against this port. This setting is going
+						to be deprecated as soon as the server comes with N1QL embedded, because it
+						will be advertised and picked up by the SDK automatically. This setting
+						should only be used to explicitly enable the N1QL service against a
+						stand-alone N1QL.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Config Loading through HTTP</b></dt>
+					<dd>Method: <codeph>bootstrapHttpEnabled(boolean)</codeph></dd>
+					<dd>Default: <codeph>true</codeph></dd>
+					<dd>System Property: <codeph>bootstrapHttpEnabled</codeph></dd>
+					<dd>If it should be possible for the client to bootstrap and grab configurations over the HTTP
+						port 8091 (and also attach a streaming connection). If you are running
+						Couchbase Server 2.2 or earlier, this setting must be set to true. Against
+						newer clusters it can be disabled, but it doesn't hurt to keep it enabled as
+						a last-resort fallback option. Also, if configuration loading through
+						carrier publication is manually disabled, this option is used as a fallback.
+						If both option are disabled, the client is not able to function properly. If
+						you don't have a good reason to disable it (for example as instructed by
+						Couchbase Support), keep it enabled.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Config HTTP Non-Encrypted Port</b></dt>
+					<dd>Method: <codeph>bootstrapHttpDirectPort(int)</codeph></dd>
+					<dd>Default: <codeph>8091</codeph></dd>
+					<dd>System Property: <codeph>bootstrapHttpDirectPort</codeph></dd>
+					<dd> The port which is used if encryption is not enabled and the client needs to bootstrap
+						through HTTP. In general, there is no need to change this value (unless you
+						run a custom Couchbase Server build during development or testing that runs
+						on different ports).</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Config HTTP Encrypted Port</b></dt>
+					<dd>Method: <codeph>bootstrapHttpSslPort(int)</codeph></dd>
+					<dd>Default: <codeph>18091</codeph></dd>
+					<dd>System Property: <codeph>bootstrapHttpSslPort</codeph></dd>
+					<dd> The port which is used if encryption is enabled and the client needs to bootstrap through
+						HTTP. In general, there is no need to change this value (unless you run a
+						custom Couchbase Server build during development or testing that runs on
+						different ports).</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Config Loading through Carrier Publication</b></dt>
+					<dd>Method: <codeph>bootstrapCarrierEnabled(boolean)</codeph></dd>
+					<dd>Default: <codeph>true</codeph></dd>
+					<dd>System Property: <codeph>bootstrapCarrierEnabled</codeph></dd>
+					<dd> If you are running Couchbase Server 2.5 or later, this is the preferred way to bootstrap
+						and grab configurations. It is not done over HTTP, but through the key-value
+						connections automatically. If this setting is manually disabled, the client
+						will fallback to HTTP (if enabled). If both option are disabled, the client
+						is not able to function properly. If you don't have a good reason to disable
+						it (for example as instructed by Couchbase Support), keep it enabled.</dd>
+				</dlentry>
+			</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Config Carrier Non-Encrypted Port</b></dt>
+					<dd>Method: <codeph>bootstrapCarrierDirectPort(int)</codeph></dd>
+					<dd>Default: <codeph>11210</codeph></dd>
+					<dd>System Property: <codeph>bootstrapCarrierDirectPort</codeph></dd>
+					<dd>The port which is used if encryption is not enabled and the client needs to bootstrap
+						through carrier publication. In general, there is no need to change this
+						value (unless you run a custom Couchbase Server build during development or
+						testing that runs on different ports).</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Config Carrier Encrypted Port</b></dt>
+					<dd>Method: <codeph>bootstrapCarrierSslPort(int)</codeph></dd>
+					<dd>Default: <codeph>11207</codeph></dd>
+					<dd>System Property: <codeph>bootstrapCarrierSslPort</codeph></dd>
+					<dd> The port which is used if encryption is enabled and the client needs to bootstrap through
+						carrier publication. In general, there is no need to change this value
+						(unless you run a custom Couchbase Server build during development or
+						testing that runs on different ports).</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name: <b>DNS SRV Enabled</b></dt>
+					<dd>Method: <codeph>dnsSrvEnabled(boolean)</codeph></dd>
+					<dd>Default: <codeph>false</codeph></dd>
+					<dd>System Property: <codeph>dnsSrvEnabled</codeph></dd>
+					<dd>Enable manually if you explicitly want to grab a bootstrap node list through a DNS SRV
+						record. See the "Connection Management" section for more information on how
+						to use it properly.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Mutation Tokens Enabled</b></dt>
+					<dd>Method: <codeph>mutationTokensEnabled(boolean)</codeph></dd>
+					<dd>Default: <codeph>false</codeph></dd>
+					<dd>System Property: <codeph>mutationTokensEnabled</codeph></dd>
+					<dd>If mutation tokens should be enabled, adding more overhead to every mutation but providing enhanced durability requirements as well as advanced N1QL querying capabilities.</dd>
+				</dlentry>
+			</dl>
+
+			<p>Timeouts apply only for blocking operations. All asynchronous operations must chain in their
+				own <codeph>timeout()</codeph> operators in order to apply a timeout. All default values
+				can be overridden through the overloaded methods that accept both a time and time unit.
+				All timeouts are reasonable defaults and should be adjusted to the environments after
+				profiling the expected latencies.</p>
+		</section>
+
+		<section><title>Timeout options</title>
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Key-Value Timeout</b></dt>
+					<dd>Method: <codeph>kvTimeout(long)</codeph></dd>
+					<dd>Default: <codeph>2500ms</codeph></dd>
+					<dd>System Property: <codeph>kvTimeout</codeph></dd>
+					<dd>The Key/Value default timeout is used on all blocking operations which are performed on a
+						specific key if not overridden by a custom timeout. It does not affect
+						asynchronous operations. This includes all commands like get(),
+						getFromReplica() and all mutation commands.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name: <b>View Timeout</b></dt>
+					<dd>Method: <codeph>viewTimeout(long)</codeph></dd>
+					<dd>Default:<codeph>75000ms</codeph></dd>
+					<dd>System Property: <codeph>viewTimeout</codeph></dd>
+					<dd>The View timeout is used on both regular and geospatial view operations if not overridden
+						by a custom timeout. It does not affect asynchronous operations. Note that
+						it is set to such a high timeout compared to key/value since it can affect
+						hundreds or thousands of rows. Also, if there is a node failure during the
+						request the internal cluster timeout is set to 60 seconds.</dd>
+				</dlentry>
+			</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Query Timeout</b></dt>
+					<dd>Method: <codeph>queryTimeout(long)</codeph></dd>
+					<dd>Default:<codeph>75000ms</codeph></dd>
+					<dd>System Property: <codeph>queryTimeout</codeph></dd>
+					<dd>The Query timeout is used on all N1QL query operations if not overridden by a custom
+						timeout. It does not affect asynchronous operations. Note that it is set to
+						such a high timeout compared to key/value since it can affect hundreds or
+						thousands of rows.</dd>
+				</dlentry>
+			</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Connect Timeout</b></dt>
+					<dd>Method: <codeph>connectTimeout(long)</codeph></dd>
+					<dd>Default:<codeph>5000ms</codeph></dd>
+					<dd>System Property: <codeph>connectTimeout</codeph></dd>
+					<dd>The connect timeout is used when a Bucket is opened and if not overridden by a custom
+						timeout. It does not affect asynchronous operations. If you feel the urge to
+						change this value to something higher, there is a good chance that your
+						network is not properly set up. Opening a bucket should in practice not take
+						longer than a second on a resonably fast network.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Disconnect Timeout</b></dt>
+					<dd>Method: <codeph>disconnectTimeout(long)</codeph></dd>
+					<dd>Default:<codeph>25000ms</codeph></dd>
+					<dd>System Property: <codeph>disconnectTimeout</codeph></dd>
+					<dd>The disconnect timeout is used when a Cluster is disconnect or a Bucket is closed
+						synchronously and if not overridden by a custom timeout. It does not affect
+						asynchronous operations. A timeout is applied here always to make sure that
+						your code does not get stuck at shutdown. 25 seconds should provide enough
+						room to drain all outstanding operations properly, but make sure to adapt
+						this timeout to fit your application requirements.</dd>
+				</dlentry>
+			</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Management Timeout</b></dt>
+					<dd>Method: <codeph>managementTimeout(long)</codeph></dd>
+					<dd>Default:<codeph>75000ms</codeph></dd>
+					<dd>System Property: <codeph>managementTimeout</codeph></dd>
+					<dd>The management timeout is used on all synchronous BucketManager and
+						ClusterManager operations and if not overridden by a custom timeout. It set
+						to a quite high timeout because some operations might take a longer time to
+						complete (for example flush).</dd>
+				</dlentry>
+			</dl>
+		</section>
+		<section><title>Reliability options</title>
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Reconnect Delay</b></dt>
+					<dd>Method: <codeph>reconnectDelay(Delay)</codeph></dd>
+					<dd>Default: <codeph>Exponential between 32ms and 4096ms</codeph></dd>
+					<dd>System Property: <codeph>-</codeph></dd>
+					<dd>The reconnect delay defines the time intervals between a socket getting closed on the SDK
+						side and trying to reopen (reconnect) to it. The default is to retry
+						relatively quickly (32ms) and then gradually approach 4 second intervals, so
+						that in case a server is longer down than usual the clients do not flood the
+						server with socket requests. Feel free to tune this interval based on your
+						application requirements. Applying a very large ceiling may lead to longer
+						down times than needed, while very short delays may flood the target node
+						and spam the network unnecessarily.</dd>
+				</dlentry>
+			</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Retry Delay</b></dt>
+					<dd>Method:  <codeph>retryDelay(Delay)</codeph></dd>
+					<dd>Default: <codeph>Exponential between 100µs and 100ms</codeph></dd>
+					<dd>System Property:  <codeph>-</codeph></dd>
+					<dd>When a request needs to be retried for some reason (for example if the retry strategy is
+						best effort and the target node is not reachable), this delay configures the
+						boundaries. An internal counter tracks the number of retries for a given
+						request and it gradually increases by default from a very quick 100
+						microseconds up to a 100 millisecond delay. The operation will be retried
+						until it succeeds or the maximum request lifetime is reached. If you find
+						yourself wanting to tweak this value to a very low setting, you might want
+						to consider a different retry strategy like "fail fast" to get tighter
+						control on the retry handling yourself.</dd>
+				</dlentry>
+			</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Retry Strategy</b></dt>
+					<dd>Method:  <codeph>retryStrategy(RetryStrategy)</codeph></dd>
+					<dd>Default: <codeph>Best Effort</codeph></dd>
+					<dd>System Property:  <codeph>-</codeph></dd>
+					<dd>The retry strategy decides if an operation should be retried or canceled. While
+						implementing a custom strategy is fairly advanced, the SDK ships with two
+						out of the box: BestEffortRetryStrategy and FailFastRetryStrategy. The first
+						one will retry the operation until it either succeeds or the maximum request
+						lifetime is reached. The fail fast strategy will cancel it right away and
+						therefore the client needs to be prepared to retry on its own, but gets much
+						tighter control on when and how to retry. See the advanced section in the
+						documentation on more specific information on retry strategies and failure
+						management.</dd>
+				</dlentry>
+			</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Maximum Request Lifetime</b></dt>
+					<dd>Method: <codeph>maxRequestLifetime(long)</codeph></dd>
+					<dd>Default: <codeph>75000ms</codeph></dd>
+					<dd>System Property: <codeph>maxRequestLifetime</codeph></dd>
+					<dd>The maximum request lifetime is used by the best effort retry strategy to decide if its
+						time to cancel the request instead of retrying it again. This is needed in
+						order to prevent requests from circling around forever and occupying
+						precious slots in the request ring buffer. Make sure to set this higher than
+						the largest timeout in your application, otherwise you risk requests being
+						canceled prematurely. This is why the default value is set to 75 seconds,
+						which is the highest default timeout on the environment.</dd>
+				</dlentry>
+			</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Socket Keepalive Interval</b></dt>
+					<dd>Method: <codeph>keepAliveInterval(long)</codeph></dd>
+					<dd>Default: <codeph>30000ms</codeph></dd>
+					<dd>System Property: <codeph>keepAliveInterval</codeph></dd>
+					<dd>To avoid nasty firewalls and other network equipment cutting of stale TCP connections, at
+						the configured interval the client will send a heartbeat keepalive message
+						to the remote node and port. This only happens if for the given amount of
+						time no traffic has happened, so if a socket is busy sending data back and
+						forth it will have no effect. If you set this value to 0, no keepalive will
+						be sent over the sockets.</dd>
+				</dlentry>
+			</dl>
+		</section>
+
+		<section><title>Performance options</title>
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Observe Interval</b></dt>
+					<dd>Method: <codeph>observeIntervalDelay(Delay)</codeph></dd>
+					<dd>Default: <codeph>Exponential between 10µs and 100ms</codeph></dd>
+					<dd>System Property: <codeph>-</codeph></dd>
+					<dd>The way PersistTo and ReplicateTo work is that once the regular mutation operation
+						succeeds, the key state on the target nodes is polled until the desired
+						state is reached. Since replication and persistence latency differs greatly
+						on servers (fast or slow networks and disks), this value can be tuned for
+						maximum efficiency. The tradeoffs to consider here is how quickly the
+						desired state is detected as well as how much the SDK will spam the network.
+						The default is an exponential delay, starting with very short intervals but
+						very quickly approaching the 100 milliseconds if replication or persistence
+						takes longer than expected. You should monitor the average persistence and
+						replication latency and adjust the delay accordingly.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name: <b>Key/Value Endpoints per Node</b></dt>
+					<dd>Method: <codeph>kvEndpoints(int)</codeph></dd>
+					<dd>Default: <codeph>1</codeph></dd>
+					<dd>System Property: <codeph>kvEndpoints</codeph></dd>
+					<dd>The number of actual endpoints (sockets) to open per Node in the cluster against the
+						Key/value service. By default, for every node in the cluster one socket is
+						opened where all traffic is pushed through. That way the SDK implicitly
+						benefits from network batching characteristics when the workload increases.
+						If you suspect based on profiling and benchmarking that the socket is
+						saturated you can think about slightly increasing it to have more "parallel
+						pipelines". This might be especially helpful if you need to push large
+						documents through it. The recommendation is keeping it at 1 unless there is
+						other evidence.</dd>
+				</dlentry>
+			</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name: <b>View Endpoints per Node</b></dt>
+					<dd>Method:<codeph>viewEndpoints(int)</codeph></dd>
+					<dd>Default: <codeph>1</codeph></dd>
+					<dd>System Property: <codeph>viewEndpoints</codeph></dd>
+					<dd>The number of actual endpoints (sockets) to open per node in
+						the cluster against the view service. By default only one socket is opened
+						to avoid unnecessary wasting resources. If you plan to run a view heavy
+						workload, especially paired with larger responses, increasing this value
+						significantly (most likely between 5 and 10) can provide greater throughput.
+						Keep in mind that these sockets will then be always open, even when no load
+						is passed through. We recommend that you tune this value based on evidence
+						obtained during benchmarking with a real workload. If no view load is
+						expected, setting this value explicitly to 0 can avoid one socket to 8092
+						per node.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>Query Endpoints per Node</b></dt>
+					<dd>Method: <codeph>queryEndpoints(int)</codeph></dd>
+					<dd>Default: <codeph>1</codeph></dd>
+					<dd>System Property: <codeph>queryEndpoints</codeph></dd>
+					<dd>The number of actual endpoints (sockets) to open per Node in the cluster against the Query
+						(N1QL) service. By default only one socket is opened to avoid unnecessary
+						wasting resources. If you plan to run a query heavy workload, especially
+						paired with larger responses, increasing this value significantly (most
+						likely between 5 and 10) can provide greater throughput. Keep in mind that
+						these sockets will then be always open, even when no load is passed through.
+						We are recommending to tune this value based on evidence during benchmarking
+						with a real workload. If no query load is expected, setting this value
+						explicitly to 0 can avoid one socket to 8093 per node.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>I/O Thread Pool Size</b></dt>
+					<dd>Method: <codeph>ioPoolSize(int)</codeph></dd>
+					<dd>Default: <codeph>Runtime#availableProcessors()</codeph></dd>
+					<dd>System Property: <codeph>ioPoolSize</codeph></dd>
+					<dd>The number of threads in the I/O thread pool. This defaults to the number of available
+						processors that the runtime returns (which, as a well known fact, sometimes
+						does not represent the actual number of processors). Every thread represents
+						an internal event loop where all needed socket are multiplexed on. The
+						default value should be fine most of the time, it may only need to be tuned
+						if you run a very large number of nodes in the cluster or the runtime value
+						is incorrect. As a rule of thumb, it should roughly correlate with the
+						number of cores available to the JVM.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>Computation Thread Pool Size</b></dt>
+					<dd>Method: <codeph>computationPoolSize(int)</codeph></dd>
+					<dd>Default: <codeph>Runtime#availableProcessors()</codeph></dd>
+					<dd>System Property: <codeph>computationPoolSize</codeph></dd>
+					<dd>The number of threads in the computation thread pool. This defaults to the number of
+						available processors that the runtime returns (which, as a well known fact,
+						sometimes does not represent the actual number of processors). Every thread
+						represents an internal event loop where all needed computation tasks are
+						run. The default value should be fine most of the time, it might only need
+						to be tuned if you run more than usual CPU-intensive tasks and profiling the
+						application indicates fully saturated threads in the pool. As a rule of
+						thumb, it should roughly correlate with the number of cores available to the
+						JVM.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>I/O Pool Group</b></dt>
+					<dd>Method: <codeph>ioPool(EventLoopGroup)</codeph></dd>
+					<dd>Default: <codeph>NioEventLoopGroup</codeph></dd>
+					<dd>System Property: <codeph>-</codeph></dd>
+					<dd>For those who want the last drop of performance, on Linux Netty provides a way to use edge
+						triggered epoll instead of going through JVM NIO. This provides better
+						throughput, lower latency and less garbage. Note that this mode has not been
+						tested by Couchbase and therefore is not supported officially. If you like
+						to take a walk on the wild side, you can find out more here: Netty
+						Native-transports.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>TCP Nodelay</b></dt>
+					<dd>Method: <codeph>tcpNodelayEnabled(boolean)</codeph></dd>
+					<dd>Default: <codeph>true</codeph></dd>
+					<dd>System Property: <codeph>tcpNodelayEnabled</codeph></dd>
+					<dd>By default, TCP Nodelay is turned on (which in effect turns off "nagleing"), and if
+						possible negotiated with the server as well. If this is set to false,
+						"nagleing" is turned on. Make sure to only turn off TCP nodelay if you know
+						what you are doing, because it can lead to decreased performance.</dd>
+				</dlentry>
+			</dl>
+
+
+			<p>Values for the advanced options listed in the following table should not be changed unless
+				there is a very good reason to do so.</p>
+		</section>
+		<section><title>Advanced options</title>
+
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>Request Ring Buffer Size</b></dt>
+					<dd>Method:<codeph>requestBufferSize(int)</codeph></dd>
+					<dd>Default: <codeph>16384</codeph></dd>
+					<dd>System Property: <codeph>requestBufferSize</codeph></dd>
+					<dd>The size of the request ring buffer where all request initially are stored and then picked
+						up to be pushed onto the I/O threads. Tuning this to a lower value will more
+						quickly lead to BackpressureExceptions during overload or failure scenarios.
+						Setting it to a higher value means backpressure will take longer to occur,
+						but more requests will potentially be queued up and more heap space is
+						used.</dd>
+				</dlentry>
+			</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>Response Ring Buffer Size</b></dt>
+					<dd>Method: <codeph>responseBufferSize(int)</codeph></dd>
+					<dd>Default: <codeph>16384</codeph></dd>
+					<dd>System Property: <codeph>responseBufferSize</codeph></dd>
+					<dd>The size of the response ring buffer where all responses are passed through from the I/O
+						threads before the target Observable is completed. Since the I/O threads are
+						pushing data in this ring buffer, setting it to a lower value is likely to
+						have a negative effect on I/O performance. In general it should be kept in
+						line with the request ring buffer size.</dd>
+				</dlentry>
+			</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>Computation Scheduler</b></dt>
+					<dd>Method: <codeph>scheduler(Scheduler)</codeph></dd>
+					<dd>Default: <codeph>CoreScheduler</codeph></dd>
+					<dd>System Property: <codeph>-</codeph></dd>
+					<dd>The scheduler used for all CPU-intensive, non-blocking computations in the core, client and
+						in user space. This is a slightly modified version of the
+						ComputationScheduler that ships with RxJava, mainly for the reason to
+						manually name threads as needed. Changing the scheduler should be used with
+						extra care, especially since lots of internal components also depend on
+						it.</dd>
+				</dlentry>
+			</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>User Agent String</b></dt>
+					<dd>Method: <codeph>userAgent(String)</codeph></dd>
+					<dd>Default: <codeph>Based on OS, Runtime and SDK Version</codeph>
+					</dd>
+					<dd>System Property: <codeph>-</codeph></dd>
+					<dd>The user agent string that is used to identify the SDK against the Couchbase Server cluster
+						on different occasions, for example when doing a view or query request.
+						There is no need to tune that because it is dynamically generated based on
+						properties set during build time (based on the package name and version, OS
+						and runtime).</dd>
+				</dlentry>
+			</dl>
+
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>Package Name and Version Identifier</b></dt>
+					<dd>Method: <codeph>packageNameAndVersion(String)</codeph></dd>
+					<dd>Default: <codeph>Based on SDK Version</codeph></dd>
+					<dd>System Property: <codeph>-</codeph></dd>
+					<dd>The package name and identifier is used as part of the user agent string and in the
+						environment info output to see which version of the SDK the application is
+						running. There is no need to change it because it is dynamically generated
+						based on properties set during build time.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>Event Bus</b></dt>
+					<dd>Method: <codeph>eventBus(EventBus)</codeph></dd>
+					<dd>Default: <codeph>DefaultEventBus</codeph></dd>
+					<dd>System Property: <codeph>-</codeph></dd>
+					<dd>The event bus implementation used to transport system, performance and debug events from
+						producers to subscribers. The default implementation is based on an internal
+						RxJava Subject which does not cache the values and only pushes subsequent
+						events to the subscribers. If you provide a custom implementation, double
+						check that it fits with the contract of the event bus as documented.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>DCP Enabled</b></dt>
+					<dd>Method: <codeph>dcpEnabled(boolean)</codeph></dd>
+					<dd>Default: <codeph>false</codeph></dd>
+					<dd>System Property: <codeph>dcpEnabled</codeph></dd>
+					<dd>DCP is not ready for prime time in clients, but this configuration switch is available
+						because all parameters from the core-io module are inherited. If you have
+						active need for DCP, get in touch with the Couchbase team.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>Buffer Pooling Enabled</b></dt>
+					<dd>Method: <codeph>bufferPoolingEnabled(boolean)</codeph></dd>
+					<dd>Default: <codeph>true</codeph></dd>
+					<dd>System Property: <codeph>bufferPoolingEnabled</codeph></dd>
+					<dd>If the SDK is suspect to buffer leaks (it pools buffers in its IO layer for performance)
+						you can set this field to false. This will make sure buffers are not pooled,
+						but remember the tradeoff here is higher GC pressure on the system. Only
+						turn off to prevent a memory leak from happening (in production). If you
+						suspect a memory leak, please open a bug ticket.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>Runtime Metrics Collector</b></dt>
+					<dd>Method: <codeph>runtimeMetricsCollectorConfig (MetricsCollectorConfig)</codeph></dd>
+					<dd>Default: <codeph>DefaultMetricsCollectorConfig</codeph></dd>
+					<dd>System Property: <codeph>-</codeph></dd>
+					<dd>The configuration of the runtime metrics collector can be modified (or completely
+						disabled). By default, it will emit an event every hour.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>Network Latency Metrics Collector</b></dt>
+					<dd>Method: <codeph>networkLatencyMetricsCollectorConfig
+							(LatencyMetricsCollectorConfig)</codeph></dd>
+					<dd>Default: <codeph>DefaultLatencyMetricsCollectorConfig</codeph></dd>
+					<dd>System Property: <codeph>-</codeph></dd>
+					<dd>The configuration of the network latency metrics collector can be modified (or completely
+						disabled). By deault, it will emit an event every hour, but collect the
+						stats all the time.</dd>
+				</dlentry>
+			</dl>
+			<dl>
+				<dlentry>
+					<dt>Name:  <b>Default Metrics Consumer</b></dt>
+					<dd>Method: <codeph>defaultMetricsLoggingConsumer(boolean, CouchbaseLogLevel,OutputFormat)
+						</codeph></dd>
+					<dd>Default: <codeph>enabled, INFO, JSON</codeph></dd>
+					<dd>System Property: <codeph>-</codeph></dd>
+					<dd>The default metric consumer which will log all metric events. You can configure if it
+						should be enabled, as well as the log level and the target output
+						format.</dd>
+				</dlentry>
+			</dl>
+
+
+		</section>
+	</body>
+
 </topic>
