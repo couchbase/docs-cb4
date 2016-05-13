@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="devguide_kvcore_generic">
+  <title>Core Operations</title>
+  <body>
+        <section id="crud-overview">
+            <title>CRUD Operations</title>
+            <p>At the core of Couchbase is the key-value store, which provides the basic
+                operations:<codeblock>upsert(docid, document)
+insert(docid, document)
+replace(docid, document)
+get(docid)
+remove(docid)</codeblock></p>
+            <p>In Couchbase, documents are stored using one of the <i>upsert</i>, <i>insert</i>, and
+                    <i>replace</i> operations. These operations will all write a JSON document with
+                a given document ID (key) to the database. The update methods differ in behavior in
+                respect to the existing state of the document:</p>
+            <ul id="ul_wjj_zlm_zs">
+                <li><i>insert</i> will only create the document if the given ID is not found within
+                    the database.</li>
+                <li><i>replace</i> will only replace the document if the given ID already exists
+                    within the database.</li>
+                <li><i>upsert</i> will always replace the document, ignoring whether the ID has
+                    already existed or not.</li>
+            </ul>
+            <p>Documents can be retrieved using the <i>get</i> operation, and finally removed using
+                the <i>remove</i> operation.</p>
+            <p>Since Couchbase’s KV store may be thought of as a distributed hashmap or dictionary,
+                the following code samples are explanatory of Couchbase’ update operations:</p>
+            <codeblock outputclass="language-python">KV_STORE = {}
+
+def insert(doc_id, value):
+    if doc_id not in KV_STORE:
+        KV_STORE[doc_id] = value
+    else:
+        raise KeyAlreadyExists()
+
+def replace(doc_id, value):
+    if doc_id in KV_STORE:
+        KV_STORE[doc_id] = value
+    else:
+        raise KeyNotFound()
+
+def upsert(doc_id, value):
+    KV_STORE[doc_id] = value
+
+def get(doc_id):
+    if doc_id in KV_STORE:
+        return KV_STORE[doc_id]
+    else:
+        raise KeyNotFound()
+
+def delete(doc_id):
+    del KV_STORE[doc_id]</codeblock>
+        </section>
+        <section>
+            <title>Document</title>
+            <p>A document refers to an entry within the database (other databases mamy refer to the
+                same concept as a "row"). A document has an ID (other databases may call this a
+                "primary key"). by which it can be located (and is unique to the document) and a
+                value which contains the actual application data.</p>
+            <p><b>Document IDs</b> are assigned by application. A valid document ID must:<ul
+                    id="ul_rht_rnm_zs">
+                    <li>Conform to UTF-8 encoding</li>
+                    <li>Be no longer than 250 bytes<note type="notice">Note the difference between
+                            bytes and characters. Most non-Latin characters occupy more than a
+                            single byte</note></li>
+                </ul>You are free to choose any ID for your document, so long as they conform to the
+                above restrictions. Unlike some other database, Couchbase does not automatically
+                generate IDs for you (but see [counter pattern]).</p>
+            <p>The <b>document value</b> contains the actual application data, for example a
+                    <i>product</i> document may contain information about the price and description.
+                Documents are usually (<xref href="http://google.com" format="cmo" scope="external">but not
+                    always</xref>) stored as JSON on the server. Because JSON is a low overhead
+                structured format, it can be subsequently searched and
+                queried.<codeblock>{
+    "type": "product",
+    "sku": "CBSRV45DP",
+    "msrp": [5.49, "USD"],
+    "ctime": "092011",
+    "mfg": "couchbase",
+    "tags": ["server", "database", "couchbase", "nosql", "fast", "json", "awesome"]
+}</codeblock></p>
+        </section>
+        <section>
+            <title>Storing documents</title>
+            <p>Documents can be stored using either the SDK, Command line, or Web UI. When using a
+                storage operation, the <i>entire contents</i> of the document are replaced with the
+                newly supplied document.</p>
+            <p>The following example shows a document being stored using the <codeph>cbc</codeph>
+                utility. The ID of the document is <codeph>docid</codeph> and its value is JSON
+                containing a single field (<codeph>json</codeph>) with the value of
+                    <codeph>value</codeph>.</p>
+            <note base="" type="note">The following example assumes the cbc command is being
+                executed on one of the cluster nodes. If run on another machine, refer to the <!--<xref
+                    href="connecting.dita#concept_fbg_xjm_zs">documentation</xref>--> to see how to
+                specify the cluster address.</note>
+            <screen># When storing JSON data using cbc, ensure it is properly quoted for your shell:
+$ cbc create docid -V '{"json":"value"}' -M upsert
+docid               Stored. CAS=0x8234c3c0f213</screen>
+            <p>You can also specify additional options when storing a document in Couchbase<ul
+                    id="ul_gfq_mhg_45">
+                    <li><!--<xref href="expiry.dita#concept_o53_kps_zs">TTL</xref>--> or Expiry value which
+                        will instruct the server to delete the document after a given amount of
+                        time. This option is useful for transient data (such as sessions). By
+                        default documents do not expire. See <!--<xref
+                            href="expiry.dita#concept_o53_kps_zs">TTL</xref>--> for more information on
+                        expiration.</li>
+                    <li><!--<xref href="cas-concurrency.dita#concept_iq4_bts_zs">CAS</xref>--> value to
+                        protect against concurrent updates to the same document. See <!--<xref
+                            href="cas-concurrency.dita#concept_iq4_bts_zs">CAS</xref>--> for a
+                        description on how to use CAS values in your application.</li>
+                    <li><!--<xref href="durability.dita#concept_gyg_14s_zs">Persistence and replication
+                            requirements</xref>-->.</li>
+                </ul></p>
+        </section>
+        <section id="devguide_kvcore_get_generic"><title>Retrieving documents</title><note
+                type="fastpath">This section discusses retrieving documents using their IDs, or
+                primary keys. Documents can also be accessed using secondary lookups via <!--<xref
+                    href="querying-toplevel.dita">Query</xref>--> and MapReduce. Primary key lookups
+                are performed using the key-value API, which simplifies use and increases
+                performance (as applications may interact with the KV store directly, rather than a
+                secondary index or query processor).</note><p>In Couchbase, documents are stored
+                with their IDs. Retrieving a document via its ID is the simplest and quickest
+                operation in
+                Couchbase.<screen>>>> result = cb.get('docid')
+>>> print result.value
+{'json': 'value'}</screen></p><codeblock>$ cbc cat docid
+docid                CAS=0x8234c3c0f213, Flags=0x0. Size=16
+{"json":"value"}</codeblock><p>Once
+                a document is retrieved, it is accessible in the native format by which it was
+                stored; meaning that if you stored the document as a list then the document is now
+                available as a list again. The SDK will automatically deserialize the document from
+                its stored format (usually JSON) to a native language type. It is possible to store
+                and retrieve non-JSON documents as well, using a <xref href="http://google.com"
+                    format="cmo" scope="external">transcoder</xref></p><p>You can also modify a
+                document's expiration time while retrieving it; this is known as
+                    <i>get-and-touch</i> and allows you to keep temporary data alive while
+                retrieving it in one atomic and efficient operation.</p>Documents can also be
+            retrieved with N1QL. While N1QL is generally used for secondary queries, it can also be
+            used to retrieve documents by their primary keys (ID) (though it is recommended to use
+            the key-value API if the ID is known). Lookups may be done either by comparing the
+                <codeph>META(from-term).id</codeph> or by using the <codeph>USE KEYS</codeph> [...]
+            keyword:
+            <codeblock>SELECT * FROM default USE KEYS ["docid"];</codeblock>or<codeblock>SELECT * FROM default WHERE META(default).id = "docid";</codeblock></section>
+        <section id="devguide_kvcore_counter_generic"
+                ><title>Counters</title><p>You can atomically increment or decrement the numerical
+                value of special counter document </p>A document may be used as a counter if its
+            value is a simple ASCII number, like <codeph>42</codeph>. Couchbase allows you to
+            atomically increment and decrement these values using a special
+                <apiname>counter</apiname> operation. The example below (in Python) shows how to use
+            counters:<codeblock>>>> cb.counter('counter_id', delta=20, initial=100).value
+100L
+>>> cb.counter('counter_id', delta=1).value
+101L
+>>> cb.counter('counter_id', delta=-50).value
+51L</codeblock>In
+            the above example, a counter is created by using the <apiname>counter</apiname> Python
+            method with an <parmname>initial</parmname> value. The initial value is the value the
+            counter uses if the counter ID does not yet exist.<p>Once created, the counter can be
+                incremented or decremented atomically by a given <i>amount</i> or <i>delta</i>.
+                Specifying a positive delta increments the value and specifying a negative one
+                decrements it. When a counter operation is complete, the application receives the
+                current value of the counter, after the increment.</p><p>Couchbase counters are
+                64-bit unsigned integers in Couchbase, and do not wrap around if decremented beyond
+                0, however they will wrap around if incremented past their maximum value (which is
+                the maximum value contained within a 64 bit integer). Many SDKs will limit the
+                    <i>delta</i> argument to the value of a <i>signed</i> 64 bit
+                    integer.</p><p><!--<xref href="expiry.dita#concept_o53_kps_zs">Expiration</xref>-->
+                times can also be specified when using counter operations.</p><p><!--<xref
+                    href="cas-concurrency.dita#concept_iq4_bts_zs">CAS</xref>--> values are not used
+                with counter operations since counter operations are atomic. The intent of the
+                counter operation is to simply increment the current server-side value of the
+                document. If you wish to only increment the document if it is at a certain value,
+                then you may use a normal <apiname>upsert</apiname> function with
+                CAS:<codeblock outputclass="language-python">rv = cb.get('counter_id')
+value, cas = rv.value, rv.cas
+if should_increment_value(value):
+  cb.upsert('counter_id', value + increment_amount, cas=cas)</codeblock></p></section>
+        <section id="devguide_kvcore_append_prepend_generic"><title>Raw byte
+                concatenation</title><hazardstatement type="danger">
+                <messagepanel id="messagepanel_xx2_btg_vt">
+                    <typeofhazard>These methods should not be used with JSON
+                        documents</typeofhazard>
+                    <howtoavoid>The append and prepend operations operate at the byte level and are
+                        unsuitable for dealing with JSON documents. Use these methods only when
+                        explicitly dealing with binary or UTF-8 documents. Using the append and
+                        prepend methods may invalidate an existing JSON document.</howtoavoid>
+                </messagepanel>
+            </hazardstatement><codeblock>append(docid, fragment)
+prepend(docid, fragment)</codeblock><p>The
+                    <i>append</i> and <i>prepend</i> operations atomically add bytes to the end or
+                beginning of a binary document. They are an efficient alternative to retrieving a
+                binary document in its entirety, appending the contents locally, and then saving the
+                contents back to the server.</p><p>Because these methods do raw string manipulation,
+                they are only suitable for non-JSON documents: Prepending or appending anything to a
+                JSON document will invalidate the JSON and make it unparseable by standard JSON
+                parsers.</p><p>The semantics of the <i>append</i> and <i>prepend</i> operations are
+                similar to those of the <i>upsert</i> family of operations, except that they accept
+                the fragment to append as their value, rather than the entire document. These
+                functions may be used to add efficiency for custom binary data structures (such as
+                logs), as they avoid transferring the contents of the entire document for each
+                operation. Consider the following versions (which are
+                equivalent)</p><p><codeblock outputclass="language-python" spectitle="Append using get() and replace() (slow)">import couchbase
+import couchbase.exceptions
+import couchbase.bucket
+
+cb = couchbase.bucket.Bucket('couchbase://10.0.0.31/default')
+# Store the document
+cb.upsert('binary_doc', '\x01', format=couchbase.FMT_BYTES)
+
+while True:
+    # Retrieve the entire document
+    rv = cb.get('binary_doc')
+    value = rv.value + '\x02'
+    try:
+        # Upload the entire document
+        cb.replace('binary_doc', value, format=couchbase.FMT_BYTES)
+        break
+    except couchbase.exceptions.KeyExistsError:
+        continue
+
+print repr(cb.get('binary_doc').value)</codeblock><codeblock spectitle="Append using append() (fast)" outputclass="language-python">import couchbase
+import couchbase.exceptions
+import couchbase.bucket
+
+cb = couchbase.bucket.Bucket('couchbase://10.0.0.31/default')
+# Store the document
+cb.upsert('binary_doc', '\x01', format=couchbase.FMT_BYTES)
+
+# Append a fragment
+cb.append('binary_doc', '\x02', format=couchbase.FMT_BYTES)
+
+print repr(cb.get('binary_doc').value)</codeblock>Note
+                that since the <i>append</i> operation is done atomically, there is no need for a
+                CAS check (though one can still be supplied if the document must be at a specific
+                state).</p>Users of the <i>append</i> and <i>prepend</i> operations should ensure
+            that the resulting documents do not become too large. Couchbase has a hard document size
+            limit of 20MB.<p>Using <i>append</i> and <i>prepend</i> on larger documents may cause
+                performance degradation and memory fragmentation at the server level, as for each
+                append operation the server must allocate memory for the new document size and then
+                append the fragment to the new memory. The performance impact may be significant
+                when document sizes reach beyond 100KB.</p><p>Finally, note that while append saves
+                network traffic from the client to server (by only specifying the fragment to
+                append), the entire document is replicated for each mutation. Five append operations
+                on a single 10MB document will result in 50MB of traffic to each
+            replica.</p></section>
+        <section id="expiry">
+            <title>Expiration Overview</title>
+            <p>Most data in a database is there to be persisted and long lived. However the need for
+                transient or temporary data does arise in applications, such as in the case of user
+                sessions, caches, or temporary documents representing a given process ownership. You
+                can use expiration values on documents to handle transient data.</p>
+            <p>In databases without a built-in expiration feature, dealing with transient data may
+                be cumbersome. To provide “expiration” semantics, applications are forced to record
+                a time stamp in a record, and then upon each access of the record, check the time
+                stamp, and if invalid, delete it.</p>
+            <p>Since some logically ‘expired’ documents may never be accessed by the application, in
+                order to ensure that temporary records to not persist and occupy storage, a
+                scheduled process is typically also employed to routinely scan the database for
+                expired entries, purging those entries that are no longer valid.</p>
+            <p>Workarounds such as those described above are not required for Couchbase, as
+                Couchbase allows applications to declare the lifetime of a given document,
+                eliminating the need to embed “validity” information in documents and eliminating
+                the need for a routine “purge” of logically expired data.</p>
+            <p>When an application attempts to access a document which has already expired, the
+                server will indicate to the client that the item is not found. The server internally
+                handles the process of determining the validity of the document and removing older,
+                expired documents.</p>
+        </section>
+        <section>
+            <title>Setting Document Expiration</title>
+            <p>By default, Couchbase documents do not expire, however the expiration value may be
+                set for the <i>upsert</i>, <i>replace</i>, and <i>insert</i> operations when
+                modifying data.</p>
+            <p>Additionally, Couchbase offers two additional operations to set a document's
+                expiration without modifying its contents:</p>
+            <ul id="ul_m4y_lrd_3v"><li>
+                <p>The <i>get-and-touch</i> operation allows an application to retrieve a document
+                    while modifying its expiration time. This method is useful when reading session
+                    data from the database: since accessing the data is indicative of it still being
+                    “alive”, <i>get-and-touch</i> provides a natural way to extend its lifetime.</p>
+            </li>
+                <li><p>The <i>touch</i> operation allows an application to modify a document’s
+                    expiration time without otherwise accessing the document. This method is useful
+                    when an application is handling a user session but does not need to access the
+                    database (for example, if a certain document is already cached locally).</p>
+                </li>
+            </ul>
+            <p>For Couchbase SDKs which accept simple integer expiry values (as opposed to a proper
+                date or time object) allow expiration to be specified in two flavors.<ol
+                    id="ol_uk5_2qs_zs">
+                    <li>As an offset from the current time.</li>
+                    <li>As an absolute Unix time stamp </li>
+                </ol>If the absolute value of the expiry is less than 30 days (i.e. <codeph>60 * 60
+                    * 24 * 30</codeph>), it is considered an <i>offset</i>. If it is greater, it is
+                considered an <i>absolute time stamp</i>. It may be preferable for applications to
+                normalize the expiration value (i.e. by always converting it to an absolute time
+                stamp) in order to avoid issues when the intended offset is larger than 30 days (in
+                which case it is taken to mean a Unix time stamp and will result in the document
+                automatically expiring as soon as it is stored).</p>
+            <hazardstatement type="remember">
+                <messagepanel id="messagepanel_y22_jqs_zs">
+                    <typeofhazard>If you wish to use the expiry feature, then you should supply the
+                        expiry value for every mutation operation</typeofhazard>
+                    <howtoavoid>When dealing with expiration, it is important to note that most
+                        operations will implicitly remove any existing expiration. Thus when
+                        modifying a document with expiration, it is important to pass the desired
+                        expiration time.</howtoavoid>
+                </messagepanel>
+            </hazardstatement>
+            <p>Note that expired documents are not deleted from the server as soon as they expire.
+                While a request to the server for an expired document will receive a response
+                indicating the document does not exist, expired documents are actually deleted (i.e.
+                cease to occupy storage and RAM) when an <i>expiry pager</i> is run. The <i>expiry
+                    pager</i> is a routine internal process which scans the database for items which
+                have expired and promptly removes them from storage.</p>
+            <p>When gathering resource usage statistics, note that expired-but-not-purged items
+                (i.e. the expiry pager has not scanned this item yet) will still be considered with
+                respect to the overall storage size and item count.</p>
+        </section>
+    </body>
+</topic>

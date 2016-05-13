@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_ml2_rdw_tv">
+  <title>SDK Operations</title>
+  <body>
+        <p>You can access documents in Couchbase using the <apiname>Bucket</apiname> class
+            (constructed via <codeph>cluster.openBucket()</codeph>). You can retrieve documents
+            using the <apiname>get()</apiname> and <apiname>lookupIn</apiname> methods, and mutate
+            documents using the <apiname>upsert()</apiname>, <apiname>insert()</apiname>,
+                <apiname>replace()</apiname>, and <apiname>mutateIn()</apiname> methods.</p>
+        <section>
+            <title>Additional Options</title>
+            <p>Additional options may be passed to some methods using an object.</p>
+            <p>Update operations also accept a <xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/expiry">TTL
+                    (expiry)</xref> value (<parmname>expiry</parmname>) which will instruct the
+                server to delete the document after a given amount of time. This option is useful
+                for transient data (such as sessions). By default documents do not expire. See <xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/expiry"/>
+                for more information on expiration.</p>
+            <p>Update operations can also accept a <xref
+                    href="../shared/concurrent-mutations-generic.dita">CAS</xref>
+                    (<parmname>cas</parmname>) value to protect against concurrent updates to the
+                same document. See <xref href="../shared/concurrent-mutations-generic.dita"
+                    >CAS</xref> for a description on how to use CAS values in your application. Note
+                that the CAS value is represented internally as <codeph>Buffer</codeph>.</p>
+        </section>
+        <section>
+            <title>Document Input Types</title>
+            <p>Documents can be anything convertible to JSON (<codeph>JSON.stringify</codeph>).
+                Simply pass the object or array to the mutation operation, and the SDK will convert
+                it to JSON and store it on the server. Do not pass already-serialized JSON to the
+                SDK, as the SDK will serialize it again.</p>
+        </section>
+        <section>
+            <title>Callbacks for operations</title>
+            <p>Due to the non-blocking nature of the node.js SDK and node.js in general, the results
+                of all operations are signalled by callbacks. Callbacks are specified as the last
+                parameter to any operation. The callback signature is
+                generally<codeblock>function(err, result) {
+    if (err) {
+        console.error("Got error!: %j", err);
+    } else {
+        console.log("Got result: %j", result);
+    }
+}</codeblock></p>
+        </section>
+        <section><title>Creating and updating full documents</title>Documents may be created and
+            updated using the <apiname>Bucket.upsert()</apiname>,
+            <apiname>Bucket.insert()</apiname>, and <apiname>Bucket.replace()</apiname> family of
+            methods. Read more about the difference between these methods at <xref
+                href="../shared/core-operations-generic.dita#devguide_kvcore_generic/crud-overview"
+            /> in the Couchbase developer guide.<p>These methods accept two mandatory arguments:<ul
+                    id="ul_gyc_zfw_tv">
+                    <li><parmname>key</parmname>: The ID of the document to modify. This should be a
+                        string.</li>
+                    <li><parmname>value</parmname>: The desired new value of the document. This may
+                        be anything that can be serialized as JSON.</li>
+                </ul></p><p>Additional options can be specified in the options:<ul
+                    id="ul_btf_lpg_vt">
+                    <li><parmname>cas</parmname>: The CAS value for the document. If the CAS on the
+                        server does not match the CAS supplied to the method, the operation will
+                        fail with a <apiname>couchbase.exceptions.KeyExistsError</apiname> error.
+                        See <xref href="../shared/concurrent-mutations-generic.dita"/> for more
+                        information on the usage of CAS values.</li>
+                    <li><parmname>expiry</parmname>: Specify the expiry time for the document. If
+                        specified, the document will expire and no longer exist after the given
+                        number of seconds. See <xref
+                            href="../shared/core-operations-generic.dita#expiry"/> for more
+                        information.</li>
+                    <li><parmname>persist_to</parmname>, <parmname>replicate_to</parmname>: Specify
+                            <xref href="../shared/durability-generic.dita#concept_gyg_14s_zs"
+                            >durability requirements</xref> for the operations.</li>
+                </ul></p><p>When the operation is complete the callback will be invoked, and if
+                successful, the <codeph>result</codeph> (the second callback argument) will contain
+                the new <xref href="../shared/concurrent-mutations-generic.dita#concept_iq4_bts_zs"
+                    >CAS</xref> value of the document. If the document was not mutated successfully,
+                the callback's first argument (<codeph>err</codeph>) will contain appropriate error
+                information. See <xref href="handling-error-conditions-py.dita#concept_ibc_p1w_tt"/>
+                for more information on error types and how to handle
+                them.</p><codeblock outputclass="language-python">bucket.insert('document_name', {'some': 'value'}, function(err, result) {
+    if (!err) {
+        console.log("stored document successfully. CAS is %j", result.cas);
+    } else {
+        console.error("Couldn't store document: %j", err);
+    }
+});</codeblock><p>Output
+                on
+                success:<screen>stored document successfully. CAS is "216000820675072"</screen><screen>Couldn't store document: {"message":"The key already exists in the server. If you have supplied a CAS then the key exists with a CAS value different than specified","code":12}</screen></p><p>If
+                the document being inserted already exists, the error will be set and its
+                    <varname>code</varname> field will be set to
+                    <varname>couchbase.errors.keyAlreadyExists</varname>. If your application simply
+                wants to set the value ignoring whether it exists or not, use the
+                    <apiname>upsert()</apiname> method.</p></section>
+        <section><title>Retrieving full documents</title><p>Documents may be retrieved using the
+                    <apiname>Bucket.get()</apiname> method. The <apiname>get()</apiname> method
+                requires the document ID to retrieve, and the callback to invoke with the result of
+                the operation.</p>When the operation is complete the callback is invoked. If
+            successful, you may access actual document may be access by using
+                <codeph>result.value</codeph> and the CAS using <codeph>result.cas</codeph>.<p>The
+                document will be a native javascript type resulting from the parsing of the stored
+                server value.</p>Upon failure, the error (first callback argument) will be populate
+            with an appropriate <codeph>code</codeph> and <codeph>message</codeph>. If the document
+            does not exist, the <codeph>code</codeph> will be
+                <varname>couchbase.errors.keyNotFound</varname><codeblock outputclass="language-python">bucket.get('document_id', function(err, result) {
+    if (err) {
+        if (err.code == couchbase.errors.keyNotFound) {
+            console.log('Key does not exist');
+        } else {
+            console.log('Some other error occurred: %j', err);
+        }
+    } else {
+        console.log('Retrieved document with value: %j', result.value);
+        console.log('CAS is %j', result.cas);
+    }
+});</codeblock><p>Sample
+                output:
+            </p><screen>Retrieved document with value: ["Hello","World"]
+CAS is "166079006573056"</screen></section>
+        <section><title>Removing full documents</title>Documents may be removed using the
+                <apiname>Bucket.remove()</apiname> method. This method takes the document ID as a
+            mandatory positional:<ul id="ul_ksh_3rg_vt">
+                <li><parmname>key</parmname>: The ID of the document to remove</li>
+            </ul>Some additional options:<ul id="ul_rw2_rrg_vt">
+                <li><parmname>cas</parmname>: Only remove the document if the <xref
+                        href="../shared/concurrent-mutations-generic.dita">CAS</xref> has not
+                    changed.</li>
+            </ul></section>
+        <section><title>Modifying expiraton</title><xref
+                href="../shared/core-operations-generic.dita#devguide_kvcore_generic/expiry"
+                >Document expiration</xref> can be performed using the
+                <apiname>Bucket.touch()</apiname> and <apiname>Bucket.getAndTouch</apiname> methods.
+            You can also set the <parmname>expiry</parmname> parameter for methods which support
+            it:<codeblock spectitle="expiry with upsert">bucket.upsert('deleteMe', {'delete': 'me'}, {'expiry': 1}, function(err){
+    bucket.get('deleteMe', function(err, result) {
+        console.log('Have item: %j', result.value);
+        console.log('Will attempt get later on..');
+        setTimeout(function(){
+            bucket.get('deleteMe', function(err, result){
+                console.log('Got error: %s', err.message);
+            })
+        }, 3500);
+    })
+});</codeblock><screen>Have item: {"delete":"me"}
+Will attempt get later on..
+Got error: The key does not exist on the server</screen><codeblock spectitle="Using getAndTouch">bucket.getAndTouch('some_document', 2, function(err, result) {
+    console.log('Got value: %j', result.value);
+    console.log('Will try again..');
+    setTimeout(function(err, result){
+        bucket.get('some_document', function(err, result) {
+            console.error('Got error: %s', err.message);
+        });
+    }, 3000);
+});</codeblock></section>
+        <section><title>Atomic document modifications</title>Additional atomic document
+            modifications can be performing using the node.js SDK. You can modify a <xref
+                href="../shared/core-operations-generic.dita#devguide_kvcore_generic/devguide_kvcore_append_prepend_generic"
+                >counter document</xref> using the <apiname>Bucket.counter()</apiname> method. You
+            can also use the <apiname>Bucket.append</apiname> and <apiname>Bucket.prepend</apiname>
+            methods to perform raw byte concatenation</section>
+        <section><title>Batching Operations</title>All operations performed in the node.js SDK are
+            inherently batched between event loop iterations. In simple terms, this means that there
+            is no added network performance for using any form of multi operation.<p>As a
+                convenience, the node.js SDK provides an <apiname>Bucket.getMulti</apiname> which
+                accepts multiple keys and returns their results.</p></section>
+        <section><title>Operating with sub-documents</title><note type="tip">See <xref
+                    href="../shared/subdoc-operations-generic.dita#subdoc-operations"/> for an
+                overview</note><hazardstatement>
+                <messagepanel id="messagepanel_edy_qwm_qv">
+                    <typeofhazard>Sub-Document API is experimental</typeofhazard>
+                    <howtoavoid>Sub-Document is a feature to be released in Couchbase 4.5. It is
+                        available as an experimental feature in 4.5 pre-release builds.</howtoavoid>
+                </messagepanel>
+            </hazardstatement>Sub-document operations save network bandwidth by allowing you to
+            specify <i>paths</i> of a document to be retrieved or updated. The document is parsed on
+            the server and only the relevant sections (indicated by <i>paths</i>) are transferred
+            between client and server. You can execute <xref
+                href="../shared/subdoc-operations-generic.dita#subdoc-operations"
+                >sub-document</xref> operations in the node.js SDK using the
+                <apiname>Bucket.mutateIn</apiname>, and <apiname>Bucket.lookupIn</apiname>
+                methods.<p>Each of these methods accepts a <parmname>key</parmname> as its mandatory
+                first argument and returns a builder object which can be used to add one or more
+                    <i>command specifications</i> specifying a specifying an operation and a
+                document field operand. To submit the operation, invoke the
+                    <apiname>execute()</apiname> method on the builder, passing it the callback to
+                be
+                invoked.<codeblock>bucket.lookupIn('some_document').
+    get('path.to.get').
+    exists('check.path.exists').
+    execute(function(err, fragment) {
+    // ...
+});</codeblock></p><p>The
+                callback function is invoked with an <codeph>error</codeph> and a
+                    <codeph>fragment</codeph>. The fragment is a <apiname>DocumentFragment</apiname>
+                object containing the fragments of the document (corresponding to each path). In
+                contrast with a normal callback which returns a single error and result, each
+                operation in the builder has its own result and status. You can use
+                    <codeph>fragment.contentByIndex</codeph> or
+                    <codeph>fragment.content(path)</codeph> or
+                    <codeph>fragment.contentByIndex(index)</codeph> to retrieve the result for an
+                individual path/command. If a path has an error, the SDK will throw an
+                exception.</p><p>Unlike other operations as well, both the <codeph>error</codeph>
+                and <codeph>fragment</codeph> can be set. If the <codeph>error</codeph> is set, and
+                    <codeph>error.code</codeph> is <varname>couchbase.errors.checkResults</varname>
+                then it means that at least one command has failed. If the top-level error code is
+                something else, it means that the document itself could not be
+                accessed.<codeblock>bucket.lookupIn('some_document').
+    get('path.to.get').
+    exists('check.path.exists').
+    execute(function(err, result) {
+    if (!err || err.code == couchbase.errors.checkResults) {
+        for (var i = 0; i &lt; 2; i++) {
+            try {
+                console.log('Result for path index %d: %j', i, result.contentByIndex(i));
+            } catch (e) {
+                console.error('Error for path index %d: %s', i, e.message);
+            }
+        }
+    } else {
+        console.error("Couldn't access document: %s", err.message);
+    }
+});</codeblock>You
+                can also mutate documents in a similar manner:</p><p>
+                <codeblock>bucket.mutateIn('some_document').
+    upsert('path.to.upsert', 'value', true).
+    remove('path.to.del').
+    execute(function(err, frag) {
+    if (!err || err.code == couchbase.errors.checkResults) {
+        for (var i = 0; i &lt; 2; i++) {
+            try {
+                frag.contentByIndex(i);
+            } catch (e) {
+                console.error('Error for index %d: %s', i, e.message);
+            }
+        }
+    } else {
+        console.error('Top-level document error: %j', err)
+    }
+});</codeblock>
+            </p></section>
+        <section><title>Formats and Non-JSON Documents</title><note type="tip">See <xref
+                    href="../shared/nonjson-generic.dita#devguide_nonjson"/> for a general overview
+                of using non-JSON documents with Couchbase</note>All JavaScript types which can be
+            represented as JSON may be passed unmodified to a storage function, and be received via
+            the <apiname>get</apiname> method without any additional modifications.<p>You can
+                implement a custom transcoder if you would like to serialize documents to/from a
+                format other than JSON, or if you would like to interact with other SDKs which use
+                non-JSON serialization formats. See
+            <apiname>Bucket.setTranscoder()</apiname>.</p></section>
+    </body>
+</topic>
