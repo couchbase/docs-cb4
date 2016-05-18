@@ -1,284 +1,201 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_eqq_rmd_yv">
-  <title>SDK Operations</title><shortdesc>This topic covers the basic CRUD operations of creating, retrieving, updating, and deleting documents. >It also describes how to do bulk operations and atomic operations.</shortdesc>
+  <title>SDK Operations</title>
   <body>
  
-    <section id="operationbasics"><title>Operation Basics</title>
-    <p>Operations use basic PHP data types.</p>
-   <sectiondiv id="datatypes">
-      
-     <p><b>Data types</b></p>
-        <p>Most PHP data types that can be serialized via the JSON functions are supported by
-          default. Recursive structures cannot be serialized. All textual data is represented
-          by UTF-8 when stored to Couchbase Server. You may alternatively implement your own
-          transcoders which modify the method by which your documents are serialized to
-          Couchbase. The following is an example of a transcoder which will transcode all
-          documents as UTF-8 encoded JSON documents.</p>
-        <codeblock outputclass="language-php">$bucket->setTranscoder(function($value) {
-          return array(json_encode($value), 0, 0);
-          }, function($value, $flags, $datatype) {
-          return json_decode($value, true);
-          });</codeblock>
-   </sectiondiv>
-      </section>
+    <section id="operationbasics">
+            <title>Operation Basics</title>
+            <p>Operations use basic PHP data types. Most PHP data types that can be serialized via
+                the JSON functions are supported by default. Recursive structures cannot be
+                serialized. You may alternatively implement your own transcoders which modify the
+                method by which your documents are serialized to Couchbase. See [Transcoders].</p>
+            <p>If an operation is successful, it will return a <apiname>CouchbaseMetaDoc</apiname>.
+                This contains the <varname>value</varname> of the document (if the operation returns
+                a value) as well as the <xref
+                    href="../shared/concurrent-mutations-generic.dita#concept_iq4_bts_zs"
+                        ><varname>cas</varname></xref> value. If an operation fails, a
+                    <apiname>CouchbaseException</apiname> is thrown, which may then be caught.</p>
+        </section>
     
-    <section id="creatingdocuments"><title>Creating Documents</title>
-     
-    <p> You can create a document by using  the <codeph>insert()</codeph> or <codeph>upsert()</codeph>
-      methods.</p>
-     
-        <p>Performing an insert  succeeds only if no document with that name exists. In
-          contrast, an upsert overwrites any existing matching document.</p>
-        <p>The following example shows how to create a new document with the <codeph>insert()</codeph>
-          method:</p>
-        <codeblock outputclass="language-php">$myBucket = $myCluster->openBucket();
-          $res = $myBucket->insert('document_name', array('some'=>'value'));
-          var_dump($res);</codeblock>
-        
-        <p>Sample output from the example:</p>
-        <codeblock>object(CouchbaseMetaDoc)#4 (4) {
-          ["cas"]=>
-          resource(5) of type (CAS)
-          }</codeblock>
-      
-      
-      
-    </section>    
+    <section id="creatingdocuments"><title>Creating and updating full documents</title><p>You can
+                create documents by using the <apiname>insert()</apiname> or
+                    <apiname>upsert()</apiname> methods and update them using the
+                    <apiname>replace()</apiname> method. See <xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/crud-overview"
+                />
+            </p><p>The following example shows how to create a new document with the
+                    <codeph>insert()</codeph>
+            method:</p><codeblock outputclass="language-php">$res = $myBucket->insert('document_name', array('some'=>'value'));</codeblock>You
+            can specify additional options as a third argument to the <apiname>insert</apiname>,
+                <apiname>upsert</apiname>, and <apiname>replace</apiname> functions. The options are
+            specified as an associative array like
+            so:<codeblock>$bucket->upsert($key, $doc, array("option1" => "value1"));</codeblock>Allowed
+            options are:<ul id="ul_gfz_mh1_1w">
+                <li><parmname>cas</parmname>: The CAS value for the document. If the CAS on the
+                    server does not match the CAS supplied to the method, the operation will fail
+                    with a <apiname>CouchbaseException</apiname> with a code of
+                        <apiname>COUCHBASE_KEY_EEXISTS</apiname> error. See <xref
+                        href="../shared/concurrent-mutations-generic.dita"/> for more information on
+                    the usage of CAS values. This is only valid for
+                    <apiname>replace()</apiname></li>
+                <li><parmname>expiry</parmname>: Specify the expiry time for the document. If
+                    specified, the document will expire and no longer exist after the given number
+                    of seconds. See <xref href="../shared/core-operations-generic.dita#expiry"/> for
+                    more information.</li>
+                <li><parmname>persist_to</parmname>, <parmname>replicate_to</parmname>: Specify
+                        <xref href="../shared/durability-generic.dita#concept_gyg_14s_zs">durability
+                        requirements</xref> for the operations.</li>
+            </ul></section>    
     
    
-    <section><title>Retrieving Documents</title>
-   
-   <p>You can retrieve documents by using regular reads or replica reads.</p>
-     
-        
-   <sectiondiv id="regularreads">
-          <p><b>Regular reads</b></p>
-          
-          <p>You will perform regular reads by using the <codeph>get()</codeph> method. Regular reads enable you
-            to retrieve a previously stored document from your active data set. </p>
-          <p>The following example shows a regular read:</p>
-          <codeblock outputclass="language-php">$myBucket = $myCluster->openBucket();
-            $res = $myBucket->get(‘document_name’);
-            var_dump($res);</codeblock>
-          
-          <p>Sample output from the example:</p>
-          <codeblock>object(CouchbaseMetaDoc)#4 (4) {
-            ["value"]=>
-            array(1) {
-            ["name"]=>
-            string(5) "Frank"
-            }
-            ["flags"]=>
-            int(4)
-            ["cas"]=>
-            resource(5) of type (CAS)
-            }</codeblock>
-   </sectiondiv> 
-        
- <sectiondiv id="replicareads">
-          <p><b>Replica reads</b></p>
-          <p>You perform replica reads by using the <codeph>getReplica()</codeph> method. Replica reads
-            enable you to retrieve a previously stored document by querying the replica copies of
-            this document rather than the active one. This is not guaranteed to be consistent, but
-            does permit a level of recovery in case the primary server is not reachable.</p>
- </sectiondiv>
-      
-    </section>    
-    
-    <section><title>Updating Documents</title>
-    
-   <p> You can update a document by using the <codeph>upsert()</codeph> or
-     <codeph>replace()</codeph> methods.</p> 
-    
-        <p>The <codeph>replace()</codeph> method replaces a document that already exists with new
-          contents. The <codeph>upsert()</codeph> method creates the document if it does not already
-          exist. </p>
-        <p>The following example shows how to update a document by using the
-          <codeph>replace()</codeph> method:</p>
-        <p>
-          <codeblock outputclass="language-php">$myBucket = $myCluster->openBucket();
-            $res = $myBucket->replace('document_name', array('some'=>'value'));
-            var_dump($res);</codeblock>
-        </p>
-        
-        <p>Sample output from the example:</p>
-        <codeblock>object(CouchbaseMetaDoc)#4 (4) {
-          ["cas"]=>
-          resource(5) of type (CAS)
-          }</codeblock>
-      
-      
-    </section>    
+    <section><title>Retrieving Documents</title><sectiondiv id="regularreads"><p>You can retrieve
+                    documents by using the <codeph>get()</codeph>
+                method.</p><codeblock outputclass="language-php">var_dump($bucket->get("new_document"));</codeblock>
+                Sample output from the example:
+                <codeblock>object(CouchbaseMetaDoc)#6 (4) {
+  ["error"]=>
+  NULL
+  ["value"]=>
+  object(stdClass)#5 (1) {
+    ["foo"]=>
+    string(3) "bar"
+  }
+  ["flags"]=>
+  int(33554438)
+  ["cas"]=>
+  resource(5) of type (CouchbaseCAS)
+}</codeblock></sectiondiv>The
+                <apiname>get()</apiname> method returns a <apiname>CouchbaseMetaDoc</apiname>
+            object. To get the actual value, use the object's <apiname>value</apiname>
+                property.<note>Items stored as associative arrays (e.g.
+                    <codeph>$bucket->upsert(docid, array("prop1" => "value1"));</codeph> are
+                retrieved as PHP <apiname>stdObject</apiname> objects. This means that you must
+                reference fields using <codeph>$result->value->property</codeph> rather than
+                    <codeph>$result->value["property"]</codeph></note><p>In some instances you may
+                wish to [READ FROM REPLICA]. This can be done using the
+                    <apiname>getFromReplica()</apiname>. </p></section>    
     
     <section><title>Deleting Documents</title>
     
- <p>You can delete documents by using the <codeph>remove()</codeph> method.</p> 
-   
-        <p>This method immediately removes the document from your bucket. </p>
-        <p>The following example shows how to delete a
-          document:<codeblock outputclass="language-php">$myBucket = $myCluster->openBucket();
-            $res = $myBucket->remove('document_name');
-            var_dump($res);</codeblock></p>
+ <p>You can delete documents by using the <codeph>remove()</codeph> method.</p>
+        <p>
+                <codeblock outputclass="language-php">$bucket->remove('document_name');</codeblock>
+            </p>
         
-        <p>Sample output from the example:</p>
-        <codeblock>object(CouchbaseMetaDoc)#4 (4) {
-          ["cas"]=>
-          resource(5) of type (CAS)
-          }</codeblock>
+        <p>You may pass a second argument containing options to the <apiname>remove()</apiname>
+                method. This is passed as an array with the option name as the key and the option
+                value as the array value. Recognized options are:<ul id="ul_idh_ly1_1w">
+                    <li><parmname>cas</parmname>: Specify the <xref
+                            href="../shared/concurrent-mutations-generic.dita#concept_iq4_bts_zs"
+                            >CAS value</xref> to use. This will ensure that the document is not
+                        removed if the CAS value differs. You may obtain the CAS value from
+                            <apiname>CouchbaseMetaDoc::cas</apiname>, as a return value of a
+                        successful operation.</li>
+                </ul></p>
       
       
       
     </section>    
     
-    <section><title>Bulk Operations</title>
-   
-    <p>You can perform bulk retrieval operations by using the multi key variant of the `get`
-      method.</p> 
+    <section><title>Bulk Operations</title><p><xref
+                    href="../shared/batching-operations-generic.dita#concept_qfq_5jg_1t">Bulk
+                    operations</xref> may help you perform operations more efficiently and quicker
+                by optimizing how commands are sent on the network.</p><p>Bulk operations may be
+                performed by passing an array as the first argument to one of the
+                    <apiname>get()</apiname>, <apiname>upsert()</apiname>,
+                    <apiname>insert()</apiname>, <apiname>replace()</apiname> and other key-value
+                methods.</p><p>When these methods are passed an array as input, they return an array
+                as output, with the array containing document IDs as its keys and their respective
+                    <apiname>CouchbaseMetaDoc</apiname> objects as values.</p><p>This method works
+                identically to its singular counterpart but instead accepts an array of keys to
+                retrieve and returns an object where the object key matches your document ID and the
+                object value is the result that you would normally expect to see from a singular
+                operation.</p><p>For the <apiname>upsert()</apiname> family of methods, the
+                top-level array value is a container for <i>options</i>. The most important option
+                is <parmname>value</parmname> which contains the actual value to be used as the
+                document.</p><p>The following example shows how to insert and retrieve multiple
+                documents. The structure of each document
+                is:<codeblock>{
+    "email": &lt;....>
+}</codeblock></p><codeblock spectitle="Storing multiple documents">$results = $bucket->upsert(array(
+    'foo' => array('value' => array('email' => 'foo@foo.com')),
+    'bar' => array('value' => array('email' => 'bar@bar.com')),
+    'baz' => array('value' => array('email' => 'baz@baz.com'))
+));</codeblock><codeblock spectitle="Retrieving multiple documents">foreach ($results as $docid => $metadoc) {
+    // Each document itself has a 'propname'
+    echo "Result for $docid\n";
+    var_dump($metadoc->value);
+    echo "\n";
+}</codeblock>Output:<screen>Result for foo
+object(stdClass)#7 (1) {
+  ["email"]=>
+  string(11) "foo@foo.com"
+}
+
+Result for bar
+object(stdClass)#9 (1) {
+  ["email"]=>
+  string(11) "bar@bar.com"
+}
+
+Result for baz
+object(stdClass)#11 (1) {
+  ["email"]=>
+  string(11) "baz@baz.com"
+}</screen></section>    
     
-        <p>This method works identically to its singular counterpart but instead accepts an array of keys
-          to retrieve and returns an object where the object key matches your document ID and the object
-          value is the result that you would normally expect to see from a singular operation.</p>
-        
-        <p>Here's an example that shows how to use the <codeph>getMulti()</codeph> method:</p>
-        <codeblock outputclass="language-php">$myBucket = $myCluster->openBucket();
-          $res = $myBucket->get(array('document_name_1', 'document_name_2'));
-          var_dump($res);</codeblock>
-        
-        <p>Sample output from the example:</p>
-        <codeblock>array(2) {
-          ["document_name_1"]=>
-          object(CouchbaseMetaDoc)#4 (4) {
-          ["value"]=>
-          array(1) {
-          ["name"]=>
-          string(5) "Frank"
-          }
-          ["flags"]=>
-          int(4)
-          ["cas"]=>
-          resource(5) of type (CAS)
-          }
-          ["document_name_2"]=>
-          object(CouchbaseMetaDoc)#4 (4) {
-          ["value"]=>
-          array(1) {
-          ["name"]=>
-          string(5) "George"
-          }
-          ["flags"]=>
-          int(4)
-          ["cas"]=>
-          resource(5) of type (CAS)
-          }
-          }</codeblock>
-        
-      
-      
-    </section>    
-    
-    <section><title>Atomic Operations</title>
-     
-    <p>The Node.js Couchbase SDK supports several operations that allow one-step, atomic
-      changes to documents. These operations include counter, prepend, and append
-      functions.</p>
- 
-        
-       <sectiondiv id="counteroperation">
-       <p><b>Counter operation</b></p>
-          <p>The <codeph>counter()</codeph> method enables you to implement an atomic counter as a
-            Couchbase document. These operations expect UTF-8 encoded string representations of
-            the number. You can either execute this operation against a previously created
-            document, or create a new document by using the <codeph>initial</codeph> property
-            passed as an option.  More information about the initial property is available
-            below.</p>
-          <p>The following example shows how to use the <codeph>counter()</codeph> method to increment your
-            counter and get the value back:</p>
-          <p>
-            <codeblock outputclass="language-php">$myBucket = $myCluster->openBucket();
-              $myBucket->insert('document_name', 10);
-              $res = $myBucket->counter('document_name', 1);
-              var_dump($res);</codeblock>
-          </p>		
-          <p>Sample output from the example:</p>
-          <codeblock>object(CouchbaseMetaDoc)#4 (4) {
-            ["value"]=>
-            int(11)
-            ["flags"]=>
-            int(0)
-            ["cas"]=>
-            resource(5) of type (CAS)
-            }</codeblock>
-          <p>The following example shows how to use the <codeph>counter()</codeph> method to decrement your
-            counter and get the value back:</p>
-          <p>
-            <codeblock outputclass="language-php">$myBucket = $myCluster->openBucket();
-              $myBucket->set('document_name', 10);
-              $res = $myBucket->counter('document_name', -1);
-              var_dump($res);</codeblock>
-          </p>		
-          <p>Sample output from the example:</p>
-          <codeblock outputclass="">object(CouchbaseMetaDoc)#4 (4) {
-            ["value"]=>
-            int(9)
-            ["flags"]=>
-            int(0)
-            ["cas"]=>
-            resource(5) of type (CAS)
-            }</codeblock>
-          <p>You can additionally perform a counter operation with an initial value specified. In this
-            case, the document will be created if it does not exist. The <codeph>initial</codeph>
-            property will do nothing if the document already
-            exists.<codeblock outputclass="language-php">$myBucket = $myCluster->openBucket();
-              $res = $myBucket->counter('document_name', 1, array('initial'=>10));</codeblock></p>
-          <p>Sample output from the example:</p>
-          <codeblock>object(CouchbaseMetaDoc)#4 (4) {
-            ["value"]=>
-            int(10)
-            ["flags"]=>
-            int(0)
-            ["cas"]=>
-            resource(5) of type (CAS)
-            }</codeblock>
-          <note>If a new counter document is created by using the <codeph>initial</codeph>
-            property, the counter is set to the value of <codeph>initial</codeph>, not
-            <codeph>initial+offset</codeph>. </note>
-       </sectiondiv> 
-        
-        
-     <sectiondiv id="appendandprepend">
-     <p><b>Append and prepend operations</b></p>
-          <p>The append and prepend operations allow you to perform a binary append or prepend to
-            a Couchbase document.</p>
-          
-          <note> This operation is performed without any consideration
-            for data type, thus appending a JSON document to a JSON document will result in
-            an invalid object (for instance: <codeph>{}{}</codeph>).</note>
-          
-          <p>The following is an example of how to use the append() method to add further text to
-            an already existing
-            document:</p><codeblock outputclass="language-php">$myBucket = $myCluster->openBucket();
-              // Insert a starting document
-              $myBucket->insert('document_name', 'Beautiful');
-              // Append some content to it
-              $myBucket->append('document_name', 'World!');
-              // Prepend some more text
-              $myBucket->prepend('document_name', 'Hello ');
-              // Retrieve its updated contents
-              $res = $myBucket->get('document_name');
-              var_dump($res);</codeblock>
-          <p>Sample output from the example:</p>
-          <codeblock>object(CouchbaseMetaDoc)#4 (4) {
-            ["value"]=>
-            string("Hello Beautiful World!")
-            ["flags"]=>
-            int(0)
-            ["cas"]=>
-            resource(5) of type (CAS)
-            }</codeblock>
-        
-     </sectiondiv>   
-      
-    </section>    
+    <section>
+            <title>Atomic Operations</title>
+            <p>The PHP Couchbase SDK supports several operations that allow one-step, atomic changes
+                to documents. These operations include <apiname>counter</apiname>,
+                    <apiname>prepend</apiname>, and <apiname>append</apiname> functions.</p>
+            <p>The <apiname>counter()</apiname> method enables you to use an <xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/devguide_kvcore_counter_generic"
+                    >atomic counter</xref>. The first argument is the document ID, and the second
+                argument is the <i>delta</i> indicating by what amount the counter should be
+                changed. You may also pass an array of options as the third argument:<ul
+                    id="ul_h2r_chb_1w">
+                    <li><parmname>initial</parmname>: Initialize the counter to this value if the
+                        counter does not yet exist</li>
+                    <li><parmname>expiry</parmname>: Set the <xref
+                            href="../shared/core-operations-generic.dita#devguide_kvcore_generic/expiry"
+                            >document expiration</xref> time</li>
+                </ul></p>
+            <codeblock>$result = $bucket->counter('counterId', 50, array('initial' => 100));
+echo 'Current counter value is ' . $result->value . "\n";</codeblock>
+            <p><xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/devguide_kvcore_append_prepend_generic"
+                    >Atomic byte concatenations</xref> can be performed using the
+                    <apiname>append()</apiname> and <apiname>prepend()</apiname> methods. These
+                operations are potentially destructive. Refer to the API documentation for more
+                information.</p>
+        </section>
+        <section><title>Operating with sub-documents</title><note type="tip">See <xref
+                    href="../shared/subdoc-operations-generic.dita#subdoc-operations"/> for an
+                overview</note><hazardstatement>
+                <messagepanel id="messagepanel_edy_qwm_qv">
+                    <typeofhazard>Sub-Document API is experimental</typeofhazard>
+                    <howtoavoid>Sub-Document is a feature to be released in Couchbase 4.5. It is
+                        available as an experimental feature in 4.5 pre-release builds.</howtoavoid>
+                </messagepanel>
+            </hazardstatement>Sub-document operations save network bandwidth by allowing you to
+            specify <i>paths</i> of a document to be retrieved or updated. The document is parsed on
+            the server and only the relevant sections (indicated by <i>paths</i>) are transferred
+            between client and server. You can execute <xref
+                href="../shared/subdoc-operations-generic.dita#subdoc-operations"
+                >sub-document</xref> operations in the PHP SDK using the <apiname>_FIXME</apiname>,
+                <apiname>FIXME</apiname>, and <apiname>FIXME</apiname> methods.<p>These methods
+                return builders .... FIXME</p></section>
+        <section>
+            <title>Non-JSON Documents and Transcoders</title>
+            <p>The following is an example of a transcoder which will transcode all documents as
+                UTF-8 encoded JSON documents.
+                <codeblock outputclass="language-php">$bucket->setTranscoder(function($value) {
+          return array(json_encode($value), 0, 0);
+          }, function($value, $flags, $datatype) {
+          return json_decode($value, true);
+          });   </codeblock></p>
+        </section>    
   </body>
 </topic>
