@@ -1,8 +1,62 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
-<topic id="topic_djk_gs5_xv">
-  <title>Searching From the Java SDK</title>
-  <body>
-    <p></p>
-  </body>
+<topic id="java-fts">
+    <title>Searching from the Java SDK</title>
+    <shortdesc>You can use the Full Text Search service (FTS) to create queryable full-text indexes in Couchbase Server.</shortdesc>
+    <body>
+        <p>
+            The normal CRUD methods allow you to look up a document by its ID, and MapReduce and N1QL queries allows to look for documents that exactly match specific criterias, but an FTS query allows you to look up one or more documents matching fuzzier criterias based on text semantics.
+            For instance, you can search for words with a common root inside a body of text, or indistinctively search for plurals and singulars of a word, or perform a fuzzy search if you're unsure about the spelling of a keyword.
+            The FTS service allows you to define indexes and mappings of your data, so it can recognize which JSON fields are text, and which analysis to operate on them (eg. if some field is expected to hold text in French, the dedicated analyzer will be able to correctly eliminate stop words and find French word roots).
+        </p>
+
+        <p>
+            Querying a FTS index through the Java client is performed through the
+            <codeph>query(SearchQuery q)</codeph> method on the <apiname>Bucket</apiname> class. This method
+            returns a <apiname>SearchQueryResult</apiname> whose iterator yields the results of the query (in the form of
+            <apiname>SearchQueryRow</apiname> objects). It also exposes a <codeph>status()</codeph> for the request, some execution <codeph>metrics()</codeph> and <codeph>facets()</codeph> results if some facets have been requested. Instead of iterating directly on the result, you can access rows as a list through the <codeph>hits()</codeph> method, and in case of execution errors you can inspect the error messages in the <codeph>errors()</codeph> method. Note that partial results can happen in this case (and hits() will return them). Instead of getting partial results through <codeph>hits()</codeph>, one can combine results and errors and get an exception through the use of <codeph>hitsOrFail()</codeph>.
+        </p>
+
+        <p>
+            The <apiname>SearchQueryRow</apiname> object contains the
+            <codeph>index</codeph>, <codeph>id</codeph> and <codeph>score</codeph> properties, respectively identifying the exact FTS index that returned the hit, the id of the document that matched and a decimal score for the match.
+            It also contains optional sections depending on the request and the availability of all relevant settings in the FTS mapping. Those are <codeph>explanation()</codeph> (an explanation of the plan followed by the FTS index to execute the query), <codeph>locations()</codeph> (a map-like listing of the location of all matching terms inside each relevant field that was queried), <codeph>fragments()</codeph> (a map-like listing of occurrences of the search terms in each field, with the context of the terms) and <codeph>fields()</codeph> (a map of the complete value of each requested field). Most of these need that the index be configured to store the data of a searched field.
+        </p>
+
+        <p>
+            There are many different flavours of search queries, and each can be constructed through static factory methods in the <apiname>SearchQuery</apiname> class. Additionally, performing a <apiname>SearchQuery</apiname> takes a mandatory index name.
+        </p>
+        <codeblock outputclass="language-java">Bucket bkt = CouchbaseCluster.create("192.168.33.101").openBucket("travel-sample");
+MatchQuery fts = SearchQuery.match("term");
+SearchQueryResult result = bkt.query(new SearchQuery("travel-search", fts));
+for (SearchQueryRow row : result) {
+    System.out.println(row);
+}</codeblock>
+
+        <p>
+            Each flavor of query has a specific set of parameters that you can set, and you can also tune parameters that affect the whole query, by creating the <apiname>SearchQuery</apiname> with a <apiname>SearchParams</apiname> object:
+        </p>
+        <codeblock outputclass="language-java">Bucket bkt = CouchbaseCluster.create("192.168.33.101").openBucket("travel-sample");
+MatchQuery fts = SearchQuery.match("term").fuzziness(2).field("content");
+SearchParams searchParams = SearchParams.build()
+    //will show value for activity and country fields
+    .fields("activity", "country")
+    //will have max 3 hits
+    .limit(3)
+    //will have a "category" facet on the top 3 countries in terms of hits
+    .addFacets(SearchFacet.term("countries", "country", 3));
+
+SearchQueryResult result = bkt.query(new SearchQuery("travel-search", fts, searchParams));
+System.out.println(result.facets() + "\n");
+for (SearchQueryRow row : result) {
+    System.out.println(row);
+}</codeblock>
+
+        <p>Here's some sample output for the previous query:</p>
+        <codeblock>{countries=TermFacetResult{name='countries', field='country', total=451, missing=0, other=0, terms=[{name='United States', count=217}, {name='United Kingdom', count=188}, {name='France', count=46}]}}
+
+DefaultSearchQueryRow{index='travel-search_33760129d0737bff_b7ff6b68', id='landmark_11778', score=0.0313815325019958, explanation={}, locations=DefaultHitLocations{size=3, locations=[HitLocation{field='content', term='tea', pos=39, start=254, end=257},HitLocation{field='content', term='teas', pos=56, start=353, end=357},HitLocation{field='content', term='tart', pos=17, start=95, end=99}]}, fragments={}, fields={activity=eat, country=United States}}
+DefaultSearchQueryRow{index='travel-search_33760129d0737bff_b7ff6b68', id='landmark_25547', score=0.02536160834515202, explanation={}, locations=DefaultHitLocations{size=3, locations=[HitLocation{field='content', term='tea', pos=33, start=191, end=194},HitLocation{field='content', term='try', pos=30, start=177, end=180},HitLocation{field='content', term='per', pos=57, start=337, end=340}]}, fragments={}, fields={activity=eat, country=United States}}
+DefaultSearchQueryRow{index='travel-search_33760129d0737bff_8b80958a', id='landmark_26854', score=0.02079624734659704, explanation={}, locations=DefaultHitLocations{size=10, locations=[HitLocation{field='content', term='trim', pos=227, start=1255, end=1259},HitLocation{field='content', term='steam', pos=7, start=41, end=46},HitLocation{field='content', term='steam', pos=38, start=213, end=218},HitLocation{field='content', term='steam', pos=74, start=424, end=429},HitLocation{field='content', term='steam', pos=93, start=532, end=537},HitLocation{field='content', term='steam', pos=114, start=651, end=656},HitLocation{field='content', term='steam', pos=126, start=715, end=720},HitLocation{field='content', term='steam', pos=145, start=819, end=824},HitLocation{field='content', term='steam', pos=300, start=1611, end=1616},HitLocation{field='content', term='team', pos=59, start=335, end=339}]}, fragments={}, fields={activity=see, country=United States}}</codeblock>
+	</body>
 </topic>
