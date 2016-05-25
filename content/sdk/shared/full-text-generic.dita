@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="full-text-search">
+  <title>Full Text Search</title>
+  <body>
+        <section>
+            <title>What is Full Text Search</title>
+            <p>Couchbase Server Full Text Search (FTS) enables you to create, manage, and query full
+                text indexes on JSON documents stored in a Couchbase bucket. Couchbase FTS is
+                similar in purpose to other search software such as <i>ElasticSearch</i> or
+                    <i>Solr</i>. Couchbase FTS is not intended as a replacement for third party
+                search software if search is at the core of your application. It is a simple and
+                lightweight way to add search to your Couchbase data without deploying additional
+                software and servers. If you have many queries which look like <codeph>SELECT ...
+                    field1 LIKE %pattern% OR field2 LIKE %pattern</codeph>, then full-text search
+                may be right for you.</p>
+        </section>
+        <section><title>Executing your first search</title><p>Our first search query will be done
+                against the <codeph>travel-sample</codeph> bucket (install it, if you haven't done
+                so already).<ol id="ol_cyv_1cs_bw">
+                    <li>Go to the Couchbase Web Console (for example, http://localhost:8091) and log
+                        in with your administrative username and password.</li>
+                    <li>Select <menucascade>
+                            <uicontrol>Indexes</uicontrol>
+                            <uicontrol>Full Text</uicontrol>
+                        </menucascade> (at the top bars).</li>
+                    <li>In the dropdown menu on the top left (<codeph>-- choose full text index or
+                            alias --</codeph>) select <userinput>travel-search</userinput>.</li>
+                    <li>In the input box (on the right), type <userinput>cheese</userinput> and
+                        click <uicontrol>Search</uicontrol>.</li>
+                </ol>You will see a list of document IDs that contain the given search term. You can
+                click on any document ID to see the full document. You can also click on
+                    <uicontrol>Advanced</uicontrol> to see the raw query as it is sent over the REST
+                API. If you click on the <uicontrol>command-line curl example</uicontrol> checkbox,
+                you can simply copy/paste the output to your terminal and execute the search
+                again.</p><p>Here's a similar version of the search done using <codeph>curl</codeph>
+                on the command
+                line:<codeblock>curl -XPOST -H "Content-Type: application/json" \
+    http://localhost:8094/api/index/travel-search/query \
+    -d '{"query":{"query":"cheese"}, "size": 1}' | json_pp</codeblock></p><p>(Note
+                that <codeph>json_pp</codeph> is just a JSON formatter. You can omit the pipe if you
+                do not have it
+                installed).<screen>{
+   ...
+   "hits" : [
+      {
+         "index" : "travel-search_2c8e9e3d5a3638a8_b7ff6b68",
+         "score" : 1.20476244729454,
+         "locations" : {
+            "name" : {
+               "cheese" : [
+                  {
+                     "end" : 12,
+                     "array_positions" : null,
+                     "start" : 6,
+                     "pos" : 2
+                  }
+               ]
+            },
+            ...
+         },
+         "id" : "landmark_27808"
+      }
+   ]
+}</screen>(Most
+                of the output has been redacted)</p>The same query using the Python
+                SDK:<codeblock>from couchbase.bucket import Bucket
+import couchbase.fulltext as FT
+
+cb = Bucket()
+results = cb.search('travel-search', FT.StringQuery('cheese'), limit=5)
+for hit in results:
+    print('Found in document ID={}. Score={}'.format(hit['id'], hit['score']))</codeblock><screen>Found in document ID=landmark_27808. Score=1.20476244729
+Found in document ID=landmark_8689. Score=0.961675281363
+Found in document ID=landmark_1154. Score=0.883110932061
+Found in document ID=landmark_1163. Score=0.846040674514
+Found in document ID=landmark_15133. Score=0.81847489864</screen><p>The
+                result contains one or more <i>hits</i>, where each <i>hit</i> contains information
+                about the location of the match within a document. This includes the <i>relevance
+                    score</i> as well as the <i>location</i> where the match was
+            found.</p></section>
+        <section>
+            <title>Making your Bucket Searchable</title>
+            <p>In order to execute a search query you must first define a search index. You can
+                define a search index by using the Couchbase Web Console.<ol>
+                    <li>Go to the Couchbase Web Console (for example, http://localhost:8091) and log
+                        in with your administrative username and password.</li>
+                    <li>Select <menucascade>
+                            <uicontrol>Indexes</uicontrol>
+                            <uicontrol>Full Text</uicontrol>
+                            <uicontrol>New Full Text Index</uicontrol>
+                        </menucascade></li>
+                    <li>Type the desired <i>name</i> of the search index in the <uicontrol>Index
+                            Name</uicontrol> field.</li>
+                    <li>Select the bucket you would like to associate the search with in the
+                            <uicontrol>Bucket</uicontrol> field</li>
+                </ol>The default settings are sufficient for most cases. You can edit the index
+                later, specifying how certain fields may be analzyed and which fields to index.</p>
+            <p>Once you've created your index, your can query it by using the methods above,
+                replacing <codeph>travel-search</codeph> with the name you used to create the
+                index.</p>
+        </section>
+        <section><title>Query Types</title><p>The query executed in the previous section is called a
+                    <i>string query</i>. This type of query searches for terms based on a special
+                type of input string. The query string <codeph>+description:cheese
+                    -country:france</codeph> will match documents which contain <i>cheese</i> in
+                their <codeph>description</codeph> field, but are <i>not</i> located in France.
+                String queries are ideal for searchbox fields to allow users to provide more
+                specialized query criteria. You can read more about the query string syntax
+                [HERE!!!]</p><p>There are many other query types available. These query types differ
+                primarily in how they interpret the search term: whether it is treated as a phrase,
+                a word, an exact match, or a prefix: A <term>Match</term> query searches for the
+                input text within documents and is the simplest of queries. <term>Match
+                    Phrase</term> query searches for documents in which a specific <i>phrase</i>
+                (i.e. one or more terms, such as <codeph>"french cheese tasting"</codeph>) is
+                present. A <term>Prefix</term> query searches documents which contain terms
+                beginning with the supplied prefix.</p><p>There are some other specialized queries,
+                such as <term>Wildcard</term> and <term>Regexp</term> queries which allow you to use
+                wildcards (<codeph>Couch?base'</codeph>) or regular expressions (<codeph>Couchbase
+                    (php|python) SDK</codeph>).</p>Below are two code snippets showing how the query
+            for <codeph>ch</codeph> is treated differently when using a <term>Prefix Query</term>
+            versus a <term>Match
+                Query</term>.<p><codeblock>results = cb.search('travel-search', FT.MatchQuery('ch'), limit=5)
+for r in results:
+    print('  Result: ID', r['id'])
+    for location, terms in r['locations'].items():
+        print('   ', location, terms.keys())</codeblock><screen>  Result: ID airline_1442
+    iata dict_keys(['ch'])
+  Result: ID landmark_35848
+    image_direct_url dict_keys(['ch'])</screen><codeblock>results = cb.search('travel-search', FT.PrefixQuery('ch'), limit=5)
+for r in results:
+    print('  Result: ID', r['id'])
+    for location, terms in r['locations'].items():
+        print('   ', location, terms.keys())</codeblock><screen>  Result: ID hotel_15912
+    reviews.content dict_keys(['check', 'cheese', 'charge', 'checkout', 'chairs', 'chances', 'choice', 'checked', 'cheapcaribbean', 'cheeses', 'charged', "church's", 'cheaper', 'chicken', 'change'])
+    reviews.author dict_keys(['christiansen'])
+  Result: ID hotel_33886
+    reviews.content dict_keys(['check', 'chose', 'chips', 'choosing', 'chairs', 'channels', 'changed', 'choice', 'checked', 'chair', 'chocolate', 'chaise', 'checking', 'chicken', 'change', 'choose', 'charter', 'cheerful'])
+    reviews.author dict_keys(['christy'])
+  Result: ID hotel_16634
+    reviews.content dict_keys(['check', 'chocolate', 'chinese', 'chairs', 'children', 'chips', 'chilis', 'chilly', 'checked', 'choice', 'chicago', 'childrens', "church's", 'cheaper', 'chicken', 'choose', 'christina', 'choices'])
+  Result: ID hotel_37318
+    reviews.content dict_keys(['check', 'choices', 'chairs', 'children', 'changed', 'choice', 'charge', 'challenging', 'chair', 'childrens', 'chicken', 'change', 'choose', 'chambermaid', 'chichen', 'child'])
+    city dict_keys(['cheshire'])
+  Result: ID hotel_21723
+    reviews.content dict_keys(['check', 'chairs', 'cheesy', 'changed', 'checked', 'chair', 'charging', 'chaotic', 'charge', 'chapel', 'change', 'choose', 'children', 'cheep', 'chef', 'child'])
+    content dict_keys(['cheapie'])
+    public_likes dict_keys(['christop'])</screen>As
+                can be seen in the above examples, the <term>Term</term> assumes the search input is
+                an actual term to search for (<codeph>ch</codeph>) and therefore rejects things such
+                as <codeph>chose</codeph>, <codeph>chairs</codeph> and similar.</p></section>
+        <section>
+            <title>Compound Queries</title>
+            <p>You can compose queries made of other queries. You can use a <term>Conjunction</term>
+                or <i>Disjunction</i> query which contains one or more queries that the document
+                should match (a <term>Disjunction</term> query can be configured with the number of
+                required subqueries that must be matched). You may also use a <term>Boolean</term>
+                query that itself contains sub queries which <i>should</i>, <i>must</i>, and <i>must
+                    not</i> be matched.</p>
+            <p>Compound queries can be used to execute searches such as <i>find any landmark
+                    containing "cheese" and also containing one of "wine" , "crackers" , or "old",
+                    but does not contain "lake" or
+                "ocean"</i>:<codeblock spectitle="Compound Query example">results = cb.search('travel-search',
+        FT.BooleanQuery(
+            must=FT.TermQuery('cheese'),
+            should=[FT.TermQuery('wine'), FT.TermQuery('crackers')],
+            must_not=[FT.TermQuery('lake'), FT.TermQuery('ocean')]),
+        limit=5)
+
+for r in results:
+    print('ID', r['id'])
+    for location, terms in r['locations'].items():
+        print('\t{}: {}'.format(location, terms.keys()))</codeblock><screen>ID landmark_25779
+	content: dict_keys(['cheese', 'crackers'])
+ID landmark_7063
+	content: dict_keys(['wine'])
+	alt: dict_keys(['cheese'])
+	name: dict_keys(['wine'])
+ID landmark_16693
+	content: dict_keys(['cheese', 'wine'])
+ID landmark_27793
+	content: dict_keys(['cheese', 'wine'])
+ID landmark_40690
+	content: dict_keys(['cheese', 'wine'])</screen></p>
+            <p>When using compoound queries, you can modify any subquery's
+                    <parmname>boost</parmname> setting to increase its relevance and scoring over
+                other subqueries, affecting the ordering.</p>
+        </section>
+        <section>
+            <title>Query Options</title>
+            <p>You can specify query options to modify how the search term is treated. This section
+                will enumerate some common query options and how they affect query results.<ul
+                    id="ul_shx_3zy_bw">
+                    <li><parmname>field</parmname>: This option restricts searches to a given field.
+                        By default searches will be executed against all fields.</li>
+                    <li><parmname>fuzziness</parmname>: Sets the <i>leniency</i> of the matching
+                        algorithm. A higher fuzziness value may result in less relevant matches
+                        being considered</li>
+                    <li><parmname>analyzer</parmname>: Sets the analyzer to be used for the search
+                        term.</li>
+                    <li><parmname>limit</parmname>: Limits the number of search results to be
+                        returned.</li>
+                    <li><parmname>skip</parmname>: Start returning after this many results. This may
+                        be used in conjunction with <parmname>limit</parmname> to use
+                        pagination.</li>
+                </ul></p>
+        </section>
+        <section>
+            <title>Search Results</title>
+            <p>After you have executed a search, you will be given a set of results, containing
+                information about documents which match the query. In the raw JSON payload, the
+                server returns an object with a <parmname>hits</parmname> property, which contains a
+                    <i>search result</i>.</p>
+            <p>The <i>search result</i> itself is a JSON object containing:<ul id="ul_thw_zbz_bw">
+                    <li><parmname>id</parmname>: The document ID of the hit</li>
+                    <li><parmname>score</parmname>: How relevant the result is to the initial search
+                        query. Search results are always ordered by score, with highest-scored hits
+                        appearing first.</li>
+                    <li><parmname>locations</parmname>: A JSON object containing information about
+                        each match in the document. Its keys are <i>document paths</i>[XREF
+                        N1QL/subdoc paths] where matches may be found, and its values are arrays
+                        that contain the <i>match location</i>. The <i>match location</i> is a JSON
+                        object whose keys are the matched terms found, and whose values are
+                            <i>locations</i>:<ul id="ul_e3w_hcz_bw">
+                            <li><parmname>start</parmname>: The character offset at which the
+                                matched text begins</li>
+                            <li><parmname>end</parmname>: The character offset at which the matched
+                                text ends</li>
+                            <li><parmname>pos</parmname>: The word-position of the matched result.
+                                This indicates how far deep the match is, in respect to words. For
+                                example if the searched term was <codeph>schema</codeph>, and the
+                                matched text was: <codeph>Ahout NoSQL schema organization</codeph>,
+                                the <parmname>pos</parmname> would be <codeph>3</codeph>, or the
+                                third word in the field.</li>
+                        </ul></li>
+                </ul></p>
+            <p>Couchbase SDKs may abstract some of the fields or provide wrapper methods around
+                them.</p>
+        </section>
+        <section>
+            <title>Partial Search Results</title>
+            <p>Because FTS queries use <i>pindexes</i>[XXXX], you may encounter situations where
+                some results may be unavailable if some pindex nodes are not online... I don't know
+                what to write here..</p>
+        </section>
+        <section>
+            <title>Other Query Types</title>
+            <p>There are other query types you can use, such as <term>Date Range</term> and
+                    <term>Numeric Range</term> queries which match documents matching a certain time
+                span or value range. There are also debugging queries such as <term>Term</term> and
+                    <term>Phrase</term> queries perform exact queries (without any analysis </p>
+        </section>
+    </body>
+</topic>
