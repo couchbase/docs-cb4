@@ -4,6 +4,84 @@
     <title>Compatibility</title>
     <body>
         <section>
+            <title>API Styles and versions</title>
+            <p>The first release of libcouchbase 2.x was in November 2012. Since then, we've had the
+                time to reflect on the API design and added newer APIs to allow a faster and more
+                efficient programming model. There are two broad categories of APIs in the library,
+                one is known as <i>api2</i> and the other is known as <i>api3</i>.</p>
+            <p>API2 is the original C 2.0 API, and is available in all versions of libcouchbase, but
+                is considered <b>deprecated</b> since version 2.6.0. It looks something like
+                this:<codeblock spectitle="API2 - Scheduling">lcb_get_cmd_t gcmd = { 0 };
+lcb_get_cmd_t* gcmd_p = &amp;gcmd;
+gcmd.version = 0;
+gcmd.v.v0.key = "key";
+gcmd.v.v0.nkey = nkey;
+lcb_get(instance, cookie, 1, &amp;gcmd);
+lcb_wait(instance);</codeblock><codeblock spectitle="API2 - Callback">lcb_set_get_callback(get_callback);
+
+void get_callback(lcb_t instance, const void *cookie, lcb_error_t err, const lcb_resp_get_t *resp)
+{
+    if (err) {
+        // ...
+    } else {
+        printf("Value is: %.*s\n", (int)resp->v.v0.nbytes, resp->v.v0.bytes);
+    }
+}</codeblock>API3
+                is available since version 2.5.6 (but see note below) and offers a more concise way
+                of performing
+                operations:<codeblock spectitle="API3 - Scheduling">lcb_CMDGET gcmd = { 0 };
+LCB_CMD_SET_KEY(&amp;gcmd, "key", 3);
+lcb_get3(instance, cookie, &amp;gcmd);</codeblock><codeblock spectitle="API3 - Callback">lcb_install_callback(instance, LCB_CALLBACK_GET, (lcb_RESPCALLBACK)get_callback);
+
+void get_callback(lcb_t instance, int cbtype, const lcb_RESPGET *resp)
+{
+    if (resp->rc) {
+        //
+    } else {
+        printf("Value is: %.*s\n", (int)resp->nvalue, resp->value);
+    }
+}</codeblock></p>
+            <p>
+                <note>While API3 is available from version 2.4.0, the above example will only work
+                    from version 2.5.6, although it will compile on any version. Versions prior to
+                    2.5.6 require <i>explicit scheduling</i> to be used in the application. Explicit
+                    scheduling requires invoking <apiname>lcb_sched_enter()</apiname> and
+                        <apiname>lcb_sched_leave()</apiname> around any code scheduling operations.
+                    Therefore the above snippet will work in version 2.4.0 and higher by using the
+                    following:<codeblock>lcb_sched_enter(instance);
+lcb_get3(instance, cookie, &amp;gcmd);
+lcb_sched_leave(instance);</codeblock></note>
+            </p>
+            <p>It is recommended to upgrade to <i>api3</i>. Internally the older <i>api2</i>
+                implementation is simply a wrapper around <i>api3</i>, and <i>api3</i> provides more
+                concise code. Newer APIs and couchbase features will be added to <i>api3</i> but not
+                    <i>api2</i>. Here are some things to keep in mind when porting:<ul
+                    id="ul_jvl_jq1_cw">
+                    <li>You can mix and match callback and scheduling styles. This means that you
+                        can use <apiname>lcb_get3</apiname> together with
+                            <apiname>lcb_set_get_callback</apiname>, or <apiname>lcb_get</apiname>
+                        with <apiname>lcb_install_callback3</apiname>.</li>
+                    <li>API3 allows you to have a single callback function that handles multiple
+                        operation types. Refer to [TODO: link to main operation page], so you can
+                        consolidate multiple <codeph>lcb_set_<i>operation</i>_callback</codeph> into
+                        a single <i>API3</i> callback.</li>
+                    <li>If you are using a version of libcouchbase prior to 2.5.6, be sure to invoke
+                            <apiname>lcb_sched_leave</apiname>
+                        <i>before</i>
+                        <apiname>lcb_wait</apiname> (or before returning to the event loop, for
+                        non-blocking applications). Calling <apiname>lcb_sched_leave</apiname> is no
+                        longer required as of version 2.5.6</li>
+                    <li>There is no explicit batching API in <i>api3</i>. If you wish to schedule
+                        multiple operations, simply invoke the relevant scheduling API (e.g.
+                                <codeph>lcb_<i>operation</i>3()</codeph>) multiple times, once for
+                        each set of input.</li>
+                    <li>The memory ownership model and callback semantics are the same for both API
+                        versions. This means that key and value buffers provided to the library are
+                        copied into the library's buffers. Likewise this means that buffers received
+                        via callbacks are owned by the library's internal buffers.</li>
+                </ul></p>
+        </section>
+        <section>
             <title>Feature Compatibility</title>
             <p>To take advantage of all features offered by Couchbase Server, you need to know what
                 version of the client provides compatibility for the features you want to use. The
