@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
 <concept id="spark-working-with-rdds">
-	<title>Spark SQL integration</title>
+	<title>Spark SQL Integration</title>
 	<shortdesc>Spark SQL integration depends on N1QL, which is available in Couchbase Server 4.0 and
 		later. To use Spark SQL queries, you need to create and persist DataFrames via the Spark SQL
 		DataFrame API.</shortdesc>
@@ -12,7 +12,7 @@
 				`travel-sample`</codeph>.</p>
 		<section>
 			<title>DataFrame creation</title>
-			
+
       <p>Before you can create a DataFrame with Couchbase, you need to create a <codeph>SQLContext</codeph>.</p>
 
 <codeblock outputclass="language-scala"><![CDATA[// Configure Spark
@@ -127,7 +127,7 @@ airports
 <codeblock outputclass="language-scala"><![CDATA[val df = sql.read
   // Define the source, required
   .format("com.couchbase.spark.sql.DefaultSource")
-  
+
   // Either set the schema filter for inference. Like this
   .option("schemaFilter", N1QLRelation.filterToExpression(EqualTo("type", "airline")))
   // Or directly as a string
@@ -136,21 +136,22 @@ airports
   .schema(StructType(
     StructField("name", StringType):: Nil
   ))
-  
+
   .load()]]></codeblock>
 
     <p>You can also provide all kinds of options directly, either to spark or for advanced functionality in the N1QL integration. Currently, the following options are allowed:</p>
 
     <ul>
       <li><codeph>idField</codeph>: The name of the document ID field, defaults to "META_ID".</li>
-      <li><codeph>bucket</codeph>: The name of the bucket to use, required if more than one bucket is opened.</li>
+      <li><codeph>bucket</codeph>: The name of the bucket to use, which is required if more than one
+          bucket is opened.</li>
     </ul>
 
     </section>
 
     <section>
       <title>DataFrame persistence</title>
-      
+
       <p>It is also possible to persist DataFrames into Couchbase. The important part is that a <codeph>META_ID</codeph> (or different if configured) field exists which can be mapped to the unique Document ID. All the other fields in the DataFrame will be converted into JSON and stored as the document content.</p>
 
 <codeblock outputclass="language-scala"><![CDATA[import sql.implicits._
@@ -167,5 +168,37 @@ people.write.couchbase(Map("idField" -> "uid"))]]></codeblock>
         mapped to <codeph>uid</codeph>.</p>
 
     </section>
+
+		<section>
+			<title>Working with Datasets</title>
+
+			<p>Spark 1.6 introduced Datasets and since they are built on top of Dataframes for Spark SQL Couchbase supports them out of the box.</p>
+
+			<p>You can call <codeph>.as[Target]</codeph> on your <codeph>DataFrame</codeph> to turn it into typesafe counterpart (most of the time a case class). Consider having the following case class:</p>
+
+<codeblock outputclass="language-scala"><![CDATA[// Airline has subset of the fields that are in the database
+case class Airline(name: String, iata: String, icao: String, country: String)]]></codeblock>
+
+			<p>Make sure to import the implicts for the <codeph>SQLContext</codeph>:</p>
+
+<codeblock outputclass="language-scala"><![CDATA[val sql = new SQLContext(sc)
+import sql.implicits._]]></codeblock>
+
+			<p>You can now create a DataFrame as usual which can be turned into a Dataset:</p>
+
+<codeblock outputclass="language-scala"><![CDATA[val airlines = sql.read.couchbase(schemaFilter = EqualTo("type", "airline")).as[Airline]]]></codeblock>
+
+			<p>If you want to print all Airlines that start with "A" you can access the properties on the case class:</p>
+
+<codeblock outputclass="language-scala"><![CDATA[airlines
+	.map(_.name)
+	.filter(_.toLowerCase.startsWith("a"))
+	.foreach(println(_))]]></codeblock>
+
+			<p>Fore more information on Datasets, please refer to the <xref
+			href="http://spark.apache.org/docs/latest/sql-programming-guide.html#datasets"
+			format="html" scope="external">Spark Dataset Docs</xref>.</p>
+
+		</section>
 	</conbody>
 </concept>
