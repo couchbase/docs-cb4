@@ -6,61 +6,36 @@
 		out of Couchbase, the Couchbase Spark connector creates RDDs for you. You can create and
 		persist RDDs by using key-value pairs, views, or N1QL.</shortdesc>
 	<conbody>
-		<section>
-			<title>Creating RDDs</title>
-
-			<p>To get access to the RDDs through the implicit methods that the Couchbase Spark
-				connector provides, you need to add the following import to your code:</p>
-
-			<codeblock outputclass="language-scala"><![CDATA[import com.couchbase.spark._]]></codeblock>
-
-			<p>This import adds Couchbase-specific methods to the <codeph>SparkContext</codeph>. Each
-				method starts with <codeph>couchbase</codeph>.</p>
-
-			<p>If you want to create an RDD for specific documents stored in a bucket, you can specify
-				the IDs directly. The connector fetches them from the server and turns them into an
-				RDD:</p>
-
-			<codeblock outputclass="language-scala"><![CDATA[sc
+		<section><title>Creating RDDs</title><p>To get access to the RDDs through the implicit methods
+				that the Couchbase Spark connector provides, you need to add the following import to
+				your
+				code:</p><codeblock outputclass="language-scala"><![CDATA[import com.couchbase.spark._]]></codeblock><p>This
+				import adds Couchbase-specific methods to the <codeph>SparkContext</codeph>. Each
+				method starts with <codeph>couchbase</codeph>.</p><p>If you want to create an RDD
+				for specific documents stored in a bucket, you can specify the IDs directly. The
+				connector fetches them from the server and turns them into an RDD:</p><codeblock outputclass="language-scala"><![CDATA[sc
 	.couchbaseGet[JsonDocument](Seq("airline_10123", "airline_10748"))
 	.collect()
 	.foreach(println)
-]]></codeblock>
-
-			<p>Because Spark outputs lots of information, you'll find the output somewhere in the
-				logs::</p>
-
-			<codeblock outputclass="language-json"><![CDATA[JsonDocument{id='airline_10748', cas=314538279043072, expiry=0, content={"country":"United States","iata":"ZQ","name":"Locair","callsign":"LOCAIR","icao":"LOC","id":10748,"type":"airline"}}
+]]></codeblock><p>Because Spark outputs lots of information, you'll find the output somewhere in the
+				logs::</p><codeblock outputclass="language-json"><![CDATA[JsonDocument{id='airline_10748', cas=314538279043072, expiry=0, content={"country":"United States","iata":"ZQ","name":"Locair","callsign":"LOCAIR","icao":"LOC","id":10748,"type":"airline"}}
 JsonDocument{id='airline_10123', cas=314538278125568, expiry=0, content={"country":"United States","iata":"TQ","name":"Texas Wings","callsign":"TXW","icao":"TXW","id":10123,"type":"airline"}}
-]]></codeblock>
-
-			<p>It is very important that you specify the target document type, otherwise the client
-				does not know how to convert it. The main reason for that is because Couchbase has
-				first-class JSON support, but is also able to store any kind of data, you can even store
-				serialized objects or protobuf-encoded documents (but you'll loose secondary indexing
-				capabilities). If you are unsure what to pick, stick with the
-					<codeph>JsonDocument</codeph>. If you need raw access to the JSON data, you can also
-				use the <codeph>RawJsonDocument</codeph>.</p>
-
-			<p>You can perform a (spatial) view query to extract rows and turn them into an RDD. Given the
-				following view against the <codeph>travel-sample</codeph> bucket: </p>
-
-			<codeblock outputclass="language-javascript"><![CDATA[function(doc, meta) {
+]]></codeblock>It is critical that you specify the target document type. Otherwise, the client does
+			not know how to convert it. The main reason is that Couchbase has first-class JSON
+			support, but is also able to store any data. You can even store serialized objects or
+			protobuf-encoded documents, but then you'll loose the secondary indexing
+				capabilities.<p>If you are unsure what to pick, stick with the
+					<codeph>JsonDocument</codeph>. If you need raw access to the JSON data, you can
+				also use the <codeph>RawJsonDocument</codeph>.</p><p>You can perform a (spatial)
+				view query to extract rows and turn them into an RDD. Given the following view
+				against the <codeph>travel-sample</codeph> bucket: </p><codeblock outputclass="language-javascript"><![CDATA[function(doc, meta) {
 	if (doc.type == "airline") {
 		emit(doc.name, null);
 	}
-}]]></codeblock>
-
-			<p>Creating an RDD for the first 10 results works like this:</p>
-
-			<codeblock outputclass="language-scala"><![CDATA[sc
+}]]></codeblock><p>Creating an RDD for the first 10 results works like this:</p><codeblock outputclass="language-scala"><![CDATA[sc
   .couchbaseView(ViewQuery.from("airlines", "by_name").limit(10))
   .collect()
-  .foreach(println)]]></codeblock>
-
-			<p>And prints the following:</p>
-
-			<codeblock><![CDATA[CouchbaseViewRow(airline_10,40-Mile Air,null)
+  .foreach(println)]]></codeblock><p>And prints the following:</p><codeblock><![CDATA[CouchbaseViewRow(airline_10,40-Mile Air,null)
 CouchbaseViewRow(airline_792,Access Air,null)
 CouchbaseViewRow(airline_665,AD Aviation,null)
 CouchbaseViewRow(airline_21,Aigle Azur,null)
@@ -69,56 +44,38 @@ CouchbaseViewRow(airline_139,Air Caledonie International,null)
 CouchbaseViewRow(airline_567,Air Carabes,null)
 CouchbaseViewRow(airline_149,Air Cargo Carriers,null)
 CouchbaseViewRow(airline_16881,Air Cudlua,null)
-CouchbaseViewRow(airline_882,Air Florida,null)]]></codeblock>
-
-			<p>If you want to load the full content for each document, you can mix both approaches:</p>
-
-			<codeblock outputclass="language-scala"><![CDATA[sc
+CouchbaseViewRow(airline_882,Air Florida,null)]]></codeblock><p>If you want to load the full content
+				for each document, you can mix both approaches:</p><codeblock outputclass="language-scala"><![CDATA[sc
   .couchbaseView(ViewQuery.from("airlines", "by_name").limit(10))
   .map(_.id)
   .couchbaseGet[JsonDocument]()
   .collect()
-  .foreach(println)]]></codeblock>
-
-			<p>Here you can see that <codeph>couchbaseGet</codeph> is not just available on the
-				context, but also on every <codeph>RDD[String]</codeph>. Neat, right? The exact same
-				approach is also available for spatial views (just use the
-					<codeph>couchbaseSpatialView()</codeph> method instead).</p>
-
-			<p>Finally, if you are using Couchbase Server 4.0 or greater you can utilize N1QL to
-				perform efficient queries against your JSON data in a Couchbase Bucket. The following
-				query is very similar to the one performed before through Views, just to show how the
-				different approaches work.</p>
-
-			<p>
+  .foreach(println)]]></codeblock><p>Here you can see that <codeph>couchbaseGet</codeph> is not just
+				available on the context, but also on every <codeph>RDD[String]</codeph>. Neat,
+				right? The exact same approach is also available for spatial views (just use the
+					<codeph>couchbaseSpatialView()</codeph> method instead).</p><p>Finally, if you
+				are using Couchbase Server 4.0 or greater, you can utilize N1QL to perform efficient
+				queries against your JSON data in a Couchbase Bucket. The following query is very
+				similar to the one performed before through Views, just to show how the different
+				approaches work.</p><p>
 				<note>You need to at least have a primary index created on the
-						<codeph>travel-sample</codeph> bucket to make the following examples work. If you
-					haven't done that already, perform a <codeph>CREATE PRIMARY INDEX ON
+						<codeph>travel-sample</codeph> bucket to make the following examples work.
+					If you haven't done that already, perform a <codeph>CREATE PRIMARY INDEX ON
 						`travel-sample`</codeph> query.</note>
-			</p>
-
-			<codeblock outputclass="language-scala"><![CDATA[val query = "SELECT name FROM `travel-sample` WHERE type = 'airline' ORDER BY name ASC LIMIT 10"
+			</p><codeblock outputclass="language-scala"><![CDATA[val query = "SELECT name FROM `travel-sample` WHERE type = 'airline' ORDER BY name ASC LIMIT 10"
 sc
   .couchbaseQuery(Query.simple(query))
   .collect()
-  .foreach(println)]]></codeblock>
-
-			<p>And if you want to fetch the full document contents based on some criteria, here is a
-				little more complex example:</p>
-
-			<codeblock outputclass="language-scala"><![CDATA[val query = "SELECT META(`travel-sample`).id as id FROM `travel-sample` WHERE type = 'airline' ORDER BY name ASC LIMIT 10"
+  .foreach(println)]]></codeblock><p>And if you want to fetch the full document contents based on
+				some criteria, here is a little more complex example:</p><codeblock outputclass="language-scala"><![CDATA[val query = "SELECT META(`travel-sample`).id as id FROM `travel-sample` WHERE type = 'airline' ORDER BY name ASC LIMIT 10"
 sc
   .couchbaseQuery(Query.simple(query))
   .map(_.value.getString("id"))
   .couchbaseGet[JsonDocument]()
   .collect()
-  .foreach(println)]]></codeblock>
-
-			<p>While this gives you the most flexibility with querying, we recommend using the higher
-				level Spark SQL components through the DataFrame API. See the Spark SQL section for more
-				information.</p>
-
-		</section>
+  .foreach(println)]]></codeblock><p>While this gives you the most flexibility with querying, we
+				recommend using the higher level Spark SQL components through the DataFrame API. See
+				the Spark SQL section for more information.</p></section>
 		<section>
 			<title>Persisting RDDs</title>
 
@@ -174,6 +131,38 @@ sc
 
 			<p>We are also working on better support for automatic conversions from different types so
 				that you don't have to map to a specific document type manually.</p>
+
+		</section>
+
+		<section>
+			<title>Subdocument API</title>
+
+			<p>If you are running Couchbase Server 4.5 or later, you can use the "subdoc" API to fetch only a
+				subset of the fields from a Document. This allows you to reduce network overhead,
+				and you need to move less data between operations.</p>
+
+				<p>The <codeph>couchbaseSubdocLookup</codeph> method is available on both the SparContext and the RDD and accepts two/three arguments, depending on the context:</p>
+
+				<ul>
+					<li><b>ids:</b> The list of IDs to fetch the fragments from.</li>
+					<li><b>get:</b> The paths of the JSON document that should be returned.</li>
+					<li><b>exists:</b> The paths of the JSON document that should be checked for existence.</li>
+				</ul>
+
+				<p>The following example fetches only two fields from an airline and checks if the <codeph>foobar</codeph> field exists in the document:</p>
+
+<codeblock outputclass="language-scala"><![CDATA[sc.parallelize(Seq("airline_10123"))
+  .couchbaseSubdocLookup(get = Seq("name", "iata"), exists = Seq("foobar"))
+  .collect()
+  .foreach(println)]]></codeblock>
+
+			<p>This prints:</p>
+
+<codeblock><![CDATA[
+SubdocLookupResult(airline_10123,0,Map(name -> Texas Wings, iata -> TQ),Map(foobar -> false))
+]]></codeblock>
+
+			<p>You can then extract the information from the <codeph>SubdocLookupResult</codeph> and use them in your RDD flow. Note that the Couchbase SDK also supports subdocument mutations which will be added to the Spark Connector in a future release.</p>
 
 		</section>
 	</conbody>
