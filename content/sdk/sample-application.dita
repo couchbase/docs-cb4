@@ -381,19 +381,90 @@ SELECT * FROM default b JOIN default a ON KEYS b.joinField</codeblock>
           <title>The Hotels component</title>
           <p><filepath>src/app/+hotels</filepath> is dealing with point of interests and searching
             for hotels. In the backend these searches are performed using <apiname>FTS</apiname>
-            queries. It has one main method, <apiname>findHotels</apiname>, which takes the
-            values of the form and performs the search using the <filepath>/api/hotel/</filepath>
-            endpoint.</p>
-          <p>The method may actually hit a more specific endpoint if a particular description
-            or location are requested by the form, eg. <filepath>/api/hotel/France/golf</filepath>
-            to search for an hotel in France with a description matching "golf" (in a full
-            text search, possibly including alternative spellings, words with the same root,
-            etc...).</p>
+            queries, performed using the <filepath>/api/hotel/</filepath> REST API endpoint.</p>
+          <p>The form is bound to the component using a <apiname>FormBuilder</apiname>, and it has
+            two optional text inputs: a description and a location field. When submitting the form,
+            the component's <apiname>findHotels</apiname> method is called with a JSON
+            representation of the form's content. The <apiname>findHotels</apiname> method will use
+            these values to determine if it should hit a more specific endpoint, in the case where
+            a particular description keyword or location are requested by the form...</p>
+          <p>For instance, to search for an hotel in France with a description matching "golf" (in
+              a full text search sense, possibly including alternative spellings, words with the
+              same root, etc...), one should use the  <filepath>/api/hotel/France/golf</filepath>
+              endpoint. The possible endpoints are:</p>
+          <ul>
+              <li><filepath>/api/hotel</filepath> to find all hotels</li>
+              <li><filepath>/api/hotel/{description}/</filepath> to find all hotels matching a
+              keyword/phrase in their name or description.</li>
+              <li><filepath>/api/hotel/{description}/{location}/</filepath> to find all hotels
+              matching the keyword/phrase and a location keyword (in either of the location-related
+              fields: country, city, state, address...)</li>
+              <li><filepath>/api/hotel/*/{location}/</filepath> to find all hotels within a
+              location (not using keyword)</li>
+          </ul>
+          <p> The Query can be seen in the terminal window that is running the backend application: </p>
+          <codeblock>Executing FTS Query:
+{"query":{"conjuncts": [
+    {"field":"type","term":"landmark"},
+    {"disjuncts":[
+        {"field":"country","match_phrase":"France"},
+        {"field":"city","match_phrase":"France"},
+        {"field":"state","match_phrase":"France"},
+        {"field":"address","match_phrase":"France"}
+    ]},
+    {"field":"content","match":"hotel"},
+    {"disjuncts":[
+        {"field":"content","match_phrase":"foo"},
+        {"field":"name","match_phrase":"foo"}
+    ]}
+]}}</codeblock>
       </section>
 
       <section>
           <title>FTS query anatomy</title>
-          <p></p>
+          <p>The Couchbase Search API (FTS) is a powerful tool for searching text inside a document
+              data store. In each SDK-specific travel application, queries about hotels are created
+              by a dedicated module (for example in Java, the <filepath>Hotel</filepath> service).
+              Here's an example of a query that finds hotels mentioning "golf" in France, followed
+              by a description of what's happening in the query:</p>
+              <codeblock>{"query":{"conjuncts": [
+    {"field":"type","term":"landmark"},
+    {"disjuncts":[
+        {"field":"country","match_phrase":"France"},
+        {"field":"city","match_phrase":"France"},
+        {"field":"state","match_phrase":"France"},
+        {"field":"address","match_phrase":"France"}
+    ]},
+    {"field":"content","match":"hotel"},
+    {"disjuncts":[
+        {"field":"content","match_phrase":"golf"},
+        {"field":"name","match_phrase":"golf"}
+    ]}
+]}}</codeblock>
+        <p>The <codeph>query</codeph> is actually a composite (<codeph>conjuncts</codeph>) of 4
+        sub-queries: a <codeph>term</codeph> query, a <codeph>disjuncts</codeph>, a <codeph>match
+        </codeph> and another <codeph>disjuncts</codeph>.</p>
+        <ul>
+            <li>The term query matches a term as-is, without performing any analysis: it must
+                match <b>exactly</b> what is stored in the index (which could be just the root
+                of a word). Here we use it to restrict our search to the <codeph>landmark</codeph>
+                <apiname>type</apiname>.</li>
+            <li>A disjunction query matches if any of its sub-queries matches. We use the first
+                only when there is a <codeph>location</codeph> provided, to search for it in any
+                of the <apiname>country</apiname>, <apiname>city</apiname>, <apiname>state</apiname>
+                and <apiname>address</apiname> fields. We use a <apiname>match phrase</apiname>
+                sub-query on each, which will attempt to find several keywords, analyzing them
+                to remove stop words, include close results like words from the same root, etc...</li>
+            <li>A match query is much like these match phrases queries, except it only considers
+                one term to search for, and can apply fuzzyness (eg. to match close words with
+                a slightly different spelling). We use this type of query with the <codeph>hotel</codeph>
+                term to try and limit results to hotels.</li>
+            <li>The second disjunction query is added whenever a description is provided for the
+                search. It performs two match phrase queries on the description, respectively
+                in the <apiname>name</apiname> and <apiname>content</apiname> fields of the
+                landmark.</li>
+            </ul>
+
       </section>
 
       <section id="using-travel-app">
