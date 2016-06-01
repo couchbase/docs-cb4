@@ -13,18 +13,21 @@
       <p>Each SDK comes with its own implementation of the backend for the application. You can download
           the complete source code and then build and run the app. While the app runs, you can view the
           log of N1QL queries that it sends. The documentation for the travel app illustrates the data
-          model and walks through the N1QL queries used to select flights.</p>
-      <p>The travel app front-end is the same in each SDK implementation and incorporates the following
-          frameworks:</p>
+          model and walks through the N1QL queries used to select flights and search for points of
+          interest, more specifically hotels.</p>
+      <p>The travel app front-end is the same in each SDK implementation and is built on the following tools:</p>
           <ul>
               <li>
-                  <xref href="http://expressjs.com" format="html" scope="external">Express</xref>
-              </li>
-              <li>
-                  <xref href="https://angularjs.org" format="html" scope="external">AngularJS</xref>
+                  <xref href="https://angular.io" format="html" scope="external">Angular2</xref>
               </li>
               <li>
                   <xref href="http://getbootstrap.com" format="html" scope="external">Bootstrap</xref>
+              </li>
+              <li>
+                  <xref href="https://www.typescriptlang.org/" format="html" scope="external">the TypeScript language</xref>
+              </li>
+              <li>
+                  <xref href="https://github.com/Reactive-Extensions/RxJS" format="html" scope="external">RxJs (in Angular2)</xref>
               </li>
           </ul>
       <p>The backend is a REST API, and is available in the following languages:</p>
@@ -213,27 +216,49 @@
       <section id="architecture">
           <title>Architecture</title>
 
-          <p>The application serves an HTML file named <filepath>index.html</filepath> (eg. from the public path
-              in the Node.js application). This file contains references to various included script
-              files for front-side JavaScript components such as Bootstrap, jQuery, and AngularJS.
-              The Angular controller script named <codeph>script.js</codeph>, which you can find
-              in the <filepath>/public/js/</filepath> directory, controls how the application
-              interacts with the REST API in the server application.</p>
+          <p>The application serves an HTML file named <filepath>index.html</filepath>
+          (in an <filepath>src/app/</filepath> folder usually contained in a root folder
+          dedicated to frontend files, eg. the <filepath>public</filepath> path in the Node.js
+          application). This file contains references to various included script files for front
+          side JavaScript components such as Bootstrap and jQuery. It also contains a small
+          script snippet that bootstraps the Angular2 application, as well as an Angular loop
+          (<codeph>{{#each scripts.polyfills}}</codeph>) to load <apiname>polyfills</apiname>
+          (implementation of html5/web component elements that can be used as a backup if the
+          browser doesn't provide the corresponding feature natively).</p>
+
+          <p>Angular2 works in terms of <apiname>Components</apiname>, and the main component
+          that gets displayed at bootstrap is in <filepath>src/app/try.component.ts</filepath>.
+          It is in charge of displaying the common elements of the single-page app, and defines
+          <apiname>Routes</apiname>, determining which component to show depending on the URL.
+          The place at which said components are shown in the html is represented by a component
+          <apiname>tag</apiname> provided by the angular <apiname>Router</apiname>:
+          <codeph>&lt;router-outlet&gt;&lt;/router-outlet&gt;</codeph>.</p>
+
+          <p>The application is then splitted in several packages that each talk to a specific
+            subset of the REST API provided by the backend. Each package has a corresponding
+            main Angular <apiname>Component</apiname> that provides the methods to interact
+            with the API or perform work. Their corresponding views then use these methods
+            to populate data in the application.</p>
 
           <fig>
               <title>The Application Services</title>
               <image href="shared/images/architecture-overview.png" width="650px" />
           </fig>
       </section>
+
+
       <section>
-          <title>REST API</title>
-          <p>The application uses these methods to populate data in the application:</p>
+          <title>The Home component</title>
+          <p><filepath>src/app/+home</filepath> is the main page, dealing with flight searches.
+            In the backend, these searches are performed using <apiname>N1QL</apiname> queries.
+            It has two main methods:
           <ul>
-              <li><apiname>$scope.findFlights</apiname>, which is a REST API call to the
-                      <filepath>/api/flightPath/findAll</filepath> endpoint</li>
-              <li><apiname>$scope.findAirports</apiname>, which is a REST API call to the
-                      <filepath>/api/airport/findAll</filepath> endpoint</li>
-          </ul>
+              <li><apiname>findFlightPath</apiname> which is a REST API call to the
+                <filepath>/api/flightPath/findAll</filepath> REST endpoint</li>
+              <li><apiname>findAirports</apiname>, which is a REST API call to the
+                <filepath>/api/airport/findAll</filepath> endpoint</li>
+            </ul></p>
+
           <fig>
               <title>Front End Framework REST calls</title>
               <image href="shared/images/angular-rest.png" width="350px" />
@@ -244,87 +269,21 @@
           </fig>
           <p>The application attempts to find an airport based on the codes used for the
                   <codeph>name</codeph> (case sensitive), and codes for Federal Aviation
-              Administration (FAA) or International Civil Aviation Organization (ICAO). The travel
-              app uses the data model and binds the input field for the <codeph>from</codeph>
-              airport to an Angular typeahead directive, which is defined in the
-                  <filepath>index.html</filepath> file as follows:</p>
-          <codeblock outputclass="language-markup" spectitle="Angular typeahead directive from /public/index.html file"><![CDATA[<input type="text"
-  placeholder="find airport"
-  typeahead="data.airportname for data in findAirports($viewValue)"
-  typeahead-min-length="3"
-  typeahead-wait-ms="250"
-  ng-model="fromName"
-  ng-minlength="3"
-  class="input-small form-control"
-  name="from" required/>]]></codeblock>
-          <p>In the Angular controller script, the <apiname>findAirports()</apiname> function is:</p>
-          <codeblock outputclass="language-javascript" spectitle="findAirports() function from /public/js/scripts.js file">$scope.findAirports=function(val){
-  return $http.get("/api/airport/findAll",{
-      params:{search:val}
-  }).then(function(response){
-      return response.data;
-  });
-}</codeblock>
-          <p>The API call to the server application <filepath>/api/airport/findAll</filepath>
-              function is defined in the <filepath>/routes/routes.js</filepath> file as:</p>
-          <codeblock outputclass="language-javascript" spectitle="/api/airport/findAll function from /routes/routes.js file">//// ▶▶ airports ◀◀ ////
-app.get('/api/airport/findAll',function(req,res) {
-if (req.query.search) {
-    airport.findAll(req.query.search, function (err, done) {
-        if (err) {
-            res.status = 400;
-            res.send(err);
-            return;
-        }
-        res.status = 202;
-        res.send(done);
-    });
-}else{
-    res.status = 400;
-    res.send({"airport":"bad request"});
-    return;
-}
-});</codeblock>
-          <p>The <filepath>/api/airport/findAll</filepath> route function in the
-                  <filepath>route.js</filepath> file points to the corresponding
-                  <apiname>findAll</apiname> function in the airport module in the<filepath>
-                  /model/airport.js</filepath> file. This method allows the user to search by FAA code,
+              Administration (FAA) or International Civil Aviation Organization (ICAO). The backend
+              method allows the user to search by FAA code,
               ICAO code or airport name. It then prepares a N1QL query based on the selection criteria
-              and bucket information from the <filepath>/config.json</filepath> file. The query is
-              passed to the Couchbase query service in the <filepath>/model/db.js</filepath> module
-              that calls Couchbase.</p>
-          <codeblock outputclass="language-javascript" spectitle="findAll() function from /model/airport.js file"><![CDATA[module.exports.findAll = function (queryStr, done) {
-  var queryPrep;
-  if (queryStr.length == 3) {
-      queryPrep = "SELECT airportname FROM `" + config.couchbase.bucket + "` WHERE faa ='" + queryStr.toUpperCase() + "'";
-  } else if (queryStr.length == 4 && (queryStr==queryStr.toUpperCase()||queryStr==queryStr.toLowerCase())) {
-      queryPrep = "SELECT airportname FROM `" + config.couchbase.bucket + "` WHERE icao ='" + queryStr.toUpperCase() + "'";
-  } else {
-      queryPrep = "SELECT airportname FROM `" + config.couchbase.bucket + "` WHERE airportname LIKE '" + queryStr + "%'";
-  }
+              (using bucket information from its configuration). The query is then sent to the Couchbase
+              query service, all by using the backend's associated SDK.</p>
 
-  db.query(queryPrep, function (err, res) {
-      if (err) {
-          done(err, null);
-          return;
-      }
-      if (res) {
-          done(null, res);
-          return;
-      }
-  });
-}]]></codeblock>
           <p>Using the data model, if you enter <userinput>SEA</userinput>, <userinput>KSEA</userinput>, or
                   <userinput>Seattle</userinput>, the typeahead directive gives you the option to
               select <uicontrol>Seattle Tacoma Intl.</uicontrol> To see the results of the query,
-              watch the terminal window in which the Node application is running. The example is
+              watch the terminal window in which the application is running. The example is
               showing an output for the N1QL statements:</p>
           <codeblock>QUERY: SELECT airportname FROM `travel-sample` WHERE faa ='SEA'
 QUERY: SELECT airportname FROM `travel-sample` WHERE icao ='KSEA'
 QUERY: SELECT airportname FROM `travel-sample` WHERE airportname LIKE 'Seattle%'</codeblock>
-          <p>You can enable or disable console logging for N1QL statements by changing the value of
-              the <codeph>showQuery</codeph> property in the <filepath>/config.json</filepath> file to
-                  <codeph>true</codeph> or <codeph>false</codeph>.</p>
+
           <fig>
               <title>REST API for finding flight paths</title>
               <image href="shared/images/architecture-flight-path.png" width="650px" />
@@ -334,78 +293,21 @@ QUERY: SELECT airportname FROM `travel-sample` WHERE airportname LIKE 'Seattle%'
               path. The call to the REST API <filepath>/api/flightPath/findAll</filepath> on the
               server is initiated when the user clicks the <uicontrol>Find Flights</uicontrol>
               button. The button is defined within the <codeph>travelForm</codeph> form element in
-              the <filepath>index.html</filepath> file, as shown in the following code
-              snippets:</p>
-          <codeblock outputclass="language-markup" spectitle="travelForm form element from /public/index.html file"><![CDATA[<form class="form-horizontal" role="form"
-     name="travelForm" ng-submit="findFlights()" novalidate>]]></codeblock>
-          <codeblock outputclass="language-markup" spectitle="Find Flights button element from /public/index.html file"><![CDATA[<button class="btn btn-primary pull-right btn-sm"
-       type="submit" ng-disabled="travelForm.$invalid">Find Flights</button>]]></codeblock>
-          <p>The <codeph>travelForm</codeph> form element contains various Angular validation options
-              that are used with the input directives. For more information about validation and the
-              input directive see <xref href="https://docs.angularjs.org/api/ng/directive/input"
-                  format="html" scope="external"
-                  >https://docs.angularjs.org/api/ng/directive/input</xref>. After validating the input
-              options, the Angular function in the <filepath>script.js</filepath> file is called to
-              find flights.</p>
-          <codeblock outputclass="language-javascript" spectitle="findFlights() function from /public/js/scripts.js file"><![CDATA[$scope.findFlights = function () {
-  $scope.empty = true;
-  $scope.rowCollectionLeave = [];
-  $scope.rowCollectionRet = [];
-  $http.get("/api/flightPath/findAll", {
-      params: {from: this.fromName, to: this.toName, leave: this.leave}
-  }).then(function (response) {
-      if (response.data.length > 0) {
-          $scope.empty = false;
-      }
-      for (var j = 0; j < response.data.length; j++) {
-          $scope.rowCollectionLeave.push(response.data[j]);
-      }
-  });
-  if (this.ret) {
-      $http.get("/api/flightPath/findAll", {
-          params: {from: this.toName, to: this.fromName, leave: this.ret}
-      }).then(function (responseRet) {
-          if (responseRet.data.length > 0) {
-              $scope.retEmpty = false;
-          }
-          for (var j = 0; j < responseRet.data.length; j++) {
-              $scope.rowCollectionRet.push(responseRet.data[j]);
-          }
-      });
-  }
-}]]></codeblock>
-          <p>The <codeph>findFlights()</codeph> function checks the form input to determine whether the
-              return option is enabled or disabled. It then calls the server REST API
-                  <filepath>/api/flightPath/findAll</filepath> function either once for a one way
-              flight or twice for a round-trip flight. When it requests the return flight for a
-              round trip, it uses the reverse <codeph>to</codeph> and <codeph>from</codeph>
-              sequence. </p>
-          <codeblock outputclass="language-javascript" spectitle="/api/flightPath/findAll function from /routes/routes.js file"><![CDATA[
-//// ▶▶ flightPath ◀◀ ////
-app.get('/api/flightPath/findAll',function(req,res){
-  if(req.query.from && req.query.to && req.query.leave){
-      flightPath.findAll(req.query.from, req.query.to,req.query.leave, function (err, done) {
-          if (err) {
-              res.status = 400;
-              res.send(err);
-              return;
-          }
-          res.status = 202;
-          res.send(done);
-      });
-  }else{
-      res.status = 400;
-      res.send({"flightPath":"bad request"});
-      return;
-  }
-});
-]]></codeblock>
-          <p>The <codeph>/api/flightPath/findAll</codeph> route function in the
-                  <filepath>route.js</filepath> file points to the corresponding
-                  <apiname>findAll</apiname> function in the <codeph>flightPath</codeph> module, found
-              in the <filepath>/model/flghtPath.js</filepath> file. The <apiname>findAll</apiname>
-              function performs several important steps for processing the request to find
-              flights:</p>
+              the home component's template.</p>
+
+          <p>The <codeph>travelForm</codeph> form binds its controls to a corresponding object in the
+            component, which allows to perform some validation checking among other things.
+            To learn more about forms and validation in Angular2, please refer to the
+            <xref href="https://angular.io/docs/ts/latest/guide/forms.html" format="html" scope="external">official
+            documentation</xref>.
+            The submit button calls the component's <codeph>findFlights()</codeph> function, which in
+            turn invokes the server REST API <filepath>/api/flightPath/findAll</filepath> function either
+            once for a one way flight or twice for a round-trip flight. When it requests the return
+            flight for a round trip, it just uses the reverse <codeph>to</codeph> and <codeph>from</codeph>
+            sequence.</p>
+
+          <p>In the backend, the code corresponding to the <apiname>findAll</apiname> endpoint performs
+            several important steps for processing the request to find flights:</p>
           <ul>
               <li>It determines the FAA identifier for the <codeph>to</codeph> and <codeph>from</codeph>
                   airports.</li>
@@ -416,43 +318,7 @@ app.get('/api/flightPath/findAll',function(req,res){
                   particular dates. It returns a list of flights that includes data for the following
                   fields: airline, flight, departure, from, to, and aircraft. </li>
           </ul>
-          <p> This method in the <filepath>flightPath.js</filepath> module is: </p>
-          <codeblock outputclass="language-javascript" spectitle="findAll function from the /model/flightPath.js file"><![CDATA[
-module.exports.findAll = function (from, to, leave,done) {
-  var queryPrep = "SELECT faa as fromAirport FROM `" + config.couchbase.bucket + "` WHERE airportname = '" + from +
-      "' UNION SELECT faa as toAirport FROM `" + config.couchbase.bucket + "` WHERE airportname = '" + to + "'";
-  db.query(queryPrep, function (err, res) {
-      if (err) {
-          done(err, null);
-          return;
-      }
-      if (res) {
-          var queryTo;
-          var queryFrom;
-          for(i=0;i<res.length;i++){
-              if(res[i].toAirport){
-                  queryTo=res[i].toAirport;
-              }
-              if(res[i].fromAirport){
-                  queryFrom=res[i].fromAirport;
-              }
-          }
-          queryPrep="SELECT a.name, s.flight, s.utc, r.sourceairport, r.destinationairport, r.equipment FROM `" + config.couchbase.bucket + "` r UNNEST r.schedule s JOIN `" + config.couchbase.bucket + "` a ON KEYS r.airlineid WHERE r.sourceairport='" + queryFrom + "' AND r.destinationairport='" + queryTo + "' AND s.day=" + convDate(leave) + " ORDER BY a.name";
-          db.query(queryPrep,function (err, flightPaths) {
-                       if (err) {
-                           done(err, null);
-                           return;
-                       }
-                       if (flightPaths) {
-                           done(null, flightPaths);
-                           return;
-                       }
-                   }
-          );
-      }
-  });
-}
-]]></codeblock>
+
           <p> The Query can be seen in the terminal window that is running the backend application: </p>
           <codeblock>QUERY:
 SELECT a.name, s.flight, s.utc, r.sourceairport, r.destinationairport, r.equipment
@@ -509,6 +375,25 @@ SELECT * FROM default b JOIN default a ON KEYS b.joinField</codeblock>
           <p>Standard SQL syntax is used in the <codeph>WHERE</codeph> clause for the
                   <codeph>SELECT</codeph> statement. The result set is ordered by the
                   <codeph>a.name</codeph> field, which contains the airline name.</p>
+      </section>
+
+      <section>
+          <title>The Hotels component</title>
+          <p><filepath>src/app/+hotels</filepath> is dealing with point of interests and searching
+            for hotels. In the backend these searches are performed using <apiname>FTS</apiname>
+            queries. It has one main method, <apiname>findHotels</apiname>, which takes the
+            values of the form and performs the search using the <filepath>/api/hotel/</filepath>
+            endpoint.</p>
+          <p>The method may actually hit a more specific endpoint if a particular description
+            or location are requested by the form, eg. <filepath>/api/hotel/France/golf</filepath>
+            to search for an hotel in France with a description matching "golf" (in a full
+            text search, possibly including alternative spellings, words with the same root,
+            etc...).</p>
+      </section>
+
+      <section>
+          <title>FTS query anatomy</title>
+          <p></p>
       </section>
 
       <section id="using-travel-app">
