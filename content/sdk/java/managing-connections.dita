@@ -3,8 +3,7 @@
   PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
 <concept xml:lang="en-us" id="concept2677">
 	<title>Managing Connections</title>
-	<shortdesc>This section shows how to instantiate a client object to connect to a Couchbase cluster
-		as well as how to configure encryption.</shortdesc>
+	<shortdesc>Shows how to instantiate a client object to connect to a Couchbase cluster</shortdesc>
 	<conbody>
 		<section>
 			<title>Connecting to a Bucket</title>
@@ -32,7 +31,7 @@ Cluster cluster = CouchbaseCluster.create(nodes);]]></codeblock>
 <codeblock outputclass="language-java"><![CDATA[Bucket bucket1 = cluster.openBucket("bucket1", "password");
 Bucket bucket2 = cluster.openBucket("bucket2", "password");]]></codeblock>
 
-<p>If more than one bucket is open at a time, the underlying <codeph>core-io</codeph> module makes
+<p>If more than one bucket is open at a time, the underlying <codeph>core-io</codeph> library makes
 				sure to utilize the resources as best as possible, that is sharing sockets, thread pools
 				and so on.</p>
 
@@ -41,13 +40,13 @@ Bucket bucket2 = cluster.openBucket("bucket2", "password");]]></codeblock>
 <ul>
 	<li>Always create only one instance of a <codeph>CouchbaseCluster</codeph> and share it across threads (same with buckets).</li>
 	<li>The SDK is thread-safe, so no additional synchronization is needed when interacting with the SDK.</li>
-	<li>If different clusters need to be accessed, reuse the <codeph>ClusterEnvironment</codeph>.</li>
+	<li>If different clusters need to be accessed, reuse the <codeph>CouchbaseEnvironment</codeph>.</li>
 </ul>
 
 <p>If the underlying environment is not shared the application will continue to work, but a warning
 				is raised in the logs:</p>
 
-<codeblock><![CDATA[WARNING: More than 1 Couchbase Environments found (N), this can have severe 
+<codeblock><![CDATA[WARNING: More than 1 Couchbase Environments found (N), this can have severe
 impact on performance and stability. Reuse environments!]]></codeblock>
 
 <p>In general, this is an indication of misconfiguration, the only exception being unit and
@@ -55,6 +54,30 @@ impact on performance and stability. Reuse environments!]]></codeblock>
 					<codeph>ClusterEnvironment</codeph> for whatever reason.</p>
 
 		</section>
+
+    <section>
+			<title>Disconnecting from a Bucket</title>
+
+<p>The most common case is to disconnect the whole <codeph>CouchbaseCluster</codeph> from the server, which has the same effect as closing all buckets manually and in addition close all underlying resources like thread pools. This also means that once disconnect has happened, you can't reopen buckets from the same <codeph>Cluster</codeph> instance.</p>
+
+<codeblock outputclass="language-java"><![CDATA[Boolean disconnected = cluster.disconnect();]]></codeblock>
+
+			<p>If the <codeph>ClusterEnvironment</codeph> is shared it needs to be closed manually, but if
+				not (which is the regular case) it gets also shut down.</p>
+
+<p>After a disconnect, it is not possible to open buckets again, so only use it when you are sure that you do not need access to a <codeph>CouchbaseCluster</codeph> again. If you only want to close a bucket, you can do that without shutting down everything:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Boolean closed = bucket.close();]]></codeblock>
+
+<p>This will release only the resources allocated for this bucket and it is possible to reopen it at
+				a later point.</p>
+
+<p>All threads used by the SDK are daemon threads, so even if you do not <codeph>disconnect()</codeph> manually, your JVM will exit. It is very important that you properly shut down the SDK so that remaining operations are finished and nothing is left behind.</p>
+
+<p>If no timeout is used for the synchronous <codeph>disconnect()</codeph> method, the environment <codeph>disconnect timeout</codeph> is used, which defaults to 25 seconds. This holds also true if you call <codeph>close()</codeph> on a bucket.</p>
+
+		</section>
+
 		<section>
 			<title>Connecting Asynchronously</title>
 
@@ -81,33 +104,9 @@ AsyncBucket asyncBucket = bucket.async();]]></codeblock>
 Observable<AsyncBucket> bucketObservable = cluster.openBucket();]]></codeblock>
 
 		</section>
+
 		<section>
-			<title>Disconnecting from a Bucket</title>
-
-<p>The most common case is to disconnect the whole <codeph>CouchbaseCluster</codeph> from the server, which has the same effect as closing all buckets manually and in addition close all underlying resources like thread pools. This also means that once disconnect has happened, you can't reopen buckets from the same <codeph>Cluster</codeph> instance.</p>
-
-<codeblock outputclass="language-java"><![CDATA[Boolean disconnected = cluster.disconnect();]]></codeblock>
-
-			<p>If the <codeph>ClusterEnvironment</codeph> is shared it needs to be closed manually, but if
-				not (which is the regular case) it gets also shut down.</p>
-
-<p>After a disconnect, it is not possible to open buckets again, so only use it when you are sure that you do not need access to a <codeph>CouchbaseCluster</codeph> again. If you only want to close a bucket, you can do that without shutting down everything:</p>
-
-<codeblock outputclass="language-java"><![CDATA[Boolean closed = bucket.close();]]></codeblock>
-
-<p>This will release only the resources allocated for this bucket and it is possible to reopen it at
-				a later point.</p>
-
-<p>Especially with <codeph>disconnect</codeph>, make sure you wait until it is finished (so everything is shut down cleanly), either by using the <codeph>toBlocking</codeph> methods or by using other mechanisms in the subscriber (like a <codeph>CountDownLatch</codeph> to orchestrate behavior).</p>
-
-<p>All threads used by the SDK are daemon threads, so even if you do not <codeph>disconnect()</codeph> manually, your JVM will exit. It is very important that you properly shut down the SDK so that remaining operations are finished and nothing is left behind.</p>
-
-<p>If no timeout is used for the synchronous <codeph>disconnect()</codeph> method, the environment <codeph>disconnect timeout</codeph> is used, which defaults to 25 seconds. This holds also true if you call <codeph>close()</codeph> on a bucket.</p>
-
-		</section>
-	
-		<section>
-			<title>Sharing Resources</title>
+			<title>Scalability and concurrency</title>
 
 <p>As mentioned previously, you should create only one instance of a CouchbaseCluster and open
 				buckets from there. If you need to connect to multiple clusters though, this is not
@@ -134,7 +133,7 @@ CouchbaseCluster cluster2 = CouchbaseCluster.create(env, "192.168.57.10");]]></c
 
 		</section>
 		<section id="ssl">
-			<title>Configuring Encryption</title>
+			<title>Connecting with SSL</title>
 
 			<p>Couchbase Server EE 3.0 and later supports full encryption of client-side traffic. That includes key-value type operations, queries, and configuration communication. Make sure to have a proper Couchbase Server version installed before proceeding with configuring encryption on the client side.</p>
 
@@ -166,8 +165,8 @@ F4+FjEqAEIr1mQepDaNM0gEfVcgd2SzGhC3yhYFBAH//8W4DUot5ciEhoBs=
 				keystore. If you don't use this option, the default location is the
 					<codeph>.keystore</codeph> file in user's home directory.</note>
 
-<codeblock outputclass="language-bash"><![CDATA[$ keytool -importcert -file cluster.cert 
-Enter keystore password:  
+<codeblock outputclass="language-bash"><![CDATA[$ keytool -importcert -file cluster.cert
+Enter keystore password:
 Owner: CN=*
 Issuer: CN=*
 Serial number: 1381528ec7379f22
@@ -184,14 +183,14 @@ Certificate was added to keystore]]></codeblock>
 <p>You can verify with <cmdname>keytool -list</cmdname>:</p>
 
 <codeblock outputclass="language-bash"><![CDATA[$ keytool -list
-Enter keystore password:  
+Enter keystore password:
 
 Keystore type: JKS
 Keystore provider: SUN
 
 Your keystore contains 1 entry
 
-mykey, Aug 18, 2014, trustedCertEntry, 
+mykey, Aug 18, 2014, trustedCertEntry,
 Certificate fingerprint (SHA1): 3A:BC:48:3C:0F:36:99:EB:35:76:7C:E5:14:DE:89:DE:AE:79:9B:ED]]></codeblock>
 
 <p>The next step is to enable encryption and pass it the path and password of the file.</p>
@@ -201,6 +200,16 @@ Certificate fingerprint (SHA1): 3A:BC:48:3C:0F:36:99:EB:35:76:7C:E5:14:DE:89:DE:
     .sslEnabled(true)
     .sslKeystoreFile("/path/tokeystore")
     .sslKeystorePassword("password")
+    .build();]]></codeblock>
+
+    <p>Alternatively, since 2.3.0 it is possible to point it directly to a keystore that has been previously
+      initialized so it can be created from different sources:</p>
+
+<codeblock outputclass="language-java"><![CDATA[KeyStore myKeystore = loadKeystore();
+
+CouchbaseEnvironment env = DefaultCouchbaseEnvironment.builder()
+    .sslEnabled(true)
+    .sslKeystore(myKeystore)
     .build();]]></codeblock>
 
 <p>Depending on the OS used there are different default passwords and paths, so consult the JDK
@@ -248,7 +257,7 @@ _couchbase._tcp.example.com.  3600  IN  SRV  0  0  0  node3.example.com.]]></cod
 
 <codeblock><![CDATA[_couchbases._tcp.example.com.  3600  IN  SRV  0  0  0  node1.example.com.
 _couchbases._tcp.example.com.  3600  IN  SRV  0  0  0  node2.example.com.
-_couchbases._tcp.example.com.  3600  IN  SRV  0  0  0  node3.example.com.]]></codeblock>			
+_couchbases._tcp.example.com.  3600  IN  SRV  0  0  0  node3.example.com.]]></codeblock>
 
 			<p>Now you need to enable DNS SRV on the environment and pass in the host name from your records
 				(here <codeph>example.com</codeph>):</p>
@@ -264,14 +273,14 @@ Cluster cluster = CouchbaseCluster.create(env, "example.com");]]></codeblock>
 				given host name will be used as a A record lookup.</p>
 
 <codeblock><![CDATA[WARNING: DNS SRV lookup failed, proceeding with normal bootstrap.
-javax.naming.NameNotFoundException: DNS name not found [response code 3]; 
+javax.naming.NameNotFoundException: DNS name not found [response code 3];
    remaining name '_couchbase._tcp.example.com'
 	at com.sun.jndi.dns.DnsClient.checkResponseCode(DnsClient.java:651)
 	at com.sun.jndi.dns.DnsClient.isMatchResponse(DnsClient.java:569)]]></codeblock>
 
 			<p>Also, if you pass in more than one node, DNS SRV bootstrap will not be initiated:</p>
 
-<codeblock><![CDATA[INFO: DNS SRV enabled, but less or more than one seed node given. 
+<codeblock><![CDATA[INFO: DNS SRV enabled, but less or more than one seed node given.
 Proceeding with normal bootstrap.]]></codeblock>
 
 		</section>
