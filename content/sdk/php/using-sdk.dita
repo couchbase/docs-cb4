@@ -3,12 +3,12 @@
 <topic id="topic_qkc_cnm_qv">
     <title>Start Using the PHP SDK</title>
     <shortdesc>The Couchbase PHP SDK allows you to connect to a Couchbase cluster from PHP. The
-        Couchbase PHP SDKis a native PHP extension and uses the Couchbase high-performance C library
+        Couchbase PHP SDK is a native PHP extension and uses the Couchbase high-performance C library
         to handle communicating to the cluster over Couchbase binary protocols.</shortdesc>
     <topic id="topic_wgf_spm_qv">
         <title>Installing the SDK</title>
         <body>
-            <p>Before installing the Python SDK, you must first install the C SDK.</p>
+            <p>Before installing the PHP SDK, you must first install the C SDK.</p>
             <section conref="../c/using-sdk.dita#toplevel/install-linux"/>
             <section conref="../c/using-sdk.dita#toplevel/install-osx">
                 <p>Once the C SDK has been installed, use PECL to download and install the
@@ -25,16 +25,23 @@
                 that the PHP interpreter should load the Couchbase SDK as an extension. To do
                     this:<ol id="ol_rr1_cpz_zv">
                     <li>Locate the location of your php.ini file. This can be done by <codeph>php
-                            --ini</codeph><screen>mnunberg@mbp15II ~ $ php --ini
+                            --ini</codeph><screen>$ php --ini
 Configuration File (php.ini) Path: /usr/local/etc/php/7.0
 Loaded Configuration File:         /usr/local/etc/php/7.0/php.ini
 Scan for additional .ini files in: /usr/local/etc/php/7.0/conf.d
 Additional .ini files parsed:      (none)</screen></li>
                     <li>Insert the following line in the <codeph>php.ini</codeph> file; this should
                         be in the <codeph>[PHP]</codeph> section. If you don't know where that is,
-                        simply search for existing commented or uncommented
-                            <codeph>extension=</codeph> entries in the
-                        file.<codeblock spectitle="Linux and OS X">extension=couchbase.so</codeblock><codeblock spectitle="Windows">extension=couchbase.dll</codeblock></li>
+                        simply search for existing commented or uncommented <codeph>extension=</codeph>
+                        entries in the file.
+                            <codeblock spectitle="Linux and OS X">extension=couchbase.so</codeblock>
+                            <codeblock spectitle="Windows">extension=couchbase.dll</codeblock>
+                        The Couchbase SDK depends on JSON PHP extension, so make sure that load order is correct. For
+                        example, in case of single <codeph>php.ini</codeph> file, just insert line after
+                        <codeph>extension=json.so</codeph> Couchbase SDK, and if <codeph>conf.d</codeph>-style used,
+                        name file with Couchbase SDK ini file so that it will be alphabetically ordered after JSON
+                        extension.
+                    </li>
                 </ol></section>
         </body>
     </topic>
@@ -53,7 +60,6 @@ Additional .ini files parsed:      (none)</screen></li>
 
 $cluster = new CouchbaseCluster("couchbase://127.0.0.1");
 $bucket = $cluster->openBucket("default");
-
 
 // Store a document
 echo "Storing u:king_arthur\n";
@@ -76,24 +82,97 @@ array_push($doc->interests, 'PHP 7');
 $bucket->replace("u:king_arthur", $doc);
 var_dump($result);
 
+echo "Creating primary index\n";
 // Before issuing a N1QL Query, ensure that there is
-// is actually a primary index. FIXME!!! to use index management API
-$query = CouchbaseN1qlQuery::fromString("CREATE PRIMARY INDEX ON `default`");
+// is actually a primary index.
 try {
-    $bucket->query($query);
+    // Do not override default name, fail if it is exists already, and wait for completion
+    $bucket->manager()->createN1qlPrimaryIndex('', false, false);
+    echo "Primary index has been created\n";
 } catch (CouchbaseException $e) {
-    echo "Couldn't create index. Maybe it already exists?";
-    print_r($e);
+    printf("Couldn't create index. Maybe it already exists? (code: %d)\n", $e->getCode());
 }
 
 // Query with parameters
-// FIXME: Doesn't currently work!?
 $query = CouchbaseN1qlQuery::fromString("SELECT * FROM `default` WHERE \$p IN interests");
+echo "Parameterized query:\n";
 var_dump($query);
 $rows = $bucket->query($query, array("p" => "African Swallows"));
+echo "Results:\n";
 var_dump($rows);</codeblock>
                 <p>The console output should look similar to this:</p>
-                <codeblock outputclass="language-bourne">....</codeblock>
+                <screen>Storing u:king_arthur
+object(CouchbaseMetaDoc)#4 (4) {
+  ["error"]=>
+  NULL
+  ["value"]=>
+  NULL
+  ["flags"]=>
+  NULL
+  ["cas"]=>
+  string(9) "mdzlfqp04"
+}
+Getting back u:king_arthur
+object(stdClass)#5 (2) {
+  ["email"]=>
+  string(24) "kingarthur@couchbase.com"
+  ["interests"]=>
+  array(1) {
+    [0]=>
+    string(16) "African Swallows"
+  }
+}
+Replacing u:king_arthur
+object(CouchbaseMetaDoc)#6 (4) {
+  ["error"]=>
+  NULL
+  ["value"]=>
+  object(stdClass)#5 (2) {
+    ["email"]=>
+    string(24) "kingarthur@couchbase.com"
+    ["interests"]=>
+    array(2) {
+      [0]=>
+      string(16) "African Swallows"
+      [1]=>
+      string(5) "PHP 7"
+    }
+  }
+  ["flags"]=>
+  int(33554438)
+  ["cas"]=>
+  string(9) "mdzlfqp04"
+}
+Creating primary index
+Primary index has been created
+Parameterized query:
+object(CouchbaseN1qlQuery)#7 (2) {
+  ["options"]=>
+  array(1) {
+    ["statement"]=>
+    string(45) "SELECT * FROM `default` WHERE $p IN interests"
+  }
+  ["adhoc"]=>
+  bool(true)
+}
+Results:
+array(1) {
+  [0]=>
+  object(stdClass)#9 (1) {
+    ["default"]=>
+    object(stdClass)#8 (2) {
+      ["email"]=>
+      string(24) "kingarthur@couchbase.com"
+      ["interests"]=>
+      array(2) {
+        [0]=>
+        string(16) "African Swallows"
+        [1]=>
+        string(5) "PHP 7"
+      }
+    }
+  }
+}</screen>
             </section>
         </body>
     </topic>
@@ -105,11 +184,45 @@ var_dump($rows);</codeblock>
                 <p>Previous releases are also available through PECL. On the command line, specify
                     the specific version you want to install. As with our current releases, you can
                     also download prebuilt binaries, listed below.</p>
+                <codeblock outputclass="language-bash">$ pecl install couchbase</codeblock>
+                <p>Or if specific version need to be installed</p>
                 <codeblock outputclass="language-bash">$ pecl install couchbase-2.0.0</codeblock>
             </section>
             <section>
                 <title>Archive Packages</title>
                 <ul id="ul_p2d_p4z_zv">
+                    <li>2.2.0beta3<msgph outputclass="beta">BETA</msgph>
+                        <ul id="ul_s4d_p4z_zv">
+                            <li><xref
+                                href="http://docs.couchbase.com/sdk-api/couchbase-php-client-2.2.0beta3/"
+                                format="html" scope="external">API Reference</xref></li>
+                            <li>PHP 5.6 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.6-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.6-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.6 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.6-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.6-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.5-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.5-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.5-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.5-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.4-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.4-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                        </ul></li>
                     <li>2.2.0beta2<msgph outputclass="beta">BETA</msgph>
                         <ul id="ul_s3d_p4z_zv">
                             <li><xref
