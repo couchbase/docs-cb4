@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_xfs_1y3_yv">
-  <title>Document (KV) Operations</title><shortdesc>This topic covers the basic CRUD operations of creating, retrieving, updating, and deleting documents.
+  <title>Document Operations</title><shortdesc>This topic covers the basic CRUD operations of creating, retrieving, updating, and deleting documents.
     It also describes how to do bulk operations and atomic operations.</shortdesc>
   <body>
-    
-    
+
+
   <section><title>Working with Documents</title>
-    <p>SDK operations use basic Go data types and JSON marshaling functionality.</p>  
+    <p>SDK operations use basic Go data types and JSON marshaling functionality.</p>
     <sectiondiv id="datatypes">
      <p><b>Data Types</b></p>
-    
-  
+
+
       <p>All Go data types that can be serialized via the JSON encoding library are supported by
         default. Recursive structures cannot be serialized. All textual data is represented by UTF-8
         when stored in Couchbase Server. You may alternatively implement your transcoders that modify
@@ -19,15 +19,15 @@
       <p>The following is an example of a transcoder that will transcode all documents as UTF-8 encoded
         JSON documents.</p>
       <codeblock outputclass="language-go">package main
-        
+
         import (
         "github.com/couchbaselabs/gocb"
         "encoding/json"
         )
-        
+
         type TestTranscoder struct {
         }
-        
+
         func (t TestTranscoder) Decode(bytes []byte, flags uint32, out interface{}) error {
         err := json.Unmarshal(bytes, &amp;out)
         if err != nil {
@@ -35,7 +35,7 @@
         }
         return nil
         }
-        
+
         func (t TestTranscoder) Encode(value interface{}) ([]byte, uint32, error) {
         bytes, err := json.Marshal(value)
         if err != nil {
@@ -43,7 +43,7 @@
         }
         return bytes, 0, nil
         }
-        
+
         func main() {
         myCluster := gocb.Connect("couchbase://127.0.0.1")
         myBucket := myCluster.OpenBucket("default", "")
@@ -51,19 +51,19 @@
         }</codeblock>
     </sectiondiv>
     <sectiondiv id="returnvalues">
-  
+
      <p><b>Return Values</b></p>
       <p>The Go SDK uses the typical Go pattern of multiple return values, where the last
         value is an error interface value.  All Go SDK methods follow this pattern.  In
         addition to this, methods which perform JSON marshalling may return values through a
         <codeph>ValuePtr</codeph> parameter of type <codeph>interface{}</codeph>.</p>
     </sectiondiv>
-    </section>  
+    </section>
     <section id="creatingdocuments">
     <title>Creating documents</title>
   <p>You can create a document by using the <codeph>Insert()</codeph> or
     <codeph>Upsert()</codeph> methods.</p>
-   
+
       <p>Performing an insert only succeeds if no document with that name exists. In contrast, an upsert
         overwrites any existing matching document.</p>
       <p>The following example shows how to create a new document with the <codeph>Insert()</codeph>
@@ -72,24 +72,24 @@
           myDoc := "Hello World!"
           err, cas := myBucket.Insert("document_name", &amp;myDoc, 0)</codeblock>
     </section>
-      
-   <section> 
+
+   <section>
     <title>Retrieving documents</title>
    <p>You can retrieve documents by using regular reads or replica reads.</p>
 
-      
+
     <sectiondiv id="regularreads">
         <p><b>Regular reads</b></p>
-        
+
         <p>Perform regular reads by using the <codeph>Get()</codeph> method. Regular reads enable you to
           retrieve a previously stored document from your active data set. </p>
         <p>The following example shows a regular read:</p>
         <codeblock outputclass="language-go">myBucket, _ := myCluster.OpenBucket("default", "")
           var myValue interface{}
           cas, err := myBucket.Get("document_name", &amp;myValue) </codeblock>
-        
+
     </sectiondiv>
-      
+
    <sectiondiv id="replicareads">
         <p><b>Replica reads</b></p>
         <p>You perform replica reads by using the <codeph>GetReplica()</codeph> method. Replica reads
@@ -102,13 +102,13 @@
           var myValue interface{}
           cas, err := myBucket.GetReplica("document_name", &amp;myValue, 0) </codeblock>
    </sectiondiv></section>
-  
-  
+
+
   <section>
     <title>Updating documents</title>
   <p>You can update a document by using the <codeph>Upsert()</codeph> or
       <codeph>Replace()</codeph> methods. </p>
-  
+
       <p>The <codeph>Replace()</codeph> method replaces a document that already exists with new
         contents. The <codeph>Upsert()</codeph> method creates the document if it does not
         already exist. </p>
@@ -119,44 +119,44 @@
           var testValue := "test content"
           cas, err := myBucket.Replace("document_name", &amp;testValue, 0, 0)</codeblock>
       </p></section>
-    
-    
-    
+
+
+
     <section id="deletingdocuments"> <title>Deleting documents</title>
-    <p>You can delete documents by using the <codeph>Remove()</codeph> method.</p> 
-    
+    <p>You can delete documents by using the <codeph>Remove()</codeph> method.</p>
+
         <p>This method immediately removes the document from your bucket. </p>
         <p>The following example shows how to delete a
         document:<codeblock outputclass="language-go">myBucket, _ := myCluster.OpenBucket("default", "")
           cas, err := myBucket.Remove("document_name", 0)</codeblock></p>
-    </section>  
-    
-    
+    </section>
+
+
     <section> <title>Bulk operations</title>
      <p>You can perform bulk operations by using the various <apiname>*Op</apiname>
         structures along with the <codeph>Do</codeph> method of your Bucket object.</p>
- 
+
         <p>The <codeph>*Op</codeph> structures work by accepting the same parameters that are
           accepted by the individual methods. Following the execution of the <codeph>Do</codeph>
           method against the list of <codeph>*Op</codeph> structures, the remaining fields will be
           filled out with the results of the operations.</p>
         <p>Here is an example that shows how to perform two inserts simultaneously:</p>
         <codeblock outputclass="language-go">myBucket, _ := myCluster.OpenBucket("default", "")
-          
+
           var items []gocb.BulkOp
           items = append(items, &amp;gocb.InsertOp{Key: "document_name_1", Value: "Hello World 1"})
           items = append(items, &amp;gocb.InsertOp{Key: "document_name_2", Value: "Hello World 2"})
-          
+
           err := bucket.Do(items)</codeblock>
-    </section>  
-    
+    </section>
+
     <section> <title>Atomic operations</title>
      <p>The Go SDK supports several operations that allow one-step, atomic changes to documents.
        These operations include <codeph>counter</codeph>, <codeph>prepend</codeph> and
        <codeph>append</codeph> functions.</p>
- 
-        
-  <sectiondiv id="counteroperation"> 
+
+
+  <sectiondiv id="counteroperation">
  <p><b>Counter operation</b></p>
           <p>The <codeph>Counter()</codeph> method enables you to implement an atomic counter as a
             Couchbase document. You can either execute this operation against a previously
@@ -184,17 +184,17 @@
           <note>If a new counter document is created by using the <codeph>initial</codeph> parameter, the
             counter is set to the value of <codeph>initial</codeph>, not
             <codeph>initial+delta</codeph>. </note></sectiondiv>
-      
+
       <sectiondiv id="append">
-          
+
 <p><b>Append and prepend operations</b></p>
           <p>The append and prepend operations allow you to perform a binary append or prepend to
             a Couchbase document.</p>
-          
+
           <note>This operation is performed without any consideration for the data type, thus appending a
             JSON document to a JSON document will result in an invalid object (for instance:
             <codeph>{}{}</codeph>).</note>
-          
+
           <p>The following is an example of how to use the <codeph>append()</codeph> and
             <codeph>prepend()</codeph> methods to add further text to an already existing
             document:</p><codeblock outputclass="language-go">myBucket, _ := myCluster.OpenBucket("default", "")
@@ -204,7 +204,7 @@
           // Document content is now "Hello Beautiful World!".</codeblock>
       </sectiondiv>
     </section>
-    
+
     <section><title>Durability requirements</title>
   <p>If you do not specify any durability requirements, the server will respond with a success
     message if the data has been acknowledged and processed in the managed cache.</p>
@@ -258,6 +258,6 @@
             into account until the durability requirement is met.</p>
       </sectiondiv>
         </section>
-    
+
   </body>
 </topic>

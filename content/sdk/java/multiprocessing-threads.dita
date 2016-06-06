@@ -1,8 +1,84 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
-<topic id="topic_tvc_khv_xv">
-  <title>Multi-Processing and Threads</title>
-  <body>
-    <p>TBA</p>
-  </body>
-</topic>
+<!DOCTYPE concept
+PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="java-multiprocessing">
+  <title>Multiprocessing and Threads</title>
+  <shortdesc>This section describes the integration of the Java SDK into the multithreaded environment of the JVM.</shortdesc>
+  <conbody>
+    <section id="java-multithreading">
+      <title>Multithreaded Access</title>
+      <p>All APIs in Couchbase Java SDK are thread safe and can be used across multiple threads without further synchronization.
+        In fact, adding <codeph>synchronized</codeph> blocks or <codeph>RW-Locks</codeph> slows down the operations unnecessarily.</p>
+
+      <p>In practice, this means that instantiated <codeph>Bucket</codeph> and <codeph>Cluster</codeph> instances can and should be
+      shared across threads.</p>
+
+      <p><note type="warning">To manage resources well you generally should not create
+                        <codeph>Bucket</codeph> and <codeph>Cluster</codeph> instances per thread in
+                    your application. This will often reduce performance and is considered bad
+                    practice.</note></p>
+    </section>
+
+    <section id="java-singleton">
+      <title>Safe Sharing and Singletons</title>
+
+      <p>Creating instances of <codeph>Bucket</codeph> and <codeph>Cluster</codeph> is expensive, so
+                it is very important to create them once and share them. The most common way to do
+                this on the JVM is through the Singleton pattern.</p>
+
+      <p>A sample class you may adapt to your application is as follows:</p>
+
+<codeblock outputclass="language-java"><![CDATA[import com.couchbase.client.java.Bucket;
+import com.couchbase.client.java.Cluster;
+import com.couchbase.client.java.CouchbaseCluster;
+
+public class CouchbaseSingleton {
+
+    private static final String HOST = "127.0.0.1";
+    private static final String BUCKET = "default";
+    private static final String PASSWORD = "";
+
+    private static final CouchbaseSingleton INSTANCE = new CouchbaseSingleton();
+
+    private final Cluster cluster;
+    private final Bucket bucket;
+
+    private CouchbaseSingleton() {
+        cluster = CouchbaseCluster.create(HOST);
+        bucket = cluster.openBucket(BUCKET, PASSWORD);
+    }
+
+    public static CouchbaseSingleton get() {
+        return INSTANCE;
+    }
+
+    public Bucket bucket() {
+        return bucket;
+    }
+
+    public Cluster cluster() {
+        return cluster;
+    }
+
+    public void disconnect() {
+        cluster.disconnect();
+    }
+
+}]]></codeblock>
+
+  <p>You would then use it like this:</p>
+
+<codeblock outputclass="language-java"><![CDATA[public static void main(String[] args) throws Exception {
+    // Get Bucket
+    Bucket bucket = CouchbaseSingleton.get().bucket();
+
+    // Fetch a Document
+    System.out.println(bucket.get("document"));
+
+    // Disconnect
+    CouchbaseSingleton.get().disconnect();
+}]]></codeblock>
+
+    </section>
+  </conbody>
+</concept>
