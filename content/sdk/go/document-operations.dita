@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_xfs_1y3_yv">
+    <title>Document Operations</title>
+    <shortdesc>This topic covers the basic CRUD operations of creating, retrieving, updating, and
+        deleting documents. It also describes how to do bulk operations and atomic
+        operations.</shortdesc>
+    <body>
+        <section><title>Document Types</title>SDK operations use basic Go data types and JSON
+            marshaling functionality. <p>All Go data types that can be serialized via the JSON
+                encoding library are supported by default. All textual data is represented by UTF-8
+                when stored in Couchbase Server. If you do not wish to use Go's JSON functionality
+                and handle your own encoding and decoding, you can implement your own transcoder
+                [TODO:link, below] </p><p>When retrieving documents, documents are received via an <i>out</i> pointer: simply pass a
+                pointer to an object of the appropriate type (or an empty interface) and the decoder
+                will set it to an object of the appropriate type. If you wish to convert to a
+                specific type, simply pass a pointer of the appropriate type and object will be
+                populated with the appropriate
+                values.<codeblock>var value = interface{}
+cas, err := bucket.Get("document_id", &amp;value)</codeblock><codeblock>var value MyObject{}
+cas, err := bucket.Get("document_id", &amp;value)</codeblock></p></section>
+        <section id="creatingdocuments"><title>Creating and Updating Full Documents</title><p>You
+                can <xref href="../shared/core-operations-generic.dita#devguide_kvcore_generic"
+                    >create or modify documents</xref> by using the
+                <apiname>Bucket.Insert</apiname>, <apiname>Bucket.Upsert</apiname>, and
+                    <apiname>Bucket.Replace</apiname> methods.</p>The following example shows how to
+            create a new document with the <apiname>Insert()</apiname>
+                method:<codeblock outputclass="language-go">myDoc := "Hello World"
+cas, err := myBucket.Insert("document_name", &amp;myDoc, 0)
+myDoc := "New Value"
+cas, err := myBucket.Replace("document_name", &amp;myDoc, cas, 0)</codeblock><p>The
+                methods returns an <apiname>error</apiname> and the document's current <xref
+                    href="../shared/concurrent-mutations-generic.dita#concept_iq4_bts_zs">CAS</xref>
+                which may be used for subsequent mutations</p><p>The last argument to
+                    <apiname>Upsert</apiname> and <apiname>Insert</apiname> is the <xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/expiry"
+                    >document expiration</xref> time, while the last arguments to
+                    <apiname>Replace</apiname> are the <i>CAS</i> and expiration time. Note that
+                only <apiname>Replace</apiname> accepts the CAS as input.</p><p>If the document does
+                not exist (and <apiname>Replace</apiname> was used) then the returned error will be
+                    <apiname>gocb.ErrKeyNotFound</apiname>. If the document exists and
+                    <apiname>Insert</apiname> was used, the returned error will be
+                    <apiname>gocb.ErrKeyExists</apiname>.</p></section>
+        <section>
+            <title>Retrieving Full Documents</title>
+            <p>You may retrieve full documents using the <apiname>Bucket.Get</apiname> method. The
+                    <apiname>Get</apiname> method receives the document ID and a value pointer (see
+                above) to receive the document
+                itself:<codeblock>var value = interface{}
+cas, err := myBucket.Get("document_name", &amp;value)</codeblock>The
+                error and <xref
+                    href="../shared/concurrent-mutations-generic.dita#concept_iq4_bts_zs">CAS</xref>
+                of the document are returned. If the document does not exist, the error will be
+                    <apiname>gocb.ErrKeyNotFound</apiname>. Note that if any error occurs, the value
+                pointer will not be set.</p>
+            <p>Note that the value pointer need not be of an empty interface. You can make the value
+                of a more specific type, so long as the document decoder (by default, Go's JSON
+                unmarshaller) can properly convert the serialized document to the target object.</p>
+            <p>You may retrieve documents while simultaneously modifying the document's <xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/expiry"
+                    >expiration</xref> by using the <apiname>Bucket.GetAndTouch</apiname> method.
+                This functions exactly like the <apiname>Get</apiname> method, except it takes a
+                different set of arguments: the second argument is the new expiration time of the
+                document, and the third is the value
+                pointer:<codeblock>var value = interface{}
+// expires in 5 minutes:
+cas, err := myBucket.GetAndTouch("document_name", 300, &amp;value)</codeblock></p>
+            <p>You may perform a [TODO: link] replica read by using the
+                    <apiname>Bucket.GetReplica()</apiname> method. The last argument is the replica
+                index, and should be set to 0 unless you desire accessing a specific replica. Note
+                that the results from a replica read may not be consistent with the latest version
+                of the document within the
+                cluster.<codeblock>var value = interface{}
+cas, err := myBucket.GetReplica("document_name", &amp;value, 0)</codeblock></p>
+        </section>
+        <section id="deletingdocuments">
+            <title>Deleting Documents</title>
+            <p>You can delete documents by using the <apiname>Bucket.Remove()</apiname> method. You
+                may supply the <xref
+                    href="../shared/concurrent-mutations-generic.dita#concept_iq4_bts_zs">CAS</xref>
+                as a third argument to <apiname>Remove</apiname>, in which case the operation will
+                fail if the CAS has since been modified on the server.</p>
+            <p>
+                <codeblock outputclass="language-go">cas, err := myBucket.Remove("document_name", 0)</codeblock>
+            </p>
+        </section>
+        <section><title>Bulk Operations</title><p>You can perform <xref
+                    href="../shared/batching-operations-generic.dita#concept_qfq_5jg_1t">bulk
+                    operations</xref> by using the various <apiname>*Op</apiname> (e.g.
+                    <apiname>GetOp</apiname>, <apiname>UpsertOp</apiname>) structures along with the
+                    <apiname>Bucket.Do</apiname> method.</p><p>The <codeph>*Op</codeph> structures
+                work by accepting the same parameters that are accepted by the individual methods.
+                Following the execution of the <apiname>Do</apiname> method against the list of
+                    <codeph>*Op</codeph> structures, the remaining fields will be filled out with
+                the results of the operations.</p><p>Here is an example that shows how to batch two
+                    <apiname>Insert</apiname>
+            operations</p><codeblock outputclass="language-go">var items []gocb.BulkOp
+items = append(items, &amp;gocb.InsertOp{Key: "document_name_1", Value: "Hello World 1"})
+items = append(items, &amp;gocb.InsertOp{Key: "document_name_2", Value: "Hello World 2"})
+err := bucket.Do(items)</codeblock>Note
+            that you may batch operations of different types into the client.<note>Ensure that the
+                    <parmname>error</parmname> field of each operation object is inspected, and note
+                that some operations may fail while others may succeed. Even if the
+                    <apiname>Do</apiname> method returns <codeph>nil</codeph> as its error, some
+                errors may have still occurred.</note></section>
+        <section><title>Modifying Expiration</title>A document's <xref
+                href="../shared/core-operations-generic.dita#devguide_kvcore_generic/expiry"
+                >expiration</xref> time may be modified using the <apiname>Bucket.Touch</apiname>
+            method<codeblock>myBucket.Touch("document_id", 500)</codeblock></section>
+        <section><title>Sub-Document Operations</title><note type="tip">See <xref
+                    href="../shared/subdoc-operations-generic.dita#subdoc-operations"/> for an
+                overview</note>Sub-document operations save network bandwidth by allowing you to
+            specify <i>paths</i> of a document to be retrieved or updated. The document is parsed on
+            the server and only the relevant sections (indicated by <i>paths</i>) are transferred
+            between client and server. You can execute <xref
+                href="../shared/subdoc-operations-generic.dita#subdoc-operations"
+                >sub-document</xref> operations in the Golang SDK using the
+                <apiname>Bucket.MutateIn</apiname>, and <apiname>Bucket.LookupIn</apiname>
+                methods.<codeblock>frag, err := bucket.LookupIn("document_id").
+	Get("path.to.get").
+	Exists("check.path.exists").Execute()
+var fragValue interface{}
+err = frag.Content("path.to.get", &amp;fragValue)
+if frag.Exists("check.path.exists") {
+	// ...
+}</codeblock><p>Each
+                of these methods accepts a <parmname>key</parmname> as its mandatory first argument
+                and returns a builder object which can be used to add one or more <i>command
+                    specifications</i> specifying an operation and a document field operand. To
+                submit the operation, invoke the <apiname>Execute()</apiname> method on the builder,
+                which returns an <apiname>DocumentFragment</apiname> that contains the results and
+                contents of the paths (where applicable).</p><p>You can use the
+                    <apiname>Get()</apiname> or <apiname>Exists()</apiname> methods on the builder
+                object returned by <apiname>LookupIn</apiname>. <apiname>Get</apiname> will instruct
+                the server to return the <i>contents</i> of the path, whereas
+                    <apiname>Exists</apiname> will merely check if the path exists.</p><p>For
+                operations which return values, you may use the
+                    <apiname>DocumentFragment.Content</apiname> or
+                    <apiname>DocumentFragment.ContentByIndex</apiname> methods to retrieve the
+                actual value. These methods accept the name (or index) of the path to retrieve, and
+                a value pointer that will be populated with the contents of the path. Like
+                    <apiname>Bucket.Get</apiname>, the value pointer should be of a type capable of
+                conversion from the serialized JSON.</p><p>For mutation operations, you may specify
+                the <xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/expiry"
+                    >expiration</xref> time and <xref
+                    href="../shared/concurrent-mutations-generic.dita#concept_iq4_bts_zs">CAS</xref>
+                alongside the document ID to
+                retrieve<codeblock>bucket.MutateIn("document_id", cas, 300).
+	Upsert("email", "user@site.com", false).
+	AddUnique("sessions.active", "0xeadbeef", true).
+	Counter("sessions.loginCount", 1, true).
+	Execute()</codeblock>The
+                above shows some mutation using the subdocument API via
+                    <apiname>Bucket.MutateIn</apiname>. The methods of the returned builder objects
+                may accept a final boolean parameter indicating whether the path's <xref
+                    href="../shared/subdoc-operations-generic.dita#subdoc-operations/subdoc-create-parents"
+                    >parents should be created</xref> if they do not exist.</p></section>
+        <section>
+            <title>Atomic Document Modifications</title>
+            <p>You may perform atomic document modifications on special document types: You can use
+                    <apiname>Bucket.Counter</apiname> for <xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/devguide_kvcore_counter_generic"
+                    >counters</xref>:<codeblock>newValue, cas, err := myBucket.Counter("counter_document", 1, 100, 300)</codeblock>Will
+                increment the value of <codeph>counter_document</codeph> by 1. If the document does
+                not exist, it will be created with an initial value of 100. The <xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/expiry"
+                    >expiration time</xref> for the document is set to 300 seconds.</p>
+            <p>Upon successful completion, the <apiname>Counter</apiname> method returns the new
+                value of the document.</p>
+        </section>
+        <section><title>Specifying Durability Requirements</title><p><xref
+                    href="../shared/durability-generic.dita#concept_gyg_14s_zs">Durability
+                    requirements</xref> allow you to place constraints on the success of a mutation
+                based on how redundant the document is. In the Go SDK you should use various
+                    <codeph>*Dura()</codeph> functions which allow you to specify durability
+                requirements. Methods such as <apiname>Bucket.Upsert</apiname> and
+                    <apiname>Bucket.Replace</apiname> have their <codeph>*Dura</codeph> variants as
+                    <apiname>Bucket.UpsertDura</apiname> and <apiname>Bucket.ReplaceDura</apiname>.
+                The durability-enabled variants function like their simple counterparts, but also
+                block until the durability requirement is achieved by requiring <i>two additional
+                    arguments</i>, indicating the persistence and replication of the performed
+                mutation:<codeblock>myBucket.UpsertDura("document_id", "value", 0, 1, 2)</codeblock></p>The
+            above snippet will perform an upsert operation with a <i>persist-to</i> of 2 and a
+                <i>replicate-to</i> of 2</section>
+        <section>
+            <title>Non-JSON Documents</title>
+            <p>TODO</p>
+        </section>
+    </body>
+</topic>
