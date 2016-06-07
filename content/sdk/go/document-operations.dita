@@ -1,263 +1,191 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_xfs_1y3_yv">
-  <title>Document Operations</title><shortdesc>This topic covers the basic CRUD operations of creating, retrieving, updating, and deleting documents.
-    It also describes how to do bulk operations and atomic operations.</shortdesc>
-  <body>
-
-
-  <section><title>Working with Documents</title>
-    <p>SDK operations use basic Go data types and JSON marshaling functionality.</p>
-    <sectiondiv id="datatypes">
-     <p><b>Data Types</b></p>
-
-
-      <p>All Go data types that can be serialized via the JSON encoding library are supported by
-        default. Recursive structures cannot be serialized. All textual data is represented by UTF-8
-        when stored in Couchbase Server. You may alternatively implement your transcoders that modify
-        the method by which your documents are serialized to Couchbase. </p>
-      <p>The following is an example of a transcoder that will transcode all documents as UTF-8 encoded
-        JSON documents.</p>
-      <codeblock outputclass="language-go">package main
-
-        import (
-        "github.com/couchbaselabs/gocb"
-        "encoding/json"
-        )
-
-        type TestTranscoder struct {
-        }
-
-        func (t TestTranscoder) Decode(bytes []byte, flags uint32, out interface{}) error {
-        err := json.Unmarshal(bytes, &amp;out)
-        if err != nil {
-        return err
-        }
-        return nil
-        }
-
-        func (t TestTranscoder) Encode(value interface{}) ([]byte, uint32, error) {
-        bytes, err := json.Marshal(value)
-        if err != nil {
-        return nil, 0, err
-        }
-        return bytes, 0, nil
-        }
-
-        func main() {
-        myCluster := gocb.Connect("couchbase://127.0.0.1")
-        myBucket := myCluster.OpenBucket("default", "")
-        myBucket.SetTranscoder(TestTranscoder{})
-        }</codeblock>
-    </sectiondiv>
-    <sectiondiv id="returnvalues">
-
-     <p><b>Return Values</b></p>
-      <p>The Go SDK uses the typical Go pattern of multiple return values, where the last
-        value is an error interface value.  All Go SDK methods follow this pattern.  In
-        addition to this, methods which perform JSON marshalling may return values through a
-        <codeph>ValuePtr</codeph> parameter of type <codeph>interface{}</codeph>.</p>
-    </sectiondiv>
-    </section>
-    <section id="creatingdocuments">
-    <title>Creating documents</title>
-  <p>You can create a document by using the <codeph>Insert()</codeph> or
-    <codeph>Upsert()</codeph> methods.</p>
-
-      <p>Performing an insert only succeeds if no document with that name exists. In contrast, an upsert
-        overwrites any existing matching document.</p>
-      <p>The following example shows how to create a new document with the <codeph>Insert()</codeph>
-        method:</p>
-      <codeblock outputclass="language-go">myBucket, _ := myCluster.OpenBucket("default", "")
-          myDoc := "Hello World!"
-          err, cas := myBucket.Insert("document_name", &amp;myDoc, 0)</codeblock>
-    </section>
-
-   <section>
-    <title>Retrieving documents</title>
-   <p>You can retrieve documents by using regular reads or replica reads.</p>
-
-
-    <sectiondiv id="regularreads">
-        <p><b>Regular reads</b></p>
-
-        <p>Perform regular reads by using the <codeph>Get()</codeph> method. Regular reads enable you to
-          retrieve a previously stored document from your active data set. </p>
-        <p>The following example shows a regular read:</p>
-        <codeblock outputclass="language-go">myBucket, _ := myCluster.OpenBucket("default", "")
-          var myValue interface{}
-          cas, err := myBucket.Get("document_name", &amp;myValue) </codeblock>
-
-    </sectiondiv>
-
-   <sectiondiv id="replicareads">
-        <p><b>Replica reads</b></p>
-        <p>You perform replica reads by using the <codeph>GetReplica()</codeph> method. Replica reads
-          enable you to retrieve a previously stored document by querying the replica copies
-          of this document rather than the active one. This is not guaranteed to be consistent
-          but does permit a level of recovery in case the primary server is not reachable.</p>
-        <p>The following example shows a replica read, where the first responding server is the
-          one used.</p>
-        <codeblock outputclass="language-go">myBucket, _ := myCluster.OpenBucket("default", "")
-          var myValue interface{}
-          cas, err := myBucket.GetReplica("document_name", &amp;myValue, 0) </codeblock>
-   </sectiondiv></section>
-
-
-  <section>
-    <title>Updating documents</title>
-  <p>You can update a document by using the <codeph>Upsert()</codeph> or
-      <codeph>Replace()</codeph> methods. </p>
-
-      <p>The <codeph>Replace()</codeph> method replaces a document that already exists with new
-        contents. The <codeph>Upsert()</codeph> method creates the document if it does not
-        already exist. </p>
-      <p>The following example shows how to update a document by using the <codeph>Replace()</codeph>
-        method:</p>
-      <p>
-        <codeblock outputclass="language-go">myBucket, _ := myCluster.OpenBucket("default", "")
-          var testValue := "test content"
-          cas, err := myBucket.Replace("document_name", &amp;testValue, 0, 0)</codeblock>
-      </p></section>
-
-
-
-    <section id="deletingdocuments"> <title>Deleting documents</title>
-    <p>You can delete documents by using the <codeph>Remove()</codeph> method.</p>
-
-        <p>This method immediately removes the document from your bucket. </p>
-        <p>The following example shows how to delete a
-        document:<codeblock outputclass="language-go">myBucket, _ := myCluster.OpenBucket("default", "")
-          cas, err := myBucket.Remove("document_name", 0)</codeblock></p>
-    </section>
-
-
-    <section> <title>Bulk operations</title>
-     <p>You can perform bulk operations by using the various <apiname>*Op</apiname>
-        structures along with the <codeph>Do</codeph> method of your Bucket object.</p>
-
-        <p>The <codeph>*Op</codeph> structures work by accepting the same parameters that are
-          accepted by the individual methods. Following the execution of the <codeph>Do</codeph>
-          method against the list of <codeph>*Op</codeph> structures, the remaining fields will be
-          filled out with the results of the operations.</p>
-        <p>Here is an example that shows how to perform two inserts simultaneously:</p>
-        <codeblock outputclass="language-go">myBucket, _ := myCluster.OpenBucket("default", "")
-
-          var items []gocb.BulkOp
-          items = append(items, &amp;gocb.InsertOp{Key: "document_name_1", Value: "Hello World 1"})
-          items = append(items, &amp;gocb.InsertOp{Key: "document_name_2", Value: "Hello World 2"})
-
-          err := bucket.Do(items)</codeblock>
-    </section>
-
-    <section> <title>Atomic operations</title>
-     <p>The Go SDK supports several operations that allow one-step, atomic changes to documents.
-       These operations include <codeph>counter</codeph>, <codeph>prepend</codeph> and
-       <codeph>append</codeph> functions.</p>
-
-
-  <sectiondiv id="counteroperation">
- <p><b>Counter operation</b></p>
-          <p>The <codeph>Counter()</codeph> method enables you to implement an atomic counter as a
-            Couchbase document. You can either execute this operation against a previously
-            created document or create a new document by using the <codeph>initial</codeph>
-            parameter.</p>
-          <p>The following example shows how to use the <codeph>Counter()</codeph> method to increment your
-            counter and get the value back:</p>
-          <p>
-            <codeblock outputclass="language-go">myBucket, _ := myCluster.OpenBucket("default", "")
-          myBucket.Insert("document_name", "10", 0)
-          value, _, _ := myBucket.Counter("document_name", 1, 0, 0)</codeblock>
-          </p>
-          <p>The following example shows how to use the <codeph>Counter()</codeph> method to decrement your
-            counter and get the value back:</p>
-          <p>
-            <codeblock outputclass="language-go">myBucket, _ := myCluster.OpenBucket("default", "")
-          myBucket.Insert("document_name", "10", 0)
-          value, _, _ := myBucket.Counter("document_name", -1, 0, 0)</codeblock>
-          </p>
-          <p>You can additionally perform a counter operation with an initial value specified. In
-          this case, the document will be created if it does not exist. The <codeph>initial</codeph>
-          parameter will do nothing if the document already
-          exists.<codeblock outputclass="language-go">myBucket, _ := myCluster.OpenBucket("default", "")
-          value, _, _ := myBucket.Counter("document_name", 1, 10, 0)</codeblock></p>
-          <note>If a new counter document is created by using the <codeph>initial</codeph> parameter, the
-            counter is set to the value of <codeph>initial</codeph>, not
-            <codeph>initial+delta</codeph>. </note></sectiondiv>
-
-      <sectiondiv id="append">
-
-<p><b>Append and prepend operations</b></p>
-          <p>The append and prepend operations allow you to perform a binary append or prepend to
-            a Couchbase document.</p>
-
-          <note>This operation is performed without any consideration for the data type, thus appending a
-            JSON document to a JSON document will result in an invalid object (for instance:
-            <codeph>{}{}</codeph>).</note>
-
-          <p>The following is an example of how to use the <codeph>append()</codeph> and
-            <codeph>prepend()</codeph> methods to add further text to an already existing
-            document:</p><codeblock outputclass="language-go">myBucket, _ := myCluster.OpenBucket("default", "")
-          myBucket.Insert("document_name", "Beautiful", 0)
-          myBucket.Append("document_name", " World!")
-          myBucket.Prepend("document_name", "Hello ")
-          // Document content is now "Hello Beautiful World!".</codeblock>
-      </sectiondiv>
-    </section>
-
-    <section><title>Durability requirements</title>
-  <p>If you do not specify any durability requirements, the server will respond with a success
-    message if the data has been acknowledged and processed in the managed cache.</p>
-
-        <p>Because persistence and replication are asynchronous tasks and happen eventually, there is a
-          time gap where a node failure can lead to data loss. This time gap occurs exactly when
-          data has neither been replicated to another node nor persisted to disk.</p>
-        <p>In general, for most use cases this time gap is totally acceptable (since it is usually very
-          small), but for the important mutation operations we need stronger guarantees. You can
-          make changes such as to acknowledge only once the data has been replicated or persisted,
-          which  by default makes the whole system slower. However, Couchbase Server has another
-          way to handle those situations:</p>
-        <ol>
-          <li>The SDK will perform the normal mutation without durability requirements.</li>
-          <li>If the server returns with a successful response, the client will start polling.</li>
-          <li>The client polls all the affected (more in a bit on this) nodes for this mutation until
-            either the desired state is reached or it can’t be reached for a reason.</li>
-          <li>In the successful case, the operation will also complete towards the application layer, and
-            in the failure case the client will error out the operation, leaving the user to
-            decide what's next.</li>
-        </ol>
-        <p>The following code will make sure that the document has been persisted on the active node
-          for this document ID and also replicated to one of the configured replicas:</p>
-        <codeblock outputclass="language-go">cas, err := myBucket.UpsertDura(docToStore, valueToStore, 1, 1)</codeblock>
-        <p>In this example, the client will poll two nodes until completion: the active node for this
-          document and also the configured replica. If any of the constraints cannot be fulfilled,
-          an error will be returned.</p>
-        <p>If you wonder why in the failure case we put the burden on you to figure out what's next: the
-          SDK has no idea of your SLAs or intents to what to do when the operation fails.
-          Sometimes it might be fine to proceed and log the error, in other cases you may want
-          sophisticated retry mechanisms where the SDK can guide you with functionality, but not
-          the actual execution semantics.</p>
-      <sectiondiv id="enhanced-durability"><p><b>Enhanced durability requirements with
-          4.0+</b></p><p>Couchbase Server 4.0 introduces a new feature that allows the SDK to be
-          more accurate during the observe poll cycle, especially in the concurrent and failover
-          cases. Instead of using the CAS to verify mutations, it uses sequence numbers and
-          partition UUIDs.</p>They are automatically enabled by default when available and will be
-        used for any durability operations performed.</sectiondiv>
-      <sectiondiv id="performance">
-         <p><b>Performance considerations</b></p>
-          <p>Couchbase Server is widely recognized for its excellent and predictable performance. One of
-            the reasons for that is its managed cache, which allows it to return a response very
-            quickly without taking replication or persistence latency into account.</p>
-          <p>If you need to make sure data is replicated and/or persisted. your network or disk performance
-            will be the dominant factor. If you need high throughput and durability
-            requirements, make sure (and measure) to have fast disks (SSD) and/or fast
-            network.</p>
-          <p>Because more than one node in general is involved and more round trips are needed, think about
-            realistic timeouts you want to set and measure them in production. All timeouts you
-            set on the blocking API need to take the original mutation and all subsequent polls
-            into account until the durability requirement is met.</p>
-      </sectiondiv>
+    <title>Document Operations</title>
+    <shortdesc>This topic covers the basic CRUD operations of creating, retrieving, updating, and
+        deleting documents. It also describes how to do bulk operations and atomic
+        operations.</shortdesc>
+    <body>
+        <section><title>Document Types</title>SDK operations use basic Go data types and JSON
+            marshaling functionality. <p>All Go data types that can be serialized via the JSON
+                encoding library are supported by default. All textual data is represented by UTF-8
+                when stored in Couchbase Server. If you do not wish to use Go's JSON functionality
+                and handle your own encoding and decoding, you can implement your own transcoder
+                [TODO:link, below] </p><p>When retrieving documents, documents are received via an <i>out</i> pointer: simply pass a
+                pointer to an object of the appropriate type (or an empty interface) and the decoder
+                will set it to an object of the appropriate type. If you wish to convert to a
+                specific type, simply pass a pointer of the appropriate type and object will be
+                populated with the appropriate
+                values.<codeblock>var value = interface{}
+cas, err := bucket.Get("document_id", &amp;value)</codeblock><codeblock>var value MyObject{}
+cas, err := bucket.Get("document_id", &amp;value)</codeblock></p></section>
+        <section id="creatingdocuments"><title>Creating and Updating Full Documents</title><p>You
+                can <xref href="../shared/core-operations-generic.dita#devguide_kvcore_generic"
+                    >create or modify documents</xref> by using the
+                <apiname>Bucket.Insert</apiname>, <apiname>Bucket.Upsert</apiname>, and
+                    <apiname>Bucket.Replace</apiname> methods.</p>The following example shows how to
+            create a new document with the <apiname>Insert()</apiname>
+                method:<codeblock outputclass="language-go">myDoc := "Hello World"
+cas, err := myBucket.Insert("document_name", &amp;myDoc, 0)
+myDoc := "New Value"
+cas, err := myBucket.Replace("document_name", &amp;myDoc, cas, 0)</codeblock><p>The
+                methods returns an <apiname>error</apiname> and the document's current <xref
+                    href="../shared/concurrent-mutations-generic.dita#concept_iq4_bts_zs">CAS</xref>
+                which may be used for subsequent mutations</p><p>The last argument to
+                    <apiname>Upsert</apiname> and <apiname>Insert</apiname> is the <xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/expiry"
+                    >document expiration</xref> time, while the last arguments to
+                    <apiname>Replace</apiname> are the <i>CAS</i> and expiration time. Note that
+                only <apiname>Replace</apiname> accepts the CAS as input.</p><p>If the document does
+                not exist (and <apiname>Replace</apiname> was used) then the returned error will be
+                    <apiname>gocb.ErrKeyNotFound</apiname>. If the document exists and
+                    <apiname>Insert</apiname> was used, the returned error will be
+                    <apiname>gocb.ErrKeyExists</apiname>.</p></section>
+        <section>
+            <title>Retrieving Full Documents</title>
+            <p>You may retrieve full documents using the <apiname>Bucket.Get</apiname> method. The
+                    <apiname>Get</apiname> method receives the document ID and a value pointer (see
+                above) to receive the document
+                itself:<codeblock>var value = interface{}
+cas, err := myBucket.Get("document_name", &amp;value)</codeblock>The
+                error and <xref
+                    href="../shared/concurrent-mutations-generic.dita#concept_iq4_bts_zs">CAS</xref>
+                of the document are returned. If the document does not exist, the error will be
+                    <apiname>gocb.ErrKeyNotFound</apiname>. Note that if any error occurs, the value
+                pointer will not be set.</p>
+            <p>Note that the value pointer need not be of an empty interface. You can make the value
+                of a more specific type, so long as the document decoder (by default, Go's JSON
+                unmarshaller) can properly convert the serialized document to the target object.</p>
+            <p>You may retrieve documents while simultaneously modifying the document's <xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/expiry"
+                    >expiration</xref> by using the <apiname>Bucket.GetAndTouch</apiname> method.
+                This functions exactly like the <apiname>Get</apiname> method, except it takes a
+                different set of arguments: the second argument is the new expiration time of the
+                document, and the third is the value
+                pointer:<codeblock>var value = interface{}
+// expires in 5 minutes:
+cas, err := myBucket.GetAndTouch("document_name", 300, &amp;value)</codeblock></p>
+            <p>You may perform a [TODO: link] replica read by using the
+                    <apiname>Bucket.GetReplica()</apiname> method. The last argument is the replica
+                index, and should be set to 0 unless you desire accessing a specific replica. Note
+                that the results from a replica read may not be consistent with the latest version
+                of the document within the
+                cluster.<codeblock>var value = interface{}
+cas, err := myBucket.GetReplica("document_name", &amp;value, 0)</codeblock></p>
         </section>
-
-  </body>
+        <section id="deletingdocuments">
+            <title>Deleting Documents</title>
+            <p>You can delete documents by using the <apiname>Bucket.Remove()</apiname> method. You
+                may supply the <xref
+                    href="../shared/concurrent-mutations-generic.dita#concept_iq4_bts_zs">CAS</xref>
+                as a third argument to <apiname>Remove</apiname>, in which case the operation will
+                fail if the CAS has since been modified on the server.</p>
+            <p>
+                <codeblock outputclass="language-go">cas, err := myBucket.Remove("document_name", 0)</codeblock>
+            </p>
+        </section>
+        <section><title>Bulk Operations</title><p>You can perform <xref
+                    href="../shared/batching-operations-generic.dita#concept_qfq_5jg_1t">bulk
+                    operations</xref> by using the various <apiname>*Op</apiname> (e.g.
+                    <apiname>GetOp</apiname>, <apiname>UpsertOp</apiname>) structures along with the
+                    <apiname>Bucket.Do</apiname> method.</p><p>The <codeph>*Op</codeph> structures
+                work by accepting the same parameters that are accepted by the individual methods.
+                Following the execution of the <apiname>Do</apiname> method against the list of
+                    <codeph>*Op</codeph> structures, the remaining fields will be filled out with
+                the results of the operations.</p><p>Here is an example that shows how to batch two
+                    <apiname>Insert</apiname>
+            operations</p><codeblock outputclass="language-go">var items []gocb.BulkOp
+items = append(items, &amp;gocb.InsertOp{Key: "document_name_1", Value: "Hello World 1"})
+items = append(items, &amp;gocb.InsertOp{Key: "document_name_2", Value: "Hello World 2"})
+err := bucket.Do(items)</codeblock>Note
+            that you may batch operations of different types into the client.<note>Ensure that the
+                    <parmname>error</parmname> field of each operation object is inspected, and note
+                that some operations may fail while others may succeed. Even if the
+                    <apiname>Do</apiname> method returns <codeph>nil</codeph> as its error, some
+                errors may have still occurred.</note></section>
+        <section><title>Modifying Expiration</title>A document's <xref
+                href="../shared/core-operations-generic.dita#devguide_kvcore_generic/expiry"
+                >expiration</xref> time may be modified using the <apiname>Bucket.Touch</apiname>
+            method<codeblock>myBucket.Touch("document_id", 500)</codeblock></section>
+        <section><title>Sub-Document Operations</title><note type="tip">See <xref
+                    href="../shared/subdoc-operations-generic.dita#subdoc-operations"/> for an
+                overview</note>Sub-document operations save network bandwidth by allowing you to
+            specify <i>paths</i> of a document to be retrieved or updated. The document is parsed on
+            the server and only the relevant sections (indicated by <i>paths</i>) are transferred
+            between client and server. You can execute <xref
+                href="../shared/subdoc-operations-generic.dita#subdoc-operations"
+                >sub-document</xref> operations in the Golang SDK using the
+                <apiname>Bucket.MutateIn</apiname>, and <apiname>Bucket.LookupIn</apiname>
+                methods.<codeblock>frag, err := bucket.LookupIn("document_id").
+	Get("path.to.get").
+	Exists("check.path.exists").Execute()
+var fragValue interface{}
+err = frag.Content("path.to.get", &amp;fragValue)
+if frag.Exists("check.path.exists") {
+	// ...
+}</codeblock><p>Each
+                of these methods accepts a <parmname>key</parmname> as its mandatory first argument
+                and returns a builder object which can be used to add one or more <i>command
+                    specifications</i> specifying an operation and a document field operand. To
+                submit the operation, invoke the <apiname>Execute()</apiname> method on the builder,
+                which returns an <apiname>DocumentFragment</apiname> that contains the results and
+                contents of the paths (where applicable).</p><p>You can use the
+                    <apiname>Get()</apiname> or <apiname>Exists()</apiname> methods on the builder
+                object returned by <apiname>LookupIn</apiname>. <apiname>Get</apiname> will instruct
+                the server to return the <i>contents</i> of the path, whereas
+                    <apiname>Exists</apiname> will merely check if the path exists.</p><p>For
+                operations which return values, you may use the
+                    <apiname>DocumentFragment.Content</apiname> or
+                    <apiname>DocumentFragment.ContentByIndex</apiname> methods to retrieve the
+                actual value. These methods accept the name (or index) of the path to retrieve, and
+                a value pointer that will be populated with the contents of the path. Like
+                    <apiname>Bucket.Get</apiname>, the value pointer should be of a type capable of
+                conversion from the serialized JSON.</p><p>For mutation operations, you may specify
+                the <xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/expiry"
+                    >expiration</xref> time and <xref
+                    href="../shared/concurrent-mutations-generic.dita#concept_iq4_bts_zs">CAS</xref>
+                alongside the document ID to
+                retrieve<codeblock>bucket.MutateIn("document_id", cas, 300).
+	Upsert("email", "user@site.com", false).
+	AddUnique("sessions.active", "0xeadbeef", true).
+	Counter("sessions.loginCount", 1, true).
+	Execute()</codeblock>The
+                above shows some mutation using the subdocument API via
+                    <apiname>Bucket.MutateIn</apiname>. The methods of the returned builder objects
+                may accept a final boolean parameter indicating whether the path's <xref
+                    href="../shared/subdoc-operations-generic.dita#subdoc-operations/subdoc-create-parents"
+                    >parents should be created</xref> if they do not exist.</p></section>
+        <section>
+            <title>Atomic Document Modifications</title>
+            <p>You may perform atomic document modifications on special document types: You can use
+                    <apiname>Bucket.Counter</apiname> for <xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/devguide_kvcore_counter_generic"
+                    >counters</xref>:<codeblock>newValue, cas, err := myBucket.Counter("counter_document", 1, 100, 300)</codeblock>Will
+                increment the value of <codeph>counter_document</codeph> by 1. If the document does
+                not exist, it will be created with an initial value of 100. The <xref
+                    href="../shared/core-operations-generic.dita#devguide_kvcore_generic/expiry"
+                    >expiration time</xref> for the document is set to 300 seconds.</p>
+            <p>Upon successful completion, the <apiname>Counter</apiname> method returns the new
+                value of the document.</p>
+        </section>
+        <section><title>Specifying Durability Requirements</title><p><xref
+                    href="../shared/durability-generic.dita#concept_gyg_14s_zs">Durability
+                    requirements</xref> allow you to place constraints on the success of a mutation
+                based on how redundant the document is. In the Go SDK you should use various
+                    <codeph>*Dura()</codeph> functions which allow you to specify durability
+                requirements. Methods such as <apiname>Bucket.Upsert</apiname> and
+                    <apiname>Bucket.Replace</apiname> have their <codeph>*Dura</codeph> variants as
+                    <apiname>Bucket.UpsertDura</apiname> and <apiname>Bucket.ReplaceDura</apiname>.
+                The durability-enabled variants function like their simple counterparts, but also
+                block until the durability requirement is achieved by requiring <i>two additional
+                    arguments</i>, indicating the persistence and replication of the performed
+                mutation:<codeblock>myBucket.UpsertDura("document_id", "value", 0, 1, 2)</codeblock></p>The
+            above snippet will perform an upsert operation with a <i>persist-to</i> of 2 and a
+                <i>replicate-to</i> of 2</section>
+        <section>
+            <title>Non-JSON Documents</title>
+            <p>TODO</p>
+        </section>
+    </body>
 </topic>
