@@ -2,46 +2,76 @@
 <!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
 <concept id="concept_bhv_nhq_44">
  <title>N1QL from the SDK</title>
- <shortdesc>You can perform Couchbase Query Language (N1QL) queries via the Go SDK. </shortdesc>
  <conbody>
-		<p>The following example shows how to send a N1QL query:</p>
-  <codeblock outputclass="language-go">myQuery := gocb.NewN1qlQuery("SELECT * FROM default")
-rows, err := myBucket.ExecuteN1qlQuery(myQuery)
-if err != nil {
-  fmt.Printf("N1QL query error: %s\n", err)
-}
-
+        <note>See <xref href="../shared/n1ql-generic.dita#toplevel">Couchbase Developer
+                documentation for a quick intro to developing with N1QL</xref></note>
+        <section>
+            <title>Simple Queries</title>
+            <p>You can issue N1QL queries by first creating a <apiname>N1qlQuery</apiname> via
+                    <apiname>gocb.N1qlN1qlQuery()</apiname>, and submitting the query to
+                    <apiname>Bucket.ExecuteN1qlQuery</apiname></p>
+            <p>The following example shows how to send a simple N1QL query:</p>
+            <codeblock outputclass="language-go">myQuery := gocb.NewN1qlQuery("SELECT * FROM default")
+rows, err := myBucket.ExecuteN1qlQuery(myQuery, nil)
 var row interface{}
 for rows.Next(&amp;row) {
     fmt.Printf("Row: %+v\n", row)
 }
-if err := rows.Close(); err != nil {
-    fmt.Printf("N1QL query error: %s\n", err)
+if err = rows.Close(); err != nil {
+    fmt.Printf("Couldn't get all the rows: %s\n", err);
 }</codeblock>
-     
-     <section><title>Read Your Own Writes (RYOW)</title>
-     <p>Often you will want to insert or update some data into Couchbase and immediately read
-         this data back using a N1QL query. This is referred to as read your own write
-         (RYOW).</p>
-     <p>This can be achieved by using the <codeph>consistency</codeph> option of the
-                    <apiname>N1qlQuery</apiname> structure:</p>
-     
-         <codeblock outputclass="language-go">myQuery := gocb.NewN1qlQuery("SELECT * FROM default")
-myQuery.consistency(gocb.RequestPlus)
-
-rows, err := myBucket.ExecuteN1qlQuery(myQuery)
-if err != nil {
-    fmt.Printf("N1QL query error: %s\n", err)
-}
-
-var row interface{}
-for rows.Next(&amp;row) {
-    fmt.Printf("Row: %+v\n", row)
-}
-if err := rows.Close(); err != nil {
-    fmt.Printf("N1QL query error: %s\n", err)
-}</codeblock>
-</section>
+            <p>The returned value (<apiname>QueryResults</apiname>) may be iterated over using the
+                    <apiname>QueryResults.Next()</apiname> method, which may be passed a pointer to
+                an object which may be converted from each row. You may use an empty interface or a
+                custom object containing JSON tags. Note that the JSON fields in the row are
+                controlled by the query string itself: See <xref
+                    href="https://github.com/couchbaselabs/devguide-examples/blob/server-4.5/go/query-marshalling-rest.go"
+                    format="html" scope="external"/> for an example of using typed query rows.</p>
+        </section>
+        <section><title>Querying with Placeholders</title>You can use N1QL <xref
+                href="../shared/n1ql-generic.dita#toplevel/devguide-named-placeholders"
+                >placeholders</xref> in the query. Placeholders allow you to specify variable
+            constraints for an otherwise constant query. To use placeholders, insert the
+            placeholders themselves in the query string - these may be positional (e.g.
+                <codeph>$1</codeph>, <codeph>$2</codeph>, etc.) or named (e.g.
+            <codeph>$age</codeph>, <codeph>$lname</codeph>, etc). To set the value for the
+            placeholders, construct an object of an appropriate type and pass it as the second
+            argument to the <apiname>ExecuteN1qlQuery()</apiname> method:<ul id="ul_ptm_w3p_fw">
+                <li>For positional placeholders, pass an array. <codeph>$1</codeph> refers to the
+                    the first array element, and so on.</li>
+                <li>For named placeholders, pass a Map. The Map keys should match up to the named
+                    placeholders, without the sigil (<codeph>$</codeph>). To specify a value for the
+                        <codeph>$age</codeph> placeholder, the Map should contain a value for
+                        <codeph>age</codeph>.</li>
+            </ul><p>Note that placeholder values may be anything JSON serializable - meaning things
+                such as Maps and arrays are
+            accepted.</p><codeblock>myQuery := gocb.NewN1qlQuery("SELECT airportname, city, country FROM `travel-sample` " +
+	"WHERE type='airport' AND city=$1 ")
+myParams = append(myParams, []interface{}{"Reno"})
+rows, err := bucket.ExecuteN1qlQuery(myQuery, myParams)</codeblock></section>
+        <section>
+            <title>Query Options</title>
+            <p>You may configure the <apiname>N1qlQuery</apiname> object with various options to
+                control query behavior. These options may be configured using various setter/getting
+                    methods<ul id="ul_bh2_3mp_fw">
+                    <li><apiname>N1qlQuery.Adhoc()</apiname> controls whether the query will be
+                            <xref href="../shared/n1ql-generic.dita#toplevel/prepare-stmts"
+                            >prepared</xref>.</li>
+                    <li><apiname>N1qlQuery.Timeout()</apiname> allows you to set the per-query
+                        timeout. This is useful for long-running queries</li>
+                    <li><apiname>N1qlQuery.Consistency()</apiname> allows you to modify the query
+                        index <xref href="../shared/n1ql-generic.dita#toplevel/consistency"
+                            >consistency</xref>.<codeblock>query.Consistency(gocb.RequestPlus)</codeblock></li>
+                </ul></p>
+        </section>
+        <section>
+            <title>Index Creation</title>
+            <p>In order to query a bucket, it must have an index defined. You can create indexes
+                using raw N1QL statements (e.g. <xref
+                    href="../../n1ql/n1ql-language-reference/createindex.dita#concept_npk_mth_rq"/>)
+                or via the Go SDK's <xref href="managing-cluster.dita">cluster
+                    management interface</xref></p>
+        </section>
      
  </conbody>
 </concept>
