@@ -1,114 +1,182 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
-<concept id="concept_jk4_mhq_44">
-    <title>Managing Clusters</title>
-    <shortdesc>You can manage Couchbase clusters by using the <codeph>ClusterManager</codeph> and
-      <codeph>BucketManager</codeph> interfaces that are available through the
-      <apiname>manager()</apiname> methods exposed in <codeph>Bucket</codeph> and
-      <codeph>Cluster</codeph> instances.</shortdesc>
-    <conbody>
-        
-    <section><title>Cluster Management</title>
-    <p>TBA</p>  
-      
-      
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="managing-cluster-node">
+  <title>Managing Clusters</title>
+  <body>
+        <p conref="../shared/flush-info-pars.dita#toplevel/management-intro"/>
+        <p>The Node SDK also comes with some convenience functionality for common Couchbase management requests.</p>
+        <p>You can manage Couchbase clusters by using the <codeph>ClusterManager</codeph> and <codeph>BucketManager</codeph>
+          interfaces that are available through the <apiname>manager(login, password)</apiname> and <apiname>manager()</apiname> methods exposed in <codeph>Cluster</codeph> and
+          <codeph>Bucket</codeph> instances.</p>
+
+    <section><title>Creating and removing buckets</title>
+        <p>Creating buckets and removing buckets is performed, for example,  when running unit tests.</p>
+        <p>The <apiname>ClusterManager</apiname> class may be used to create and delete buckets from the Couchbase cluster.
+            It is instantiated through the <apiname>Cluster</apiname>'s <apiname>manager()</apiname> method, providing the
+            administrative username and password.</p>
+        <codeblock>var clusterManager = cluster.manager("Administrator", "123456")</codeblock>
+
+        <p>To create a bucket, use the <apiname>createBucket(name, opts, callback)</apiname> method. The <parmname>opts</parmname>
+        represents the options of the bucket, an object with the following structure (shown with default values):</p>
+        <codeblock>var myOpts = {
+    authType: 'sasl',
+    bucketType: 'couchbase',
+    ramQuotaMB: 100,
+    replicaNumber: 1,
+    saslPassword: null,
+    flushEnabled: null
+  };</codeblock>
+
+        <p>The parameters correspond to those in the REST API, most notably:</p>
+        <ul><li><parmname>bucketType</parmname>: Defaults to <codeph>"couchbase"</codeph>, but can also be
+            <codeph>"memcached"</codeph> to create a cache bucket.</li>
+            <li><parmname>ramQuotaMB</parmname>: How much memory should each node use for the bucket. This number is specified in megabytes.</li>
+            <li><parmname>saslPassword</parmname>: If specified, makes this bucket password protected, forcing future connects
+                (using the <apiname>Bucket</apiname>) to specify the <parmname>password</parmname> parameter. Must be
+                used together with the <parmname>authType: 'sasl'</parmname> (which is the default).</li>
+            <li><parmname>flushEnabled</parmname>: Enables the <apiname>BucketManager#flush()</apiname> operation to be performed
+                on this bucket (see the <xref href="#managing-cluster-node/flushing"/> section below).</li>
+            <li><parmname>replicaNumber</parmname>: The number of replicas to use for the bucket.</li>
+            <li><parmname>replicaIndex</parmname>: Wether or not to replicate indexes.</li>
+        </ul>
+        <p>The following example creates an "hello" bucket with only the <parmname>flushEnabled</parmname> differing from the
+            defaults shown above:</p>
+        <codeblock>var manager = cluster.manager("Administrator", "123456");
+manager.createBucket("hello", { flushEnabled: true }, function(err) {
+    console.log('Creation of hello bucket failed:', err);
+});</codeblock>
+
+<!-- TODO does the Node SDK automatically wait for the bucket to be ready, or is there some polling involved?
+     if polling, the shared content <p conref="../shared/flush-info-pars.dita#toplevel/after-creation"/> should be added -->
+
+        <p>You can completely delete a bucket using the <apiname>removeBucket(name)</apiname> method:
+        <codeblock>manager.removeBucket("hello", function(err) {
+    console.log('Could not delete hello bucket: ', err);
+});</codeblock></p></section>
+
+    <section id="flushing">
+        <title>Flushing Buckets</title>
+        <p conref="../shared/flush-info-pars.dita#toplevel/flush-intro"/>
+        <p>You may flush a bucket in the Node SDK by using the <apiname>BucketManager</apiname>'s <apiname>flush()</apiname>
+            method:<codeblock>var bucketMgr = bucket.manager();
+bucketMgr.flush(new function(err, status) {
+    if (status) {
+        console.log('Bucket flushed');
+    } else {
+        console.log('Could not flush bucket: ', err);
+    }
+});</codeblock></p>
+        <p>The <apiname>flush</apiname> operation may notably fail if the bucket does not have flush enabled.</p>
     </section>
-      <section><title>Bucket Management</title>
-        <p>Creating buckets and destorying buckets is performed, for example,  when running unit
-        tests.</p>
-      <p>To manage buckets, use the design documents. </p>
-        <sectiondiv><b>Creating a Design Document</b>
-      <p>To create a view, you can use the
-          <codeph>manager()</codeph> method of your bucket instance to retrieve a
-          <codeph>BucketManager</codeph> instance. After you have a <codeph>BucketManager</codeph>
-        instance, invoke the <codeph>upsertDesignDocument</codeph> method to store the design
-        document for later
-      querying.</p><codeblock outputclass="language-javascript">var bucket = cluster.openBucket();
+
+    <!-- TODO uncomment when index management is available -->
+    <!--<section>
+        <title>N1QL Index Management</title>
+        <p conref="../shared/flush-info-pars.dita#toplevel/index-management"/>
+        <p>You can manage indexes in the Node SDK using the <apiname>BucketManager</apiname>
+            class, with its various N1QL related methods: <apiname>listN1qlIndexes()</apiname>, <apiname>createN1qlIndex(...)</apiname>, etc...</p>-->
+        <!-- TODO: example -->
+    <!--</section>-->
+
+
+    <section>
+        <title>View Management</title>
+        <p>Views are stored in design documents. The SDK provides convenient methods to create, retrieve, and remove
+            design documents. To set up views, you create design documents that contain one or more view definitions, and then
+            insert the design documents into a bucket.</p>
+        <p>Each view in a design document is represented by a name and a set of MapReduce functions.
+            The mandatory map function describes how to select and transform the data from the bucket,
+            and the optional reduce function describes how to aggregate the results.</p>
+<!-- TODO use shared content when available instead of paragraphs above -->
+        <p>To create a view, you can use the <codeph>manager()</codeph> method of your bucket instance to retrieve a
+          <codeph>BucketManager</codeph> instance. After you have a <codeph>BucketManager</codeph> instance, invoke the
+          <codeph>upsertDesignDocument</codeph> method to store the design document for later querying.</p>
+        <p>The following example creates or updates a "ddocname" design document with a single "by_name" view on the "hello"
+            bucket (because it is created through hello's <apiname>BucketManager</apiname>):</p>
+        <codeblock outputclass="language-javascript">var bucket = cluster.openBucket("hello");
 var bucketMgr = bucket.manager();
 
 var ddocdata = {
-  views: {
-    by_name: {
-      map: [ 'function(doc, meta) {',
-             '  if (doc.type &amp;&amp; doc.type == "beer") {',
-             '    emit(doc.name, null);',
-             '  }',
-             '}'
-           ].join('\n')
-    },
-  }
+views: {
+by_name: {
+map: [ 'function(doc, meta) {',
+     '  if (doc.type &amp;&amp; doc.type == "beer") {',
+     '    emit(doc.name, null);',
+     '  }',
+     '}'
+   ].join('\n')
+},
+}
 };
 bucketMgr.upsertDesignDocument('ddocname', ddocdata, function(err) {
-  console.log('Insertion of design document completed with error:', err);
-});</codeblock>Alternatively,
-      you can just pass a JavaScript function into the design document manipulation methods and they
-      will automatically be serialized to JavaScript. For instance, the following code snippets are
-      functionally
-      equivalent:<codeblock>// Using a string
+console.log('Insertion of design document completed with error:', err);
+});</codeblock>
+
+        <p>Alternatively, you can just pass a JavaScript function into the design document manipulation methods and they
+        will automatically be serialized to JavaScript. For instance, the following code snippets are
+        functionally equivalent:</p>
+        <codeblock>// Using a string
 var ddocdata = {
-  views: {
-    by_name: {
-      map: [ 'function(doc, meta) {',
-             '  if (doc.type &amp;&amp; doc.type == "beer") {',
-             '    emit(doc.name, null);',
-             '  }',
-             '}'
-           ].join('\n')
-    },
-  }
+views: {
+by_name: {
+map: [ 'function(doc, meta) {',
+     '  if (doc.type &amp;&amp; doc.type == "beer") {',
+     '    emit(doc.name, null);',
+     '  }',
+     '}'
+   ].join('\n')
+},
+}
 };
 
 // Using a function
 var ddocdata = {
-  views: {
-    by_name: {
-      map: function(doc, meta) {
-             if (doc.type &amp;&amp; doc.type == "beer") {
-               emit(doc.name, null);
-             }
-           }
-    },
-  }
-};</codeblock></sectiondiv>
-      
-    <sectiondiv><b>Deleting a Design Document</b>
-            <p>To delete a design document, pass the name of the design document to delete to the
-                <codeph>removeDesignDocument</codeph>
-                method.<codeblock>var bucket = cluster.openBucket();
-var bucketMgr = bucket.manager();
+views: {
+by_name: {
+map: function(doc, meta) {
+     if (doc.type &amp;&amp; doc.type == "beer") {
+       emit(doc.name, null);
+     }
+   }
+},
+}
+};</codeblock>
 
-bucketMgr.removeDesignDocument('ddocname', function(err) {
-  console.log('Insertion of design document completed with error:', err);
-});</codeblock></p></sectiondiv>
-        
-<sectiondiv><b>Removing a Single View</b>
-            <p>Removing a single view involves retrieving the full design document, removing the specific
-                view and then replacing the existing design document with the version without your
-                targeted view. Here is an
-                example:<codeblock>var bucket = cluster.openBucket();
+        <note type="warning">When you want to update an existing document to either introduce a new view, modify an existing
+            view or delete an existing view, you can use the <codeph>upsertDesignDocument</codeph> method.
+            <p>The catch is that this method needs the list of views in the document to be exhaustive, meaning that if you just create the new <codeph>View</codeph> definition as previously and add it to a new <codeph>DesignDocument</codeph> that you upsert, all your other views will be erased!</p>
+            <p>The solution is to perform a <codeph>getDesignDocument(ddoc)</codeph>, add your view definition to the DesignDocument's <codeph>views()</codeph> list, then upsert it. This also works with view modifications, provided the change is in the <codeph>map</codeph> or <codeph>reduce</codeph> functions (just reuse the same name for the modified <codeph>View</codeph>).</p></note>
+
+            <p>Here is an example of deleting a view from an existing document, which follows the same principle:</p>
+            <codeblock>var bucket = cluster.openBucket();
 var bucketMgr = bucket.manager();
 
 function deleteView(ddocname, viewname, callback) {
-  bucketMgr.getDesignDocument(ddocname, function(err, ddoc, meta) {
-    if (err) {
-      return callback(err);
-    }
+    bucketMgr.getDesignDocument(ddocname, function(err, ddoc, meta) {
+        if (err) {
+            return callback(err);
+        }
 
-    delete ddoc.views[viewname];
+        //we have the current exhaustive list of views, delete the one we want to remove
+        delete ddoc.views[viewname];
 
-    bucketMgr.upsertDesignDocument(ddocname, ddoc, function(err) {
-      if (err) {
-        return callback(err);
-      }
+        //update the new exhaustive design document
+        bucketMgr.upsertDesignDocument(ddocname, ddoc, function(err) {
+            if (err) {
+                return callback(err);
+            }
 
-      callback(null);
-    });
-  });
+            callback(null);
+            });
+        });
 }
 
 deleteView('ddoc', 'view', function(err) {
-  console.log('Deletion completed with error:', err);
-});</codeblock></p></sectiondiv>
-        </section>
-    </conbody>
-</concept>
+    console.log('Deletion completed with error:', err);
+});</codeblock>
+
+        <p>To remove a complete design document from a bucket, pass its name to the <codeph>removeDesignDocument</codeph>
+            method.</p>
+    </section>
+  </body>
+</topic>
