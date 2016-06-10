@@ -2,7 +2,171 @@
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_alz_z1n_bw">
   <title>Handling Errors</title>
+  <shortdesc>Shows how errors are handled and various exception classes.</shortdesc>
   <body>
-    <p></p>
+    <section>
+      <title>How the SDK handles errors</title>
+      <p>The .NET SDK generally handles errors in two ways: either by catching an internally thrown
+        exception and returning it back the application tier as a property of the
+          <apiname>IDocumentResult</apiname> or by throwing the exception with the expectation that
+        the application will handle it. The generally rule is if the error is scoped to an operation
+        or query, then it's handled gracefully and returned as part of the response; if the error
+        scoped to the client itself and non-recoverable, then the exception is thrown. An example of
+        an error that is caught and returned to the application would be an
+        OperationTimeoutException. A non-recoverable error such as a BootstrapException would be
+        thrown since the client cannot function without successfully bootstrapping to the
+        server.</p>
+    </section>
+    <section><title>Useful properties of IResult and it's derivatives</title><p>The
+          <apiname>Document</apiname>, <apiname>Query</apiname> (N1QL) and <apiname>View</apiname>
+        API's methods all return specifications that inherit from a common interface: IResult. The
+        IResult interface contains signatures for the following properties:<ul id="ul_dyj_xbn_gw">
+          <li><b><apiname>Success</apiname></b>: returns a boolean value indicating that the overall
+            operation or request was successful or not.</li>
+          <li><b><apiname>Message</apiname></b>: returns an optional message if Success was false -
+            this may indicate the reason for the failure.</li>
+          <li><b><apiname>Exception</apiname></b>: if Success was false an optional exception if one
+            was generated.</li>
+        </ul></p><p>The purpose of these properties is to provide information regarding the
+        operation and if it was a failure, enough information to diagnose or handle the error within
+        the application. For example, in the event of a failure, the application may decide to
+        rethrow the exception up the stack or perhaps log the error and keep on going.<codeblock><![CDATA[var result = bucket.GetDocument("thekey");
+if(!result.Success && result.Exception != null){
+  throw result.Exception;
+}]]></codeblock></p><p>There is also an interface that inherits <apiname>IResult</apiname> called <apiname>IResult&lt;T></apiname> which
+        has a Value property of Type "T"; its purpose is for operations that retrieve a document
+        from Couchbase. A good example would be <apiname>IBucket.GetDocument&lt;T>(string id)</apiname> which retrieves
+        a document from the Couchbase and casts it to whatever you specify as T (assuming the
+        document is compatible with whatever T is).</p><p>As mentioned previously, each SDK has it's
+        own <apiname>IResult</apiname> specification which extends the definition for its own
+          domain-specific purpose. Query has a <apiname>IQueryResult&lt;T></apiname> and Views has an <apiname>IViewResult</apiname>, since
+        both of have IResult in the inheritance chain, they share implementations of the common
+        properties above, plus much more.</p><image href="images/iresult-interface-inheritence.JPG"
+        id="image_pyd_mwg_hw" align="center"/></section>
+    <section><p/>For more detail on each specific implementation, look within the section for each
+      of respective API's: Document, View, Query and Full Text Search.</section>
+    <section>
+      <title>The Exception Types and there meanings</title>
+      <p>As mentioned previously, the .NET SDK differentiates between throwing non-recoverable
+        exceptions and returning recoverable exceptions as part of the IResult.Exception property.
+        The following table defines each exception type in the SDK and the behavior of the client
+        when it is encountered.<table frame="all" rowsep="1" colsep="1" id="table_i4n_rxg_hw">
+          <title>Overview of .NET SDK Exceptions</title>
+          <tgroup cols="2">
+            <colspec colname="c1" colnum="1" colwidth="1*"/>
+            <colspec colname="newCol2" colnum="2" colwidth="2.42*"/>
+            <thead>
+              <row>
+                <entry>Name</entry>
+                <entry>Description</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry>BootstrapException</entry>
+                <entry>The client failed to bootstrap for one more reasons. See Note below.</entry>
+              </row>
+              <row>
+                <entry>AuthenticationException</entry>
+                <entry>The client failed to authenticate - thrown along with BootstrapException. See
+                  Note below.</entry>
+              </row>
+              <row>
+                <entry>ConfigException</entry>
+                <entry>The client could not bootstrap for a given provider type. Client will
+                  generally recover if a Memcached bucket.</entry>
+              </row>
+              <row>
+                <entry>CouchbaseBootstrapException and BootstrapException</entry>
+                <entry>An error occurred while bootstrapping the client on a Couchbase
+                  bucket.</entry>
+              </row>
+              <row>
+                <entry>BucketAlreadyOpenException</entry>
+                <entry>An attempt to open a bucket that has already been opened.</entry>
+              </row>
+              <row>
+                <entry>BucketNotFoundException</entry>
+                <entry>A bucket was referenced that does not exist.</entry>
+              </row>
+              <row>
+                <entry>DocumentMutationLostException</entry>
+                <entry>If enhanced durability is enabled, indicates a non-recoverable state when
+                  using an overload</entry>
+              </row>
+              <row>
+                <entry>InitializationException</entry>
+                <entry>A failure occurred during initialization.</entry>
+              </row>
+              <row>
+                <entry>NodeUnavailableException</entry>
+                <entry>Thrown if a node in the cluster is not online to service a pending
+                  request.</entry>
+              </row>
+              <row>
+                <entry>ReplicaNotConfiguredException</entry>
+                <entry>Thrown if requested desired ReplicateTo value exceeds the number of
+                  configured replicas on the Server.</entry>
+              </row>
+              <row>
+                <entry>ServiceNotSupportedException</entry>
+                <entry>Thrown if a service (Data, Query, etc) is requested that is not supported or
+                  configured on the server cluster.</entry>
+              </row>
+              <row>
+                <entry>BufferUnavailableException</entry>
+                <entry>Thrown when an available buffer cannot be obtained from the
+                  BufferAllocator.</entry>
+              </row>
+              <row>
+                <entry>ConnectionUnavailableException</entry>
+                <entry>Thrown when an available IConnection cannot be obtained from the
+                  IConnectionPool after n number of tries.</entry>
+              </row>
+              <row>
+                <entry>RemoteHostClosedException</entry>
+                <entry>Thrown when the remote host closes a connection.</entry>
+              </row>
+              <row>
+                <entry>RemoteHostTimeoutException</entry>
+                <entry>Thrown when an in-process operation times out.</entry>
+              </row>
+              <row>
+                <entry>IndexAlreadyExistsException</entry>
+                <entry>Thrown when an attempt to create an index that already exists.</entry>
+              </row>
+              <row>
+                <entry>IndexDoesNotExistException</entry>
+                <entry>Thrown when an attempt is made to use and index that does not exist.</entry>
+              </row>
+              <row>
+                <entry>PrepareStatementException</entry>
+                <entry>Thrown when the IQueryClient cannot prepare a non-adhoc statement on the
+                  server.</entry>
+              </row>
+              <row>
+                <entry>NullConfigException</entry>
+                <entry>Thrown when a node locator can not be found.</entry>
+              </row>
+              <row>
+                <entry>ServerUnavailableException</entry>
+                <entry>Thrown when the client representation of a remote host cannot be located to
+                  fulfill a request.</entry>
+              </row>
+              <row>
+                <entry>UnsupportedAddressFamilyException</entry>
+                <entry>Thrown if an IP cannot be resolved from a domain name.</entry>
+              </row>
+              <row>
+                <entry>System.TimeoutException</entry>
+                <entry>Thrown if a request cannot be fulfilled by the configured timeout.</entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table><note>both BootstrapException and AuthenticationException will nearly always be
+          wrapped in an System.AggregateException.</note><note>not all exceptions are returned back
+          to application or thrown - in many cases they are handled internally and
+        logged.</note></p>
+    </section>
   </body>
 </topic>
