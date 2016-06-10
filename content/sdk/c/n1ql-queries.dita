@@ -2,8 +2,6 @@
 <!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
 <concept id="concept_bhv_nhq_44">
 	<title>N1QL from the SDK</title>
-	<shortdesc>You can perform Couchbase Query Language (N1QL) queries via the C client
-		library.</shortdesc>
 	<conbody>
         <p>N1QL queries are performed using a row-based API. This API is similar in spirit to the
             view API (see <xref href="view-queries.dita#concept_tvx_nhq_44"/>). The N1QL API is
@@ -40,34 +38,30 @@
             <li>Free or clear the <codeph>params</codeph> object (<apiname>lcb_n1p_free</apiname> or
                     <apiname>lcb_n1p_reset</apiname>).</li>
         </ol>
-        <p>Here's a code example that uses named parameters:</p>
-        <codeblock spectitle="Issuing a N1QL query with a placeholder" outputclass="language-c">// Error checking omitted for brevity
-
-// The command structure
+        <p>Here's a code example that uses placeholders</p>
+        <codeblock spectitle="Issuing a N1QL query with a placeholder" outputclass="language-c">lcb_N1QLPARAMS *params = lcb_n1p_new();
 lcb_CMDN1QL cmd = { 0 };
-// Allocate the parameter object
-lcb_N1QLPARAMS *nparams = lcb_n1p_new();
 
-lcb_n1p_setstmtz(nparams,
-   "SELECT fname || \" \" || lname, age FROM default WHERE age > $age LIMIT 5");
-// Set the value for '$age'
-lcb_n1p_namedparamz(nparams, "$age", "27");
-// Now, fill the command structure
-lcb_n1p_mkcmd(nparams, &amp;cmd);
-#if DEBUG
-// Dump the encoded query
-printf("Encoded query is: %s\n", lcb_n1p_encode(nparams));
-#endif
-cmd.callback = rowCallback;
+// Need to make this properly formatted JSON
+std::string city_str;
+city_str += '"';
+city_str += city;
+city_str += '"';
 
-lcb_error_t rc = lcb_n1ql_query(instance, NULL, &amp;cmd);
-if (rc != LCB_SUCCESS) {
-    // OOPS!
-}
-// We can release the params object now..
-lcb_n1p_free(nparams);
-lcb_wait(instance);
-</codeblock>
+rc = lcb_n1p_setstmtz(params,
+    "SELECT airportname FROM `travel-sample` "
+    "WHERE city=$1 AND type=\"airport\"");
+rc = lcb_n1p_posparam(params, city_str.c_str(), city_str.size());
+
+cmd.callback = query_callback;
+
+rc = lcb_n1p_mkcmd(params, &amp;cmd);
+rc = lcb_n1ql_query(instance, cookie, &amp;cmd);
+lcb_n1p_free(params);
+lcb_wait(instance);</codeblock>
+        <note type="tip">See a fully compilable example using placeholders: <xref
+                href="https://github.com/couchbaselabs/devguide-examples/blob/server-4.5/c/query-placeholders.cc"
+                format="html" scope="external"/></note>
         <p>You can also utilize the encoded query directly (without using
                 <apiname>lcb_N1QLPARAMS</apiname>). This involves using a pre-encoded query per the
             N1QL REST API. This example issues the same query as above, bypassing the parameters
