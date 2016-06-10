@@ -31,5 +31,454 @@
       You can monitor the current configuration, current status, and the last time a replication
       process was triggered for each configured replication.</p>
     <p><image href="picts/xccr-create.png" id="image_vwk_d2t_zs" align="left" width="720"/></p>
+    <section><title>Create Cluster Reference</title>
+      <p>Full, Cluster, and Replication Administrators can create a cluster
+        reference.</p>
+      <p>The cluster reference sets the cluster name, IP or hostname, administrator credentials and
+        encryption. </p>
+      <p>To create a cluster reference using the Couchbase Web Console:</p>
+      
+      <p> Go to <menucascade>
+        <uicontrol>XDCR</uicontrol>
+        <uicontrol>Create Cluster Reference</uicontrol>
+      </menucascade></p>
+      <p><image href="../admin/picts/xdcr-createreference.png" id="image_fxf_crb_ft"
+        align="left"/></p>
+      <p>To create the unidirectional replication (from cluster A to cluster B):</p>
+      <ol>
+        
+        <li>Verify that a destination bucket exists in the cluster where you will be replicating.</li>
+        <li>To check that a destination bucket exists, issue a REST API request using the following
+          syntax, GET HTTP method, and URI path:
+          <codeblock>curl GET -u Admin:password http://ip.for.destination.cluster:8091/pools/default/buckets</codeblock></li>
+        <li>Navigate to the XDCR section, <menucascade>
+          <uicontrol>XDCR</uicontrol>
+          <uicontrol>Remote Cluster section</uicontrol>
+          <uicontrol>Create Cluster Reference</uicontrol>
+          
+        </menucascade></li>
+        <li>Click the <uicontrol>Create Cluster Reference</uicontrol> button. </li>
+        <li>Provide the following information for identifying and accessing the destination cluster.
+          <ul>
+            <li>Cluster Name</li>
+            <li>IP address or hostname of a node in the destination cluster</li>
+            <li>Administrator username and password for the destination cluster</li>
+            <li>Enable Encryption - If selected, XDCR data encryption occurs using SSL.</li>
+          </ul></li>
+        <li>Click <uicontrol>Save</uicontrol> to store the new reference to the destination cluster.
+          This cluster information is now available when configuring replication for the source
+          cluster.</li></ol>
+    </section>
+    <section><title>Create Replication</title>
+      <p>Full, Cluster, and Replication Administrators can create a replication between clusters
+        after creating references to the source and destination cluster.</p>
+      <p>After you configure and start replication, view the current status and list of replications
+        in the <wintitle>Ongoing Replications</wintitle> section.</p>
+      <ol>
+        <li>Click <uicontrol>Create Replication</uicontrol> to configure a new XDCR replication. A
+          panel appears where you can configure a new replication from the source to the destination
+          cluster.<p><image href="picts/xdcr-create-replication.png" id="image_zds_pjt_zs"
+            align="left" width="550"/></p></li>
+        <li>In the section <wintitle>Replicate changes from</wintitle>, select a bucket from the
+          current cluster to replicate.</li>
+        <li>In the section <wintitle>To</wintitle>, select a destination cluster and enter the bucket
+          name from the destination cluster:</li>
+        <li>Select the check box <wintitle>Enable Advanced filtering</wintitle>. This will allow you
+          to specify the filtering expression while creating replication. <p>For more details, see
+            <xref href="xdcr-filtering-setup.dita#topic_wz2_yjf_xq"/>.</p></li>
+        <li>Configure <xref href="xdcr-adv-settings.dita#topic_l3v_lh4_14">XDCR advanced
+          settings</xref>.</li>
+        <li>Click the <uicontrol>Replicate</uicontrol> button to start the replication process.</li>
+      </ol>
+    </section>
+    <section><title>XDCR Advanced Settings</title>
+      <p>XDCR advanced settings are internal settings available for configuration.</p>
+      <p>Advanced settings that can be updated include:</p> 
+      
+      <dl>
+        <dlentry>
+          <dt>XDCR Protocol</dt>
+          <dd>The XDCR protocol defaults to version 2. <ul>
+            <li>Version 1 uses the REST protocol for replication. If the Elasticsearch plug-in is
+              used, choose version 1.</li>
+            <li>Version 2 uses memcached REST protocol for replication, a high-performance mode that
+              directly uses the memcached protocol on the destination nodes. Choose version 2 when
+              setting up a new replication with Couchbase Server 2.2 or later. </li>
+          </ul></dd>
+        </dlentry>
+      </dl>
+      
+      
+      <dl>
+        <dlentry>
+          <dt>XDCR Source Nozzles per Node</dt>
+          <dd>This setting determines the number of XDCR source nozzles per node. This number must be
+            less than or equal to the number of <codeph>XDCR Target Nozzles per Node</codeph>.</dd>
+          <dd>A small value of two or four is often sufficient. The default is two and the value range
+            is 1-100. The CLI command for setting this value is provided in <xref
+              href="../cli/cbcli/xdcr-replicate.dita#cbcli-xdcr-manage-replications"/>.</dd>
+        </dlentry>
+      </dl> 
+      
+      <dl>
+        <dlentry>
+          <dt>XDCR Target Nozzles per Node</dt>
+          <dd>This setting determines the number of XDCR target nozzles per node, and this number can be
+            set higher if the target nodes have high processing power. The default is two and the
+            value range is 1-100.</dd>
+          <dd>The setting <codeph>XDCR Target Nozzles per Node</codeph> affects the level of concurrency
+            as follows:
+            <codeblock>Number of concurrent workers writing to the target cluster  = 
+              XDCR Target Nozzles per Node * &lt;Number of Nodes in Target Cluster&gt;</codeblock></dd>
+        </dlentry>
+      </dl>
+      
+      <note type="note">The setting for <codeph>XDCR Source Nozzles per Node</codeph> must be less or
+        equal to <codeph>XDCR Target Nozzles per Node</codeph>. Otherwise, more mutations per second
+        are received by XDCR than it can send to the target node. This can lead to mutations piling up
+        in the XDCR queue and to DCP backing off, which results in a slow drain rate.</note>
+      <dl>
+        <dlentry>
+          <dt>XDCR Checkpoint Interval</dt>
+          <dd>The Checkpoint Interval does not affect the persistence of actual data. During that time, 
+            XDCR computes and persists checkpoint documents, which contain the high sequence number 
+            for each vBucket that was successfully replicated to the target cluster.
+            <p>If the replication is restarted by user or recovers from an error, 
+              the checkpoint documents can be used to determine the starting point of t
+              he replication to avoid unnecessary work. The shorter the interval, 
+              the more accurate the checkpoint documents will be and the less unnecessary 
+              work will be needed at the replication restart. The computation and persistence of 
+              checkpoint documents use considerable system resources and may impact XDCR performance 
+              if they are performed too frequently. A tradeoff is needed to determine the optimal value for the users.</p></dd>
+          
+        </dlentry>
+      </dl>
+      
+      <dl>
+        <dlentry>
+          <dt>XDCR Batch Count</dt>
+          <dd>Document batching count, 500 to 10000. Default is 500. In general, increasing this value
+            by 2 or 3 times will improve XDCR transmissions rates since larger batches of data will be
+            sent in the same timed interval. For unidirectional replication from a source to a
+            destination cluster, adjusting this setting by 2 or 3 times will improve overall
+            replication performance as long as persistence to disk is fast enough on the destination
+            cluster. Note however that this can have a negative impact on the destination cluster if
+            you are performing bi-directional replication between two clusters and the destination
+            already handles a significant volume of reads/writes.</dd>
+        </dlentry>
+      </dl>      
+      
+      <dl>
+        <dlentry>
+          <dt>XDCR Batch Size (kilobytes)</dt>
+          <dd>Document batching size, 10 to 100000 (kilobytes). Default is 2048. In general, increasing this
+            value by 2 or 3 times will improve XDCR transmissions rates since larger batches of data
+            will be sent in the same timed interval. For unidirectional replication from a source to a
+            destination cluster, adjusting this setting by 2 or 3 times will improve overall
+            replication performance as long as persistence to disk is fast enough on the destination
+            cluster. Note however that this can have a negative impact on the destination cluster if
+            you are performing bi-directional replication between two clusters and the destination
+            already handles a significant volume of reads/writes.</dd>
+        </dlentry>
+      </dl>    
+      <dl>
+        <dlentry>
+          <dt>XDCR Failure Retry Interval</dt>
+          <dd>This interval is the time that XDCR waits before it attempts to restart replication
+            after a server or network failure. The interval for restarting a failed XDCR is 1 to 300
+            seconds (default 10): if you expect more frequent network or server failures, you may want
+            to set this interval to a lower value.</dd>
+        </dlentry>
+      </dl>    
+      
+      <dl>
+        <dlentry>
+          <dt>XDCR Optimistic Replication Threshold</dt>
+          <dd>This option improves XDCR latency and represents the compressed document size in bytes that spans from 0 to 
+            20MB (default is 256 Bytes). XDCR will get metadata for documents larger than this size on a single 
+            time before replicating the uncompressed document to a destination cluster. </dd>
+        </dlentry>
+      </dl>    
+      
+      
+      <dl>
+        <dlentry>
+          <dt>XDCR Statistics Collection Interval</dt>
+          <dd>Shows how often XDCR Statistics is updated.</dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>XDCR Logging Level</dt>
+          <dd>The log level for the replication. It can be <codeph>Error</codeph>, <codeph>Info</codeph>, <codeph>Debug</codeph> or <codeph>Trace</codeph></dd>
+        </dlentry>
+      </dl>
+    </section>
+    <section><title>Configure XDCR Filtering</title>
+      <p>Full, Cluster, and Replication Administrators can set up filtering in XDCR.</p>
+      <p>The <varname>filtering expression</varname> is a regular expression for filtering keys that
+        need to be transmitted from the source cluster to the destination cluster. It is set when
+        creating the XDCR replication. </p>
+      <note type="important">Filtering expressions are currently implemented only for the document
+        keys.</note>
+      <p>The filtering expression becomes a part of the key for replication. Therefore,
+        administrators can create multiple replications to the same destination cluster and bucket as
+        long as the filtering expression is different.</p>
+      <p><b>Define a Filtering Expression</b></p>
+      <p>To implement filtering, you must explicitly do it by selecting <menucascade>
+        <uicontrol>XDCR</uicontrol>
+        <uicontrol>Create Replication</uicontrol>
+        <uicontrol>Enable Advanced filtering</uicontrol>
+      </menucascade>.</p>
+      <p><image href="picts/xdcr-adv-filtering.png" id="image_i12_h15_zs" align="left" width="500"
+      /></p>
+      <note type="important">You cannot change a filtering expression on an existing
+        replication.</note>
+      <p>It is important to avoid conditions where two replications to the same destination overlap
+        partially or fully. If an overlap occurs, it will waste machine resources since a single key
+        gets replicated multiple times. Overlapping filtering expressions cannot guarantee which of
+        the two replications will replicate the overlapping key instance to the destination faster. </p>
+      <p>Filtering does not impact conflict resolution and can be used with a conflict
+        resolution based on revision ID (RevID). </p>
+      
+      <p>You can pause or resume replication with filtering expression without restrictions. </p>
+      <p><b>Test a Replication Filter</b></p>
+      <p>For example, if you have installed the
+        <codeph>Travel-Sample</codeph> bucket and want to replicate a subset of data to a remote
+        cluster, use the regular expression provided below to test it out:
+        <codeblock>regular exp - airline* 
+          test key -airline_SFO</codeblock></p>
+      <p><b>XDCR Filtering Regular Expression</b></p>
+      <p>This is a list of JavaScript regular expressions (RegEx) you can use for XDCR
+        filtering.</p>
+      <p>Regular expressions (RegEx) are a powerful way to match a sequence of simple characters. You
+        can use regular expressions to create filters. </p>
+      <p>Regular expressions are case-sensitive: a lowercase 
+        &apos;<codeph>a</codeph>&apos; is distinct from an
+        uppercase &apos;<codeph>A</codeph>&apos;. You can enclose a range of characters in square brackets to match
+        against all of those characters.</p>
+      <table>
+        <tgroup cols="4">
+          <colspec colname="col1" colwidth="1*"/>
+          <colspec colname="col2" colwidth="4*"/>
+          <thead>
+            <row>
+              <entry align="left">Expression</entry>
+              <entry align="left">Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            <row>
+              <entry><codeph>[tT]here</codeph></entry>
+              <entry>Matches against 'There' and 'there'</entry>
+            </row>
+            <row>
+              <entry><codeph>[ ]</codeph></entry>
+              <entry>Might be used on a range of characters separated by a <codeph>-</codeph> character.</entry>
+            </row>
+            <row>
+              <entry><codeph>[0-9]</codeph></entry>
+              <entry>Matches any digit.</entry>
+            </row>
+            <row>
+              <entry><codeph>[A-Z]</codeph></entry>
+              <entry>Matches any uppercase alpha character.</entry>
+            </row>
+            <row>
+              <entry><codeph>[A-Za-z0-9]</codeph></entry>
+              <entry>Matches any alphanumeric character.</entry>
+            </row>
+            <row>
+              <entry><codeph>^</codeph></entry>
+              <entry>Matches beginning of input. If the multiline flag is set to <codeph>true</codeph>, also
+                matches immediately after a line break character. For example, <codeph>/^A/</codeph> does not
+                match the &apos;<codeph>A</codeph>&apos; in "<codeph>an A</codeph>", but does match the
+                &apos;<codeph>A</codeph>&apos; in "<codeph>An E</codeph>". <p>The &apos;<codeph>^</codeph>&apos; has a different
+                  meaning when it appears as the first character in a character set pattern. See <xref
+                    href="https://developer.mozilla.org/en/docs/Web/JavaScript/Guide/Regular_Expressions#special-negated-character-set"
+                    format="html" scope="external">complemented character sets</xref> for details and an
+                  example.</p><p>It can also be used as a "<codeph>not</codeph>" character, therefore
+                    <codeph>[^0-9] </codeph>matches against any character that is not a digit.</p></entry>
+            </row>
+          </tbody>
+        </tgroup>
+      </table> 
+      <p>You can use ranges to specify a group of characters. You can also use the following shortcuts:</p>
+      <table>
+        <tgroup cols="4">
+          <colspec colname="col1" colwidth="1*"/>
+          <colspec colname="col2" colwidth="4*"/>
+          <thead>
+            <row>
+              <entry align="left">Expression</entry>
+              <entry align="left">Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            <row>
+              <entry><codeph>.</codeph></entry>
+              <entry>Matches against any character.</entry>
+            </row>
+            <row>
+              <entry><codeph>\d</codeph></entry>
+              <entry>Matches against a digit [0-9]. <b>*</b></entry>
+            </row>
+            <row>
+              <entry><codeph>\D</codeph></entry>
+              <entry>Matches against a non-digit <codeph>[^0-9]</codeph>. <b>*</b></entry>
+            </row>
+            <row>
+              <entry><codeph>\s</codeph></entry>
+              <entry>Matches against a whitespace character (such as a tab, space, or line feed
+                character).<b>*</b></entry>
+            </row>
+            <row>
+              <entry><codeph>\S</codeph></entry>
+              <entry>Matches against a non-whitespace character.<b>*</b></entry>
+            </row>
+            <row>
+              <entry><codeph>\w</codeph></entry>
+              <entry>Matches against an alphanumeric character
+                <codeph>[a-zA-Z_0-9]</codeph>.<b>*</b></entry>
+            </row>
+            <row>
+              <entry><codeph>\W</codeph></entry>
+              <entry>Matches against a non-alphanumeric character.<b>*</b></entry>
+            </row>
+            <row>
+              <entry><codeph>\xhh</codeph></entry>
+              <entry>Matches against a control character (for the hexadecimal character
+                <codeph>hh</codeph>).<b>*</b></entry>
+            </row>
+            <row>
+              <entry><codeph>\uhhhh</codeph></entry>
+              <entry>Matches against a Unicode character (for the hexadecimal character
+                <codeph>hhhh</codeph>).<b>*</b></entry>
+            </row>
+            
+          </tbody>
+        </tgroup>
+      </table>
+      <note type="note"><b>*</b>Since the backslash character is used to denote a specific search
+        expression, if you want to match against this character you must enter a double backslash
+        (<codeph>\\</codeph>).</note>
+      
+      
+      <p>To match against occurrences of a character or expression, you can use the following.</p>
+      
+      <table>
+        <tgroup cols="4">
+          <colspec colname="col1" colwidth="1*"/>
+          <colspec colname="col2" colwidth="4*"/>
+          <thead>
+            <row>
+              <entry align="left">Expression</entry>
+              <entry align="left">Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            <row>
+              <entry><codeph>*</codeph></entry>
+              <entry>Matches against zero or more occurrences of the previous character or expression.</entry>
+            </row>
+            <row>
+              <entry><codeph>+</codeph></entry>
+              <entry>Matches against one or more occurrences of the previous character or expression.</entry>
+            </row>
+            <row>
+              <entry><codeph>?</codeph></entry>
+              <entry>Matches zero or one occurrence of the previous character or expression.</entry>
+            </row>
+            <row>
+              <entry><codeph>(n)</codeph></entry>
+              <entry>Matches <codeph>n</codeph> occurrences of the previous character or expression.</entry>
+            </row>
+            <row>
+              <entry><codeph>(n,m)</codeph></entry>
+              <entry>Matches from <codeph>n</codeph> to <codeph>m</codeph> occurrences of the previous character or expression.</entry>
+            </row>
+            <row>
+              <entry><codeph>(n,)</codeph></entry>
+              <entry>Matches at least <codeph>n</codeph> occurrences of the previous character or
+                expression.</entry>
+            </row>
+          </tbody>
+        </tgroup>
+      </table>
+      <p>You can provide text to replace all or part of your search string. 
+        To do this, you need to group together matches by enclosing them in parentheses so that they can be referenced 
+        in the replacement. To reference a matched parameter, use <codeph>$n</codeph> where <codeph>n</codeph> is the 
+        parameter starting from <codeph>1</codeph>.</p>
+    </section>
+    <section><title>Pause/Resume Replication</title>
+      <p>Full, Cluster, and Replication Administrators can pause and resume XDCR
+        replication.</p>
+      <p><b>Pause/Resume Replication with the Couchbase Web Console</b></p>
+      <p>XDCR streams between the source and destination cluster can be paused and later resumed.
+        After XDCR is resumed, data continues to replicate between the source and destination clusters
+        starting from where it previously left off.</p>
+      <p>To pause and resume replication, click the replicating and paused icons under the ongoing replication status.
+      </p>
+      <ol>
+        <li>Using the Couchbase Web Console, navigate to XDCR.</li>
+        <li>To pause, under <menucascade>
+          <uicontrol>Ongoing Replication</uicontrol>
+          <uicontrol>Status</uicontrol>
+        </menucascade>, click on the <uicontrol>Replicating</uicontrol> icon to pause replication.
+          <p><image href="picts/xdcr-pause-resume.png" id="image_ltl_q25_zs" align="left"
+            width="720"/></p></li>
+        <li>To resume, under <menucascade>
+          <uicontrol>Ongoing Replication</uicontrol>
+          <uicontrol>Status</uicontrol>
+        </menucascade>, click on the <uicontrol>Paused</uicontrol> triangle icon to continue
+          replicating. </li>
+      </ol>
+      <p><b>Pause/Resume Replication with REST API or CLI</b></p>
+      <p>To use REST API or CLI: <ul>
+        <li>REST API: <xref href="../rest-api/rest-xdcr-pause-resume.dita#reference_kz4_khq_w4"
+        /></li>
+        <li>CLI: <xref href="../cli/cbcli/xdcr-replicate.dita#cbcli-xdcr-manage-replications"/>
+        </li>
+      </ul></p>
+    </section>
+    <section><title>Monitor Replication Status</title>
+      <p>Full, Cluster, Read-only, and Replication Administrators can monitor the replication
+        status using the <wintitle>XDCR</wintitle> and <wintitle>Data Buckets</wintitle>
+        tabs.</p>
+      <p>The following Couchbase Web Console areas contain information about replication via XDCR:
+      </p>
+      <ul>
+        <li>The XDCR tab.</li>
+        <li>The outgoing XDCR section under the Data Buckets tab.</li>
+      </ul>
+      <p>The Couchbase Web Console displays any replications configured, or replications in progress
+        for that particular source cluster. If you want to view information about replications at a
+        destination cluster, you must open the console for that cluster. When configuring
+        bi-directional replication, use the web interfaces that belong to the source and destination
+        clusters to monitor both clusters. </p>
+      <p>Any errors that occur during replication appear in the XDCR errors panel. 
+        The following example shows the errors that occur if replication streams from XDCR fail due to the missing vBuckets at the source cluster:
+      </p>
+      <p><image href="picts/xdcr-replication-statuis.png" id="image_tfl_mg5_zs" align="left"
+        width="450"/></p>
+      <p><b>XDCR Replication and Network Failures</b></p>
+      <p>XDCR is resilient to intermittent network failures. If the destination cluster is unavailable due to a network interruption, XDCR pauses 
+        replication and then retries the connection to the cluster every 30 seconds. Once XDCR can successfully reconnect with the 
+        destination cluster, it resumes replication.</p>
+      <p>In the event of a more prolonged network failure, where the destination cluster is unavailable for more than 30 seconds, 
+        the source cluster continues to poll the destination cluster possibly resulting in numerous errors over time.</p>
+    </section>
+    <section><title>Delete XDCR Replication</title>
+      <p>Full, Cluster, and Replication Administrators can  delete active replications.</p>
+      <p>To delete the replication, delete the active replications.
+      </p>
+      <ol>
+        <li>In the XDCR section of the Couchbase Web Console, click <uicontrol>Delete</uicontrol> next to the active replication you want to delete.</li>
+        <li>Confirm the deletion. </li>
+      </ol>
+    </section>
   </body>
+  <related-links>
+    <link href="../security/concepts-rba.dita#concept_ntl_jph_hr"/>
+  </related-links>
 </topic>
