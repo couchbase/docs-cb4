@@ -7,29 +7,78 @@
     <note type="note">Choosing a root CA, the CA hierarchy, and obtaining a certificate from that CA
       chain to set up a Couchbase cluster are not within the scope of this document.</note>
     <section>
-      <title>Certificate Validity Requirements for X.509 in Couchbase</title>
-      <p>Couchbase Server will accept an X.509 certificate as valid if it meets the following
-        requirements:</p>
+      <title>X.509 Certificate Requirements and Best Practices</title>
+      <p>Here are the basic requirements for using your X.509 certificates in Couchbase: </p>
       <ul>
         <li>The certificate must be in available in the <codeph>.pem</codeph> format.</li>
+        <li>The certificate must be an RSA key certificate.</li>
         <li>The current system time must fall between the times set in the certificate's properties
             <codeph>valid from</codeph> and <codeph>valid to</codeph>. </li>
+        <li>Common name: This can be a certificate with a <codeph>nodename</codeph> (preferable), IP
+          address, URI (<codeph>www.example.com</codeph>), or URI with a subject alternative name
+          (SAN) certificate (<codeph>example.com</codeph> and <codeph>example.net</codeph>).</li>
         <li>The node certificate must be designated for server authentication set in the optional
           field of the certificate's property <codeph>enhanced key usage</codeph> as <codeph>Server
-            Authentication</codeph>. </li>
-        <li>Make sure that the certificate meets these requirements: <ul>
-            <li>Common name: This can be a wildcard certificate (<codeph>*.example.com</codeph>),
-              subject alternative name (SAN) certificate (<codeph>example.com</codeph> and
-                <codeph>example.net</codeph>), a certificate with a node name, or an IP
-              address.</li>
-            <li>Key length: 2048 bits or higher.</li>
-          </ul></li>
-      </ul>
+            Authentication</codeph>. </li></ul>
+      
+      <p>Here are a few best practices around X.509 certificates in Couchbase that you should
+        consider using:</p>
+          
+          <ul>
+            <li>To avoid man-in-the-middle attacks do not use wildcards with IP addresses in the
+          certificate common name.</li>
+            <li>We recommended at least RSA key-length of 2048 bits or higher. As computing
+          capabilities increase, longer RSA keys provide increased security.</li>
+          </ul>
+
       <p>The certificate chain must be valid from the node certificate up to the root certificate,
         which can be verified using the <xref
           href="https://www.openssl.org/docs/manmaster/apps/verify.html" format="html"
           scope="external">OpenSSL validate certificate test</xref>. </p>
     </section>
+    <section>
+      <title>Validating Server Identity </title>
+      <p>The HTTPS specification mandates that HTTPS clients must be capable of verifying the
+        identity of the server. This requirement can potentially affect how you generate your X.509
+        certificates. The HTTPS specification defines a generic mechanism for verifying the server
+        identity, known as the HTTPS URL integrity check, which is the standard mechanism used by
+        Web browsers. </p>
+      <sectiondiv><b>HTTPS URL integrity check</b>
+        <p>The basic idea of the URL integrity check is that the server certificate's identity must
+          match the server hostname. This integrity check has an important impact on how you
+          generate X.509 certificates for HTTPS: the certificate identity (usually the certificate
+          subject DN’s common name) must match the name of the host on which Couchbase Server is
+          deployed. </p><p>The URL integrity check is designed to prevent man-in-the-middle attacks.
+          </p><p>Specify the certificate identity for the URL integrity check in one of the
+          following ways: </p><dl>
+          <dlentry>
+            <dt>Using the <codeph>commonName</codeph></dt>
+            <dd>The usual way to specify the certificate identity (for the purpose of the URL
+              integrity check) is through the Common Name (CN) in the subject DN of the certificate.
+            </dd>
+          </dlentry>
+        </dl><dl>
+          <dlentry>
+            <dt>Using the <codeph>subjectAltName</codeph></dt>
+            <dd>If you deploy a certificate on a multi-homed host, however, you might find it is
+              practical to allow the certificate to be used with any of the multi-homed host names.
+              In this case, it is necessary to define a certificate with multiple, alternative
+              identities, and this is only possible using the <codeph>subjectAltName</codeph>
+              certificate extension. </dd>
+          </dlentry>
+        </dl><p>The HTTPS protocol also supports in host names the wildcard character *. For
+          example, you can define the <codeph>subjectAltName</codeph> as follows:
+          <codeblock>subjectAltName=DNS:*.couchbase.com </codeblock></p><p>This certificate identity
+          matches any three-component host name in the domain <codeph>couchbase.com</codeph>.
+          </p><note type="note">As a best practice, try to avoid using the wildcard character in the
+          domain name. Be sure never to do this accidentally by forgetting to type the dot (.)
+          delimiter in front of the domain name.  For example, if you specified *couchbase.com, your
+          certificate could be used in any domain that ends with the string
+            <codeph>couchbase</codeph>. </note></sectiondiv>
+    </section>  
+    
+    
+    
     <section>
       <title>Couchbase Cluster Certificate</title>
       <p>The Couchbase cluster certificate is the root CA's public key <codeph>ca.pem</codeph>. In
@@ -81,12 +130,12 @@
               <row>
                 <entry><codeph>pkey.key</codeph></entry>
                 <entry>Node private key per node (private key of the node). Each node in the cluster
-                  must have its own private key.</entry>
+                  must have its private key.</entry>
               </row>
               <row>
                 <entry><codeph>pkey.pem</codeph></entry>
                 <entry>Node public key (public key of the node). Each node in the cluster must have
-                  its own public key.</entry>
+                  its public key.</entry>
               </row>
               <row>
                 <entry><codeph>chain.pem</codeph></entry>

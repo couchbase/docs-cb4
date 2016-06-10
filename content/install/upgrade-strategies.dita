@@ -3,12 +3,94 @@
 <topic id="topic_y23_jjv_xs">
   <title>Upgrade Strategies</title><shortdesc>Upgrade a Couchbase Server cluster in a manner that is best suited to your operations.</shortdesc>
   <body>
-    <p>The following upgrade strategies are available: <ul>
-        <li>Standard online upgrade</li>
-        <li>Swap rebalance online upgrade </li>
-        <li>Offline upgrade</li>
-        <li>Cross Datacenter Replication (XDCR)</li>
-      </ul>Both the online and offline upgrade processes have trade-offs. The following table
+    
+      <p>There are various strategies for upgrading Couchbase Server, each with pros and cons, as
+      well as levels of risk and complexity.</p>   
+    <section><title>Option #1 - Rolling Online Upgrade</title>
+      <p>If you have no sound reason to use another option, use the online upgrade. It provides the
+        ability to incur no downtime for the database and applications, as all data operations
+        continue normally throughout the process. </p>
+      <p>Rolling upgrades involve the addition of completely new upgraded node(s) or the removal,
+        upgrade plus adding back of node(s) using the rebalance feature of Couchbase to redistribute
+        the data amongst the nodes, but keeps that data accessible the entire duration of the
+        upgrade.</p>  
+      <p>Couchbase Server is specifically designed to provide fully online 
+        upgrades with minimal impact to no impact on the availability and performance of the application. 
+        If you find this is not the case, please report a bug.</p>
+      <p>There are three options for rolling online upgrades:</p> 
+      
+      <dl>
+        <dlentry>
+          <dt>Swap Rebalance</dt>
+          <dd>This method incorporates introducing new nodes into a Couchbase Server cluster as you remove the same number of nodes to be upgraded. It uses a feature called Swap Rebalance to move vBuckets efficiently from an existing node running the Data Service to a new node that will run the data service.
+          </dd>
+          <dd>While this method is the safest and provides the most availability, one downside to
+            this option is the overall duration of a cluster upgrade may be longer as compared to
+            other options. If the speed of an upgrade is the primary concern for the cluster to be
+            upgraded, such as if you have a narrow maintenance window, see <xref
+              href="../clustersetup/setup-failover-graceful.dita#topic_ysk_ycm_zs">Graceful
+              Failover</xref> or <xref href="upgrade-offline.dita#topic_q11_1my_p4"/>.</dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Regular Rebalance</dt>
+          <dd>This method is used when you must use the existing nodes of the cluster to complete the
+            upgrade. It involves removing at least one existing node from the cluster, upgrading the
+            node(s) and then added back in. Using this upgrade method will reduce the capacity of
+            the cluster during the upgrade process. </dd>
+          <dd>Like a swap rebalance upgrade, this style will require multiple rebalances to
+            complete.</dd>
+        </dlentry>
+      </dl>  
+      <dl>
+        <dlentry id="graceful">
+          <dt>Graceful Failover</dt>
+          <dd>This option involves performing a rolling online upgrade using a <xref
+              href="../clustersetup/setup-failover-graceful.dita#topic_ysk_ycm_zs">Graceful
+              Failover</xref> instead of the full addition and removal of nodes in option #1. This
+            option is typically faster and less resource intensive as it does not involve moving of
+            vBuckets between nodes. With this process, there is a cluster rebalance but it is only
+            to synchronize the vBuckets on the upgraded node when each node returns to the cluster.
+            An added benefit over other online upgrades is the ability to save the global secondary
+            indexes without rebuilding them. </dd>
+          <dd>The primary downside to this option is increased risk as replicas are used for faster failover and not recreated until a rebalance occurs. This option is not available when choosing to upgrade with net-new systems (as in the case of many cloud deployments) since those new nodes would not have the previous nodes’ data in place. Use Option #1 when upgrading with net-new systems.
+          </dd>
+        </dlentry>
+      </dl>
+      
+    </section>
+    <section><title>Option #2 - Upgrade Using Intercluster Replication</title>
+      <p>For this option, another Couchbase Server cluster is created or already exists and then
+        intercluster replication is enabled via the Cross Datacenter Replication (<xref
+          href="../xdcr/xdcr-intro.dita#topic1500">XDCR</xref>) built-in feature of Couchbase
+        Server. The application is transitioned over by the administrator to use the new cluster as
+        part of the upgrade process. While the upgrade process is relatively straightforward to set
+        up, it will require more investment in servers/instances and networking, as well as a change
+        to the application to see the new upgraded cluster. It is best used when an administrator
+        does not want to tinker with the original cluster or would like to have an immediate
+        rollback position. This method is recommended when an existing XDCR connection is already in
+        place. </p>  
+      <p>Some people modify their application, to make this can be a zero downtime upgrade by having
+        their application aware of both clusters and can failover between them automatically. If you
+        do this, keep in mind that unlike regular operations against the Data Service, XDCR is
+        eventually consistent. Most people treat this as an offline upgrade and will roll the
+        application over with the new cluster configurations. Which solution is best will depend on
+        your SLA requirements. </p> 
+      
+    </section>
+    <section id="offline"><title>Option #3 - Offline Upgrade</title>
+      <p>Choose an offline upgrade when the situation calls for an easy and fast upgrade method as well as when the database can incur a controlled outage. The offline upgrade is more likely to succeed in situations where an online upgrade option might fail, but also the rare time a cluster is unstable and has been determined that a Couchbase Server upgrade will fix a specific issue.</p>
+      <p>The offline upgrade is also the easiest option for single-node environments (such as in
+        development) where additional nodes are not available; the overall dataset is minimal, and a
+        brief disruption is tolerable. See also <xref href="upgrade-offline.dita#topic_q11_1my_p4"
+        />.</p>
+      
+      
+    </section>
+    <section><title>Choosing the Upgrade Strategy</title>
+      
+      <p>Both the online and offline upgrade processes have trade-offs. The following table
       illustrates some important aspects of the two upgrade strategies.</p>
     <table frame="all" rowsep="1" colsep="1" id="table_shv_yr2_zs">
       <title>Differences between online and offline upgrades</title>
@@ -50,6 +132,6 @@
     </table>
    <note type="important">Mac OSX does not support a direct upgrade. When upgrading on this
       platform, first back up your data and perform a clean uninstall of the old version. Once you
-      install the new version, restore the data back to the new cluster.</note> 
+      install the new version, restore the data back to the new cluster.</note> </section>
   </body>
 </topic>
