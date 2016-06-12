@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_vyq_pwy_gw">
+  <title>Troubleshooting and FAQs</title>
+  <shortdesc>Full Text logs can be found in the file fts.log. This is stored with the other Couchbase Server logs; the exact location depends on your operating system.</shortdesc>
+  <body>
+    <p><b>Q: I just did a search but I don’t see the document contents, I just see the document IDs. I don’t want to have to click on document IDs.</b></p>
+    <p>You need to store fields in order to see result snippets and highlighting. Be aware that doing so makes your indexes larger and take longer to build, so make sure you need these features.</p>
+    <p><b>Q: Why doesn’t a search for X return document Y?</b></p>
+    <p>Check the following:</p><ul>
+      <li>How are the search terms being analyzed? <p>Text is analyzed when it is written to the index, and separately, search terms are analyzed when you perform a search. These processes are independent. Unless the same analyzer is used for both indexing and search, the terms may not match.</p> 
+        <p>The analyzer being used on your search terms may not the one you expected. This may happen if the search is not be scoped to the field, or is scoped to the wrong field name.</p>
+        <p>If the search clause is scoped to a field, FTS uses the same analyzer that the index mapping dictates for that field.</p></li>
+      <li>After analysis, what terms is the search looking for in the index?
+        <p>Once you know what analyzer is being used on your search query, use http://analysis.blevesearch.com/ to see the exact terms that the analyzer outputs for your search. 
+          For example, if you’ve determined that the “en” analyzer is being used, a search for “marketing blunders” will result in term searches for “market” and “blunder."</p></li>
+      <li>Run a special query called a term search for one term at a time, exactly as the terms come from the analyzer in step 2. Be sure to return the document id match. Rerun for each term. <codeblock>curl -XPOST -H "Content-Type: application/json" \
+        http://localhost:9200/api/index/perf_fts_index/query \
+        -d '{
+        "query": {
+        "conjuncts": [
+        {
+        "term": "market"
+        },
+        {
+        "ids": ["Y"]
+        }
+        ]
+        }
+        }'</codeblock></li>
+      <li>Did you get any results? <p>If yes, the search query is working fine. If not, check the following: <ul>
+        <li>The document (as analyzed) does not contain the terms in question. Review the contents of the document.</li>
+        <li>The terms in the document don’t analyze the way the user expected. Try changing the analyzer, possibly define a custom analyzer.</li>
+        <li>The index mapping may be incorrect and the expected analyzer isn’t actually being used.</li>
+      </ul></p></li>
+      <li>Advanced: Digging deeper into the index <p>Run command-line tools on the pindex that contains the document you expect to match.</p><codeblock>$ cbft-bleve-dump -docID Y -index path_to.pindex</codeblock> <p>This dumps everything the index knows about that document.</p> </li>
+    </ul>
+    <p><b>Q: Why is this document in the search results, or why is this document ranked high in the search results?</b></p>
+    <p>Check the following: <ul>
+      <li>Run the query with the option “explain” set to true. Understand which terms contributed to the document scoring the way it did. Higher numbers indicate that a term contributes more weight.</li>
+      <li>Experiment with boost to adjust this. For example, a query like “name:margaret^2 hobby:singing” would give twice as much weight to a match in the name field as the hobby field.</li>
+    </ul></p>
+    <p><b>Q: Why is indexing so slow?</b></p>
+    <p>By default, FTS tries to index all the fields in a document yet you typically only need to search on a few key fields. Indexing all fields requires more computation and results in larger indexes than you get if you limit the index to just the fields you need. </p>
+    <p>Here are some tips to speed up indexing: <ul>
+      <li>Build a custom mapping, set “dynamic”: false to disable automatic indexing, and explicitly index only the named fields that you need to search.</li>
+      <li>Avoid numeric/date fields if you do not plan to query on these fields.</li>
+      <li>Avoid storing fields unless you absolutely need snippets or highlighting.</li>
+      <li>Consider disabling term vectors for a particular field if you know that you do not need snippets, highlights, or phrase search.</li>
+    </ul></p>
+    <p><b>Q: Why is querying so slow?</b></p>
+    <p>Slow queries can be caused by searches that require a lot of processing to satisfy. This is commonly due to a search includes high frequency terms, that is, terms that appear in many or even all documents. Searches on high frequency terms require more work than searches for low frequency terms and can easily be 100x slower due to the large number of matches. <ul>
+      <li>If possible, consider adding high frequency terms to a stop word list and reindex so they are not excluded from the index altogether. High frequency words often contribute little to the search effectiveness and they can have a seriously detrimental impact on search performance, index size and index build times.</li>
+      <li>Check your indexes to rule out unexpected high frequency terms. Words like “the” and “a” in English are relatively obvious candidates to add to a stopword list, but you may also have unexpected high frequency terms in your index, perhaps because there is a common token in your data you didn’t expect or a tokenizer is breaking words in an unexpected way, leading to other common terms. </li>
+      <li>Try rewriting queries to be more efficient if you must search on high frequency terms. Using conjunction (AND) queries can help make the search faster. In a query string, you can do this by using the + operator (MUST).  For If searching for the following is slow: lowFreqTerm highFreqTerm, try +lowFreqTerm highFreqTerm. 
+        <p>Although it is a different search, it should perform better and may be acceptable.</p></li>
+    </ul></p>
+    <p><b>Q: Are there command-line tools to help troubleshoot?</b></p>
+    <p>Yes - cbft-bleve-dump and cbft-bleve-query.<ul>
+      <li>cbft-bleve-dump<ul>
+        <li>Dump entire contents of pindex file</li>
+        <li>Dump all rows in pindex for single document</li>
+        <li>Dump term dictionary for field in pindex</li>
+        <li>Dump list of fields in pindex</li>
+        <li>Dump index mapping stored inside pindex</li>
+      </ul></li>
+      
+      <li>cbft-bleve-query <ul>
+        <li>Runs query on single pindex file</li>
+      </ul></li></ul></p>
+    
+  </body>
+</topic>
