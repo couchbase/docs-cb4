@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_ol2_khr_dt">
+ <title>Modeling Relationships</title>
+ <shortdesc></shortdesc>
+ <conbody>
+  <section> <title>1-to-1 Relationships</title>
+   <p>1-to-1 relationships are fairly obvious. For example, brewery and address can have a 1-to-1 relationship: A brewery can have a single address and that address can only belong to one brewery. 
+   </p>
+   <p>In Couchbase Server, typically 1-to-1 relationships are represented as a flat list of attributes or an embedded document, but you can also choose to represent 1-to-1 relationships by referencing a document. The choice depends on the size of each document, access patterns (read and write ratios and queries), and performance requirements.</p>
+   <p>As mentioned above brewery address is a good candidate for embedding as a sub document.
+    However, if the embedded document was much larger, for example a long text called “brewery
+    history”, it may make sense to separate out the history to a separate document to optimize
+    frequent retrieval of brewery. By separating the history, you can avoid having to maintain a
+    very large document in memory, on the network with replication and persisted storage. History
+    can be fetched when needed, but the vast majority of accesses to the brewery document take
+    advantage of the smaller brewery document size. <fig id="fig_mdh_bst_dt">
+     <title>Embedded versus referenced documents: 1-to-1 relationships</title>
+     <image placement="break" href="images/modeling-relationships-one-to-one.png" width="600"
+            id="image_ndh_bst_dt"/>
+    </fig></p>
+  </section>
+  <section> <title>1-to-many Relationships</title>
+   <p>1-to-many relationships are found in many places. For example, breweries and beers have a 1 to many relationship: A beer can have a single brewery and breweries can have many beers they produce.</p>
+   <p>In Couchbase Server, you can choose to represent 1-to-many relationships by either embedding or by referencing other documents. The choice depends on the cardinality of the 1-to-many relationship, size of each document, access patterns, and performance requirements. </p>
+   <p><b>Embedding with 1-to-many relationships</b>: There are multiple options when embedding
+    1-to-many relationships.<dl>
+     <dlentry>
+      <dt>Embedding "1" in "many" side</dt>
+      <dd>This is the case where “beer” contains a “brewery” sub-document. <ul>
+        <li><b>Pros</b>: This is advantageous if you have only a few attributes in “brewery” and
+         they are frequently used when accessing beers. In this case, “brewery” does not increase
+         the “beer” document size much, yet your data access can take advantage of using a “brewery”
+         attribute like “brewery country” to filter the beers to retrieve without a separate
+         retrieval of breweries. </li>
+        <li><b>Cons</b>: This may cause a great deal of data duplication if there are a very large
+         number of beer documents and if brewery entity requires many or large properties. It may
+         also compromise consistent update of brewery details because in this model you now have to
+         iterate over all the “beer” documents to update the details of the duplicate embedded
+         “brewery” sub-documents.</li>
+       </ul></dd>
+     </dlentry>
+     <dlentry>
+      <dt>Embedding “many” in the “1” side</dt>
+      <dd>This is the case where “beer” documents are embedded as an array of documents in the
+       “brewery” document. <ul>
+        <li><b>Pros: </b>Embedding documents is okay if there are fewer beers per brewery and your
+         access pattern is to work with all beer in the brewery in most cases. With this model you
+         can also do a single consistent write to make multiple changes to the “brewery” and “beer”
+         documents embedded together. </li>
+        <li><b>Cons: </b>If the “brewery” document has many beers, you may end up with very large
+         documents. A more obvious case where embedding is bad is when an instrument and its
+         measurements are involved. Storing the perpetual list of measurements in the single
+         instrument document is not likely to end well given the high frequency of measurements.
+          <p>There are a few reasons why such large documents can be bad for your application.
+          Document size is limited to 20MB in Couchbase Server. Large document may cause excessive
+          I/O even in cases where only a smaller part of the document is read or updated. I/O
+          penalty can hit both network traffic with replication and storage subsystems with disk
+          persistence.</p>
+        </li>
+       </ul></dd>
+     </dlentry>
+    </dl>
+    <fig id="fig_lgv_ytt_dt">
+     <title>Embedded versus referenced documents</title>
+     <image placement="break" href="images/modeling-relationships-one-to-many-embed.png" width="600"
+            id="image_mgv_ytt_dt"/>
+    </fig></p>
+   
+   <p><b>Referencing 1-to-many relationships</b>: There are multiple options when referencing
+    1-to-many relationships as well. <dl>
+     <dlentry>
+      <dt>Referencing “1” in “many” side</dt>
+      <dd>This is the case where “beer” contains a “brewery” reference key. <ul>
+        <li><b>Pros</b>: This is advantageous if you have a large number of “brewery” attributes to
+         maintain and “brewery” attributes are not required in majority of the cases that need to
+         access “beer” documents. This approach can also ensure “brewery” information is consistent
+         across all beers.</li>
+        <li><b>Cons</b>: However, this may cause a great deal of added requests to retrieve brewery
+         if “brewery” is frequently used when accessing “beer”. </li>
+       </ul></dd>
+     </dlentry>
+     <dlentry>
+      <dt>Referencing “many” in the “1” side</dt>
+      <dd>This is the case where “beer” document keys are embedded as an array in the “brewery” document.<ul>
+        <li><b>Pros</b>: Referencing documents is okay if there are only a few beers per brewery and
+         you access pattern require you to be able to enlist beers frequently for a given “brewery”.
+         Imagine “books” referencing “authors” for example. With this model you can also do a single
+         consistent write to make changes to the “brewery” or “book” document. </li>
+        <li><b>Cons</b>: If the “brewery” documents has very large number of beers, you may end up
+         with very large documents. Imagine “product category” document referencing millions of
+         “products”. “product category” document may get very large. Maximum document size in
+         Couchbase Server is 20MB. Large documents may cause excessive I/O even in cases where only
+         a smaller part of the document is updated. (For example, updating “product category” when a
+         new product is added for a given category). I/O penalty can hit both network traffic with
+         replication and storage subsystems with disk persistence. </li>
+       </ul></dd>
+     </dlentry>
+    </dl>
+    <fig id="fig_ppc_fwt_dt">
+     <title>Embedded versus referenced documents</title>
+     <image placement="break" href="images/modeling-relationships-one-to-many-reference.png"
+            width="600" id="image_qpc_fwt_dt"/>
+    </fig></p>
+   
+  </section>
+  <section> <title>Many-to-many relationships</title>
+   <p>Many to many relationships are not that different from 1-to-many relationships but the number of options multiply. </p>
+   <p>Consider a case such as “drivers” and “cars”: A car can have many drivers and drivers can be driving many cars. There are many ways you can represent the relationship. The choice depend on the cardinality of the many-to-many relationship, size of each document, access patterns and performance requirements.</p>
+   <p>One way more model the relationship is to represent the relationship just like a 1-to-many relationships with “many” side embedding or referencing the other “many” side. </p>
+   <p>The same pros and cons of embedding and referencing with 1-to-many relationships apply here. However, with many-to-many relationships, data duplication gets amplified by the cardinality of the relationships. This is true especially with embedding. Let's say due to your access pattern, you choose to embed “car” documents in a “driver” document. This would work well if there are only handful of “car” documents but they are very large with many attributes. On the other hand there are thousands of drivers per “car”, you end up duplicating each “car” document thousands of time. In this case, it may make more sense to embed “drivers” in “car” document.</p>
+   <p>Another way to model the relationship is to represent the relationship with a separate relationship document. This is similar to the relational modeling of the many-to-many relationships - these are called “mapping tables”. For the “cars” and “drivers” example, this method produces a separate “car-driver” document that has a “car” document reference and a “driver” document reference for each car-driver combination. This typically isn’t a good approach in Couchbase Server as referencing and embedding provides a great deal of flexibility to avoid creating this redundant document.</p>
+  </section>
+ </conbody>
+</concept>

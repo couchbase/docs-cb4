@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="sql-to-n1ql">
+	<title>Mapping SQL queries to N1QL queries</title>
+	<shortdesc>N1QL is based on SQL. It has familiar data definition language (DDL), data
+		manipulation language (DML), and query language statements, yet it works on NoSQL database
+		features such as key-value stores, multivalue attributes, and nested objects. If you know SQL,
+		you can easily learn N1QL—in fact, you’re already more than halfway there.</shortdesc>
+	<conbody>
+		<p>The page demonstrates how to map existing SQL queries to N1QL by taking an example of a
+			typical relational database and showing the equivalent queries.</p>
+
+		<section>
+			<title>Terminology comparison</title>
+			<p>While N1QL is closely aligned with SQL and uses many of the same keywords, some of the
+				terminology and concepts used in Couchbase Server differ.</p>
+
+			<p>The following table lists terminology used in relational database management systems
+				(RDBMSs) and compares them to the terminology and concepts used in Couchbase
+					Server.<table frame="all" rowsep="1" colsep="1" id="table_btn_3rq_ks">
+					<title>SQL vs. N1QL terminology</title>
+					<tgroup cols="2" align="left">
+						<colspec colname="c1" colnum="1" colwidth="1.0*" />
+						<colspec colname="c2" colnum="2" colwidth="1.0*" />
+						<thead>
+							<row>
+								<entry>SQL terms and concepts</entry>
+								<entry>N1QL terms and concepts</entry>
+							</row>
+						</thead>
+						<tbody>
+							<row>
+								<entry>Database</entry>
+								<entry>Bucket</entry>
+							</row>
+							<row>
+								<entry>Table</entry>
+								<entry>Keyspace</entry>
+							</row>
+							<row>
+								<entry>Row</entry>
+								<entry>Document</entry>
+							</row>
+							<row>
+								<entry>Column</entry>
+								<entry>Field</entry>
+							</row>
+							<row>
+								<entry>Index</entry>
+								<entry>Index</entry>
+							</row>
+							<row>
+								<entry>Join</entry>
+								<entry>Join</entry>
+							</row>
+							<row>
+								<entry>Primary key</entry>
+								<entry>Document key</entry>
+							</row>
+							<row>
+								<entry>Foreign key</entry>
+								<entry>A reference to a document key</entry>
+							</row>
+						</tbody>
+					</tgroup>
+				</table></p>
+
+		</section>
+
+		<section>
+			<title>A typical relational database structure</title>
+
+			<p>The following figure shows a set of typical RDBMS tables used in a sales database. The
+				table names are <codeph>Orders</codeph>, <codeph>Customers</codeph>, and
+					<codeph>Items</codeph>. Each table contains several fields. In the figure, some of
+				the field names are labeled with <codeph>(pk)</codeph> or <codeph>(fk)</codeph>. The
+				annotation <codeph>(pk)</codeph> indicates the field is a primary key, and
+					<codeph>(fk)</codeph> indicates the field is a foreign key. </p>
+			<p>The <codeph>Orders</codeph> table contains a field for the order number
+					(<codeph>order_no</codeph>), the customer who made the purchase
+					(<codeph>cust_id</codeph>), the purchase date (<codeph>purchase_dt</codeph>), and the
+				item purchased (<codeph>item_id</codeph>). The primary key for the
+					<codeph>Orders</codeph> table is <codeph>order_no</codeph>, and the table also uses
+				two foreign key fields. The <codeph>cust_id</codeph> field is a foreign key used to
+				retrieve details about the customer from the <codeph>Customers</codeph> table, and the
+					<codeph>item_id</codeph> field is a foreign key used to retrieve details about the
+				purchase from the <codeph>Items</codeph> table.</p>
+			<p>The <codeph>Customers</codeph> table contains a field for the customer identifiers
+					(<codeph>cust_id</codeph>), the name of the customer (<codeph>Name</codeph>), the
+				address of the customer (<codeph>Address</codeph>), and the customer's phone number
+					(<codeph>phone_no</codeph>). The primary key for the <codeph>Customers</codeph> table
+				is <codeph>cust_id</codeph>. This table does not contain any foreign keys.</p>
+			<p>The <codeph>Items</codeph> table contains a field for the item identifier
+					(<codeph>item_id</codeph>), a description of the item (<codeph>desc</codeph>), and
+				the manufacture date of the item (<codeph>manufacture_dt</codeph>). The primary key for
+				the <codeph>Items</codeph> table is <codeph>item_id</codeph>. This table does not
+				contain any foreign keys.</p>
+
+			<fig>
+				<title>RDBMS tables for a sales database</title>
+				<image href="../images/sales-db-tables.png" width="650px" />
+			</fig>
+
+
+		</section>
+
+		<section>
+			<title>The corresponding document database structure</title>
+			<p>In Couchbase, you don't need to define tables with fixed fields for each record type.
+				Instead, you just need to define your document types. The following figures contain
+				document prototypes that correspond to the RDBMS sales database shown previously. The
+				prototypes show the schema for each type of document and represent many fields that
+				might be stored in the document. The schema for each document is not static, and you can
+				add new fields to any document at any time without having to restructure your existing
+				database.</p>
+			<p>One essential field that is included in each document schema is a field named
+					<codeph>type</codeph>. The <codeph>type</codeph> field identifies the kind of
+				document. This sales database has several kinds of documents and the value for the
+					<codeph>type</codeph> field can be <codeph>order</codeph>, <codeph>customer</codeph>,
+				or <codeph>item</codeph>. These types correspond to the <codeph>Orders</codeph>,
+					<codeph>Customers</codeph>, and <codeph>Items</codeph> tables used in the RDBMS
+				model.</p>
+			<p>The <codeph>Order</codeph> document contains a field for the document type
+					(<codeph>type</codeph>), the customer who made the purchase
+					(<codeph>cust_id)</codeph>, the item purchased (<codeph>item_id</codeph>), and the
+				purchase date (<codeph>purchase_dt</codeph>). In an <codeph>Order</codeph> document, the
+				value of the <codeph>type</codeph> field is always <codeph>order</codeph>. Here's the
+				prototype for an <codeph>Order</codeph> document:</p>
+
+			<fig>
+				<title>Order document prototype</title>
+				<codeblock outputclass="language-json" spectitle="Document key = o1">{
+  "type": "order",
+  "cust_id": "c1",
+  "item_id": "i1",
+  "purchase_dt": "2015-01-01 00:00:00"
+}</codeblock>
+			</fig>
+			<p>The <codeph>Customer</codeph> document contains a field for the document type
+					(<codeph>type</codeph>), customer name (<codeph>Name</codeph>), customer age
+					(<codeph>Age</codeph>), customer address (<codeph>Address</codeph>), and customer
+				phone number (<codeph>Phone</codeph>). In a <codeph>Customer</codeph> document, the
+				value of the type field is always <codeph>customer</codeph>. The interesting thing about
+				the <codeph>Customer</codeph> document is that it uses arrays for the
+					<codeph>Address</codeph> and <codeph>Phone</codeph> fields, which allows you to store
+				multiple addresses for a customer in a single document. Each object in the
+					<codeph>Address</codeph> array contains the type of address
+					(<codeph>add_type</codeph>), city name (<codeph>city</codeph>), and zip code
+					(<codeph>zip</codeph>). The value of the <codeph>add_type</codeph> field can reflect
+				different kinds of addresses such as <codeph>office</codeph>, <codeph>home</codeph>,
+					<codeph>billing</codeph>, <codeph>shipping</codeph>, or <codeph>mailing</codeph>. The
+					<codeph>Phone</codeph> field is laid out similarly, with each array object containing
+				fields for type of phone number (<codeph>phn_type</codeph>) and the phone number
+					(<codeph>phn_num</codeph>). Here's the prototype for a <codeph>Customer</codeph>
+				document:</p>
+
+			<fig>
+				<title>Customer document prototype</title>
+				<codeblock outputclass="language-json" spectitle="Document key = c1">{
+  "type": "customer",
+  "Name": "John Smith",
+  "Age": "30",
+  "Address": [
+    {
+      "add_type": "office",
+      "city": "San Jose",
+      "zip": "95050"
+    },
+    {
+      "add_type": "home",
+      "city": "Mountain View",
+      "zip": "94040"
+    }
+  ],
+  "Phone": [
+    {
+      "phn_type": "mobile",
+      "phn_num": "650-345-3455"
+    },
+    {
+      "phn_type": "home",
+      "phn_num": "510-343-4322"
+    }
+  ]
+}							</codeblock>
+			</fig>
+			<p>The <codeph>Item</codeph> document contains a field for the document type
+					(<codeph>type</codeph>), a description of the item (<codeph>desc</codeph>), the brand
+				name of the item (<codeph>brand</codeph>), and the manufacture date of the item
+					(<codeph>manufacture_dt</codeph>). In an <codeph>Item</codeph> document, the value of
+				the <codeph>type</codeph> field is always <codeph>item</codeph>. Here's the prototype
+				for an <codeph>Item</codeph> document:</p>
+
+			<fig>
+				<title>Item document prototype</title>
+
+				<codeblock outputclass="language-json" spectitle="Document key = i1">{
+  "type": "item",
+  "desc": "shirt",
+  "brand": "Arrow",
+  "manufacture_dt": "2014-01-01 00:00:00"
+}</codeblock>
+			</fig>
+		</section>
+
+		<section>
+			<title>Query examples</title>
+			<p>The following tables show examples of SQL queries and the equivalent N1QL queries. Some
+				of the advanced N1QL queries have no SQL equivalent.</p>
+			<p>
+				<table frame="all" rowsep="1" colsep="1" id="table_bbh_nvq_ks">
+					<title>SELECT statements</title>
+					<tgroup cols="2">
+						<colspec colname="c1" colnum="1" colwidth="1.0*" />
+						<colspec colname="c2" colnum="2" colwidth="1.0*" />
+						<thead>
+							<row>
+								<entry>SQL statement</entry>
+								<entry>N1QL statement</entry>
+							</row>
+						</thead>
+						<tbody>
+							<row>
+								<entry />
+								<entry />
+							</row>
+							<row>
+								<entry />
+								<entry />
+							</row>
+							<row>
+								<entry />
+								<entry />
+							</row>
+							<row>
+								<entry />
+								<entry />
+							</row>
+							<row>
+								<entry />
+								<entry />
+							</row>
+							<row>
+								<entry />
+								<entry />
+							</row>
+							<row>
+								<entry />
+								<entry />
+							</row>
+							<row>
+								<entry />
+								<entry />
+							</row>
+							<row>
+								<entry />
+								<entry />
+							</row>
+							<row>
+								<entry />
+								<entry />
+							</row>
+						</tbody>
+					</tgroup>
+				</table>
+			</p>
+			<table frame="all" rowsep="1" colsep="1" id="insert">
+				<title>INSERT statements</title>
+				<tgroup cols="2">
+					<colspec colname="c1" colnum="1" colwidth="1.0*" />
+					<colspec colname="c2" colnum="2" colwidth="1.0*" />
+					<thead>
+						<row>
+							<entry>SQL statement</entry>
+							<entry>N1QL statement</entry>
+						</row>
+					</thead>
+					<tbody>
+						<row>
+							<entry />
+							<entry />
+						</row>
+						<row>
+							<entry />
+							<entry />
+						</row>
+					</tbody>
+				</tgroup>
+			</table>
+		</section>
+	</conbody>
+</concept>

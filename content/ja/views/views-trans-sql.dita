@@ -1,0 +1,403 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE topic
+  PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic xml:lang="en-us" id="topic12355">
+  <title>Translating SQL to MapReduce</title>
+  <shortdesc>This section provides information on how to translate SQL to a MapReduce
+		environment.</shortdesc>
+  <body>
+  	
+  	<p>If you have existing SQL queries and need materialized reductions, you can follow the
+			guidelines on this page for translating SQL queries to MapReduce views.</p>
+  	
+  	<note type="important">If you don't need materialized reductions, we recommend that you
+			reformulate your SQL queries to use N1QL rather than MapReduce views. 
+			<!--For more information
+			about N1QL, see <xref href="../n1ql/index.dita#concept_g1x_jy3_mr" />.-->
+  	</note>
+  	
+  	<p>Here's an example of a SQL statement that you might want to translate:</p>
+  	
+    <codeblock><codeph>SELECT fieldlist FROM table
+    WHERE condition
+    GROUP BY groupfield
+    ORDER BY orderfield
+    LIMIT limitcount OFFSET offsetcount
+</codeph></codeblock>
+    <p>The different elements within the SQL statement affect how a view is written. The following
+			table describes how each clause is handled in a MapReduce view:</p>
+    <table frame="all" rowsep="1" colsep="1" id="table_q4l_pzm_2r">
+      <tgroup cols="2">
+        <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+        <colspec colname="c2" colnum="2" colwidth="1.0*"/>
+        <thead>
+          <row>
+            <entry>SQL clause</entry>
+            <entry>MapReduce</entry>
+          </row>
+        </thead>
+        <tbody>
+          <row>
+            <entry><codeph>SELECT fieldlist</codeph></entry>
+            <entry>The field list within the SQL statement affects either the corresponding key or
+              value within the <codeph>map()</codeph> function, depending on whether you are also
+              selecting or reducing your data. </entry>
+          </row>
+          <row>
+            <entry><codeph>FROM table</codeph></entry>
+            <entry>There are no table compartments within Couchbase Server and you cannot perform
+              views across more than one bucket boundary. However, if you are using a
+                <codeph>type</codeph> field within your documents to identify different record
+              types, then you may want to use the <codeph>map()</codeph> function to make a
+              selection.</entry>
+          </row>
+          <row>
+            <entry><codeph>WHERE condition</codeph></entry>
+            <entry>The <codeph>map()</codeph> function and the data generated into the view key
+              directly affect how you can query, and therefore how selection of records takes
+              place.</entry>
+          </row>
+          <row>
+            <entry><codeph>GROUP BY groupfield</codeph></entry>
+            <entry>Grouping within SQL is handled within views through the use of the
+                <codeph>reduce()</codeph> function.</entry>
+          </row>
+          <row>
+            <entry><codeph>ORDER BY orderfield</codeph></entry>
+            <entry>The order of record output within a view is directly controlled by the key
+              specified during the <codeph>map()</codeph> function phase of the view
+              generation.</entry>
+          </row>
+          <row>
+            <entry><codeph>LIMIT limitcount OFFSET offsetcount</codeph></entry>
+            <entry>There are a number of different paging strategies available within the MapReduce
+							and views mechanism.</entry>
+          </row>
+        </tbody>
+      </tgroup>
+    </table>
+    
+    <p>View <codeph>map()</codeph> function, <codeph>reduce()</codeph>
+      function, selection parameters and other miscellaneous parameters have the following interactions:</p>
+
+    
+    <table>
+      <tgroup cols="7">
+        <colspec colname="col1"/>
+        <colspec colname="col2"/>
+        <colspec colname="col3"/>
+        <colspec colname="col4"/>
+        <colspec colname="col5"/>
+        <colspec colname="col6"/>
+        <colspec colname="col7"/>
+        <thead>
+          <row>
+            <entry>SQL clause</entry>
+            <entry>View key</entry>
+            <entry>View value</entry>
+            <entry><codeph>map()</codeph> function</entry>
+            <entry><codeph>reduce()</codeph> function</entry>
+            <entry>Selection parameters</entry>
+            <entry>Other parameters</entry>
+          </row>
+        </thead>
+        <tbody>
+          <row>
+            <entry>SELECT fields</entry>
+            <entry>Yes</entry>
+            <entry>Yes</entry>
+            <entry>Yes</entry>
+            <entry>No: with <codeph>GROUP BY</codeph> and <codeph>SUM()</codeph> or
+                <codeph>COUNT()</codeph> functions only</entry>
+            <entry>No</entry>
+            <entry>No</entry>
+          </row>
+          <row>
+            <entry>FROM table</entry>
+            <entry>No</entry>
+            <entry>No</entry>
+            <entry>Yes</entry>
+            <entry>No</entry>
+            <entry>No</entry>
+            <entry>No</entry>
+          </row>
+          <row>
+            <entry>WHERE clause</entry>
+            <entry>Yes</entry>
+            <entry>No</entry>
+            <entry>Yes</entry>
+            <entry>No</entry>
+            <entry>Yes</entry>
+            <entry>No</entry>
+          </row>
+          <row>
+            <entry>ORDER BY field</entry>
+            <entry>Yes</entry>
+            <entry>No</entry>
+            <entry>Yes</entry>
+            <entry>No</entry>
+            <entry>No</entry>
+            <entry><codeph>descending</codeph></entry>
+          </row>
+          <row>
+            <entry>LIMIT x OFFSET y</entry>
+            <entry>No</entry>
+            <entry>No</entry>
+            <entry>No</entry>
+            <entry>No</entry>
+            <entry>No</entry>
+            <entry><codeph>limit</codeph>, <codeph>skip</codeph></entry>
+          </row>
+          <row>
+            <entry>GROUP BY field</entry>
+            <entry>Yes</entry>
+            <entry>Yes</entry>
+            <entry>Yes</entry>
+            <entry>Yes</entry>
+            <entry>No</entry>
+            <entry>No </entry>
+          </row>
+        </tbody>
+      </tgroup>
+    </table>
+    <p>Within SQL, the basic query structure can be used for a multitude of different queries. For
+      example, the structure <codeph>SELECT fieldlist FROM table WHERE xxxx</codeph> can be used with a
+      number of different clauses.</p>
+    <p>Within MapReduce and Couchbase Server, you might need to create multiple views to handle different types of queries. For example, performing a query on all the blog posts on a specific
+      date needs a very different view definition than one needed to support selection by the
+      author.</p>
+    
+    
+    
+    
+    <section><title>Translating SQL SELECT to MapReduce</title><p>The field selection within an SQL
+        query can be translated into a corresponding view definition by:</p>
+      <ul>
+        <li>Adding the fields to the emitted key if the value is also used for selection in a <codeph>WHERE</codeph>
+          clause.</li>
+        <li>Into the emitted value if the data is separate from the required query parameters.</li>
+      </ul>
+      <p>For example, to get the sales data by country from each stored document
+        using the following <codeph>map()</codeph>
+        function:</p><codeblock>function(doc, meta) {
+  emit([doc.city, doc.sales], null);
+}
+</codeblock><p>If
+        you want to output information that can be used within a reduce function, this should be
+        specified in the value generated by each <codeph>emit()</codeph> call. For example, to
+        reduce the sales figures the above <codeph>map()</codeph> function could be rewritten
+        as:</p><codeblock>function(doc, meta) {
+  emit(doc.city, doc.sales);
+}
+</codeblock><p>In
+        essence this does not produce significantly different output (albeit with a simplified key),
+        but the information can now be reduced using the numerical value.</p><p>If you want to
+        output data or field values completely separate to the query values, then these fields can
+        be explicitly output within the value portion of the view. For
+        example:</p><codeblock>function(doc, meta) {
+  emit(doc.city, [doc.name, doc.sales]);
+}
+</codeblock><p>If
+        the entire document for each item is required, load the document data after the view has
+        been requested through the client library. For more information on this parameter and the
+        performance impact.</p><p>Within a <codeph>SELECT</codeph> statement it is
+        common practice to include the primary key for a given record in the output. Within a view
+        this is not normally required, since the document ID that generated each row is always
+        included within the view
+        output.</p></section>
+    
+    
+    
+    <section><title>Translating SQL WHERE to MapReduce</title><p>The <codeph>WHERE</codeph> clause
+        within an SQL statement forms the selection criteria for choosing individual records. Within
+        a view, the ability to query the data is controlled by the content and structure of the
+          <codeph>key</codeph> generated by the <codeph>map()</codeph> function.</p><p>In general, for each <codeph>WHERE</codeph> clause you need to include the corresponding field in
+				the key of the generated view, and then use the <codeph>key</codeph>,
+					<codeph>keys</codeph> or <codeph>startkey</codeph> / <codeph>endkey</codeph>
+				combinations to indicate the data you want to select. The complexity occurs when you
+				need to perform queries on multiple fields. There are a number of different strategies
+				that you can use for this.</p><p>The simplest way
+        is to decide whether you want to be able to select a specific combination, or whether you
+        want to perform range or multiple selections. For example, using our recipe database, if you
+        want to select recipes that use the ingredient ‘carrot’ and have a cooking time of exactly
+        20 minutes, then you can specify these two fields in the <codeph>map()</codeph>
+        function:</p><codeblock><codeph>function(doc, meta)
+{
+  if (doc.ingredients)
+  {
+    for(i=0; i &lt; doc.ingredients.length; i++)
+    {
+      emit([doc.ingredients[i].ingredient, doc.totaltime], null);
+    }
+  }
+}
+</codeph></codeblock><p>Then
+        the query is an array of the two selection
+        values:</p><codeblock><codeph>?key=["carrot",20]
+</codeph></codeblock><p>This is equivalent
+        to the SQL
+        query:</p><codeblock><codeph>SELECT recipeid FROM recipe JOIN ingredients on ingredients.recipeid = recipe.recipeid
+    WHERE ingredient = 'carrot' AND totaltime = 20
+</codeph></codeblock><p>If,
+        however, you want to perform a query that selects recipes containing carrots that can be
+        prepared in less than 20 minutes, a range query is possible with the same
+          <codeph>map()</codeph>
+        function:</p><codeblock><codeph>?startkey=["carrot",0]&amp;endkey=["carrot",20]
+</codeph></codeblock><p>This works because of the sorting mechanism in a view, which outputs the information sequentially
+				with carrots first and a sequential number.</p><p>More complex queries though are more difficult. What if you want to select
+        recipes with carrots and rice, still preparable in under 20 minutes?</p><p>A standard <codeph>map()</codeph> function like that above wont work. A range query on both
+				ingredients will list all the ingredients between the two. There are a number of
+				solutions available to you. First, the easiest way to handle the timing selection is to
+				create a view that explicitly selects recipes prepared within the specified time. Here's
+				an example:</p><codeblock><codeph>function(doc, meta)
+{
+  if (doc.totaltime &lt;= 20)
+  {
+    ...
+  }
+}
+</codeph></codeblock><p>Although this approach seems to severely limit your queries, remember you can create multiple
+				views, so you could create one for 10 minutes, one for 20 minutes, one for 30 minutes,
+				or whatever intervals you select. It’s unlikely that anyone will really want to select
+				recipes that can be prepared in 17 minutes, so such granular selection is overkill.</p><p>The multiple ingredients is more
+        difficult to solve. One way is to use the client to perform two queries and merge the data.
+        For example, the <codeph>map()</codeph>
+        function:</p><codeblock><codeph>function(doc, meta)
+{
+  if (doc.totaltime &amp;amp;&amp;amp; doc.totaltime &lt;= 20)
+  {
+    if (doc.ingredients)
+    {
+      for(i=0; i &lt; doc.ingredients.length; i++)
+      {
+        emit(doc.ingredients[i].ingredient, null);
+      }
+    }
+  }
+}
+</codeph></codeblock><p>Two
+        queries, one for each ingredient can easily be merged by performing a comparison and count
+        on the document ID output by each view.</p><p>The alternative is to output the ingredients
+        twice within a nested loop, like
+        this:</p><codeblock><codeph>function(doc, meta)
+{
+  if (doc.totaltime &amp;amp;&amp;amp; doc.totaltime &lt;= 20)
+  {
+    if (doc.ingredients)
+    {
+      for (i=0; i &lt; doc.ingredients.length; i++)
+      {
+        for (j=0; j &lt; doc.ingredients.length; j++)
+        {
+          emit([doc.ingredients[i].ingredient, doc.ingredients[j].ingredient], null);
+        }
+      }
+    }
+  }
+}
+</codeph></codeblock><p>Now
+        you can perform an explicit query on both
+        ingredients:</p><codeblock><codeph>?key=["carrot","rice"]
+</codeph></codeblock><p>If you
+        really want to support flexible cooking times, then you can also add the cooking
+        time:</p><codeblock><codeph>function(doc, meta)
+{
+  if (doc.ingredients)
+  {
+    for (i=0; i &lt; doc.ingredients.length; i++)
+    {
+      for (j=0; j &lt; doc.ingredients.length; j++)
+      {
+        emit([doc.ingredients[i].ingredient, doc.ingredients[j].ingredient, recipe.totaltime], null);
+      }
+    }
+  }
+}
+</codeph></codeblock><p>And
+        now you can support a ranged query on the cooking time with the two ingredient
+        selection:</p><codeblock><codeph>?startkey=["carrot","rice",0]&amp;key=["carrot","rice",20]
+</codeph></codeblock><p>This
+        would be equivalent
+        to:</p><codeblock><codeph>SELECT recipeid FROM recipe 
+JOIN ingredients i1 ON ingredients.recipeid = recipe.recipeid
+JOIN ingredients i2 ON ingredients.recipeid = recipe.recipeid
+WHERE (i1.ingredient IN ('carrot',rice')) AND 
+(i2.ingredient IN ('carrot',rice')) AND 
+(totaltime &lt; 20 AND totaltime &gt; 0)
+</codeph></codeblock></section>
+    
+    
+    
+    <section><title>Translating SQL ORDER BY to MapReduce</title><p>The <codeph>ORDER BY</codeph>
+        clause within SQL controls the order of the records that are output. Ordering within a view
+        is controlled by the value of the key. However, the key also controls and supports the
+        querying mechanism.</p><p>In <codeph>SELECT</codeph> statements where there is no explicit
+          <codeph>WHERE</codeph> clause, the emitted key can entirely support the sorting you want.
+        For example, to sort by the city and salesman name, the following <codeph>map()</codeph>
+        will achieve the required
+        sorting:</p><codeblock><codeph>function(doc, meta)
+{
+   emit([doc.city, doc.name], null)
+}
+</codeph></codeblock><p>If
+        you need to query on a value, and that query specification is part of the order sequence
+        then you can use the format above. For example, if the query basis is city, then you can
+        extract all the records for ‘London’ using the above view and a suitable range
+        query:</p><codeblock><codeph>?endkey=["London\u0fff"]&amp;startkey=["London"]
+</codeph></codeblock><p>However,
+        if you want to query the view by the salesman name, you need to reverse the field order in
+        the <codeph>emit()</codeph>
+        statement:</p><codeblock><codeph>function(doc, meta)
+{
+   emit([doc.name,doc.city],null)
+}
+</codeph></codeblock><p>Now
+        you can search for a name while still getting the information in city order.</p><p>The order
+        the output can be reversed (equivalent to <codeph>ORDER BY field DESC</codeph> ) by using
+        the <codeph>descending</codeph> query parameter. </p></section>
+    
+    
+    
+    <section><title>Translating SQL GROUP BY to MapReduce</title><p>The <codeph>GROUP BY</codeph>
+        parameter within SQL provides summary information for a group of matching records according
+        to the specified fields, often for use with a numeric field for a sum or total value, or
+        count operation.</p><p>For
+        example:</p><codeblock><codeph>SELECT name,city,SUM(sales) FROM sales GROUP BY name,city
+</codeph></codeblock><p>This query groups the information by the two fields ‘name’ and ‘city’ and produces a sum total of
+				these values. To translate this into a MapReduce function within Couchbase Server:</p><ul>
+        <li><p>From the list of selected fields, identify the field used for the calculation. These
+            will need to be exposed within the value emitted by the <codeph>map()</codeph>
+            function.</p></li>
+        <li><p>Identify the list of fields in the <codeph>GROUP BY</codeph> clause. These will need
+            to be output within the key of the <codeph>map()</codeph> function.</p></li>
+        <li><p>Identify the grouping function, for example <codeph>SUM()</codeph> or
+              <codeph>COUNT()</codeph>. You will need to use the equivalent built-in function, or a
+            custom function, within the <codeph>reduce()</codeph> function of the view.</p></li>
+      </ul><p>For example, in the above case, the corresponding map function can be written as
+          <codeph>map()</codeph>
+        :</p><codeblock><codeph>function(doc, meta)
+{
+   emit([doc.name,doc.city],doc.sales);
+}
+</codeph></codeblock><p>This
+        outputs the name and city as the key, and the sales as the value. Because the
+          <codeph>SUM()</codeph> function is used, the built-in <codeph>reduce()</codeph> function
+          <codeph>_sum</codeph> can be used.</p><p>An example of this MapReduce combination can be seen <codeph>_sum</codeph>.</p><p>More complex grouping operations may require a custom reduce function.
+        </p></section>
+    
+    
+    
+    <section><title>Translating SQL LIMIT and OFFSET</title><p>Within SQL, the
+          <codeph>LIMIT</codeph> and <codeph>OFFSET</codeph> clauses to a given query are used as a
+        paging mechanism. For example, you might
+        use:</p><codeblock><codeph>SELECT recipeid,title FROM recipes LIMIT 100</codeph></codeblock><p>To
+        get the first 100 rows from the database, and then use the <codeph>OFFSET</codeph> to get
+        the subsequent groups of
+        records:</p><codeblock><codeph>SELECT recipeid,title FROM recipes LIMIT 100 OFFSET 100</codeph></codeblock><p>With
+        Couchbase Server, the <codeph>limit</codeph> and <codeph>skip</codeph> parameters when
+        supplied to the query provide the same basic
+        functionality:</p><codeblock><codeph>?limit=100&amp;skip=100</codeph></codeblock><p>Performance
+        for high values of skip can be affected.</p></section>
+  </body>
+ 
+</topic>

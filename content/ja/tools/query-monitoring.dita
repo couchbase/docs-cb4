@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_wk1_5v3_t5">
+  <title>Query Monitoring</title>
+  <shortdesc>Couchbase Server 4.5 introduces new system catalogs and API for monitoring the operation of individual queries and query service nodes. </shortdesc>
+  <body><p>Using these APIs, you can easily find diagnostic information, for example, the top <varname>k</varname> slow queries, or details about how a query service is spending time.</p>
+    <p>The following system catalogs (keyspaces) have been added in this release: <ul>
+      <li><xref href="#topic_wk1_5v3_t5/vitals" format="dita">Vitals</xref></li>
+      <li><xref href="#topic_wk1_5v3_t5/sys-active-req" format="dita"
+          >system:active_requests</xref></li>
+      <li><xref href="#topic_wk1_5v3_t5/sys-prepared" format="dita">system:prepareds</xref></li>
+      <li><xref href="#topic_wk1_5v3_t5/sys-completed-req" format="dita"
+            >system:completed_requests</xref></li>
+    </ul></p><note>The examples in the following sections use simplified REST API and SELECT commands. Refer to the reference documentation for full syntax. </note>
+    <section id="vitals"><title>Vitals</title>
+      <p>The <cmdname>Vitals</cmdname> API provides data about the running state and health
+        of the query engine, such as number of logical cores, active threads, queued threads,CPU utilization, memory usage, network utilization, garbage collection percentage, and so on. This information can be very useful to assess the current workload and performance characteristics of a query engine, and hence load-balance the requests being sent to various query engines. </p>
+      <dl>
+        <dlentry>
+          <dt>Get System Vitals</dt>
+          <dd><codeblock>GET http://localhost:8093/admin/vitals</codeblock>
+            <codeblock spectitle="Example">{
+            "uptime":"30h0m10.801209195s”,
+            "local.time":"2016-02-18 17:39:41.612724694 -0800 PST”,
+            "version":"1.0.0”,
+            "total.threads":225,
+            "cores":8,
+            "gc.num":11607200,
+            "gc.pause.time":"1.849506783s",
+            "gc.pause.percent":0,
+            "memory.usage":10019216,
+            "memory.total":5628336088,
+            "memory.system":29055224,
+            "cpu.user.percent":0,
+            "cpu.sys.percent":0,
+            "request.completed.count":111,
+            "request.active.count":0,
+            "request.per.sec.1min":0.0007,
+            "request.per.sec.5min":0.0107,
+            "request.per.sec.15min":0.0091,
+            "request_time.mean":"170.870877ms”,
+            "request_time.median":"733.364µs”,
+            "request_time.80percentile":"21.85926ms”,
+            "request_time.95percentile":"1.274152266s”,
+            "request_time.99percentile":"1.588775188s”,
+            "request.prepared.percent”:0
+}         </codeblock></dd>
+        </dlentry>
+      </dl>
+    </section>
+    <section id="sys-active-req"><title>system:active_requests</title>
+      <p>This catalog lists all currently executing active requests or queries. </p>
+      <dl>
+        <dlentry>
+          <dt>Get Active Requests</dt>
+          <dd><p>To get all active requests, use:
+              <codeblock spectitle="REST">GET  http://localhost:8093/admin/active_requests</codeblock><codeblock spectitle="N1QL">SELECT * FROM system:active_requests;</codeblock></p>
+            <p>To get a specific active request, use: <codeblock spectitle="REST">GET  http://localhost:8093/admin/active_requests/<varname>request_ID</varname></codeblock></p><codeblock spectitle="Example">cbq> SELECT * FROM system:active_requests;
+
+{
+    "requestID": "82e0978b-a36a-46cd-afd5-3d483817893d",
+    "signature": {
+        "*": "*"
+    },
+    "results" : [
+        {
+        "active_requests": {
+            "ElapsedTime": "586.589µs",
+            "ExecutionTime": "550.136µs",
+            "RequestId": "82e0978b-a36a-46cd-afd5-3d483817893d",
+            "RequestTime": "2016-02-18 15:22:41.4563869 -0800 PST",
+            "State": "running",
+            "Statement": "select * from system:active_requests"
+        }
+    }
+],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "680.607µs",
+        "executionTime": "643.443µs",
+        "resultCount": 1,
+        "resultSize": 395
+    }
+}</codeblock>
+            </dd>
+        </dlentry>
+        <dlentry>
+          <dt>Terminate an Active Request</dt>
+          <dd><p>The DELETE command can be used to terminate an active request, for instance, a non-responding or a long-running query.</p><codeblock spectitle="REST">DELETE http://localhost:8093/admin/active_requests/<varname>request_ID</varname></codeblock>
+            <codeblock spectitle="N1QL">DELETE FROM system:active_requests [ WHERE <varname>expression</varname> ]   </codeblock></dd>
+        </dlentry>
+      </dl>
+    </section>
+    <section id="sys-prepared"><title>system:prepareds</title>
+      <p>This catalog provides data about the known prepared statements and their state in a query
+        engine’s prepared statement cache. For each prepared statement, this catalog provides
+        information such as name, statement, query plan, last use time, number of uses, and so on. </p>
+      <dl>
+        <dlentry>
+          <dt>Get Prepared Statements</dt>
+          <dd><p>To get a list of all known prepared statements, use:
+              <codeblock spectitle="REST">GET http://localhost:8093/admin/prepareds</codeblock><codeblock spectitle="N1QL">SELECT <varname>projection-list-expression</varname> FROM system:prepareds 
+              [ WHERE <varname>predicate-expression</varname> ]</codeblock></p> <p>To get information about a specific prepared statement, use: <codeblock spectitle="REST">GET http://localhost:8093/admin/prepareds/<varname>prepared-statement-name</varname></codeblock></p> <codeblock spectitle="Example">SELECT * FROM system:prepareds 
+    WHERE name = "p1";
+
+{
+    "name": "p1",
+    "statement": "prepare p1 as select * from default where foo = 42",
+    "plan": "{ TODO }",
+    "lastUse": "2015-08-27 15:29:49.274047526 +0100 IST",
+    "uses": 5,
+    "use.rate.1min":  "2.5",
+    "use.rate.5min": "1.1"
+    "use.rate.15min": "0.05",
+    "elapsedTime.80pct": "1.35s",
+    "elapsedTime.95pct": "3.879s",
+    "elapsedTime.99pct": "15.183s",
+    "elapsedTime.average": "1.15s",
+    "elapsedTime.median": "5.75s"        
+}             </codeblock> </dd>
+        </dlentry>
+        <dlentry>
+          <dt>Delete Prepared Statement</dt>
+          <dd><p>The DELETE command can be used to delete a prepared statement.
+              <codeblock spectitle="REST">DELETE http://localhost:8093/admin/prepareds/<varname>prepared-statement-name</varname></codeblock><codeblock spectitle="N1QL">DELETE FROM system:prepareds 
+WHERE name = "p1";</codeblock></p> <p>To delete all the known prepared statements, use <codeblock spectitle="REST">DELETE http://localhost:8093/admin/prepareds</codeblock></p></dd>
+        </dlentry>
+      </dl>
+    </section>
+    <section id="sys-completed-req"><title>system:completed_requests</title>
+      <p>This catalog maintains a list of the most recent completed requests that have run longer than a predefined threshold of time. For each completed request, this catalog maintains information such as requsetId, statement text, prepared name (if prepared statement), request time, service time, and so on. This information provides a general insight into the health and performance of the query engine and the cluster. </p>
+      <dl>
+        <dlentry>
+          <dt>Get Completed Requests</dt>
+          <dd><p>To get a list of the completed requests, use:
+              <codeblock spectitle="REST">GET http://localhost:8093/admin/completed_requests</codeblock><codeblock spectitle="N1QL">SELECT * FROM system:completed_requests;</codeblock></p> <codeblock spectitle="Example">cbq> SELECT * FROM system:completed_requests LIMIT 1;
+{
+    "requestID": "c23ac87e-d756-4158-879f-98d8303de326",
+    "signature": {
+        "*": "*"
+    },
+    "results" : [
+        {
+            "completed_requests": {
+                "ElapsedTime": 1.617954658e+09,
+                "ErrorCount": 0,
+                "RequestId": "1fd0a5db-442f-4cfb-ab8e-438adcee380f",
+                "ResultCount": 0,
+                "ResultSize": 0,
+                "ServiceTime": 1.617933369e+09,
+                "SortCount": 0,
+                "Statement": "create index dayflight2 on `travel-sample`(distinct array v.day FOR v in schedule end) where type = \"route\"",
+                "Time": "2016-02-17 11:57:18.210234079 -0800 PST"
+            }
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "1.016817ms",
+        "executionTime": "981.564µs",
+        "resultCount": 1,
+        "resultSize": 556,
+        "sortCount": 11
+    }
+}</codeblock></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Purging the Completed Requests</dt>
+          <dd>To purge the completed requests for a given time period, use
+            <codeblock spectitle="N1QL">DELETE FROM system:completed_requests <varname>requests</varname> 
+       WHERE requests.Time LIKE "2015-09-09%";</codeblock></dd>
+        </dlentry>
+      </dl>
+      <p><b>Configuring the system:completed_requests Catalog</b></p>
+      <p>You can configure the <codeph>system:completed_requests</codeph> catalog by specifying the
+        parameters as command line options for the cbq-engine.<ul>
+          <li><parmname>completed-threshold</parmname>: Sets the minimum request duration after
+            which requests are added to the <codeph>system:completed_requests</codeph> catalog. The
+            default value is 1000ms. Specify <userinput>0</userinput> to log all requests and
+              <userinput>-1</userinput> to not log any requests to the catalog. <p>To specify a
+              different value, use:
+            <codeblock>cbq-engine -completed-threshold=500</codeblock></p></li>
+          <li><parmname>completed-limit</parmname>: Sets the number of most recent requests to be
+            tracked in the <codeph>system:completed_requests</codeph> catalog. The default value is
+            4000. Specify <userinput>0</userinput> to not track any requests and
+              <userinput>-1</userinput> to set no limit. <p>To specify a different value, use:
+              <codeblock>cbq-engine -completed-limit=1000</codeblock></p></li>
+        </ul>You can also set these parameters through the Admin API settings endpoint:
+        <codeblock>curl -X POST 'http://localhost:8093/admin/settings'  -u Administrator:password -d '{ ... }'</codeblock>
+        The JSON parameter accepts two new fields: <parmname>completed-threshold</parmname> and
+          <parmname>completed-limit</parmname>.</p>
+    </section>
+  </body>
+</topic>

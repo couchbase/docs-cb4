@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept xml:lang="en-us" id="concept2677">
+	<title>Atomic operations</title>
+
+	<shortdesc>The <codeph>CouchbaseBucket</codeph> class provides atomic operations such as
+			<codeph>counter()</codeph>, <codeph>append()</codeph>, and
+		<codeph>prepend()</codeph>.</shortdesc>
+	<conbody>
+
+		<section>
+			<title>Counter</title>
+
+			<p>The <codeph>counter()</codeph> method allows you to atomically increment or decrement a
+				document with numerical content. The method only accepts and returns a
+					<codeph>LongDocument</codeph>. The value stored in the document is incremented or
+				decremented depending on the <codeph>delta</codeph> given. If the delta value is a
+				positive number the value is incremented, and if it is a negative number the value is
+				decremented. You can also pass in an initial value and an expiration time.</p>
+
+			<codeblock outputclass="language-java"><![CDATA[// Increase the counter by 5 and set the initial value to 0 if it does not exist
+Observable<LongDocument> doc = bucket.counter("id", 5);]]></codeblock>
+
+			<p>The resulting document contains the new counter value. A very common use case is to implement
+				an increasing <codeph>AUTO_INCREMENT</codeph> like counter, where every new user just
+				gets a new ID:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[bucket
+    .counter("user::id", 1, 1)
+    .map(new Func1<LongDocument, String>() {
+        @Override
+        public String call(LongDocument counter) {
+            return "user::" + counter.content();
+        }
+    })
+    .flatMap(new Func1<String, Observable<JsonDocument>>() {
+        @Override
+        public Observable<JsonDocument> call(String id) {
+            return bucket.insert(JsonDocument.create(id, JsonObject.empty()));
+        }
+    }).subscribe();]]></codeblock>
+
+			<p>This code increases the counter by one, then maps the returned number onto a custom
+				document ID (here the code prefixes <codeph>user::</codeph>). Afterward, the
+					<codeph>insert</codeph> method is executed with the generated ID and an empty
+				document content. Because a <codeph>counter</codeph> operation is atomic, the code is
+				guaranteed to deliver different user IDs, even when called at the same time from
+				multiple threads.</p>
+
+			<p>If the initial value is omitted, <codeph>0</codeph> is used. The counter always needs to be
+				greater than or equal to zero because negative values are not allowed. If you want to
+				decrement a counter, make sure to set it to a value greater than zero initially.</p>
+
+			<p>If the document does not exist, the value is always set to <codeph>0</codeph>. If you want to
+				set the counter to the delta initially, set both values:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[// Increase the counter by 5 and set the initial value to 5 if it does not exist
+Observable<LongDocument> doc = bucket.counter("id", 5, 5);]]></codeblock>
+
+			<p>If you want to set an expiration time, you need to provide both the initial value and the
+				expiration time. This is a constraint imposed by the API, because just exposing the
+				expiration time would be ambiguous with the initial value (<codeph>long</codeph> and
+					<codeph>int</codeph>).</p>
+
+			<codeblock outputclass="language-java"><![CDATA[// Increment by 5, initial 5 and 3 second expiration
+Observable<LongDocument> doc = bucket.counter("id", 5, 5, 3);]]></codeblock>
+
+		</section>
+
+		<section>
+			<title>Append &amp; Prepend</title>
+
+			<p>Appending and prepending values to existing documents is also possible. Both the
+					<codeph>append</codeph> and <codeph>prepend</codeph> operation are atomic, so they
+				can be used without further synchronization.</p>
+
+			<p>
+				<note>Both operations only work on binary documents, ideally strings or byte arrays. It
+					does not work on JSON documents, because it doesn't do any further inspection.
+					Applying one of those operations on a JSON document will render it invalid.</note>
+			</p>
+
+			<p>A <codeph>Document</codeph> needs to be created before values can be appended or prepended.
+				Here is an example that creates a document and then appends a string to it:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[bucket
+    .insert(LegacyDocument.create("doc", "Hello, "))
+    .flatMap(doc ->
+        bucket.append(LegacyDocument.create("doc", "World!"))
+    )
+    .flatMap(bucket::get)
+    .toBlocking()
+    .forEach(doc -> System.err.println(doc.content()));]]></codeblock>
+
+			<p>When executed, this code prints <codeph>Hello, World!</codeph>.</p>
+		</section>
+
+	</conbody>
+</concept>

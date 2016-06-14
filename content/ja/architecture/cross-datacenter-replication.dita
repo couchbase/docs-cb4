@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_csn_h4v_vs">
+ <title>Cross Datacenter Replication</title>
+ <shortdesc>Using the cross datacenter replication (XDCR) capability you can set up replication of data between clusters. XDCR helps protect against data center failures and also helps maintain data locality in globally distributed mission critical applications. </shortdesc>
+ <conbody>
+  <p>As an administrator, you can use XDCR to create replication relationships that replicate data
+   from a source cluster’s bucket to a destination cluster’s bucket. You can also set up complex
+   topologies across many clusters such as bidirectional topologies, ring topologies, tree
+   structured topologies, and more. </p>
+  <p>XDCR uses DCP to stream mutations with an agent running on each node within the data service.
+   This XDCR agent is tuned to function with low latency and high reliability over WAN type
+   latencies and efficiently handle frequent connectivity issues between clusters. <fig
+    id="fig_m4y_g3d_ws">
+    <title>Cross datacenter replication (XDCR)</title>
+    <image placement="break" href="images/xdcr.png" width="600" align="left" id="image_n4y_g3d_ws">
+     <alt>Cross datacenter replication (XDCR) with Couchbase Server </alt>
+    </image>
+   </fig></p>
+  <p>In XDCR, each replication stream is set up between a source and destination bucket on separate
+   clusters. Each bucket on each cluster can be a source or a destination for many replication
+   definitions in XDCR. XDCR is a "push-based" replication and so each source node runs the XDCR
+   agent and pushes mutations to the destination bucket.</p>
+  <p>The XDCR agent on the source node uses direct access communication (XMem) protocol to propagate
+   mutations from the source vBucket to the matching vBucket on the destination cluster. Since there
+   are equal number of vBuckets (default is 1024) on both the source and the destination clusters,
+   there is a one-to-one match for each source and destination vBucket.</p>
+  <p>It is important to note that XDCR does not require source and destination clusters to have
+   identical topology. XDCR agents are topology aware and match the destination vBucket with the
+   local vBucket, propagating mutations directly from vBucket to vBucket.</p>
+  <section><title>Conflict Resolution in XDCR</title>
+   <p>In case of bi-directional XDCR where the same dataset exists on both the clusters, conflicts
+    can arise. XDCR automatically performs conflict resolution for different document versions on
+    source and destination clusters.</p>
+   <p>The algorithm is designed to consistently select the same document on
+    either a source or destination cluster. For each stored document, XDCR perform checks of metadata to resolve conflicts. It checks the following:</p><ul>
+     <li><p>Revision ID, a numerical sequence that is incremented on each mutation</p></li>
+     <li><p>CAS value</p></li>
+     <li><p>Document flags</p></li>
+     <li><p>Expiration (TTL) value</p></li>
+    </ul>
+   <p>XDCR conflict resolution uses revision ID as the first field to resolve conflicts between two
+    writes across clusters. Revision IDs are maintained per key and are incremented with every
+    update to the key. Revision IDs keep track of number of mutations to a key, thus XDCR conflict
+    resolution can be best characterized as “the most updates wins”.</p><p>If a document does not have the highest revision number, changes to this document will not be stored or replicated; instead the document with the highest score will take precedence on both clusters. Conflict resolution is automatic and does not require any manual correction or selection of documents.</p>
+   <p>By default XDCR fetches metadata twice from every document before it replicates the document at a destination cluster. XDCR fetches metadata on the source cluster and looks at the number of revisions for a document. It compares this number with the number of revisions on the destination cluster and the document with more revisions is considered the ‘winner.’</p><p>If XDCR determines a document from a source cluster will win conflict resolution, it puts the document into the replication queue. If the document will lose conflict resolution because it has a lower number of mutations, XDCR will not put it into the replication queue. Once the document reaches the destination, this cluster will request metadata once again to confirm the document on the destination has not changed since the initial check. If the document from the source cluster is still the ‘winner’ it will be persisted onto disk at the destination. The destination cluster will discard the document version with the lowest number of mutations.</p>
+   <p>The key point is that the number of document mutations is the main factor that determines whether XDCR keeps a document version or not. This means that the document that has the most recent mutation may not be necessarily the one that wins conflict resolution. If both documents have the same number of mutations, XDCR selects a winner based on other document metadata. Precisely determining which document is the most recently changed is often difficult in a distributed system. The algorithm Couchbase Server uses does ensure that each cluster can independently reach a consistent decision on which document wins.</p>
+  </section>
+ </conbody>
+</concept>

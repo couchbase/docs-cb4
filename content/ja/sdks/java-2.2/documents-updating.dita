@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept xml:lang="en-us" id="concept2677">
+	<title>Updating documents</title>
+	<shortdesc>Describes updating documents by using the <codeph>replace()</codeph> or <codeph>upsert()</codeph> methods.</shortdesc>
+
+	<conbody>
+
+		<section>
+			<title>Replace</title>
+
+			<p>The <codeph>replace</codeph> method replaces the <codeph>Document</codeph> if it exists, but fails with a <codeph>DocumentDoesNotExistException</codeph> otherwise.</p>
+
+			<p>In addition, if the <codeph>CAS</codeph> value is set on the <codeph>Document</codeph> (not
+				equal to <codeph>0</codeph>), it is respected and passed to the server. If the
+					<codeph>CAS</codeph> value does not match the current server value, it fails
+				with a <codeph>CASMismatchException</codeph>.</p>
+
+<codeblock outputclass="language-java"><![CDATA[JsonObject content = JsonObject.empty().put("name", "Michael");
+JsonDocument doc = JsonDocument.create("docId", content);
+JsonDocument inserted = bucket.replace(doc)]]></codeblock>
+
+			<p>If the <codeph>Document</codeph> also has the <codeph>expiry</codeph> time set, it will be respected and picked up by the server.</p>
+
+			<p>It doesn't matter what type of <codeph>Document</codeph> is replaced: its type is inferred
+				from the method argument, and the corresponding <codeph>Transcoder</codeph> is used
+				to encode it.</p>
+
+			<p>The <codeph>Document</codeph> returned, as a result, is a different one compared to the
+					<codeph>Document</codeph> passed in. It references some values like its
+					<codeph>id</codeph> and <codeph>content</codeph> but also has the new
+					<codeph>CAS</codeph> value set.</p>
+
+			<p>The following asynchronous sample will automatically take the <codeph>CAS</codeph> value into account because it is populated from the <codeph>get()</codeph> call and respected on the <codeph>replace()</codeph> call.</p>
+
+<codeblock outputclass="language-java"><![CDATA[bucket.async()
+    .get("id")
+    .map(new Func1<JsonDocument, JsonDocument>() {
+        @Override
+        public JsonDocument call(JsonDocument document) {
+            modifyDocumentSomehow(document);
+            return document;
+        }
+    })
+    .flatMap(new Func1<JsonDocument, Observable<JsonDocument>>() {
+        @Override
+        public Observable<JsonDocument> call(JsonDocument document) {
+            return bucket.async().replace(document);
+        }
+    }).subscribe();]]></codeblock>
+
+    		<p>Since this operation can fail if there is a <codeph>CASMismatchException</codeph>, a common pattern is to retry the complete process until it succeeds:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .defer(() -> bucket.async()get("id"))
+    .map(document -> {
+        document.content().put("modified", new Date().getTime());
+        return document;
+    })
+    .flatMap(doc -> bucket.async().replace(doc))
+    .retryWhen(attempts ->
+        attempts.flatMap(n -> {
+            if (!(n.getThrowable() instanceof CASMismatchException)) {
+                return Observable.error(n.getThrowable());
+            }
+            return Observable.timer(1, TimeUnit.SECONDS);
+        })
+    )
+    .subscribe();]]></codeblock>
+		<p>This code snippet uses <codeph>defer()</codeph>. This was necessary before SDK 2.2.0 to always do a fresh <codeph>get()</codeph>, but is now already done by the SDK.</p>
+		<note type="remember">Before version 2.2.0, a Subject was directly used in the SDK internally,
+				caching the value and, therefore, a resubscribe would just return the same value.
+					<codeph>defer()</codeph> makes sure to create a new one on every resubscribe. </note>
+		<p>Afterward, it artificially modifies the document and then tries to store it through a
+					<codeph>replace()</codeph> call. If it succeeds all is good, if it fails with an
+					<codeph>Exception</codeph> the <codeph>retryWhen()</codeph> block is executed.
+				In this block, the code checks if it is a <codeph>CASMismatchException</codeph> and
+				if so, executes a <codeph>timer</codeph> before retrying. Other errors could be
+				handled in there as well (even with different retry strategies), but in this
+				example, other errors are passed along.</p>
+
+        <p>Note that since 2.1.2, such code is easier to write by use of the <codeph>RetryBuilder</codeph>:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .defer(() -> bucket.async().get("id"))
+    .map(document -> {
+        document.content().put("modified", new Date().getTime());
+        return document;
+    })
+    .flatMap(doc -> bucket.async().replace(doc))
+    .retryWhen(RetryBuilder
+      .anyOf(CASMismatchException.class)
+      .delay(Delay.fixed(1, TimeUnit.SECONDS))
+      .once() //alternatively use max(n) to attempt n times total
+      .build())
+    .subscribe();]]></codeblock>
+
+		</section>
+
+		<section>
+			<title>Upsert</title>
+
+			<p>The <codeph>upsert</codeph> method works similar to <codeph>replace</codeph>, but it also stores the <codeph>Document</codeph> if it does not exist (so there is no <codeph>DocumentDoesNotExistException</codeph> thrown).</p>
+
+			<p>It also does not use the <codeph>CAS</codeph> value to handle concurrent updates, even when set on the document. Use <codeph>replace</codeph> instead.</p>
+
+<codeblock outputclass="language-java"><![CDATA[JsonObject content = JsonObject.empty().put("name", "Michael");
+JsonDocument doc = JsonDocument.create("docId", content);
+JsonDocument inserted = bucket.upsert(doc)]]></codeblock>
+
+			<p>If the <codeph>Document</codeph> also has the <codeph>expiry</codeph> time set, it will be respected and picked up by the server.</p>
+
+			<p>It doesn't matter what type of <codeph>Document</codeph> is upserted; its type is inferred
+				from the method argument, and the corresponding <codeph>Transcoder</codeph> is used
+				to encode it.</p>
+
+			<p>The <codeph>Document</codeph> returned, as a result, is a different one compared to the
+					<codeph>Document</codeph> passed in. It references some values like its
+					<codeph>id</codeph> and <codeph>content</codeph> but also has the
+					<codeph>CAS</codeph> value set.</p>
+		</section>
+
+		<section>
+			<title>Durability Requirements</title>
+
+			<p>If no durability requirements are set on the <codeph>replace</codeph> or <codeph>upsert</codeph> methods, the operation will succeed when the server acknowledges the document in its managed cache layer. While this is a performant operation, there might be situations where you want to make sure that your document has been persisted and/or replicated so that it survives power outages and other node failures.</p>
+
+			<p>Both methods provide overloads to supply such requirements:</p>
+
+<codeblock outputclass="language-java"><![CDATA[D replace(D document, PersistTo persistTo);
+D replace(D document, ReplicateTo replicateTo);
+D replace(D document, PersistTo persistTo, ReplicateTo replicateTo);
+
+D upsert(D document, PersistTo persistTo);
+D upsert(D document, ReplicateTo replicateTo);
+D upsert(D document, PersistTo persistTo, ReplicateTo replicateTo);]]></codeblock>
+
+			<p>You can configure either just one or both of the requirements when inserting or upserting. From an application point of view nothing needs to be changed when working with the response, although there is something that need to be kept in mind:</p>
+
+			<p>The internal implementation first performs a regular <codeph>replace</codeph> or
+					<codeph>upsert</codeph> operation and afterward starts polling the specifically
+				affected cluster nodes for the state of the document. If something fails during this
+				operation (and failing the <codeph>Observable</codeph>), the original operation
+				might have succeeded nonetheless.</p>
+
+<codeblock outputclass="language-java"><![CDATA[// Update the document and make sure it is persisted to the master node
+bucket.replace(document, PersistTo.MASTER);
+
+// Update the document and make sure it is replicate to one replica node
+bucket.replace(document, ReplicateTo.ONE);
+
+// Update the document and make sure it is persisted to one node and replicated to two
+bucket.replace(document, PersistTo.ONE, ReplicateTo.TWO);]]></codeblock>
+
+		</section>
+
+		<section>
+			<title>Batching</title>
+
+			<p>Because everything is asynchronous internally, batching <codeph>replaces</codeph> or
+					<codeph>upserts</codeph> can be achieved with the <codeph>Observable</codeph>
+				functionality of the <codeph>AsyncBucket</codeph>.</p>
+
+			<p>A combination of <codeph>just()</codeph> and <codeph>flatMap()</codeph> is used to store them without blocking:</p>
+
+<codeblock outputclass="language-java"><![CDATA[JsonDocument doc1 = JsonDocument.create("id1", content);
+JsonDocument doc2 = JsonDocument.create("id2", content);
+JsonDocument doc3 = JsonDocument.create("id3", content);
+
+Observable
+    .just(doc1, doc2, doc3)
+    .flatMap(new Func1<JsonDocument, Observable<JsonDocument>>() {
+        @Override
+        public Observable<JsonDocument> call(JsonDocument document) {
+            return bucket.async().replace(document);
+        }
+    }).subscribe();]]></codeblock>
+
+		</section>
+
+	</conbody>
+</concept>

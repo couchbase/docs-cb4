@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept xml:lang="en-us" id="topic2022">
+	<title>Installation and Configuration</title>
+	<conbody>
+		<p>Before you can work with Couchbase and Elasticsearch, you need to set up the Couchbase
+			Elasticsearch plug-in, a Couchbase cluster, and an Elasticsearch cluster. After you install
+			the clusters, start them. The Couchbase cluster stores any items from your application and
+			sends replicas of these items to the Elasticsearch cluster for indexing. Your Couchbase
+			cluster can contain one or more instances of Couchbase server, and your Elasticsearch
+			cluster can contain one or more instances of Elasticsearch. </p>
+
+		<p>For compatibility information, see <xref href="release-notes.dita#elastic-release-notes"
+			 />.</p>
+
+		<p>For now, you probably need only one instance of Couchbase Server running in a cluster and
+			one instance of the Elasticsearch engine. Later, as you test your integration under load
+			and deploy your implementation, you will need to add more servers to handle the workload.
+			At this phase, the most important point about the Couchbase Server installation is to make
+			sure that you include the <codeph>beer-sample</codeph> sample data bucket, which is
+			available as an installation option. The examples in this guide build on data contained in
+			the sample database. </p>
+
+		<section>
+			<title>Installing the Couchbase Elasticsearch Plug-in</title>
+			<p>To enable full-text search of data in Couchbase, you transmit data from a Couchbase
+				cluster to an Elasticsearch cluster where it will be indexed by Elasticsearch. The
+				Couchbase Plug-in for Elasticsearch helps transmit data from Couchbase using a protocol
+				understood by Elasticsearch. The plug-in ensures that information from Couchbase can be
+				mapped and converted into data which Elasticsearch will index and query.</p>
+			<p>To install the Couchbase Elasticsearch plug-in:</p>
+			<ol>
+				<li>Go to your installation directory for
+					Elasticsearch:<codeblock>cd elasticsearch-&lt;version&gt;</codeblock></li>
+				<li>Install the Couchbase Plug-in. Replace the version number with the appropriate one. <p>To
+						install the Elasticsearch 1.x compatible plugin, run the following command
+						from your Elasticsearch installation
+						folder:</p><codeblock>bin/plugin --install transport-couchbase --url \
+http://packages.couchbase.com.s3.amazonaws.com/releases/\
+elastic-search-adapter/2.1.2/elasticsearch-transport-couchbase-2.1.2.zip </codeblock><p>To
+						install the ES 2.1.1 compatible version, run the following command from your
+						Elasticsearch installation folder:
+						<codeblock>bin/plugin --install --url \
+https://github.com/couchbaselabs/elasticsearch-transport-couchbase/\
+releases/download/v2.2.1.2/elasticsearch-transport-couchbase-2.2.1.2.zip</codeblock></p><p>After
+						a successful installation, the plug-in installer
+					returns:</p><codeblock>DONE Installed transport-couchbase</codeblock></li>
+
+				<li>Set the user name and password for the
+					plug-in:<codeblock>echo "couchbase.password: password" &gt;&gt; config/elasticsearch.yml; 
+echo "couchbase.username: Administrator" &gt;&gt; config/elasticsearch.yml</codeblock></li>
+				<li>Install <codeph>head</codeph>, a third-party plug-in for Elasticsearch that provides a
+					simple web-based interface you can use to interact with Elasticsearch:<p>
+						<codeblock> bin/plugin --install mobz/elasticsearch-head </codeblock>
+					</p></li>
+				<li>Start Elasticsearch:<codeblock> bin/elasticsearch </codeblock><p>Elasticsearch starts and
+						runs on your machine in the background.</p></li>
+				<li> In a browser, go to <filepath>http://localhost:9200/_plugin/head/</filepath> to open the
+					administrative client for Elasticsearch. <p>The following screen with a
+						randomized name appears:</p>
+					<image href="images/elastic_head.png" width="720"/>
+				</li>
+			</ol>
+
+
+			<p>At this point you have the Couchbase Elasticsearch plug-in and the Elasticsearch engine
+				installed and running. You can now set up the index templates for Elasticsearch and set
+				up Couchbase Server to send data to Elasticsearch.</p>
+		</section>
+
+		<section>
+			<title>Updating Configurations</title>
+			<p>After installation you are now ready to transfer data from Couchbase Server to
+				Elasticsearch and begin indexing the data. In Elasticsearch you will create an index
+				template to define the scope of indexing and searching. In Couchbase Server, you will
+				change the default setting for replication so that the timing and performance will work
+				with Elasticsearch clusters.</p>
+			<ol>
+				<li>Configure an index template for Elasticsearch to use on the information sent from
+						Couchbase.<codeblock>shell&gt; curl -XPUT http://localhost:9200/_template/couchbase \
+-d @plugins/transport-couchbase/couchbase_template.json </codeblock><p>The
+						template specified in the command is included with the Couchbase
+						Elasticsearch plug-in. You can also provide your own index template. If you
+						provide more than one template, you can maintain multiple indexes that can
+						be individually updated. </p><p>Upon success, Elasticsearch
+					returns:</p><codeblock>{"ok":true,"acknowledged":true}</codeblock></li>
+
+				<li>For each Couchbase data bucket that you want to search, create an empty index in
+						Elasticsearch:<codeblock>shell&gt; curl -XPUT http://localhost:9200/beer-sample</codeblock><p>The
+						command names the index <codeph>beer-sample</codeph>.</p><p>Upon success
+						Elasticsearch
+					returns:</p><codeblock>{"ok":true,"acknowledged":true}</codeblock></li>
+
+				<li>Set the number of concurrent requests Elasticsearch can process: 
+					<codeblock>shell&gt; echo "couchbase.maxConcurrentRequests: 1024" &gt;&gt; config/elasticsearch.yml </codeblock></li>
+				<li>Stop and restart Elasticsearch for your changes to take effect.</li>
+				<li>Set the number of concurrent replicators in Couchbase Server to 8:
+						<codeblock>shell&gt; curl -X POST -u Administrator:password1 http://10.4.2.4:8091/ \
+internalSettings -d xdcrMaxConcurrentReps=8  </codeblock><p>When
+						Couchbase Server successfully updates this setting, it sends a response
+						similar to this:
+						</p><codeblock>HTTP/1.1 200 OK 
+Server: Couchbase Server 3.0.0-1209-rel
+Pragma: no-cache Date: Wed, 28 Nov 2012 18:20:22 GMT 
+Content-Type: application/json Content-Length: 188
+Cache-Control: no-cache </codeblock><p>One
+						of the issues that can occur when an Elasticsearch node is overwhelmed by
+						replication from Couchbase is that the node can fail. If this does occur,
+						you may also experience errors from remaining nodes.</p></li>
+			</ol>
+		</section>
+	</conbody>
+
+</concept>

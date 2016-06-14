@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE topic
+  PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic xml:lang="en-us" id="topic2989">
+	<title>Indexing and Querying Data</title>
+	<body>
+		<p>The Couchbase Elasticsearch plug-in uses the cross data center replication (XDCR) feature
+			in Couchbase Server. This feature can transmit all documents from a Couchbase data bucket
+			or server cluster to another cluster. In this case you transmit documents from Couchbase to
+			Elasticsearch by using XDCR. As soon and these documents have been transmitted, the
+			Elasticsearch engine indexes them.</p>
+		<section>
+			<title>Setting up XDCR Replication to Elasticsearch</title>
+			<p>To set up XDCR replication from Couchbase Server to Elasticsearch:</p>
+			<ol>
+				<li>Open the Couchbase web console and log in.</li>
+				<li>Click on the XDCR tab.<p>Under this tab you can configure and start data replication between
+						a source and destination cluster. In this case the source cluster is a
+						Couchbase cluster and the destination cluster is Elasticsearch.</p></li>
+				<li>Click on Create Cluster Reference.<p>A panel appears where you can specify
+						information for your Elasticsearch cluster. This is the Elasticsearch cluster
+						where Couchbase Server will send copies of documents from a data bucket to be
+						indexed.</p></li>
+				<li>Enter a name, host name, user name and password for your Elasticsearch cluster then
+					click Save. <p>Be aware that Elasticsearch listens on port 9091, which is not a
+						standard port for those familiar with Couchbase Server.</p>
+					<image href="images/create_cluster_ref.png" width="500" align="left" />
+					<p>The reference to the new replication will appear in the Remote Clusters list under
+						the XDCR Tab.</p></li>
+				<li>To set up replication, click Create Replication.<p>A panel appears where you can
+						establish replication from your Couchbase cluster to Elasticsearch.</p></li>
+				<li>Under Replicate changes from: Bucket, choose <codeph>beer-sample</codeph>.</li>
+				<li>Under the section To: select Elasticsearch.</li>
+				<li>For Bucket: enter <codeph>beer-sample</codeph>. This is actually the Elasticsearch
+					index where the data will be sent for indexing.</li>
+				<li>If you are using Couchbase Server 2.2 or later, click Advanced settings and change
+					the XDCR Protocol setting to Version 1.</li>
+				<li>Finally click Replicate to start replication of documents to Elasticsearch.
+					Couchbase Server will begin sending data from the beer-sample bucket to your
+					Elasticsearch cluster. <p>Under the Ongoing Replications section, you will see the
+						replication and status of replication.</p>
+					<image href="images/elastic_replicate.png" width="500" />
+					<image href="images/elastic_replicate_2.png" width="500" />
+				</li>
+				<li>You can also view the data transfer by clicking the Overview tab of Elasticsearch head:
+						<image href="images/view_replication.png" width="720" align="left"/>
+					<p>The <codeph>docs</codeph> field indicates the number of items that have been
+						indexed by Elasticsearch. At this point you can begin querying data from
+						Elasticsearch. </p></li>
+			</ol>
+			<p>The number of documents displayed by Elasticsearch head may be greater than the actual
+				number of documents in Couchbase Server. This is because XDCR and the Couchbase Plug-in
+				for Elasticsearch will also send additional documents that describe the status of
+				replication and Elasticsearch head will show this total number. There is an alternate,
+				more accurate way you can determine the true number of documents indexed by
+				Elasticsearch, which excludes extra status documents. You can use this method to debug
+				possible data transfer issues between Couchbase and Elasticsearch.</p>
+		</section>
+
+		<section>
+			<title>Querying Data</title>
+
+			<p>To issue a query to Elasticsearch, you send a request in the form of a simple Lucene-based
+				string or you can use the more extensive JSON-based query syntax, DSL. When you query
+				Elasticsearch, you send it as an HTTP request using any REST client, or as a URI in a
+				browser:</p>
+			<codeblock><codeph>curl http://localhost:9200/beer-sample/_search?q=blueberry
+</codeph></codeblock>
+			<p>Elasticsearch will return a result set as JSON as follows:</p>
+			<codeblock><codeph>{"took":2,
+"timed_out":false,
+....
+        "hits" : 8,
+    ....
+        {
+        ....
+        "_index":"beer-sample",
+        "_type":"couchbaseDocument",
+        "_id":"dark_horse_brewing_co-tres_blueberry_stout",
+        "_score":1.8963704,
+        "_source": ....
+        "
+        .....
+        "_index":"beer-sample",
+        "_type":"couchbaseDocument",
+        "_id":"yegua_creek_brewing_dallas-blueberry_blonde",
+        "_score":1.2890494,
+        "_source": ....
+        ....
+        }
+}
+</codeph></codeblock>
+			<p>For the sake of brevity we show just the first two results out of a result set
+				containing eight hits. Each item has a “_score” field which Elasticsearch uses to
+				indicate the level of relevance for search hits. Notice that <codeph>source</codeph>
+				attribute will contain only metadata saved by Elasticsearch rather than the entire
+				document contents. We do this because Couchbase Server provides incredibly fast access
+				to the documents. So we use <codeph>_id</codeph> sent back by Elasticsearch to retrieve
+				the document out of Couchbase Server. To start we view the document using Couchbase Web
+				Console:</p>
+			<ol>
+				<li>Copy one of the document IDs returned by Elasticsearch, for instance
+						<codeph>dark_horse_brewing_co-tres_blueberry_stout</codeph>.</li>
+				<li>Click on the Data Bucket tab in Couchbase Web Console. A table appears with a list
+					of all Couchbase Buckets.</li>
+				<li>Click on the Documents button for the <codeph>beer-sample</codeph> bucket. A table
+					appears which displays all documents in the bucket.</li>
+				<li>In the Document ID field, paste the document ID
+						<codeph>dark_horse_brewing_co-tres_blueberry_stout</codeph>. The JSON document for
+					that beer will appear. You can click on the document name to view the entire JSON
+						document.<required-cleanup remap="figure"><ph>
+							<image href="images/elastic_get_doc.png">
+								<alt />
+							</image>
+						</ph></required-cleanup></li>
+			</ol>
+			<p>Elasticsearch supports more complex queries using their REST API; for instance you can
+				search the beer database for a style ‘lambic’ and for ‘blueberry’ in the description. In
+				this case you send a HTTP POST request. The JSON request will appear as follows:</p>
+			<codeblock><codeph>{
+"query": {
+    "query_string": {
+            "query_string": {
+                "query": "style: lambic AND description: blueberry"
+            }
+        }
+    }
+}
+</codeph></codeblock>
+			<p>Here we scope the search so that it looks for ‘lambic’ in the style field and
+				‘blueberry’ in the description and we get this result:</p>
+			<codeblock><codeph>{
+    "name" : "Wild Blueberry Lager",
+    "abv" : 8,
+    "brewery_id" : "110f01",
+    "description" : "....blueberry aroma....",
+    "style" : "Belgian Fruity Lambic"
+    ....
+}
+</codeph></codeblock>
+			<p>Rather than using the web console to retrieve a document, you would typically use a
+				Couchbase SDK to retrieve the documents the IDs. There are specific methods and
+				functions available in each SDK to retrieve one or more items based on the IDs. For more
+				information about reading and writing data from an application with Couchbase SDKs, see
+				Couchbase Developer Guides.</p>
+			<p>For more information about the JSON request and response documents for Elasticsearch,
+				see <xref
+					href="http://www.elasticsearch.org/guide/reference/api/search/request-body.html"
+					scope="external" format="html">Elastic Search, Search API</xref>.</p>
+		</section>
+
+	</body>
+
+</topic>

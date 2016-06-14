@@ -1,0 +1,334 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="elastic-advanced">
+
+
+	<title>Advanced Settings and Usage</title>
+	<shortdesc>The Couchbase Elasticsearch plug-in is highly configurable and provides many setting
+		to customize how your documents are indexed.</shortdesc>
+
+
+	<conbody>
+
+
+
+		<p>Configuration for the plug-in is specified as part of the Elasticsearch configuration file
+			(usually <filepath>elasticsearch.yml</filepath>) and is currently only read when
+			Elasticsearch starts.</p>
+		<section>
+			<title>Basic Settings</title>
+			<ul>
+				<li><codeph>couchbase.port</codeph>—The port the plug-in will listen on. The default
+					port is 9091.</li>
+
+				<li><codeph>couchbase.username</codeph>—The username for HTTP basic authentication. The default
+					username is Administrator.</li>
+
+				<li><codeph>couchbase.password</codeph>—The password for HTTP basic authentication. No
+					default password.</li>
+
+				<li><codeph>couchbase.num_vbuckets</codeph>—The number of vBuckets that Elasticsearch
+					should pretend to have. The default value is 64 vBuckets on OS&#xA0;X and 1024
+					vBuckets on all other platforms). This setting must match the number of vBuckets on
+					the source Couchbase cluster.</li>
+
+				<li><codeph>couchbase.maxConcurrentRequests</codeph>—The number of concurrent requests
+					that the plug-in will allow. The default is 1024 requests. If the load on the machine
+					gets too high, you can lower the number of requests allowed.</li>
+
+			</ul>
+
+		</section>
+
+		<section>
+			<title>Advanced Settings</title>
+
+			<ul>
+
+				<li><codeph>couchbase.ignoreFailures</codeph>—Enabling this flag will cause the plug-in
+					to return a success status to Couchbase even if it cannot index some of the
+					documents. This will prevent the XDCR replication from being stalled due to indexing
+					errors in Elasticsearch, for example when a schema change breaks some of the ES type
+					mappings. The default is false.</li>
+
+				<li><codeph>couchbase.ignoreDeletes</codeph>—Specifying one or more index names here
+					will cause the plug-in to ignore document deletion and expiration for those indexes.
+					This can be used to turn Elasticsearch into a sort of searchable archive for a
+					Couchbase bucket. This also means that the index will continue to grow
+					indefinitely.</li>
+
+				<li><codeph>couchbase.wrapCounters</codeph>—Enabling this flag will cause the plug-in to
+					wrap integer values from Couchbase, which are not valid JSON documents, in a simple
+					document before indexing them in Elasticsearch. The resulting document is in the
+					format <codeph>{ "value" : &lt;value&gt; }</codeph> and is stored under the ID of the
+					original value from Couchbase.</li>
+
+			</ul>
+
+		</section>
+
+		<section>
+			<title>Mapping Couchbase Documents to Elasticsearch Types</title>
+
+			<ul>
+				<li><codeph>couchbase.typeSelector</codeph>—The type selector class to use for mapping documents
+					to types. <ul>
+						<li>
+							<codeph>org.elasticsearch.transport.couchbase.capi.DefaultTypeSelector</codeph>—Maps
+							all documents to the specified type. As the name implies, this is the
+							default type selector and can be omitted from the configuration file. <ul>
+								<li>
+									<codeph>couchbase.typeSelector.defaultDocumentType</codeph>—The
+									document type to which the DefaultTypeSelector will map all
+									documents. Defaults to "couchbaseDocument".</li>
+								<li>
+									<codeph>couchbase.typeSelector.checkpointDocumentType</codeph>—The
+									document type to which replication checkpoint documents will be
+									mapped. Defaults to "couchbaseCheckpoint".</li>
+							</ul>
+						</li>
+						<li>
+							<codeph>org.elasticsearch.transport.couchbase.capi.DelimiterTypeSelector</codeph>—If
+							the document ID is of the format
+								<codeph>&lt;type&gt;&lt;delimiter&gt;&lt;*&gt;</codeph>, this type
+							selector will map these documents to the type
+								<codeph>&lt;type&gt;</codeph>, otherwise it will use the
+								<codeph>DefaultTypeSelector</codeph> for the type mapping. The
+							default delimiter is <codeph>:</codeph>, so for example a document with
+							the ID <codeph>user:123</codeph> will be indexed under the type
+								<codeph>user</codeph>. <ul>
+								<li>
+									<codeph>couchbase.typeSelector.documentTypeDelimiter</codeph>—Optional.
+									The delimiter to use for the
+										<codeph>DelimiterTypeSelector</codeph>. Default is
+										<codeph>:</codeph>. </li>
+							</ul>
+						</li>
+						<li>
+							<codeph>org.elasticsearch.transport.couchbase.capi.GroupRegexTypeSelector</codeph>—Maps
+							documents that match the specified regular expression with a capture
+							group named <codeph>type</codeph>. If the document doesn't match the
+							regular expression, or the regular expression doesn't define a capture
+							group named <codeph>type</codeph>, the
+								<codeph>DefaultTypeSelector</codeph> is used instead. <ul>
+								<li>
+									<codeph>couchbase.typeSelector.documentTypesRegex</codeph>—Specified
+									the regular expression for mapping Couchbase document IDs to
+									Elasticsearch types. Example:
+										<codeph>^(?&lt;type&gt;\w+)::.+$</codeph> will map document
+									IDs of the format <codeph>&lt;type&gt;::&lt;stuff&gt;</codeph>
+									to the type <codeph>&lt;type&gt;</codeph>, so the ID
+										<codeph>user::123</codeph> will be indexed under the type
+										<codeph>user</codeph>. </li>
+							</ul></li>
+						<li>
+							<codeph>org.elasticsearch.transport.couchbase.capi.RegexTypeSelector</codeph>—Maps
+							document IDs that match the specified regular expressions to the named
+							types. If the ID doesn't match any of the specified expressions,
+								<codeph>DefaultTypeSeletor</codeph> is used to select the type. <ul>
+								<li>
+									<codeph>couchbase.typeSelector.documentTypesRegex.*</codeph>—Specifies
+									a regular expression with a named type. For example,
+										<codeph>couchbase.typeSelector.documentTypesRegex.users:
+										^user-.+$</codeph> will map all document IDs that start with
+									the string <codeph>user-</codeph> to the type
+										<codeph>users</codeph>. </li>
+							</ul></li>
+					</ul></li>
+			</ul>
+		</section>
+
+
+
+		<section>
+			<title>Mapping Parent-child Relationships</title>
+
+			<ul>
+				<li> couchbase.parentSelector —The parent selector class to use for mapping child documents to
+					parents. Note that because of the nature of XDCR, it's possible that the child
+					document will be replicated before the parent, leading to unpredictable behavior
+					on the Elasticsearch side. <ul>
+						<li>
+							<codeph>org.elasticsearch.transport.couchbase.capi.DefaultParentSelector</codeph>—Maps
+							documents to parents according to a predefined map of types to field
+							names. <ul>
+								<li>
+									<codeph>couchbase.parentSelector.documentTypeParentFields.*</codeph>—Specifies
+									which document field contains the ID of the parent document for
+									that particular type. For example,
+										<codeph>couchbase.parentSelector.documentTypeParentFields.order:
+										doc.user_id</codeph> will set the parent ID of all documents
+									in the type <codeph>order</codeph> to the value of the
+										<codeph>user_id</codeph> field. </li>
+							</ul></li>
+						<li>
+							<codeph>org.elasticsearch.transport.couchbase.capi.RegexParentSelector</codeph>—Maps
+							documents to parents according to a specified regular expression with
+							the capture group <codeph>parent</codeph>. Optionally lets you specify
+							the format for the parent document ID. <ul>
+								<li><codeph>couchbase.parentSelector.documentTypesParentRegex.*</codeph>—A
+									named regular expression for matching the parent document ID.
+									For example, <codeph>couchbase.documentTypesParentRegex.typeA:
+										^typeA::(?&lt;parent&gt;.+)</codeph> with the document ID
+										<codeph>typeA::123</codeph> will use <codeph>123</codeph> as
+									the parent document ID.</li>
+								<li><codeph>couchbase.parentSelector.documentTypesParentFormat.*</codeph>—Specifies
+									an optional format for the parent document ID matched by the
+									regular expression above. Uses <codeph>&lt;parent&gt;</codeph>
+									as the placeholder for the matched ID. For example,
+										<codeph>couchbase.documentTypesParentFormat.typeA:
+										parentType::&lt;parent&gt;</codeph> with the previous
+									example will produce the parent document ID
+										<codeph>parentType::123</codeph>.</li>
+							</ul>
+						</li>
+					</ul></li>
+			</ul>
+
+
+
+
+		</section>
+
+
+
+		<section>
+			<title>Specifying Custom Document Routing</title>
+			<ul>
+				<li><codeph>couchbase.documentTypeRoutingFields.*</codeph>—A mapping of types to custom
+					document routing paths. For example, specifying
+						<codeph>couchbase.documentTypeRoutingFields.users: user_id</codeph> will use the
+					field <codeph>user_id</codeph> as the custom routing path for type
+						<codeph>users</codeph>.</li>
+			</ul>
+
+		</section>
+
+		<section id="filter">
+			<title>Filtering Documents on the Elasticsearch Side</title>
+
+			<ul>
+				<li><codeph>couchbase.keyFilter</codeph>—The document filter class to use for filtering
+					documents on the plug-in side. Couchbase sends all documents through XDCR no
+					matter what, and the document filter simply chooses whether to index or ignore
+					certain documents according to their ID. <ul>
+						<li><codeph>org.elasticsearch.transport.couchbase.capi.DefaultKeyFilter</codeph>—The
+							default filter, which lets all documents through. Can be omitted from
+							the configuration file.</li>
+						<li><codeph>org.elasticsearch.transport.couchbase.capi.RegexKeyFilter</codeph>
+							<ul>
+								<li><codeph>couchbase.keyFilter.type</codeph>—<codeph>[include|exclude]</codeph>
+									Specifies whether the filter will include or exclude the
+									documents based on the matched regular expression. If you choose
+										<codeph>include</codeph>, then only documents with IDs that
+									match one of the regular expressions will be indexed. If
+										<codeph>exclude</codeph>, then only documents that do not
+									match any of the regular expressions will be indexed. </li>
+								<li><codeph>couchbase.keyFilter.keyFiltersRegex.*</codeph>—Specifies
+									one or more regular expressions to match against the document ID
+									before indexing them in Elasticsearch. For example,
+										<codeph>couchbase.keyFilter.type: exclude</codeph> +
+										<codeph>couchbase.keyFilter.keyFiltersRegex.temp:
+										^temp.*$</codeph> will cause the plug-in to ignore any
+									documents whose IDs start with <codeph>temp</codeph>. </li>
+							</ul></li>
+					</ul></li>
+
+			</ul>
+
+
+		</section>
+
+		<section>
+			<title>Understanding Metadata</title>
+			<p>As you get more advanced in your usage of the Couchbase Elasticsearch plug-in, it might
+				be helpful for you to understand what is actually sent via the plug-in and how
+				Elasticsearch uses it. When you send a JSON document to Couchbase Server to store, it
+				looks similar to the following:</p>
+			<codeblock>{
+   "name": "Green Monsta Ale",
+   "abv": 7.3,
+   "ibu": 0,
+   "srm": 0,
+   "upc": 0,
+   "type": "beer",
+   "brewery_id": "wachusetts_brewing_company",
+   "updated": "2010-07-22 20:00:20",
+   "description": "A BIG PALE ALE with an awesome balance of Belgian malts with Fuggles and East Kent Golding hops.",
+   "style": "American-Style Strong Pale Ale",
+   "category": "North American Ale"
+}                </codeblock>
+			<p>Here we have a JSON document with all the information for a beer in our application.
+				When Couchbase stores this document, it adds metadata about the document so that we now
+				have JSON in Couchbase that looks like this:</p>
+			<codeblock>{
+    {
+   "id": "wachusetts_brewing_company-green_monsta_ale",
+   "rev": "1-00000005ce01e6210000000000000000",
+   "expiration": 0,
+   "flags": 0,
+   "type": "json"
+    },
+    {
+       "name": "Green Monsta Ale",
+       "abv": 7.3,
+       "ibu": 0,
+       "srm": 0,
+       "upc": 0,
+       "type": "beer",
+       "brewery_id": "wachusetts_brewing_company",
+       "updated": "2010-07-22 20:00:20",
+       "description": "A BIG PALE ALE with an awsome balance of Belgian malts with Fuggles and East Kent Golding hops.",
+       "style": "American-Style Strong Pale Ale",
+       "category": "North American Ale"
+    }
+}</codeblock>
+			<p>The metadata that Couchbase Server stores with our beer document contains the key for
+				the document, an internal revision number, expiration, flags and the type of document.
+				When Couchbase Server replicates data to Elasticsearch via the plug-in, it sends this
+				entire JSON including the metadata. Elasticsearch will then index the document and will
+				store the following JSON with document metadata:</p>
+			<codeblock>{
+  "id": "wachusetts_brewing_company-green_monsta_ale",
+  "rev": "1-00000005ce01e6210000000000000000",
+  "expiration": 0,
+  "flags": 0,
+  "type": "json"
+}</codeblock>
+			<p>And finally when you query Elasticsearch and get a result set, it will contain the
+				document metadata only:</p>
+
+			<codeblock>{
+    took: 22
+    timed_out: false
+    _shards: {
+    total: 5
+    successful: 5
+    failed: 0
+},
+    hits: {
+    total: 1
+    max_score: 0.18642133
+    hits: [
+        {
+        _index: beer-sample
+        _type: couchbaseDocument
+        _id: wachusetts_brewing_company-green_monsta_ale
+        _score: 0.18642133
+            _source: {
+                meta: {
+                    id: wachusetts_brewing_company-green_monsta_ale
+                    rev: 1-00000005ce01e6210000000000000000
+                    flags: 0
+                    expiration: 0
+                    }
+                }
+            }
+        ]
+    }
+}</codeblock>
+		</section>
+
+	</conbody>
+
+</concept>

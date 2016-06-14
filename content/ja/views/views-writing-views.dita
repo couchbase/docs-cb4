@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="views-writing-best">
+ <title>Views best practices</title>
+ <shortdesc>Several practices should be kept in mind with developing and deploying
+  views.</shortdesc>
+ <conbody>
+  
+   <p>Although you are free to write views matching your data, you should keep in mind the
+    performance and storage implications of creating and organizing the different design
+    document and view definitions.</p>
+   <p>Keep in mind the following factors when developing and deploying views:</p>
+   <ul>
+    <li>View quality per design document</li>
+    <li>Modifying existing views</li>
+    <li>Don’t include document IDs</li>
+    <li>Check document fields</li>
+    <li>View Size, disk storage and I/O</li>
+    <li>Include value data in views</li>
+    <li>Don’t include entire documents in view output</li>
+    <li>Use document types</li>
+    <li>Use built-in Reduce functions</li>
+   </ul>
+
+    <section><title>View quality per design document</title>
+
+   <p>Because the index for each map/reduce combination within each view within a given design
+    document is updated at the same time, avoid declaring too many views within the same
+    design document. For example, if you have a design document with five different views,
+    all five views will be updated simultaneously, even if only one of the views is
+    accessed.</p>
+   <p>This can result in increase view index generation times, especially for frequently
+    accessed views. Instead, move frequently used views out to a separate design
+    document.</p>
+   <p>The exact number of views per design document should be determined from a combination of
+    the update frequency requirements on the included views and grouping of the view
+    definitions. For example, if you have a view that needs to be updated with a high
+    frequency (for example, comments on a blog post), and another view that needs to be
+    updated less frequently (e.g. top blogposts), separate the views into two design
+    documents so that the comments view can be updated frequently, and independently, of the
+    other view.</p>
+   <p>You can always configure the updating of the view through the use of the
+    <codeph>stale</codeph> parameter. You can also configure different automated view
+    update times for individual design documents</p>
+     
+    </section>
+   
+
+    <section><title>Modifying existing views</title>
+   
+   <p>If you modify an existing view definition, or are executing a full build on a
+    development view, the entire view will need to be recreated. In addition, all the views
+    defined within the same design document will also be recreated.</p>
+   <p>Rebuilding all the views within a single design document is an expensive operation in
+    terms of I/O and CPU requirements, as each document will need to be parsed by each views
+    <codeph>map()</codeph> and <codeph>reduce()</codeph> functions, with the resulting
+    index stored on disk.</p>
+   <p>This process of rebuilding will occur across all the nodes within the cluster and
+    increases the overall disk I/O and CPU requirements until the view has been recreated.
+    This process will take place in addition to any production design documents and views
+    that also need to be kept up to date.</p>
+     
+    </section>
+   
+   
+
+    <section><title>Don’t include document IDs</title>
+   
+   <p>The document ID is automatically output by the view system when the view is accessed.
+    When accessing a view without reduce enabled you can always determine the document ID of
+    the document that generated the row. You should not include the document ID (from
+    <codeph>meta.id</codeph> ) in your key or value data.</p>
+    </section>
+   
+
+    <section><title>Check document fields</title>
+   
+   <p>Fields and attributes from source documentation in <codeph>map()</codeph> or
+    <codeph>reduce()</codeph> functions should be checked before their value is checked
+    or compared. This can cause issues because the view definitions in a design document are
+    processed at the same time. A common cause of runtime errors in views is missing or
+    invalid field and attribute checking.</p>
+   <p>The most common issue is a field within a null object being accessed. This generates a
+    runtime error that will cause execution of all views within the design document to fail.
+    To address this problem, you should check for the existence of a given object before it
+    is used, or the content value is checked. For example, the following view will fail if
+    the <codeph>doc.ingredient</codeph> object does not exist, because accessing the
+    <codeph>length</codeph> attribute on a null object will fail:</p>
+   
+   <codeblock>
+function(doc, meta)
+{
+    emit(doc.ingredient.ingredtext, null);
+}
+</codeblock>
+  
+   <p>Adding a check for the parent object before calling <codeph>emit()</codeph> ensures that
+    the function is not called unless the field in the source document exists:</p>
+   <codeblock>
+function(doc, meta)
+{
+  if (doc.ingredient)
+  {
+     emit(doc.ingredient.ingredtext, null);
+  }
+}
+</codeblock>
+   <p>The same check should be performed when comparing values within the <codeph>if</codeph>
+    statement.</p>
+   <p>This test should be performed on all objects where you are checking the attributes or
+    child values (for example, indices of an array).</p>
+    </section>
+
+    <section><title>View Size, disk storage and I/O</title>
+   
+   <p>Within the map function, the information declared within your <codeph>emit()</codeph>
+    statement is included in the view index data and stored on disk. Outputting this information has
+    the following effects on your indexes:</p>
+   <codeblock>* *Increased index size on disk* — More detailed or complex key/value combinations
+  in generated views will result in more information being stored on disk.
+
+* *Increased disk I/O* — in order to process and store the information on disk,
+  and retrieve the data when the view is queried. A larger more complex key/value
+  definition in your view will increase the overall disk I/O required both to
+  update and read the data back.
+</codeblock>
+   
+   <p>The result is that the index can be quite large, and in some cases, the size of the
+    index can exceed the size of the original source data by a significant factor if
+    multiple views are created, or you include large portions or the entire document data in
+    the view output.</p>
+   <p>For example, if each view contains the entire document as part of the value, and you
+    define ten views, the size of your index files will be more than 10 times the size of
+    the original data on which the view was created. With a 500-byte document and 1 million
+    documents, the view index would be approximately 5GB with only 500MB of source data.</p>
+    </section>
+  <section><title>Limits on document sizes for indexing</title>
+  
+    <p>These are limits on the document size during indexing: </p>
+ 
+ 
+ 
+ 
+ 
+   <table>
+    <title>Limits for indexing</title>
+    <tgroup cols="3">
+     <colspec colname="col1" colwidth="2*"/>
+     <colspec colname="col2" colwidth="1*"/>
+     <colspec colname="col3" colwidth="4*"/>
+     <thead>
+      <row>
+       <entry>Parameter</entry>
+       <entry>Default value</entry>
+       <entry>Description</entry>
+      </row>
+     </thead>
+     <tbody>
+      <row>
+       <entry><codeph>indexer_max_doc_size</codeph></entry>
+       <entry>20M</entry>
+       <entry>The view engine enforced a limit of 1 MB on documents that can be indexed in Couchbase
+        Server version 2.x. In version 3.x, the limit is was increased to 20 MB to ensure every
+        document gets indexed and not silently dropped by the view engine if size of document
+        exceeded previously enforced limit.</entry>
+      </row>
+      <row>
+       <entry><codeph>max_kv_size_per_doc</codeph></entry>
+       <entry>1M</entry>
+       <entry>The maximum byte size allowed to be emitted for a single document and per view. This
+        is the sum of the sizes of all emitted keys and values. If a document emits a key, if the
+        value pair exceeds <codeph>max_kv_size_per_doc</codeph> an error is logged and that document
+        is not indexed. A value of <codeph>0</codeph> for this new setting disables the limit
+        (meaning unlimited, as it was before this change).</entry>
+      </row>
+      <row>
+       <entry><codeph>function_timeout</codeph></entry>
+       <entry>1000ms</entry>
+       <entry>Maximum duration, in milliseconds, for the execution time of all the map/reduce
+        functions in a design document against a single document (map function), or against a list
+        of map values/reductions (reduce/rereduce function). If map/map+reduce exceeds
+         <codeph>function_timeout</codeph> it is aborted and this document is not indexed.</entry>
+      </row>
+     </tbody>
+    </tgroup>
+   </table>
+     
+   
+   
+  </section>
+
+    <section><title>Include value data in views</title>
+   
+   <p>Views store both the key and value emitted by the <codeph>emit()</codeph>. To ensure the
+    highest performance, views should only emit the minimum key data required to search and
+    select information. The value output by <codeph>emit()</codeph> should only be used when
+    you need the data to be used within a <codeph>reduce()</codeph>.</p>
+   <p>You can obtain the document value by using the core Couchbase API to get individual
+    documents or documents in bulk. Some SDKs can perform this operation for you
+    automatically. </p>
+   <p>Using this model will also prevent issues where the emitted view data may be
+    inconsistent with the document state and your view is emitting value data from the
+    document which is no longer stored in the document itself.</p>
+   <p>For views that are not going to be used with reduce, you should output a null value:</p>
+   <codeblock>
+function(doc, meta)
+    {
+    if(doc.type == 'object')
+    emit(doc.experience, null);
+    }
+</codeblock>
+     
+   <p>This creates an optimized view containing only the information required, ensuring
+    the highest performance when updating the view, and smaller disk usage.</p>
+    </section>
+  
+    <section><title>Don’t include entire documents in view output</title>
+   
+   <p>A view index should be designed to provide base information and through the implicitly
+    returned document ID point to the source document. It is bad practice to include the
+    entire document within your view output.</p>
+   <p>You can always access the full document data through the client libraries by later
+    requesting the individual document data. This is typically much faster than including
+    the full document data in the view index, and enables you to optimize the index
+    performance without sacrificing the ability to load the full document data.</p>
+   <p>For example, the following is an example of a bad view:</p>
+   <codeblock>
+function(doc, meta)
+    {
+    if(doc.type == 'object')
+    emit(doc.experience, doc);
+    }
+</codeblock>
+   <p>The above view may have significant performance and index size effects.</p>
+   <p>This will include the full document content in the index.</p>
+   <p>Instead, the view should be defined as:</p>
+   <codeblock>
+function(doc, meta)
+    {
+    if(doc.type == 'object')
+    emit(doc.experience, null);
+    }
+</codeblock>
+   <p>You can then either access the document data individually through the client libraries,
+    or by using the built-in client library option to separately obtain the document
+    data.</p>
+    </section>
+  
+
+    <section><title>Use document types</title>
+   
+   <p>If you are using a document type (by using a field in the stored JSON to indicate the
+    document structure), be aware that on a large database this can mean that the view
+    function is called to update the index for document types that are not being updated or
+    added to the index.</p>
+   <p>For example, within a database storing game objects with a standard list of objects, and
+    the users that interact with them, you might use a field in the JSON to indicate
+    ‘object’ or ‘player’. With a view that outputs information when the document is an
+    object:</p>
+   <codeblock>
+function(doc, meta)
+{
+  emit(doc.experience, null);
+}
+</codeblock>
+   <p>If only players are added to the bucket, the map/reduce functions to update this view
+    will be executed when the view is updated, even though no new objects are being added to
+    the database. Over time, this can add a significant overhead to the view building
+    process.</p>
+   <p>In a database organization like this, it can be easier from an application perspective
+    to use separate buckets for the objects and players, and therefore completely separate
+    view index update and structure without requiring to check the document type during
+    progressing.</p>
+    </section>
+ 
+ 
+ 
+    <section><title>Use built-in Reduce functions</title>
+
+   <p>Where possible, use one of the supplied built-in reduce functions,
+    <codeph>_sum</codeph>, <codeph>_count</codeph>](#couchbase-views-writing-reduce-count),
+    <codeph>_stats</codeph>](#couchbase-views-writing-reduce-stats).</p>
+   <p>These functions are highly optimized. Using a custom reduce function requires additional
+    processing and may impose additional build time on the production of the index.</p>
+  </section>
+ </conbody>
+</concept>

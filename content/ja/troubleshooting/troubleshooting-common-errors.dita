@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_c5q_2g1_vs">
+  <title>Common Errors</title><shortdesc>Most commonly encountered errors when using Couchbase Server and possible resolutions.</shortdesc>
+  <body>
+   
+      
+      <dl>
+        <dlentry>
+          <dt>File descriptor and core file size limits</dt>
+          <dd>If you are having problems starting Couchbase Server on Linux for the first time, there are two common and related causes to consider. When the
+            <filepath>/etc/init.d/couchbase-server </filepath>script runs, it tries to set the file
+            descriptor limit and core file size limit:
+            <codeblock>> ulimit -n 10240 ulimit -c unlimited </codeblock></dd>
+          <dd>This may or may not be allowed depending on your system configuration. 
+            If Couchbase Server is failing to start, you can look through the logs for one or both of these messages:
+            <codeblock>ns_log: logging ns_port_server:0:Port server memcached on node 'ns_1@127.0.0.1' exited with status 71.  
+Restarting. Messages: failed to set rlimit for open files. 
+Try running as root or requesting smaller maxconns value.
+</codeblock></dd>
+          <dd>Alternatively, you may additionally see or optionally see:
+            <codeblock>ns_port_server:0:info:message - Port server memcached on node 'ns_1@127.0.0.1' exited with status 71. 
+Restarting. Messages: failed to ensure core file creation</codeblock></dd>
+          <dd>The resolution to these is to edit the /etc/security/limits.conf file and add these entries:
+            <codeblock>couchbase hard nofile 10240
+couchbase hard core unlimited</codeblock></dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>IP address seems to have changed</dt>
+          <dd>Error message:
+            <codeblock>IP address seems to have changed. Unable to listen on 'ns_1@' </codeblock></dd>
+          <dd>This message means that Couchbase Server had a problem opening a port with that address. 
+            Couchbase Server listens on all interfaces (0.0.0.0), and chooses which interface to use for 
+            its cluster host name (Erlang OTP hostname, not DNS hostname, though the two values can be the same)  
+            (ns_1@IP) by determining which interface would lead out to external networks. 
+            This is defined by your routing table. This error often occurs due to a networking 
+            issue, particularly around DHCP and DNS resolution. </dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Cluster version compatibility mismatch</dt>
+          <dd>Error message:
+            <codeblock> This node cannot add another node (ns@xx.xx.xx) because of cluster compatibility mismatch. 
+ Cluster works in [version xx] mode and only support [version xx].</codeblock></dd>
+          
+          <dd>This message means that the cluster is at version XX and only supports adding nodes XX or
+            higher. Typically, to enable certain features like client-server SSL, or secure XDCR; all the
+            nodes of the cluster to be at a required compatibility level or higher that supports the
+            feature. </dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Difficulties communicating with the cluster. Displaying cached information.</dt>
+          <dd>Error message:
+            <codeblock>Lost connection to server at &lt;IP&gt;:8091. Repeating in XX seconds. Retry now. Repeating failed XHR request...</codeblock>You
+            are seeing the cached UI. This issue is mostly due to the network connection between your
+            system and the Couchbase Server node. Verify your connectivity to the Couchbase Server node
+            using <cmdname>ping</cmdname> and <cmdname>telnet</cmdname>. </dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Transparent huge server pages enabled</dt>
+          <dd>Starting in Red Hat Enterprise Linux (RHEL) version 6, a new default method of 
+            managing huge pages was implemented in the OS. It combines smaller memory pages 
+            into Huge Pages without the running processes knowing. The idea is to reduce the 
+            number of lookups on TLB required and therefore increase performance. 
+            It introduces an abstraction for automation and management of huge page. 
+            Couchbase Engineering has determined that under some conditions, <b>Couchbase Server 
+            can be negatively impacted by severe page allocation delays when THP is enabled</b>. 
+            Couchbase therefore recommends that THP be disabled on all Couchbase Server nodes </dd>
+          <dd>To disable THPs on a running system temporarily, run the following commands:
+          <codeblock> # Disable THP on a running system
+      sudo echo never > /sys/kernel/mm/transparent_hugepage/enabled
+      sudo echo never > /sys/kernel/mm/transparent_hugepage/defrag</codeblock></dd>
+          <dd>To disable this permanently, do the following:
+            <codeblock># Backup rc.local
+      sudo cp -p /etc/rc.local /etc/rc.local.`date +%Y%m%d-%H:%M`</codeblock>
+          </dd>
+          <dd>Then copy the following into the bottom of /etc/rc.local.
+            <codeblock>if test -f /sys/kernel/mm/transparent_hugepage/enabled; then
+      echo never > /sys/kernel/mm/transparent_hugepage/enabled
+      fi
+      
+      if test -f /sys/kernel/mm/transparent_hugepage/defrag; then
+      echo never > /sys/kernel/mm/transparent_hugepage/defrag
+      fi</codeblock>
+          </dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Excessive memory consumption by the <codeph>beam.smp</codeph> process on Lnux</dt>
+          <dd>If the XDCR Max Replications per Bucket value is raised (such as to 128), 
+            then the <codeph>beam.smp</codeph> process uses excessive memory. The solution is to reset to 32 or lower.
+          </dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Blocked view indexing</dt>
+          <dd>You have defined a view with <codeph>a _stats</codeph> reduce function. You see constant empty results in your queries to the view::
+          <codeblock>  > curl -s 'http://localhost:8092/default/_design/dev_test3/_view/view1?full_set=true'
+      {"rows":[]
+      }</codeblock>
+        </dd>
+          <dd>You might repeat this query for several minutes or even hours and always get an empty
+          result set. Try to query the view with <codeph>stale=false</codeph>, and you will get:
+          <codeblock>&gt; curl -s 'http://localhost:8092/default/_design/dev_test3/_view/view1?full_set=true&amp;stale=false'
+      {"rows":[
+      ],
+      "errors":[
+      {"from":"local","reason":"Builtin _stats function
+      requires map values to be numbers"},
+      {"from":"http://192.168.1.80:9502/_view_merge/?stale=false","reason":"Builtin _stats function requires map values to be
+      numbers"},
+      {"from":"http://192.168.1.80:9501/_view_merge/?stale=false","reason":"Builtin _stats function requires map values to be
+      numbers"},
+      {"from":"http://192.168.1.80:9503/_view_merge/?stale=false","reason":"Builtin _stats function requires map values to be
+      numbers"}
+      ]
+      }</codeblock>
+        </dd>
+          <dd>Then looking at the design document, you see it could never work, as values are not numbers:
+            <codeblock> {
+      "views":
+      {
+      "view1": {
+      "map": "function(doc, meta) { emit(meta.id, meta.id); }",
+      "reduce": "_stats"
+      }
+      }
+      }</codeblock>
+          </dd>
+          <dd>One important question to answer is, why do you see the errors when querying with
+            <codeph>stale=false</codeph> but do not see them when querying with
+            <codeph>stale=update_after </codeph>(default) or <codeph>stale=ok </codeph>? Consider these points: <ul>
+            <li><codeph>stale=false</codeph> means: trigger an index update/build, and wait until it
+              that update/build finishes, then start streaming the view results. For this example,
+              index build/update failed, so the client gets an error, describing why it failed, from
+              all nodes where it failed.</li>
+            <li><codeph>stale=update_after</codeph> means start streaming the index contents
+              immediately and after trigger an index update (if the index is not up to date
+              already), so query responses won’t see indexing errors as they do for the
+                <codeph>stale=false</codeph> scenario. For this particular example, the error
+              happened during the initial index build, so the index was empty when the view queries
+              arrived in the system, whence the empty result set. </li>
+            <li><codeph>stale=ok</codeph> is very similar to (2), except it doesn’t trigger index
+              updates.</li>
+          </ul>
+        </dd>
+          <dd>Finally, index build/update errors, related to user Map/Reduce functions, can be
+            found in a dedicated log file that exists per node and has a filename matching mapreduce_errors.#. 
+            For example, from node 1, the file *mapreduce_errors.1 contained:
+            
+            <codeblock>[mapreduce_errors:error,2012-08-20T16:18:36.250,n_0@192.168.1.80:&gt;0.2096.1&lt;] Bucket `default`, 
+       main group `_design/dev_test3`,
+       error executing reduce
+       function for view `view1'
+       reason: Builtin _stats function requires map values to be numbers</codeblock>
+          </dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>View time-out errors</dt>
+          <dd>View timeout errors can occur when querying a view with stale=false.
+          </dd>
+          <dd>When querying a view with stale=false, you often get timeout errors for one or more
+          nodes. These nodes are nodes that did not receive the original query request. For example,
+          you query node 1, and you get timeout errors for nodes 2, 3 and 4 as in the example below
+          (view with reduce function _count):
+          <codeblock>&gt; curl -s 'http://localhost:8092/default/_design/dev_test2/_view/view2?full_set=true&amp;stale=false'
+      {"rows":[
+      {"key":null,"value":125184}
+      ],
+      "errors":[
+      {"from":"http://192.168.1.80:9503/_view_merge/?stale=false","reason":"timeout"},
+      {"from":"http://192.168.1.80:9501/_view_merge/?stale=false","reason":"timeout"},
+      {"from":"http://192.168.1.80:9502/_view_merge/?stale=false","reason":"timeout"}
+      ]
+      }</codeblock>
+        </dd>
+          <dd>By default, for queries with <codeph>stale=false</codeph> (full consistency) the view
+          merging node (node that receives the query request, node 1 in this example) waits up to
+          60000 milliseconds (1 minute) to receive partial view results from each other node in the
+          cluster. If it waits for more than 1 minute for results from a remote node, it stops
+          waiting and a timeout error entry is added to the final response. A
+            <codeph>stale=false</codeph> request blocks a client, or the view merger node as in this
+          example, until the index is up to date, and these timeouts can happen frequently. </dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Swappiness enabled </dt>
+          <dd>Swappiness levels tell the virtual memory subsystem how much it should try and swap to
+          disk. The thing is, the system will try to swap out items in memory even when there is
+          plenty of RAM available to the system. The OS default is usually 60, and you can see what
+          value your system is set to by running the following command:
+          <codeblock> cat /proc/sys/vm/swappiness</codeblock>
+        </dd>
+          <dd>Couchbase Server is tuned to operate in memory as much as possible. You can gain or at
+          minimum not lose performance by just changing the swappiness value to 0. In a non-tech
+          talk, this tells the virtual memory subsystem of the OS to not swap items from RAM to disk
+          unless it really has to. If you have correctly sized your nodes, swapping should not be needed. 
+          To set this, perform the following process use sudo or just become root if you
+          ride in the wild west. <ol>
+            <li>Set the value for the running system:
+              <codeblock>sudo echo 0 > /proc/sys/vm/swappiness</codeblock>
+            </li>
+            <li>Backup sysctl.conf:
+              <codeblock>sudo cp -p /etc/sysctl.conf /etc/sysctl.conf.`date +%Y%m%d-%H:%M`</codeblock></li>
+            <li>Set the value in /etc/sysctl.conf so it stays after reboot:
+                <codeblock>sudo echo '' >> /etc/sysctl.conf
+       sudo echo '#Set swappiness to 0 to avoid swapping' >> /etc/sysctl.conf
+       sudo echo 'vm.swappiness = 0' >> /etc/sysctl.conf</codeblock><p>Make
+                sure that you either have or modify your process that builds your OSs to do this.
+                This is especially critical for public/private clouds where it is so easy to bring
+                up new instances. You need to make this part of your build process for a Couchbase
+                node. </p>
+            </li>
+          </ol>
+        </dd>
+          
+        </dlentry>
+      </dl>
+      
+      
+  </body>
+</topic>

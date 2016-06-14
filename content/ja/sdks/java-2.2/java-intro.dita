@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_l11_ppm_pp">
+	<title>Java SDK 2.2</title>
+	<shortdesc>The Couchbase Java SDK provides synchronous and asynchronous (reactive) interfaces that
+		allow your applications to interact efficiently with a Couchbase Server cluster. It provides
+		capabilities to store, update, and retrieve documents in the database and query the database
+		by using N1QL.</shortdesc>
+	<conbody>
+
+
+		<p>In general, every synchronous method has a corresponding asynchronous method. The SDK also
+			has first-class support for Java 8.</p>
+
+		<p>Here are some samples of typical operations you can accomplish with the SDK:</p>
+
+		<section>
+			<title>Connecting</title>
+
+			<p>You can connect to one or more buckets on your cluster in a very concise way while at the same
+				time making sure that the underlying resources like thread pools and sockets are
+				reused as much as possible:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[// Connect to localhost
+Cluster cluster = CouchbaseCluster.create();
+
+// Open the default bucket and the "beer-sample" one
+Bucket defaultBucket = cluster.openBucket();
+Bucket beerSampleBucket = cluster.openBucket("beer-sample");
+
+// Disconnect and clear all allocated resources
+cluster.disconnect();]]></codeblock>
+
+		</section>
+
+		<section>
+			<title>Storing Documents</title>
+
+			<p>JSON is a first-class citizen, but the SDK also provides support for any other type of
+				objects (such as serialized Java objects or raw byte streams). This example shows how
+				you can create a JSON document and insert it synchronously:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[JsonObject user = JsonObject.empty()
+  .put("firstname", "Walter")
+  .put("lastname", "White")
+  .put("job", "chemistry teacher")
+  .put("age", 50);
+JsonDocument stored = bucket.upsert(JsonDocument.create("walter", user));]]></codeblock>
+
+		</section>
+
+		<section>
+			<title>Retrieving Documents</title>
+
+			<p>You can also retrieve your stored documents in a variety of ways. This first example
+				synchronously loads a document identified by its ID and prints out a field of the JSON.
+				Notice how the JSON decoding is done for you:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[JsonDocument walter = bucket.get("walter");
+System.out.println("Found: " + walter.content().getString("firstname"));]]></codeblock>
+
+			<p>That doesn't impress you? Asynchronous, reactive APIs are also exposed. The following
+				example uses Java 8 to showcase a more advanced query:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[bucket
+  .async()
+  .get("beer")
+  .onErrorResumeNext(bucket.async().getFromReplica("beer", ReplicaMode.ALL))
+  .first()
+  .map(doc -> doc.content().getString("name"))
+  .timeout(2, TimeUnit.SECONDS)
+  .doOnError(System.err::println)
+  .onErrorReturn(error -> "Not Found!");]]></codeblock>
+
+			<p>This code snippet loads a document, falls back to load from replica nodes if an error
+				happens, grabs the first of potentially many replica responses, and then extracts the
+				beer name. Finally, a timeout is applied and more error handling (printing out the
+				errors) is added as well. This gives you a glimpse of what's possible with our
+				asynchronous, reactive methods that are always available. In fact, the synchronous calls
+				are just convenience wrappers.</p>
+
+		</section>
+
+		<section>
+			<title>Querying</title>
+
+			<p>Couchbase Server has extensive support for querying (be it through views or the N1QL query
+				language). The SDK provides various ways to query them. Here is how to query a view that
+				gives us beers and breweries, filters out the beers, and prints their name:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[ViewResult result = bucket.query(ViewQuery.from("beers_and_breweries", "by_name"));
+
+for (ViewRow row : result) {
+    JsonDocument doc = row.document();
+
+    if (doc.content().getString("type").equals("beer")) {
+        System.out.println(doc.content().getString("name"));
+    }
+}]]></codeblock>
+
+			<p>This can also be done asynchronously:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[bucket
+    .async()
+    .query(ViewQuery.from("beers_and_breweries", "by_name"))
+    .flatMap(AsyncViewResult::rows)
+    .flatMap(AsyncViewRow::document)
+    .filter(doc -> doc.content().getString("type").equals("beer"))
+    .subscribe(doc -> System.out.println(doc.content().getString("name")));]]></codeblock>
+
+			<p>Here is how to run a N1QL query—notice how nicely the domain-specific language (DSL)
+				leads you to your final query:</p>
+
+			<codeblock outputclass="language-java"><![CDATA[bucket
+    .async()
+    .query(N1qlQuery.simple(select("*").from(i("beer-sample")).limit(10)))
+    .flatMap(AsyncN1qlQueryResult::rows)
+    .toBlocking()
+    .forEach(row -> System.out.println(row.value()));]]></codeblock>
+
+			<p>The query selects all documents from the <codeph>beer-sample</codeph> bucket (notice it is escaped using <codeph>i()</codeph> utility method) and prints
+				the content of each row. This also shows it is easy to go back to blocking from an async query (chain in <codeph>toBlocking()</codeph>). There is of course also a fully synchronous API.</p>
+
+		</section>
+
+	</conbody>
+</concept>

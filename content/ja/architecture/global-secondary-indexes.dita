@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_e5c_kf4_vs">
+ <title>Global Secondary Indexes (GSIs)</title>
+ <shortdesc>Global secondary index (GSI) is a powerful solution for secondary lookup queries that are required for interactive applications that require low latencies. Global secondary indexes (GSIs) are defined using the CREATE INDEX statement in N1QL. The CREATE INDEX statement supports the use of document attributes, N1QL expressions including functions, and a filter (a WHERE clause to limit the documents being indexed) in the index key.</shortdesc>
+ <conbody>
+  <p>The indexer for GSI processes the mutations to the bucket and creates a B+ tree for fast scans on the index key. Queries that filter on a range can use GSI to quickly acquire the document keys that satisfy the filter expression. They can then query the bucket to get the full document values and project the final query result.</p>
+  <section><title>Indexing with Global Secondary Indexes</title><p>Global secondary indexes (GSIs)
+    are defined using the CREATE INDEX statement in N1QL. The CREATE INDEX statement supports the
+    use of document attributes and N1QL expressions including functions in the index key. Using
+    CREATE INDEX, you can also define a filter (that is, a “WHERE” clause with WHERE
+    type=”person_document”) to limit the index to person documents in the bucket) which in turn
+    limits the documents being indexed. There can only be zero or one index key output per document
+    key.</p><p>For example, you can create a global secondary index, also referred to as
+     <i>index</i>, on name that indexes beer name attributes for documents of type “beer” using the
+    following CREATE INDEX statement in N1QL.
+    <codeblock>    CREATE INDEX Index1_beer_name 
+    ON `beer-sample`(name) 
+    WHERE type=”beer” USING GSI;</codeblock></p>GSI
+   processes mutations in the bucket by coordinating with the following processes: <dl>
+    <dlentry>
+     <dt>Projector and Router</dt>
+     <dd>This process is responsible for processing incoming mutations on the bucket. It resides on
+      the nodes that run data service and thus contains active vBuckets. This process understands
+      the indexes that exist on the bucket at any given time and processes incoming mutation to only
+      send the relevant information to the Supervisor process for maintaining indexes. <p>Every node
+       has a single projector and router process which runs the data service. It can listen on all
+       buckets on the node, if there are indexes on these buckets. Projector and router process
+       sends a stream of changes per bucket to each node running the index service. Indexes may
+       index only a small set of the attributes in a document and may filter documents to index a
+       subset of the documents in a bucket. The stream of changes is optimized to only contain
+       relevant information for the indexes created on the nodes running the index service.
+      </p></dd>
+    </dlentry>
+    <dlentry>
+     <dt>Supervisor</dt>
+     <dd>This process is responsible for both processing mutations sent by the projector and router
+      process for the indexes it maintains, and for responding to scan requests from N1QL queries
+      that are executed as part of the query service. It resides on the nodes that run the index
+      service. <p>Each node running the index service can contain different indexes (for example,
+       index1 and index2 can be on node A while index3 and index4 can be on node B). Each index only
+       indexes mutations from one bucket but each node running the index service may contain indexes
+       from multiple buckets (for example, index1 and index3 can be indexes on bucket X and index2
+       and index4 can be indexes on bucket Y). Indexes may index a small set of the attributes in a
+       document and may filter to documents to only index a subset of the documents in a
+       bucket.</p><p>Every node has a single supervisor process which runs the index service. The
+       supervisor process listens to change streams from the projector and router processes from all
+       nodes running the data service. It evaluates the incoming stream of changes for the specific
+       indexes created on the node running the index service. The stream of changes is optimized to
+       only contain relevant information for the indexes created on the nodes running the index
+       service. This ensures optimized data exchange and faster indexing between the projector and
+       router process and supervisor process. This is especially important when using
+       multidimensional scaling to deploy data service and index service to independent set of nodes
+       within the cluster creating dedicated zones inside the cluster.</p><p>When a mutation arrives
+       at the bucket, the mutation is processed in memory by the vBucket manager that is responsible
+       for the document key in the data service. The mutation is then queued for replication with
+       DCP to propagate the mutation to replica vBuckets, to the views on the bucket, and to the
+       projector and router process for GSI processing. The projector and router process picks up
+       the mutation from DCP and removes the attributes that are not part of index filter or
+       definition on any of the GSI indexes being maintained on nodes running the index service. The
+       supervisor process picks up the stream of changes and applies them to the indexes maintained
+       locally on the node. <fig id="fig_l4h_t4h_zs">
+        <title>Execution flow of Global Secondary Indexes (GSIs)</title>
+        <image placement="break" href="images/global-secondary-indexes.png" width="600"
+         id="image_m4h_t4h_zs"/>
+       </fig></p></dd>
+    </dlentry>
+   </dl></section>
+  <section><title>Index Storage Options</title>
+   <p>Index service can be configured to utilize standard or the memory-optimized storage option.</p>
+   <p>Memory-Optimized GSI: Indexes are created for achieving low latency query execution. When memory-optimized storage option is selected, all indexes on the cluster utilize fast in-memory index processing for efficient index maintenance and index scans. Memory optimized indexes uses the skiplist structure as opposed to B-tree indexes. Skiplist structure optimize memory consumption. They also enhance concurrent processing of index updates and scans with a lock-free processing arrangements of the index in memory. Memory optimized indexes provide the most optimized index for processing high velocity mutations and high frequency scans.</p>
+   <p>When standard storage option is selected, the supervisor process uses the ForestDB storage engine to persist changes to the individual indexes to disk. Each index gets a dedicated file. With standard storage mode, writes to the storage can either be done using an append-only write or using a write with circular reuse depending on the write mode selected for global secondary indexes.</p>
+   <p>Both write modes in the standard storage mode for GSI requires compaction to clean up the orphaned space. Writes with circular reuse require compaction much less frequently compared to the append only writes. For more information about compaction and differences between ForestDB and Couchstore, and write modes in ForestDB, see <xref href="storage-architecture.dita">Storage Architecture</xref>.</p>
+  </section>
+  <section><title>GSI and High Availability </title>
+  <p>Unlike the database engine or the views engine, Global Secondary Indexes do not provide automatic built-in replicas. As an administrator, you can manually create replicas with GSIs by using the index service to create identical indexes on separate nodes. To create redundant copies of an index, you can create the same index definition with different index names on different nodes that are running the index service. 
+  </p>
+   <p>If one of the copies of the index is not available due to a node failure, N1QL queries automatically redirect and use the available identical index for the execution of the query. This ensures that the index service has an index available for faster query execution as long as a one copy of the index is available on one of the index service nodes.</p>
+   <p>The following example shows how to place two indexes on two separate nodes (nodeA and nodeB)
+    that have identical definitions using the WITH clause.
+    <codeblock>     CREATE INDEX Index1_beer_name 
+     ON `beer-sample`(name) 
+     WHERE type=”beer” USING GSI WITH {"nodes":"nodeA:8091"};
+     CREATE INDEX Index2_beer_name 
+     ON `beer-sample`(name)
+     WHERE type=”beer” USING GSI WITH {"nodes":"nodeB:8091"};  </codeblock></p>
+  </section>
+  <section><title>GSI and Index Mirroring and Partitioning </title>
+   <p>With global secondary indexes, you can place each index only on a single node. However, as an administrator, you can create an identical index definition and place each index on a separate node to engage multiple nodes when executing highly concurrent queries. When identical index definitions on separate nodes are available, N1QL queries use the round-robin algorithm to load balance the index scan operations. This ensures each index on each node takes an equal share of the index scan workload and engages both the nodes for best performance. As an administrator, you can create more indexes with identical definitions to scale-out the index scans to additional nodes. See the example described in the previous section on "GSI and high availability".</p>
+   <p>An index definition can define a filter to limit the documents being indexed. As an administrator, you can partition indexes by splitting them into multiple smaller segments and placing the individual segments in separate nodes to engage multiple nodes for processing highly concurrent queries. </p>
+   <p>The following example illustrates partitioning the beer_name index into segments using a
+    BETWEEN clause. Index1_beer_name1 specifies names that are between “A” and “C”, while
+    Index1_beer_name2 specifies names between “C” and “F”, and so on.
+    <codeblock>    CREATE INDEX Index1_beer_name1 
+    ON `beer-sample`(name) 
+    WHERE type="beer" AND name BETWEEN "A" AND "C"
+    USING GSI WITH {"nodes":"nodeA:8091"};
+    
+    CREATE INDEX Index1_beer_name2 
+    ON `beer-sample`(name) 
+    WHERE type="beer" AND name BETWEEN "C" AND "F"
+    USING GSI WITH {"nodes":"nodeB:8091"};
+    ...  </codeblock></p>
+   <p> The first query below uses Index1_beer_name1 index to return the result which only engages
+    nodeA as the index is created on nodeA, while the second query scans Index_beer_name2 index
+    which is on nodeB.
+    <codeblock>     SELECT * FROM `beer-sample` 
+     WHERE type="beer" AND name = "Blackberry";
+     
+     SELECT * FROM `beer-sample` 
+     WHERE type="beer" AND name = "Downtown Brown";  </codeblock>
+   </p>
+  </section>
+ </conbody>
+</concept>

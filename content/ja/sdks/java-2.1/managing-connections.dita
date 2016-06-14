@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept xml:lang="en-us" id="concept2677">
+	<title>Managing connections</title>
+	<shortdesc>This section covers the different approaches to connecting and disconnecting, as well as
+		how to configure encryption.</shortdesc>
+	<conbody>
+		<section>
+			<title>Connecting</title>
+
+			<p>Connecting to a bucket is a two-step process: first, a <codeph>CouchbaseCluster</codeph>
+				object needs to be initialized, followed by one or more calls to openBucket():</p>
+
+<codeblock outputclass="language-java"><![CDATA[Cluster cluster = CouchbaseCluster.create();
+Bucket bucket = cluster.openBucket();]]></codeblock>
+
+			<p>If no further arguments are applied, this code connects to <codeph>localhost</codeph> and opens the default bucket. While this is suitable for development, you most probably want to connect to a remote cluster and also a different bucket (with a password):</p>
+
+<codeblock outputclass="language-java"><![CDATA[Cluster cluster = CouchbaseCluster.create("192.168.56.101", "192.168.56.102");
+Bucket bucket = cluster.openBucket("myapp", "password");]]></codeblock>
+
+<p>Alternatively, a list of nodes can be passed in:</p>
+
+<codeblock outputclass="language-java"><![CDATA[List<String> nodes = Arrays.asList("192.168.56.101", "192.168.56.102");
+Cluster cluster = CouchbaseCluster.create(nodes);]]></codeblock>
+
+<p>It is very important in a production setup to pass in at least two or three nodes of the cluster because if the first one in the list fails the other ones can be tried. After initial contact is made, the bootstrap list provided by the user is thrown away and replaced with a list provided by the server (which contains all nodes of the cluster).</p>
+
+<p>More buckets can be open at the same time if needed:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Bucket bucket1 = cluster.openBucket("bucket1", "password");
+Bucket bucket2 = cluster.openBucket("bucket2", "password");]]></codeblock>
+
+<p>If more than one bucket is open at a time, the underlying <codeph>core-io</codeph> module makes
+				sure to utilize the resources as best as possible, that is sharing sockets, thread pools
+				and so on.</p>
+
+<p>Here are some very important things to keep in mind:</p>
+
+<ul>
+	<li>Always create only one instance of a <codeph>CouchbaseCluster</codeph> and share it across threads (same with buckets).</li>
+	<li>The SDK is thread-safe, so no additional synchronization is needed when interacting with the SDK.</li>
+	<li>If different clusters need to be accessed, reuse the <codeph>ClusterEnvironment</codeph>.</li>
+</ul>
+
+<p>If the underlying environment is not shared the application will continue to work, but a warning
+				is raised in the logs:</p>
+
+<codeblock><![CDATA[WARNING: More than 1 Couchbase Environments found (N), this can have severe 
+impact on performance and stability. Reuse environments!]]></codeblock>
+
+<p>In general, this is an indication of misconfiguration, the only exception being unit and
+				integration tests where multiple paths are executed at once and cannot share the
+					<codeph>ClusterEnvironment</codeph> for whatever reason.</p>
+
+		</section>
+		<section>
+			<title>Connecting Asynchronously</title>
+
+			<p>Every synchronous API is just a wrapper around an asynchronous one. To get to it, you can use
+				one of these methods:</p>
+
+			<ul>
+				<li>Use <codeph>async()</codeph> on the interface to access its <codeph>Async*</codeph> counterpart.</li>
+				<li>Instantiate a <codeph>CouchbaseAsyncCluster</codeph> in the first place.</li>
+			</ul>
+
+			<p>So if you are connecting to the bucket synchronously but then want to switch over to
+				asynchronous data operations, you can do it like this:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Cluster cluster = CouchbaseCluster.create();
+Bucket bucket = cluster.openBucket();
+
+// Same API as Bucket, but completely async with Observables
+AsyncBucket asyncBucket = bucket.async();]]></codeblock>
+
+			<p>On the other hand, you can use the Async API right from the beginning:</p>
+
+<codeblock outputclass="language-java"><![CDATA[AsyncCluster cluster = CouchbaseAsyncCluster.create();
+Observable<AsyncBucket> bucketObservable = cluster.openBucket();]]></codeblock>
+
+		</section>
+		<section>
+			<title>Disconnecting</title>
+
+<p>The most common case is to disconnect the whole <codeph>CouchbaseCluster</codeph> from the server, which has the same effect as closing all buckets manually and in addition close all underlying resources like thread pools. This also means that once disconnect has happened, you can't reopen buckets from the same <codeph>Cluster</codeph> instance.</p>
+
+<codeblock outputclass="language-java"><![CDATA[Boolean disconnected = cluster.disconnect();]]></codeblock>
+
+			<p>If the <codeph>ClusterEnvironment</codeph> is shared it needs to be closed manually, but if
+				not (which is the regular case) it gets also shut down.</p>
+
+<p>After a disconnect, it is not possible to open buckets again, so only use it when you are sure that you do not need access to a <codeph>CouchbaseCluster</codeph> again. If you only want to close a bucket, you can do that without shutting down everything:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Boolean closed = bucket.close();]]></codeblock>
+
+<p>This will release only the resources allocated for this bucket and it is possible to reopen it at
+				a later point.</p>
+
+<p>Especially with <codeph>disconnect</codeph>, make sure you wait until it is finished (so everything is shut down cleanly), either by using the <codeph>toBlocking</codeph> methods or by using other mechanisms in the subscriber (like a <codeph>CountDownLatch</codeph> to orchestrate behavior).</p>
+
+<p>All threads used by the SDK are daemon threads, so even if you do not <codeph>disconnect()</codeph> manually, your JVM will exit. It is very important that you properly shut down the SDK so that remaining operations are finished and nothing is left behind.</p>
+
+<p>If no timeout is used for the synchronous <codeph>disconnect()</codeph> method, the environment <codeph>disconnect timeout</codeph> is used, which defaults to 25 seconds. This holds also true if you call <codeph>close()</codeph> on a bucket.</p>
+
+		</section>
+	
+		<section>
+			<title>Sharing resources</title>
+
+<p>As mentioned previously, you should create only one instance of a CouchbaseCluster and open
+				buckets from there. If you need to connect to multiple clusters though, this is not
+				going to work. To keep things efficient, you should share the <codeph>CouchbaseEnvironment</codeph>
+				object between those instances:</p>
+
+<codeblock outputclass="language-java"><![CDATA[CouchbaseEnvironment env = DefaultCouchbaseEnvironment.create();
+CouchbaseCluster cluster1 = CouchbaseCluster.create(env, "192.168.56.1");
+CouchbaseCluster cluster2 = CouchbaseCluster.create(env, "192.168.57.10");]]></codeblock>
+
+			<p>This ensures that the resources in the environment (thread pools for I/O and computation) are
+				reused. Note that if you pass in your custom environment, it needs to be shut down
+				manually because it's not under the complete control of any cluster. The recommended
+				approach is to first shut down all clusters and after this is done shut down the
+				environment (here using asynchronous code, but you can also loop synchronously):</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .just(cluster1, cluster2)
+    .flatMap(CouchbaseCluster::disconnect)
+    .last()
+    .flatMap(aBoolean -> env.shutdown())
+    .toBlocking()
+    .single();]]></codeblock>
+
+		</section>
+		<section>
+			<title>Encryption</title>
+
+			<p>Couchbase Server EE 3.0 and later supports full encryption of client-side traffic. That includes key-value type operations, queries, and configuration communication. Make sure to have a proper Couchbase Server version installed before proceeding with configuring encryption on the client side.</p>
+
+<p>To configure encryption for the Java SDK:</p>
+
+<ol>
+	<li>Load and import the certificate from the cluster into your JVM keystore</li>
+	<li>Enable encryption on the client side and point it to the keystore</li>
+</ol>
+
+<p>The JVM keystore is independent of the Java SDK, so your own setup might look different. It is important to make sure you are transferring the certificate in an encrypted manner from the server to the client side, so either copy it through SSH or through a similar secure mechanism.</p>
+
+<p>If you are running on <codeph>localhost</codeph> and just want to enable it for a development machine, just copying and pasting it suffices. Navigate in the admin UI to <menucascade><uicontrol>Settings</uicontrol> <uicontrol>Cluster</uicontrol></menucascade> and copy the input box of the SSL certificate into a file on your machine (here named cluster.cert). It looks similar to this:</p>
+
+<codeblock><![CDATA[-----BEGIN CERTIFICATE-----
+MIICmDCCAYKgAwIBAgIIE4FSjsc3nyIwCwYJKoZIhvcNAQEFMAwxCjAIBgNVBAMT
+ASowHhcNMTMwMTAxMDAwMDAwWhcNNDkxMjMxMjM1OTU5WjAMMQowCAYDVQQDEwEq
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzz2I3Gi1XcOCNRVYwY5R
+................................................................
+mgDnQI8nw2arBRoseLpF6WNw22CawxHVOlMceQaGOW9gqKNBN948EvJJ55Dhl7qG
+BQp8sR0J6BsSc86jItQtK9eQWRg62+/XsgVCmDjrB5owHPz+vZPYhsMWixVhLjPJ
+mkzeUUj/kschgQ0BWT+N+pyKAFFafjwFYtD0e5NwFUUBfsOyQtYV9xu3fw+T2N8S
+itfGtmmlEfaplVGzGPaG0Eyr53g5g2BgQbi5l5Tt2awqhd22WOVbCalABd9t2IoI
+F4+FjEqAEIr1mQepDaNM0gEfVcgd2SzGhC3yhYFBAH//8W4DUot5ciEhoBs=
+-----END CERTIFICATE-----]]></codeblock>
+
+<p>Now, use the <cmdname>keytool</cmdname> command to import it into your JVM keystore.</p>
+
+<codeblock outputclass="language-bash"><![CDATA[$ keytool -importcert -file cluster.cert 
+Enter keystore password:  
+Owner: CN=*
+Issuer: CN=*
+Serial number: 1381528ec7379f22
+Valid from: Tue Jan 01 01:00:00 CET 2013 until: Sat Jan 01 00:59:59 CET 2050
+Certificate fingerprints:
+	 MD5:  4A:5E:DB:4F:F6:7E:FD:C3:0E:0C:56:C4:05:34:C1:4A
+	 SHA1: 3A:BC:48:3C:0F:36:99:EB:35:76:7C:E5:14:DE:89:DE:AE:79:9B:ED
+	 SHA256: 24:46:59:55:F2:65:23:85:E2:80:9F:CC:D1:EF:41:E9:4E:D8:ED:11:C8:CF:60:C7:C5:AD:63:56:D0:E6:7F:4D
+	 Signature algorithm name: SHA1withRSA
+	 Version: 3
+Trust this certificate? [no]:  yes
+Certificate was added to keystore]]></codeblock>
+
+<p>You can verify with <cmdname>keytool -list</cmdname>:</p>
+
+<codeblock outputclass="language-bash"><![CDATA[$ keytool -list
+Enter keystore password:  
+
+Keystore type: JKS
+Keystore provider: SUN
+
+Your keystore contains 1 entry
+
+mykey, Aug 18, 2014, trustedCertEntry, 
+Certificate fingerprint (SHA1): 3A:BC:48:3C:0F:36:99:EB:35:76:7C:E5:14:DE:89:DE:AE:79:9B:ED]]></codeblock>
+
+<p>The next step is to enable encryption and pass it the path and password of the file.</p>
+
+<codeblock outputclass="language-java"><![CDATA[CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+    .builder()
+    .sslEnabled(true)
+    .sslKeystoreFile("/path/tokeystore")
+    .sslKeystorePassword("password")
+    .build();]]></codeblock>
+
+<p>Depending on the OS used there are different default passwords and paths, so consult the JDK
+				manual if you need further information on keytool and the JVM keystore.</p>
+
+<p>There are no other application changes needed. If you want to verify it's actually working ,you
+				can use a tool like <cmdname>tcpdump</cmdname>. For example, an unencrypted upsert
+				request looks like this (using <codeph>sudo tcpdump -i lo0 -A -s 0 port
+				11210</codeph>):</p>
+
+<codeblock><![CDATA[E..e..@.@.............+......q{...#..Y.....
+.E...Ey........9........................id{"key":"value"}]]></codeblock>
+
+<p>After enabling encryption, you cannot inspect the traffic in cleartext (same upsert request, but
+				watched on port 11207 which is the default encrypted port):</p>
+
+<codeblock><![CDATA[E.....@.@.............+....Z.'yZ..#........
+..... ...xuG.O=.#.........?.Q)8..D...S.W.4.-#....@7...^.Gk.4.t..C+......6..)}......N..m..o.3...d.,.	...W.....U..
+.%v.....4....m*...A.2I.1.&.*,6+..#..#.5]]></codeblock>
+
+		</section>
+
+		<section>
+			<title>Bootstrapping through DNS SRV (experimental)</title>
+
+			<p>Beginning with Java SDK version 2.1.0 you can get the actual bootstrap node list from a DNS
+				SRV record. The following steps are necessary to make it work:</p>
+
+			<ol>
+				<li>Set up your DNS server to respond properly from a DNS SRV request.</li>
+				<li>Enable it on the SDK and point it towards the DNS SRV entry.</li>
+			</ol>
+
+			<p>Your DNS server should be set up like this (one row for each bootstrap node):</p>
+
+<codeblock><![CDATA[_couchbase._tcp.example.com.  3600  IN  SRV  0  0  0  node1.example.com.
+_couchbase._tcp.example.com.  3600  IN  SRV  0  0  0  node2.example.com.
+_couchbase._tcp.example.com.  3600  IN  SRV  0  0  0  node3.example.com.]]></codeblock>
+
+			<p>Note that ordering and priorities are completely ignored and should not be set on the records to avoid ambiguities. If you plan to use secure connections, you use <codeph>_couchbases</codeph> instead:</p>
+
+<codeblock><![CDATA[_couchbases._tcp.example.com.  3600  IN  SRV  0  0  0  node1.example.com.
+_couchbases._tcp.example.com.  3600  IN  SRV  0  0  0  node2.example.com.
+_couchbases._tcp.example.com.  3600  IN  SRV  0  0  0  node3.example.com.]]></codeblock>			
+
+			<p>Now you need to enable DNS SRV on the environment and pass in the host name from your records
+				(here <codeph>example.com</codeph>):</p>
+
+<codeblock outputclass="language-java"><![CDATA[CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+    .builder()
+    .dnsSrvEnabled(true)
+    .build();
+
+Cluster cluster = CouchbaseCluster.create(env, "example.com");]]></codeblock>
+
+			<p>If the DNS SRV records could not be loaded properly you'll get the exception logged and the
+				given host name will be used as a A record lookup.</p>
+
+<codeblock><![CDATA[WARNING: DNS SRV lookup failed, proceeding with normal bootstrap.
+javax.naming.NameNotFoundException: DNS name not found [response code 3]; 
+   remaining name '_couchbase._tcp.example.com'
+	at com.sun.jndi.dns.DnsClient.checkResponseCode(DnsClient.java:651)
+	at com.sun.jndi.dns.DnsClient.isMatchResponse(DnsClient.java:569)]]></codeblock>
+
+			<p>Also, if you pass in more than one node, DNS SRV bootstrap will not be initiated:</p>
+
+<codeblock><![CDATA[INFO: DNS SRV enabled, but less or more than one seed node given. 
+Proceeding with normal bootstrap.]]></codeblock>
+
+		</section>
+	</conbody>
+</concept>

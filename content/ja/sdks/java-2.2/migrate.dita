@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept xml:lang="en-us" id="concept2677">
+	<title>Migrating from Java SDK 1.4.x to 2.x</title>
+	<shortdesc>Couchbase recommends that you migrate to the Java 2.x SDK to take advantage of
+		enhancements to the SDK as well as new features available in Couchbase Server.</shortdesc>
+	<conbody>
+		<p>The 2.x Java SDK is based on the reactive programming model and has a different architecture
+			that uses a core I/O layer and a Java client layer. It's asynchronous by design and
+			offers performance, scalability, and durability enhancements.</p>
+		<p>This guide helps you migrate from the previous generation of the Java SDK (version
+				<codeph>1.4.x</codeph>) to this new generation SDK (version <codeph>2.x</codeph>).</p>
+		<p>If you plan on using the synchronous blocking API, you can follow the simple migration
+			path. Or, you can follow the optional migration path to fully reactive and asynchronous
+			code by using the asynchronous API, which provides the best performance.</p>
+
+		<p>To get the full benefit of using the asynchronous code with this new generation SDK, you need
+			to understand how to build asynchronous yet expressive code by leveraging the
+				<codeph>Observable</codeph> paradigm. To learn more about using <codeph>Observables</codeph>, see
+				<xref href="observables.dita"/>.</p>
+
+		<section>
+			<title>Getting Started</title>
+
+			<p>The 2.x generation of the Java SDK is a complete rewrite of the 1.x SDK. It is layered
+				into <codeph>core-io</codeph> and <codeph>java-client</codeph> pieces. The
+					<codeph>java-client</codeph> layer is more abstract and closer to the client. The
+					<codeph>core-io</codeph> layer is purely asynchronous and message-oriented. It makes
+				use of a reactive architecture based on <xref href="http://netty.io" format="html"
+					scope="external">Netty</xref>, the <xref
+					href="https://github.com/LMAX-Exchange/disruptor/wiki" format="html" scope="external"
+					>LMAX Disruptor</xref>, and most importantly <xref
+					href="https://github.com/ReactiveX/RxJava" format="html" scope="external"
+					>RxJava</xref>.</p>
+
+			<note type="important">The <codeph>core-io</codeph> layer is not intended for broad consumption.
+				In general, you should focus on using the <codeph>java-client</codeph> layer in your
+				application. For advanced use cases, when you are trying to squeeze out the very
+				last drop of performance working with the raw byte stream or building a client layer
+				in another language, you can use the <codeph>core-io</codeph> layer. </note>
+
+			<p>The client exposes the server-side concepts of a <codeph>Cluster</codeph> and
+					<codeph>Bucket</codeph>s as first-class citizens that replace the previous
+					<codeph>CouchbaseClient</codeph> class. Each class exposes a <b>synchronous</b> API
+				by default, but an <b>asynchronous</b> API (based on RxJava <codeph>Observable</codeph>
+				objects) can be accessed simply by calling <codeph>async()</codeph> on either one.</p>
+
+			<p>This split also allows for much more efficient resource utilization. In the past, each
+					<codeph>CouchbaseClient</codeph> (for each bucket) had its resources, but now
+				they are as shared as much as possible, and the <codeph>Cluster</codeph> and
+					<codeph>Bucket</codeph> references can always be reused.</p>
+
+			<p>The <codeph>Maven</codeph> artifact has been renamed from <codeph>couchbase-client</codeph> to
+				java-client to differentiate this rewrite from the previous generation. It has
+				minimal transitive dependencies (by embedding a few internal dependencies like
+				Netty), most notably RxJava 1.x:</p>
+
+			<codeblock outputclass="language-xml"><![CDATA[<dependencies>
+    <dependency>
+        <groupId>com.couchbase.client</groupId>
+        <artifactId>java-client</artifactId>
+        <version>2.2.8</version>
+    </dependency>
+</dependencies>
+]]></codeblock>
+
+			<p>
+				<note type="important">After you've fully migrated, make sure that old dependencies to
+						<codeph>couchbase-client</codeph> or dependencies introduced in your POM because
+					of the <codeph>couchbase-client</codeph> have been removed.</note>
+			</p>
+
+
+			<p>You'll most probably want the SDK to perform some logging, which can easily be activated
+				by adding a logging framework such as <xref href="http://logging.apache.org/log4j/2.x/"
+					format="html" scope="external">log4j</xref> to your dependencies. For more
+				information about configuring logging, see <xref href="logging.dita" />.</p>
+
+		</section>
+
+		<section>
+			<title>Initializing the connection</title>
+			<p><codeph>CouchbaseClient</codeph> is replaced by the <codeph>Cluster</codeph> and
+					<codeph>Bucket</codeph> classes, bringing real-world concepts of Couchbase into the
+				SDK as first-class citizens. For more information about using these classes, see <xref
+					href="managing-connections.dita" />. </p>
+			<p>Compared to the 1.4.x SDK, when providing a list of nodes for bootstrapping, you only need
+				hostnames or IP addresses in <codeph>String</codeph> form. No need for the URI
+				anymore, and no need for the port and pools path either: </p>
+			<codeblock outputclass="language-java"><![CDATA[Cluster cluster = CouchbaseCluster.create("192.168.0.1");]]></codeblock>
+			<p>The SDK uses the factory method pattern to create the Cluster object. This pattern is
+				heavily used throughout the SDK in place of constructors.</p>
+
+			<p>The <codeph>Cluster</codeph> and each <codeph>Bucket</codeph> reference must be reused as much
+				as possible. Make them singletons, which can be used by multiple threads safely. Here's
+				an example that uses a naive helper approach: </p>
+
+			<codeblock outputclass="language-java"><![CDATA[public class CouchbaseHelper {
+
+    //the IPs / hostnames would be obtained from configuration file
+    private static final List<String> SEED_IPS = Arrays.asList("192.168.0.1", "192.168.0.2");
+
+    public static final Cluster CLUSTER = CouchbaseCluster.create(SEED_IPS);
+
+    public static final Bucket EXAMPLEBUCKET = CLUSTER.openBucket("example", "p4ssW0rd");
+}
+            ]]></codeblock>
+
+			<p>You can customize the connection to the <codeph>Cluster</codeph> via the
+					<codeph>CouchbaseEnvironment</codeph> interface (see <xref href="env-config.dita" />
+				for more details): </p>
+
+			<codeblock outputclass="language-java"><![CDATA[public class CouchbaseHelper {
+
+    //the IPs / hostnames would be obtained from configuration file
+    private static final List<String> SEED_IPS = Arrays.asList("192.168.0.1", "192.168.0.2");
+
+    //the environment configuration
+    private static final CouchbaseEnvironment ENV = DefaultCouchbaseEnvironment.builder()
+        .connectTimeout(8 * 1000) // 8 Seconds in milliseconds
+        .keepAliveInterval(3600 * 1000) // 3600 Seconds in milliseconds
+    .build();
+
+    public static final Cluster CLUSTER = CouchbaseCluster.create(ENV, SEED_IPS);
+
+    public static final Bucket EXAMPLEBUCKET = CLUSTER.openBucket("example", "p4ssW0rd");
+}
+            ]]></codeblock>
+		</section>
+
+		<section>
+			<title>Working With Data</title>
+			<p>In the new SDK, a new model of data within Couchbase was introduced: the
+					<codeph>Document</codeph> class. It encapsulates both the content itself and the
+				metadata ( <codeph>id</codeph>, <codeph>expiry</codeph> and <codeph>cas</codeph>
+				information). See <xref href="documents.dita"/> for additional information. </p>
+			<p>The SDK has several implementations of <codeph>Document</codeph>. By default, most SDK methods
+				assume the content is JSON and return a <codeph>JsonDocument</codeph>. This kind of
+				document use standardized storing flags, which make it compatible with the other
+				second generation SDKs in other languages. If you already deal with JSON transcoding
+				to domain objects, use the <codeph>RawJsonDocument</codeph> instead, which exposes
+				the JSON String as content instead of a superfluous <codeph>JsonObject</codeph>. </p>
+			<note>To interact with documents stored by an older Java SDK, use the
+					<codeph>LegacyDocument</codeph> class. This class provides 1:1 compatibility
+				with the 1.4 SDK, but consider to migrate to a new implementation after backward
+				compatibility isn't required anymore. </note>
+			<p>Concerning optimistic locking—because the CAS is now part of the
+					<codeph>Document</codeph>, the SDK picks it up if it is non-zero during mutating
+				operations. To learn more about mutating operations, see <xref
+					href="documents-updating.dita" />. </p>
+		</section>
+
+		<section>
+			<title>Working Asynchronously</title>
+			<p>In the 2.x SDK, asynchronous processing is done via RxJava. The asynchronous API is not mixed
+				with the synchronous API, but rather accessible via the <codeph>async()</codeph>
+				method on <codeph>Cluster</codeph> and <codeph>Bucket</codeph>. </p>
+
+			<p>The SDK is thread-safe and uses a pool of threads internally for operations (so they are
+				effectively processed in a separate thread). Additionally, some Rx operators use one
+				of the <codeph>Schedulers</codeph> provided by RxJava (meaning it could execute in
+				another thread). </p>
+
+			<p>The SDK doesn't use <codeph>Future</codeph> objects anymore. For progressive migration
+				purposes, you can convert an <codeph>Observable</codeph> into a <codeph>Future</codeph>
+				and vice-versa. Here's an example of how to do that:</p>
+			<codeblock outputclass="language-java"><![CDATA[//converting these to/from Future
+Observable<String> myStringObservable;
+Future<String> myStringFuture;
+
+//this expects exactly one item emitted
+Future<String> f = myStringObservable.toBlocking().toFuture();
+
+//when several items expected, use a List
+Future<List<String>> f = myStringObservable.toList().toBlocking().toFuture();
+
+//convert back from a Future<String>
+Observable<String> o = Observable.from(myStringFuture);
+                ]]></codeblock>
+
+		</section>
+
+	</conbody>
+</concept>

@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_obm_wq1_1t">
+ <title>View operation</title>
+ <shortdesc>MapReduce views are scoped within a design document, with each design document attached to a single bucket. View indexes are eventually consistent compared to the underlying bucket documents in the Data service. View updates can happen automatically.</shortdesc>
+ <conbody>
+  <p>All views within Couchbase Server operate as follows: <ul>
+    <li><b>Views are scoped within a design document, with each design document attached to a single
+      bucket.</b> A view can only access the information within the corresponding bucket and cannot
+     access or aggregate data from multiple buckets. <p>Views are created within design documents
+      and each design document exists within the corresponding named bucket.<ul>
+       <li>Each design document can have 0-n views.</li>
+       <li>Each bucket can contain 0-n design documents.</li>
+      </ul></p></li>
+    <li><b>View indexes are eventually consistent compared to the underlying bucket documents in the
+            Data Service.</b> This means that there might be a delay between the time a document is
+          modified and the time it is indexed. For more information, see <xref href="mapreduce-view-consistency.dita"></xref>.</li>
+    <li><b>View updates can happen automatically.</b> The view engine uses Database Change Protocol
+     (DCP) to track document mutations in memory and uses these mutations to incrementally build the
+     view on disk. Every 5 seconds the view engine checks whether 5000 mutations have occurred or
+     not. If at least 5000 mutations have occurred, an index update operation is started per design
+     document and all views within that design document are updated. The indexer takes all mutations
+     since it was last run and applies them to the index files. <p>The default number of mutations
+      to check for is 5000, but this setting is tunable using the
+       <parmname>updateMinChanges</parmname> option. The update interval can also be configured by
+      setting the <parmname>updateInterval</parmname> option.</p></li>
+   </ul></p>
+  <p>The updates are applied as follows: <ul>
+   <li>For all active, production views, indexes are automatically updated according to the update interval <parmname>updateInterval</parmname> and the number of document changes <parmname>updateMinChanges</parmname>. If <parmname>updateMinChanges</parmname> is set to 0 (zero), then automatic updates are disabled for main indexes.</li>
+   <li>If replica indexes have been configured for a bucket, the index is automatically updated
+     according to the document changes settings (replicaUpdateMinChanges; default 5000). <p>If
+      replicaUpdateMinChanges is set to 0 (zero), then automatic updates are disabled for replica
+      indexes.</p><p>The trigger level can be configured both globally and for individual design
+      documents for all indexes using the REST API.</p><p>To obtain the current view update daemon
+      settings, access a node within the cluster on the administration port using the following URL:
+        <userinput>http://<varname>nodename</varname>:8091/settings/viewUpdateDaemon : GET
+        http://Administrator:<varname>Password</varname>@<varname>nodename</varname>:8091/settings/viewUpdateDaemon</userinput></p><p>The
+      request returns a JSON document with the current update settings:
+      <codeblock>
+   {
+   "updateInterval":5000,
+   "updateMinChanges":5000,
+   "replicaUpdateMinChanges":5000
+   }
+  </codeblock></p>
+     <p>To update the settings, use POST with a data payload that includes the updated values. For
+      example, to update the time interval to 10 seconds and document changes to 7000 each:
+       <userinput>POST http://<varname>nodename</varname>:8091/settings/viewUpdateDaemon
+       updateInterval=10000&amp;updateMinChanges=7000</userinput></p> If successful, the returned
+     value is the JSON of the updated configuration. To configure the
+      <parmname>updateMinChanges</parmname> or <parmname>replicaUpdateMinChanges</parmname> values
+     explicitly on individual design documents, specify the parameters within the options section of
+     the design document. For example:
+     <codeblock>
+      {
+      "_id": "_design/myddoc",
+      "views": {
+      "view1": {
+      "map": "function(doc, meta) { if (doc.value) { emit(doc.value, meta.id);} }"
+      }
+      },
+      "options": {
+      "updateMinChanges": 1000,
+      "replicaUpdateMinChanges": 20000
+      }
+      }
+     </codeblock>
+     You can set this information when creating and updating design documents through the design
+     document REST API. To perform this operation using the curl tool: <userinput>curl -X POST -v -d
+      'updateInterval=7000&amp;updateMinChanges=7000' \
+      'http://Administrator:Password@192.168.0.72:8091/settings/viewUpdateDaemon'</userinput>. 
+    <note>Settings per design document always take precedence over the global settings.</note>
+    </li>
+   <li><b>Views can contain expired documents.</b> Documents that are stored with an expiry are not automatically removed until the background index-compaction process cleans them up.</li>
+   <li><b>View names must be specified using one or more UTF-8 characters.</b> You cannot have a blank view name. View names cannot have leading or trailing white space characters (space, tab, newline, or carriage-return). </li>
+   <li><b>Document IDs that are not UTF-8 encodable are automatically filtered and not included in any view.</b> The filtered documents are logged so that they can be identified.</li>
+   <li>If you have a long view request, use POST instead of GET.</li>
+   <li><b>Views are updated incrementally.</b> The first time a view is indexed, all the documents
+          within the bucket are processed through the map and reduce functions. Each new access to
+          the view only processes the documents that have been added, updated, or deleted, since the
+          last time the view index was updated. <p>In practice, this means that views are entirely
+            incremental in nature. Updates to views are typically quick as they only update changed documents.<ul>
+              <li>Because of the incremental nature of the view update process, information is only
+                appended to the index stored on disk. This helps ensure that the index is updated
+                efficiently. Compaction (including auto-compaction) optimizes the index size on disk
+                and the index structure. An optimized index is more efficient to update and
+                query.</li>
+              <li>The entire view is recreated when the view definition changes. Because this has a
+                detrimental effect on live data, only development views can be modified.</li>
+            </ul></p><p>Views are organized by design document, and indexes are created according to
+            the design document. Changing a single view in a design document with multiple views
+            invalidates all the views (and stored indexes) within the design document, and all the
+            corresponding views defined in that design document must be rebuilt. This increases the
+            I/O across the cluster while the index is rebuilt, in addition to the I/O required for
+            any active production views.<ul>
+              <li>You can choose to update the result set from a view before you query it or after
+                you query. Or you can choose to retrieve the existing result set from a view when
+                you query the view. In this case the results are possibly out of date, or
+                stale.</li>
+              <li>The views engine creates an index for each design document. This index contains
+                the results for all the views within that design document. </li>
+              <li>The index information stored on disk consists of the combination of both the key
+                and value information defined within your view. The key and value data is stored in
+                the index so that the information can be returned as quickly as possible, and so
+                that views that include a reduce function can return the reduced information by
+                extracting that data from the index.</li>
+            </ul></p></li>
+   <li><b>The value and key information from the defined map function are stored in the index.</b> Thus, the overall size of the index can be larger than the stored data if the emitted key/value information is larger than the original source document data.</li>
+   <li><b>Deleted documents may show up in the view.</b> Couchbase Server implements lazy
+          expiration, that is, expired items are flagged as deleted rather than being immediately
+          erased. Couchbase Server has a maintenance process, called <i>expiry pager</i>, that
+          periodically looks through all data and erases expired items. This maintenance process
+          runs every 60 minutes, by default, unless configured to run at a different interval.
+          Expired items are also purged on data access and on compaction. When an item is requested,
+          Couchbase Server removes the item flagged for deletion and provides a response that the
+          item does not exist. <p>The result set from a view <i>will contain</i> any items stored on
+            disk that meet the requirements of your views function. Therefore, expired documents
+            that have not yet been removed from the bucket may appear as part of a result set when
+            you query a view.</p><p>Using Couchbase Server views, you can also run reduce functions
+            on the returned data, which perform calculations or other aggregations of data. For
+            instance, if you want to count the instances of a type of object, use a reduce function.
+            Once again, if an item is in a bucket, it will be included in any calculation performed
+            by your reduce functions. In this case, you may want to run the expiry pager process
+            more frequently to ensure that items that have expired are not included in calculations
+            used in the reduce function. We recommend an interval of 10 minutes for the expiry pager
+            on each node of a cluster. <note>This interval has a small impact on node performance as
+              the expiry pager process will be performing cleanups more frequently on the node.
+            </note></p><p>For more information about setting intervals for the maintenance process,
+            see section "Couchbase command line tool" and review the examples on
+              <cmdname>exp_pager_stime</cmdname>. </p>
+        </li>
+  </ul></p> 
+ </conbody>
+</concept>

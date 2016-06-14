@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_ed2_pth_rq">
+	<title>CREATE PRIMARY INDEX</title>
+	<conbody>
+		<p>The CREATE PRIMARY INDEX statement allows you to create a primary index. Primary indexes
+			contain a full set of keys in a given bucket. Primary indexes are optional and are only
+			required for running ad hoc queries on a bucket that is not supported by a secondary
+			index.</p>
+		<p>CREATE PRIMARY INDEX is by default a synchronous operation. The CREATE PRIMARY INDEX statement
+			blocks until the operation finishes. Index building starts by creating a task that is
+			queued for index build. After this phase, if you lose connectivity, the index build
+			operation continues in the background. You can also run index creation asynchronously by
+			using the <codeph>defer_build</codeph> clause. In the asynchronous mode, CREATE PRIMARY
+			INDEX starts a task to create the primary index and returns as soon as the task is queued
+			for execution. The full index creation operation happens in the background.</p>
+		<p>Both GSI and view indexers provide a status field and mark index status pending. With the
+			GSI indexer, index status continues to report <codeph>pending</codeph>. This status field
+			and other index metadata can be queried by using <codeph>system:indexes</codeph>.</p>
+		<note type="important">
+			<p>Indexes cannot be built concurrently on a given bucket unless the <codeph>defer_build</codeph>
+				option in the CREATE PRIMARY INDEX statement is used in combination with the BUILD INDEX
+				statement. The following error is reported if a second index creation operation is
+				kicked off before the completion of the ongoing index creation.</p>
+			<codeblock>"errors": {"code": 12014, 
+   "msg": "error: Build Already In Progress. Bucket BUCKET_NAME. Index INDEX_NAME. Index state: pending"}</codeblock>
+			<p>You can create multiple primary indexes on a bucket for better index availability and place
+				them on separate nodes by using the <codeph>nodes</codeph> clause.</p>
+		</note>
+		<p>
+			<i>create-primary-index:</i>
+		</p>
+		<codeblock>CREATE PRIMARY INDEX [index_name]
+    ON named_keyspace_ref
+    [USING GSI | VIEW]
+    [WITH {"nodes”: [“node_name”], “defer_build”:true|false}];</codeblock>
+		<p>
+			<i>index_name:</i>
+		</p>
+		<p><codeph>index_name</codeph> is a unique name that identifies the index.
+				<codeph>index_name</codeph> is optional in the case of the primary index and you can
+			have one index that is unnamed.</p>
+		<note type="important">Unnamed primary indexes are dropped by using the DROP PRIMARY INDEX
+			statement, and named primary indexes are dropped by using the DROP INDEX statement.</note>
+		<p>
+			<i>named-keyspace-ref:</i>
+		</p>
+		<codeblock>[ namespace-name :] keyspace-name </codeblock>
+		<p>
+			<i>keyspace-name:</i>
+		</p>
+		<p>identifier that refers to the bucket name. Specifies the bucket as source for which the
+			index needs to be created. You can add an optional namespace name to the keyspace name in
+			this way:</p>
+		<codeblock>namespace-name : keyspace-name</codeblock>
+		<p>For example, <codeph>main:customer</codeph> indicates the <codeph>customer</codeph> keyspace in
+			the main namespace. If the namespace name is omitted, the default namespace in the current
+			session is used.</p>
+		<p>
+			<i>USING GSI | VIEW</i>
+		</p>
+		<p> The USING clause specifies the index type to use. Primary indexes can be created as global
+			secondary indexes (<codeph>GSI</codeph>) or views (<codeph>VIEW</codeph>). If the USING
+			clause is not specified, by default <codeph>GSI</codeph> is used as the indexer.</p>
+		<p>
+			<i>WITH options</i>
+		</p>
+		<p> The <codeph>WITH</codeph> clause specifies additional options for the <codeph>GSI</codeph>
+			type primary indexes.</p>
+		<p>
+			<i>"nodes":["node name"] </i>
+		</p>
+		<p>A single primary index of type <codeph>GSI</codeph> can only be placed on a single node that
+			runs the indexing service. The <codeph>nodes</codeph> option allows you to specify the node
+			that the index is placed on. If <codeph>nodes</codeph> is not specified, one of the nodes
+			running the index service is randomly picked for the index.</p>
+		<p>
+			<i>"defer_build":true|false</i>
+		</p>
+		<p>When <codeph>defer_build</codeph> is set to true, the CREATE PRIMARY INDEX operation queues the
+			task for building the index but immediately pauses the building of the index of type
+				<codeph>GSI</codeph>. Index building requires an expensive scan operation. Deferring
+			building of the index with multiple indexes can optimize the expensive scan operation. You
+			can defer building multiple indexes and, using BUILD INDEX statement, multiple indexes to
+			be built efficiently with one efficient scan of bucket data.</p>
+		<p>When <codeph>defer_build</codeph> is set to <codeph>false</codeph>, the CREATE PRIMARY
+			INDEX operation queues the task for building the index and immediately kicks off the
+			building of the index of type <codeph>GSI</codeph>.</p>
+		<section> Examples<p>The following example creates a primary index on the
+					<parmname>beer-sample</parmname> bucket. After the index creation statement
+				comes back, <codeph>system:indexes</codeph> is queried for the status of the
+				index.</p><codeblock>CREATE PRIMARY INDEX `beer-sample-primary-index` ON `beer-sample` USING GSI;
+SELECT * FROM system:indexes WHERE name="beer-sample-primary-index";</codeblock>The
+			following example creates the same primary index using the <codeph>defer_build</codeph>
+			option coupled with the BUILD INDEX statement. <codeblock>CREATE PRIMARY INDEX `beer-sample-primary-index` ON `beer-sample` USING GSI 
+    WITH {"defer_build":true};
+SELECT * FROM system:indexes WHERE name="beer-sample-primary-index";	</codeblock>
+			<p>With the <codeph>defer_build</codeph> option enabled, the output from
+					<codeph>system:indexes</codeph> shows the
+					<codeph>beer-sample-primary-index</codeph> in the pending state
+					(<codeph>"state": "pending"</codeph>). BUILD INDEX can be used to kick off the
+				deferred build on the primary
+			index:</p><codeblock>BUILD INDEX ON `beer-sample`(`beer-sample-primary-index`) USING GSI;
+SELECT * FROM system:indexes WHERE name="beer-sample-primary-index";</codeblock></section>
+		<section><title>Primary scan timeout</title>
+			<p>For a primary index scan on any keyspace size, the query engine guarantees that the client is not exposed to scan timeout if the indexer throws a scan timeout after it has returned a greater than zero sized subset of primary keys. To complete the scan, the query engine performs successive scans of the primary index until all the primary keys have been returned. It is possible that the indexer throws scan timeout without returning any primary keys, and in this event the query engine returns scan timeout to the client. For example, if the indexer cannot find a snapshot that satisfies the consistency guarantee of the query within the timeout limit, it will timeout without returning any primary keys.  </p>
+			<p>For secondary index scans, the query engine does not handle scan timeout, and returns index scan timeout error to the client. You can handle scan timeout on a secondary index by increasing the indexer timeout setting, or, preferably, defining and using a more selective index. </p>
+		</section>
+
+	</conbody>
+</concept>

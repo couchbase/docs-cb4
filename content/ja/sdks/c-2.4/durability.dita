@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_inc_2js_zr">
+  <title>Durability requirements for mutations</title>
+  <body>
+      <section>
+          <title>Overview</title>
+          <p>To greatly improve performance, normal SDK mutation operations such as store receive a
+				positive reply (meaning that the operation was successful) as soon as the node has
+				managed to store the value in its RAM. The item is then asynchronously written to the
+				disk and sent to any applicable replica servers (in no specific order). </p>
+          <p>While the process of replication and persistence is extremely fast, there is
+				nevertheless a small risk of data loss if the server which received the mutation replies
+				with success, but then immediately afterward goes offline. For some critical mutations,
+				the application may desire to choose to wait until the item has attained a given
+				redundancy before continuing. </p>
+          <p>
+                <i>Durability Requirements</i> provide a means for the user to declare to the
+                library to not continue until a given mutation has been replicated or persisted to a
+                given amount of nodes. </p>
+      </section>
+      <section><title>Durability Requirements</title><p> A durability requirement is a declaration
+				made by the application to the library to wait until the item has been made redundant to
+				some degree. The degree of redundancy is configurable. For example: <ul>
+					<li>Wait until the item is stored on the disk of the master node</li>
+					<li>Wait until the item is propagated to the disk and memory of at least one replica
+						node</li>
+					<li>Wait until the item is propagated to the memory of all nodes</li>
+				</ul> This allows applications to balance their fault-tolerance and performance demands
+				in a manner they see fit </p><p> In the C library, durability operations may be
+				performed by using the <apiname>lcb_durability_poll()</apiname>. To use durability
+				requirements, the CAS of a successful mutation operation (retrieved from its callback)
+				should be placed into an <apiname>lcb_durability_cmd_t</apiname>; additionally, a
+				general setting structure (<apiname>lcb_durability_settings_t</apiname>) should be
+				populated with the persistence and replication requirements.
+				<codeblock outputclass="language-c">lcb_durability_cmd_t cmd, *cmdp = { &amp;cmd };
+lcb_durability_opts_t opts;
+lcb_error_t err;
+
+memset(&amp;opts, 0, sizeof(opts);
+memset(&amp;cmd, 0, sizeof(cmd);
+
+opts.persist_to = 2;
+opts.replicate_to = 1;
+cmd.v.v0.key = resp->v.v0.key;
+cmd.v.v0.nkey = resp->v.v0.nkey;
+cmd.v.v0.cas = resp->v.v0.cas;
+//schedule the command --
+err = lcb_durability_poll(instance, cookie, &amp;opts, &amp;cmdp, 1);
+// error checking omitted --
+// later on, in the callback. resp is now a durability_resp_t* --
+if (resp->v.v0.err == LCB_SUCCESS) {
+     printf("Key was endured!\n");
+} else {
+     printf("Key did not endure in time\n");
+     printf("Replicated to: %u replica nodes\n", resp->v.v0.nreplicated);
+     printf("Persisted to: %u total nodes\n", resp->v.v0.npersisted);
+     printf("Did we persist to master? %u\n", resp->v.v0.persisted_master);
+     printf("Does the key exist in the master's cache? %u\n", resp->v.v0.exists_master);
+     switch (resp->v.v0.err) {
+     case LCB_KEY_EEXISTS:
+         printf("Seems like someone modified the key already...\n");
+         break;
+     case LCB_ETIMEDOUT:
+         printf("Either key does not exist, or the servers are too slow\n");
+         printf("If persisted_master or exists_master is true, then the"
+             "server is simply slow.",
+             "otherwise, the key does not exist\n");
+         break;
+     default:
+         printf("Got other error. This is probably a network error\n");
+         break;
+     }
+ }              </codeblock>
+			</p>Durability requirements are implemented by the client periodically polling the active
+			and replica nodes to retrieve the current status of an item until the status indicates that
+			the given constraints have been satisfied. This means that even if durability fails, it is
+			not a tell-tale indicator that the operation will never persist or replicate to the given
+			nodes, it is merely an indicator that it failed to be replicated or persisted within the
+			given time frame. </section>
+      <section id="lcb_enhanced_dur">
+            <title>Enhanced Durability (Couchbase 4.0)</title>
+            <p>In traditional CAS-based durability, constraints checking is done using the CAS. The
+				CAS is a value that is randomly changes each time the item has been mutated and is
+				intended to be used in compare-and-swap operations (this means that if the local version
+				of the CAS differs from the one on the server, the item has changed). </p>
+            <p>CAS-based durability might sometimes report indeterminate results, specifically in
+				the case of server failover or for highly contended items. Specifically, if the
+				durability polling operation detects a CAS mismatch, it does not know if this mismatch
+				is due the item not having been replicated, or if this is due to a highly contended item
+				being changed since the last mutation. </p>
+            <p>Couchbase 4.0 and later allows the usage of monotonically incrementing sequence
+				numbers (and an additional identifier) that can be used instead of CAS to check the
+				persistence and replication status of a given mutation. Using the sequence number it is
+				possible to distinguish failovers from highly contended items. This additional mutation
+				metadata is abstracted in the library in the form of a new structure called
+					<codeph>lcb_SYNCTOKEN</codeph>.</p>
+            <p> To enable sequence-number based durability, two settings should be enabled. <ul>
+                    <li><option>LCB_CNTL_FETCH_SYNCTOKENS</option>, or
+							<option>fetch_synctokens</option>. <p>This setting enables the server to return
+							sequence information (which is different than CAS) for each operation. Note
+							that this increases the size of each response by 16 bytes. </p>
+					</li>
+                    <li><option>LCB_CNTL_DURABILITY_SYNCTOKENS</option> or
+							<option>dur_synctokens</option>. <p>This allows
+								<apiname>lcb_durability_poll()</apiname> to transparently use this sequence
+							number information (cached internally within the client) rather than CAS values
+							for durability requirement checking. In this mode, CAS values passed are
+							actually ignored. Note that it is still possible to manually pass the sequence
+							information to the <apiname>lcb_durability_poll()</apiname> (the necessary
+							fields are mentioned in the API documentation). This mode also allows existing
+							applications to transparently use enhanced durability.<note>If
+									<codeph>FETCH_SYNCTOKENS</codeph> is enabled <i>and</i> you are
+								performing durability checks across multiple client instances (that is,
+								calling <apiname>lcb_durability_poll()</apiname> on a mutation performed by
+								another client instance), then this setting should either be disabled or the
+									<apiname>lcb_SYNCTOKEN</apiname> object should be explicitly passed to
+								the command structure
+							(<apiname>lcb_durability_cmd_t</apiname>)</note></p><p> This mode is enabled by
+							default if <option>fetch_synctokens</option> is enabled.</p></li>
+                </ul></p>
+        </section>
+        <section>
+            <title>Differences between <apiname>SYNCTOKEN</apiname> and CAS</title>
+            <note>This section explains the differences between <codeph>SYNCTOKEN</codeph> and CAS
+                values. This is written from a higher level architectural perspective. From a
+                programming perspective, both of these values are opaque.</note>
+            <p><codeph>SYNCTOKEN</codeph> values are per-bucket and reflect a given bucket's state
+                moving forward. A given <codeph>SYNCTOKEN</codeph> can be logically <i>greater
+                    then</i> or <i>less than</i> another <codeph>SYNCTOKEN</codeph>. These values
+                are used internally by Couchbase's replication functionality to create checkpoints
+                and determine to which point a bucket has been replicated to a given node.
+                Durability checking works by querying replica nodes about the current
+                    <codeph>SYNCTOKEN</codeph> they contain, and comparing that to the
+                    <codeph>SYNCTOKEN</codeph> value returned from the point at which the given
+                mutation (the one the application wishes to <i>endure</i>), and ensuring the
+                    <codeph>SYNCTOKEN</codeph> value from the replica is at least equal to the state
+                of the given mutation. Note that the relationship between various
+                    <codeph>SYNCTOKEN</codeph> values is abstracted in the library, and for
+                programming purposes, are to be treated as opaque (<codeph>lcb_SYNCTOKEN</codeph>
+                objects themselves are not simple integer values).</p>
+            <p>CAS values on the other hand are bound to specific items and do not have a <i>less
+                    than</i> or <i>greater than</i> relationship to other CAS values. CAS values may
+                only be checked for <i>equality</i>: if an item's CAS value is equal to the CAS
+                value known to the application, then the application may assume the item has not
+                been modified since the last CAS value was retrieved; if the CAS value differs, then
+                the item no longer contains the same value.</p>
+            <p><codeph>SYNCTOKEN</codeph> values are not suited for CAS-like comparisons (checking
+                whether the value is the same or has changed) since the <codeph>SYNCTOKEN</codeph>
+                is modified on each mutation within the bucket. As such, if a
+                    <codeph>SYNCTOKEN</codeph> value is higher on the server than it was when the
+                client performed its last mutation on a given item, it is unknown whether this is
+                because the item has changed, or because another item has changed. Differing CAS
+                values for the same item however guarantee that the item has since been
+                modified.</p>
+            <p>While theoretically speaking, an equal <codeph>SYNCTOKEN</codeph> value is also a
+                positive indicator that an item has <i>not</i> changed, it is not suitable for
+                general purpose use, since the value will change when <i>any</i> item is mutated
+                (not just the one the application is dealing with). CAS values on the other hand are
+                per-item.</p>
+            <p>The following sequence will show a simplified version of how CAS and
+                    <codeph>SYNCTOKEN</codeph> values may change:<table frame="all" rowsep="1"
+                    colsep="1" id="table_mfy_ppm_1s">
+                    <title>Mutation Flow</title>
+                    <tgroup cols="3">
+                        <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+                        <colspec colname="c2" colnum="2" colwidth="1.0*"/>
+                        <colspec colname="newCol3" colnum="3" colwidth="1*"/>
+                        <thead>
+                            <row>
+                                <entry>Action</entry>
+                                <entry>CAS Value</entry>
+                                <entry><codeph>SYNCTOKEN</codeph> Value</entry>
+                            </row>
+                        </thead>
+                        <tbody>
+                            <row>
+                                <entry><codeph>STORE("foo", "first foo value")</codeph></entry>
+                                <entry>589</entry>
+                                <entry>1</entry>
+                            </row>
+                            <row>
+                                <entry><codeph>STORE("bar", "first bar value")</codeph></entry>
+                                <entry>foo=589, bar=943 </entry>
+                                <entry>2</entry>
+                            </row>
+                            <row>
+                                <entry><codeph>STORE("foo", "second foo value")</codeph></entry>
+                                <entry>foo=436, bar=943</entry>
+                                <entry>3</entry>
+                            </row>
+                            <row>
+                                <entry><codeph>STORE("bar", "second bar value")</codeph></entry>
+                                <entry>foo=436, bar=216</entry>
+                                <entry>4</entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table></p>
+        </section>
+  </body>
+</topic>

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_f3j_zsx_yq">
+ <title>Local indexer recovery</title>
+ <shortdesc>The process associated with the local indexer recovery.</shortdesc>
+ <conbody>
+  <p>The local indexer recovery occurs under the following circumstances:</p>
+  <ul>
+   <li>When the indexer needs to roll back data due to KV data loss.</li>
+   <li>When the indexer restarts.</li>
+  </ul>
+  
+   <p>Local indexer recovery process:</p>
+   
+   <ol>
+    <li>Sets status to recovery mode and continues 
+     to listen to messages and put new mutations into the mutation queue.</li>
+    <li>Notifies the index manager that it is in recovery mode.</li>
+    <li>If the index coordinator is in rollback mode, cleans up its state.</li>
+    <li>Computes a proposed restart timestamp.</li>
+    <li>Opens a catch-up connection with each projector and DCP using the proposed restart
+    timestamp.</li>
+    <li>Attempts to restore to a snapshot based on the DCP restart timestamp and the 
+    new failover timestamp. These timestamps are returned from the projector.</li>
+    <li>If the local indexer has indexes that are being backfilled (index loading), 
+     the local indexer opens a new connection with the projector for the backfill traffic.</li>
+    <li>At any time during recovery, the local indexer listens to the index coordinator message
+    regarding new rollback (for example, key-value failover when the local indexer is in
+    recovery).</li>
+    <li>Given the snapshot timestamp, the local indexer asks the index coordinator all the known
+    stability timestamps that are greater than the indexer’s snapshot timestamp. The mutations in
+    the catch-up queue are persisted according to these set of timestamps.</li>
+    <li>The local indexer starts listening to any mutation coming from the main UPR pipe (from the
+    projector). Any new mutations are held in the mutation queue of the local indexer. </li>
+    <li>Upon receiving catch-up mutations, the local indexer puts them into a catch-up queue and
+    maintains a catch-up timestamp to tell the version at the tip of the catch-up queue. The
+    catch-up timestamp is updated whenever a mutation is put onto the catch-up queue.</li>
+    <li>Whenever the local indexer sees the the catch-up timestamp matches the a previous stability
+    timestamp (from the index coordinator), the local indexer writes those mutations to the storage.
+     <note type="note">The local indexer creates snapshots as necessary.</note></li>
+    <li>For each vbucket, once the local indexer sees that largest sequence number in the catch-up
+    queue is equal to the smallest sequence number in the mutation queue, the local indexer sends a
+    message to the projector to terminate the DCP connection for that vBucket.</li>
+    <li>Once all the DCP connections are terminated, the local indexer starts processing the
+    mutation queue.</li>
+    <li>Once the local indexer catches up with the latest stability timestamp, its status is set to
+    normal mode. </li>
+    </ol>
+   
+   <note type="note">If the local indexer dies during recovery, the sequence is re-executed upon restart.</note>
+   
+   
+   
+ </conbody>
+</concept>

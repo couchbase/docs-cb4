@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE topic
+  PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic xml:lang="en-us" id="topic5399">
+	<title>Writing geospatial views</title>
+	<shortdesc>Geospatial views add multidimensional index support to Couchbase. </shortdesc>
+	<body>
+		<p>Spatial support enables you to record geometry data into the bucket and then
+		perform queries that return information based on whether the recorded geometries exist
+		within a given two-dimensional range such as a bounding box. The geometry data can be used
+		in spatial queries and geolocational queries where you want to find entries based on your
+		location or region.</p>
+		
+		<section><title>Adding geometry data</title>
+			<p>Geospatial views support the storage of any geometry information using the GeoJSON
+				specification. The format of the storage of the point data is arbitrary with the
+				geometry type being supported during the view index generation.</p>
+			<p>For example, you can use two-dimensional geometries
+				for storing simple location data. You can add these to your Couchbase documents
+				using any field name. The convention is to use a single field with two-element array
+				with the point location, but you can also use two separate fields or compound
+				structures as it is the view that compiles the information into the geospatial
+				index.</p><p>For example, to populate a bucket with city location information, the
+				document sent to the bucket could be formatted like that
+				below:</p><codeblock><codeph>{
+"loc" : [-122.270833, 37.804444],
+"title" : "Oakland"
+}
+</codeph></codeblock>
+			</section>
+		
+		
+		
+		<section><title>Views and queries</title><p>Geospatial views extensions use the standard Couchbase indexing system to build a two-dimensional
+				index from the point data within the bucket. The format of the index information is
+				based on the GeoJSON specification.</p>
+			<p>To create a geospatial index, use the
+					<codeph>emit()</codeph> function to output a GeoJSON Point value containing the
+				coordinates of the point you are describing. For example, the following function
+				will create a geospatial index on the earlier spatial record
+				example.</p><codeblock><codeph>function(doc, meta)
+{
+  if (doc.loc)
+  {
+     emit(
+          {
+             type: "Point",
+             coordinates: doc.loc,
+          },
+          [meta.id, doc.loc]);
+  }
+}
+</codeph></codeblock><p>The
+				key in the spatial view index can be any valid GeoJSON geometry value, including
+				points, multipoints, linestrings, polygons and geometry collections.</p><p>The view
+					<codeph>map()</codeph> function should be placed into a design document using
+				the <codeph>spatial</codeph> prefix to indicate the nature of the view definition.
+				For example, the following design document includes the above function as the view
+					<codeph>points</codeph></p><codeblock>{
+   "spatial" : {
+      "points" : "function(doc, meta) 
+         { if (doc.loc) 
+            { emit({ type: \"Point\", coordinates: doc.loc}, [meta.id, doc.loc]);}}",
+   }
+}
+</codeblock><p>To
+				execute the geospatial query you use the design document format using the embedded
+				spatial indexing. For example, if the design document is called
+					<codeph>main</codeph> within the bucket <codeph>places</codeph>, the URL will be
+					<codeph>http://localhost:8092/places/_design/main/_spatial/points</codeph>.</p><p>Spatial
+				queries include support for a number of additional arguments to the view request.
+				The full list is provided in the following summary
+				table.</p>
+			
+			
+			<table>
+				<tgroup cols="2">
+					<colspec colname="col1"/>
+					<colspec colname="col2"/>
+					<thead>
+						<row>
+							<entry>Get Spatial Name</entry>
+							<entry>Description</entry>
+						</row>
+					</thead>
+					<tbody>
+						<row>
+							<entry><b>Method</b></entry>
+							<entry><codeph>GET
+									/bucket/_design/design-doc/_spatial/spatial-name</codeph></entry>
+						</row>
+						<row>
+							<entry><b>Request Data</b></entry>
+							<entry>None</entry>
+						</row>
+						<row>
+							<entry><b>Response Data</b></entry>
+							<entry>JSON of the documents returned by the view</entry>
+						</row>
+						<row>
+							<entry><b>Authentication Required</b></entry>
+							<entry>no</entry>
+						</row>
+						<row>
+							<entry/>
+							<entry><b>Query Arguments</b></entry>
+						</row>
+						<row>
+							<entry><codeph>bbox</codeph></entry>
+							<entry>Specify the bounding box for a spatial query</entry>
+						</row>
+						<row>
+							<entry/>
+							<entry><b>Parameters</b> : string; optional</entry>
+						</row>
+						<row>
+							<entry><codeph>limit</codeph></entry>
+							<entry>Limit the number of the returned documents to the specified
+								number</entry>
+						</row>
+						<row>
+							<entry/>
+							<entry><b>Parameters</b> : numeric; optional</entry>
+						</row>
+						<row>
+							<entry><codeph>skip</codeph></entry>
+							<entry>Skip this number of records before starting to return the
+								results</entry>
+						</row>
+						<row>
+							<entry/>
+							<entry><b>Parameters</b> : numeric; optional</entry>
+						</row>
+						<row>
+							<entry><codeph>stale</codeph></entry>
+							<entry>Allow the results from a stale view to be used</entry>
+						</row>
+						<row>
+							<entry/>
+							<entry><b>Parameters</b> : string; optional</entry>
+						</row>
+						<row>
+							<entry/>
+							<entry><b>Supported Values</b></entry>
+						</row>
+						<row>
+							<entry/>
+							<entry><codeph>false</codeph> : Force update of the view index before
+								results are returned</entry>
+						</row>
+						<row>
+							<entry/>
+							<entry><codeph>ok</codeph> : Allow stale views</entry>
+						</row>
+						<row>
+							<entry/>
+							<entry><codeph>update_after</codeph> : Allow stale view, update view
+								after access </entry>
+						</row>
+					</tbody>
+				</tgroup>
+			</table><p>If you do not supply a bounding box, the full data set is returned. When querying a spatial index
+				you can use the bounding box to specify the boundaries of the query lookup on a given
+				value. The specification should be in the form of a comma-separated list of the
+				coordinates to use during the query.</p><p>These coordinates are specified using the GeoJSON format, so the first
+				two numbers are the lower left coordinates, and the last two numbers are the upper
+				right coordinates.</p><p>For example, using the above design
+				document:</p><codeblock><codeph>GET http://localhost:8092/places/_design/main/_spatial/points?bbox=-180,-90,0,0
+Content-Type: application/json
+</codeph></codeblock><p>Returns
+				the following
+				information:</p><codeblock><codeph>{
+    "total_rows": 0,
+    "rows": [
+        {
+            "id": "oakland",
+            "key": [
+                [
+                    -122.270833,
+                    -122.270833
+                ],
+                [
+                    37.804444,
+                    37.804444
+                ]
+            ],
+            "value": [
+                "oakland",
+                [
+                    -122.270833,
+                    37.804444
+                ]
+            ],
+            "geometry": {
+                "coordinates": [
+                    -122.270833,
+                    37.804444
+                ],
+                "type": "Point"
+            }
+        }
+    ]
+}
+</codeph></codeblock><note type="note">The return data includes the value specified in the design document view
+				function, and the bounding box of each individual matching document. If the spatial
+				index includes the <codeph>bbox</codeph> bounding box property as part of the
+				specification, then this information will be output in place of the automatically
+				calculated version.</note></section>
+	</body>
+	
+</topic>

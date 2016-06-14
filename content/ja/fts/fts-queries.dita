@@ -1,0 +1,286 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_q2x_tl4_1v">
+  <title>Queries</title>
+  <body>
+   <p><b>Queries Using the Web Console</b></p>
+   <p>Once you have created a full text index, you can search it using the Couchbase Server Web
+                Console (<filepath>http://<varname>your-Couchbase</varname>:8091</filepath>). Go to
+                    <uicontrol>Indexes</uicontrol> > <uicontrol>Full Text</uicontrol>. Select your
+                index from the dropdown and then enter your query using the <xref
+                    href="fts-query-types.dita#topic_jfq_fn4_1v/query-string-query-syntax">query
+                    string syntax</xref>. </p>
+      <p><b>Queries Using the REST API</b></p>
+      <p>You can also use the REST API to perform queries. The easiest way to get started is to
+            perform a query using the Web Console. Then, click the “<uicontrol>Advanced</uicontrol>”
+            checkbox. You will see the JSON payload to pass to the REST API. Click the nearby
+            checkbox to get the CURL command. See the <xref
+                href="../rest-api/rest-fts.dita#topic_ytp_sx4_1v">REST reference</xref> for more
+            information.
+            <codeblock spectitle="Example CURL command to query the index 'beer-idx'">curl -X POST -H "Content-Type: application/json" \
+http://127.0.0.1:8094/api/index/beer-idx/query \
+-d '{
+        "indexName": "beer-idx",
+        "size": 10,
+        "from": 0,
+        "explain": true,
+        "highlight": {},
+        "query": {
+            "boost": 1,
+            "query": "geo.accuracy:rooftop"
+        },
+        "fields": [
+            "*"
+        ],
+        "ctl": {
+            "consistency": {
+                "level": "",
+                "vectors": {}
+            },
+            "timeout": 0
+        }
+    }'</codeblock></p>
+      
+      <section><title>Query Response</title>
+          <p>The response object contains the result of a full text query. It consists of the following objects. For more information, see Response Object Schema. </p><dl>
+              <dlentry>
+                  <dt>Status</dt>
+                  <dd>The status object returns the number of successful and failed pindex queries. This information is useful as you can choose to use partial results depending on your application use case. <p>We recommend that you check the status object for failures rather than rely on the HTTP response codes alone. For example,FTS returns an HTTP 200 response in case of pindex failures or timeouts (not consistency timeouts). This is done so that you can choose to accept partial results in an application. However, this also means FTS returns an HTTP 200 response even when ALL pindexes fail. </p></dd>
+              </dlentry>
+              <dlentry>
+                  <dt>Request</dt>
+                  <dd>The request object stores a copy of the query that was executed and other details from the request that generated this response object, for example the number of results requested (size), the offset, highlighting, and so on. </dd>
+              </dlentry>
+              <dlentry>
+                  <dt>Hits</dt>
+                  <dd>Hits returns an array containing the matches for the executed query. The length of the array is equal to or less than the size specified in the request. </dd>
+              </dlentry>
+              <dlentry>
+                  <dt>Facets</dt>
+                  <dd>Facets return an object that contains aggregated information about the
+                        documents that match a query. There are three types of queries: Numeric
+                        Range Facet, DateTime Range Facets, and Terms Facets. For more information,
+                        see <xref href="#topic_q2x_tl4_1v/search-facets" format="dita"/>.</dd>
+              </dlentry>
+              <dlentry>
+                  <dt>Total_hits</dt>
+                  <dd>Total hits represents the total number of matches for this result. It can be any integer starting from 0.</dd>
+              </dlentry>
+              <dlentry>
+                  <dt>Max_score</dt>
+                  <dd>Max score represents the highest score of all documents for this query.</dd>
+              </dlentry>
+              <dlentry>
+                  <dt>Took</dt>
+                  <dd>Time taken to complete the query. </dd>
+              </dlentry>
+          </dl>
+          
+          <p><b>Response Headers</b></p>
+          <p>The response headers can contain the following information: <table frame="all"
+                    rowsep="1" colsep="1" id="table_wcx_nw1_4v">
+                    <title>Response Headers</title>
+                    <tgroup cols="3" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+                        <colspec colname="c2" colnum="2" colwidth="1.0*"/>
+                        <colspec colname="c3" colnum="3" colwidth="1.0*"/>
+                        <thead>
+                            <row>
+                                <entry>Code</entry>
+                                <entry>Example</entry>
+                                <entry>Valid Return Codes</entry>
+                            </row>
+                        </thead>
+                        <tbody>
+                            <row>
+                                <entry>Status</entry>
+                                <entry>HTTP/1.1 200 OK</entry>
+                                <entry>200 OK<p>400 Bad Request, returned if the query is invalid
+                                        due to malformed JSON or invalid consistency
+                                        request.</p><p>412 if timeout occurs before the requested
+                                        consistency requirements are met.</p>
+                                    <p>For a complete list of status codes and information on how to
+                                        interpret them, see <xref
+                                            href="fts-response-object-schema.dita#topic_uvg_4x1_4v/handling-response-status"
+                                        >Understanding the Query Response Status</xref>.</p></entry>
+                            </row>
+                            <row>
+                                <entry>Cache-Control</entry>
+                                <entry>no-cache</entry>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry>Content-Type</entry>
+                                <entry>application/json; version=1.0.0</entry>
+                                <entry>The API version information is included in this field unless
+                                    the response is HTTP 400, in which case the response will be
+                                    "text/plain: charset=utf-8"</entry>
+                            </row>
+                            <row>
+                                <entry>Date</entry>
+                                <entry>Tue, 22 Mar 2016 19:28:57 GMT</entry>
+                                <entry>Date of the response</entry>
+                            </row>
+                            <row>
+                                <entry>Transfer-Encoding</entry>
+                                <entry>chunked</entry>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry>X-Content-Type-Options</entry>
+                                <entry>nosniff</entry>
+                                <entry>Value “<xref
+                                        href="https://blogs.msdn.microsoft.com/ie/2008/09/02/ie8-security-part-vi-beta-2-update/"
+                                        format="html" scope="external">nosniff</xref>” is returned
+                                    in case of a bad request (400 or 412) in order to deter driveby
+                                    downloads.</entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table></p>
+          
+          <p><b>Query Counts</b></p>
+          <p>All queries return a result count. To get just the count of documents that match a
+                particular query without returning documents or ids, execute the query as usual but
+                specify size “<userinput>0</userinput>” to return no results, as in the following
+                example:
+                <codeblock>curl -X POST -H "Content-Type: application/json" \
+                  http://127.0.0.1:8094/api/index/beer-idx/query \
+                  -d '{
+                  "indexName": "beer-idx",
+                  "size": 0,
+                  "from": 0,
+                  "explain": true,
+                  "highlight": {},
+                  "query": {
+                  "boost": 1,
+                  "query": "geo.accuracy:rooftop"
+                  },
+                  "fields": [
+                  "*"
+                  ],
+                  "ctl": {
+                  "consistency": {
+                  "level": "",
+                  "vectors": {}
+                  },
+                  "timeout": 0
+                  }
+                  }'</codeblock></p>
+          <p>You can get a count of entries in an index overall by using the REST API:
+                <codeblock>http://localhost:8094/api/index/beer-idx/count</codeblock></p>
+      </section>
+      
+      <section><title>Types of Queries</title>
+         <p>See <xref href="fts-query-types.dita"></xref> for details.</p> 
+      </section>
+      <section id="search-facets"><title>Search Facets</title>
+          <p>Facets are aggregate information collected on a particular result set. So, you have to
+              already have a search in mind, and then you collect additional facet information along with
+              it. All of the facet examples below are for the query "<codeph>water</codeph>" on the
+              beer-sample dataset.</p>
+          <p>FTS supports 3 types of facets: <ul>
+              <li>Term Facet - A term facet counts up how many of the matching documents have a particular
+                  term in a particular field. Most of the time this only makes sense for relatively low
+                  cardinality fields, like a type or tags. It would not make sense to use it on a unique
+                  field like an ID.</li>
+              <li>Numeric Range Facet - A numeric range facet works by the user defining their own buckets
+                  (numeric ranges). The facet then counts how many of the matching documents fall into a
+                  particular bucket for a particular field.</li>
+              <li>Date Range Facet - same as numeric, but on dates instead of numbers <note>For Developer
+                  Preview, Date Range Facets are not supported.</note></li>
+          </ul><note>Most of the time, when building a term facet you want to use the keyword analyzer.
+              Otherwise multi-term values get tokenized and the results are not what you
+              expect.</note></p>
+          <p><b>Examples</b></p>
+              <ol>
+                  <li>Term Facet - computes facet on the type field which has 2 values:
+                        <codeph>beer</codeph> and <codeph>brewery</codeph>.
+                    <codeblock>curl -X POST -H "Content-Type: application/json" \
+                          http://localhost:8094/api/index/bix/query \
+                          -d '{
+                          "size": 10,
+                          "query": {
+                          "boost": 1,
+                          "query": "water"
+                          },
+                          "facets": {
+                          "type": {
+                          "size": 5,
+                          "field": "type"
+                          }
+                          }
+                          }'</codeblock>
+                    The result snippet below only shows the facet section for clarity. Run the curl
+                    command to see the HTTP response containing the full results.
+                    <codeblock>"facets": {
+                          "type": {
+                          "field": "type",
+                          "total": 91,
+                          "missing": 0,
+                          "other": 0,
+                          "terms": [
+                          {
+                          "term": "beer",
+                          "count": 70
+                          },
+                          {
+                          "term": "brewery",
+                          "count": 21
+                          }
+                          ]
+                          }
+                          }</codeblock></li>
+                  <li>Numeric Range Facet - computes facet on the <codeph>abv</codeph> field with 2
+                    buckets describing <codeph>high</codeph> (greater than 7) and
+                        <codeph>low</codeph> (less than 7).
+                    <codeblock>curl -X POST -H "Content-Type: application/json" \
+                          http://localhost:8094/api/index/bix/query \
+                          -d '{
+                          "size": 10,
+                          "query": {
+                          "boost": 1,
+                          "query": "water"
+                          },
+                          "facets": {
+                          "abv": {
+                          "size": 5,
+                          "field": "abv",
+                          "numeric_ranges": [
+                          {
+                          "name": "high",
+                          "max": 7
+                          },
+                          {
+                          "name": "low",
+                          "min": 7
+                          }
+                          ]
+                          }
+                          }
+                          }'</codeblock>
+                    Results:
+                    <codeblock>facets": {
+                          "abv": {
+                          "field": "abv",
+                          "total": 70,
+                          "missing": 21,
+                          "other": 0,
+                          "numeric_ranges": [
+                          {
+                          "name": "high",
+                          "max": 7,
+                          "count": 57
+                          },
+                          {
+                          "name": "low",
+                          "min": 7,
+                          "count": 13
+                          }
+                          ]
+                          }
+                          }</codeblock></li>
+              </ol>
+      </section>
+      </body>
+</topic>

@@ -1,0 +1,827 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_bzd_zwr_w5">
+  <title>cbq: The Command Line Shell for N1QL</title>
+  <shortdesc><cmdname>cbq</cmdname> is a comprehensive new command line shell for N1QL. It is a powerful, developer friendly tool that enables you to query and update data from Couchbase Server.</shortdesc>
+  <body><p>At a high level the <cmdname>cbq</cmdname> shell provides following capabilities: <ul>
+        <li><xref href="#topic_bzd_zwr_w5/cbq-connection-mgmt" format="dita">Connection
+            Management</xref> - provides commands to manage connections between the
+          <cmdname>cbq</cmdname> shell and the cluster or query node directly.</li>
+        <li><xref href="#topic_bzd_zwr_w5/cbq-session-mgmt" format="dita">Security</xref> - supports
+          self-signed certificates for encrypting communication between clusters.</li>
+        <li><xref href="#topic_bzd_zwr_w5/cbq-scripting-support" format="dita">Scripting
+            Support</xref> - provides commands to interpret and run single or multiple commands on
+          the shell. </li>
+        <li><xref href="#topic_bzd_zwr_w5/cbq-query-mgmt" format="dita">Query Management</xref> -
+          provides commands to monitor and profile queries. </li>
+        <li><xref href="#topic_bzd_zwr_w5/cbq-session-mgmt" format="dita">Session Management</xref>
+          - provides commands to set preferences and manage different shell sessions. The cbq shell
+          provides the unique capability to store aliases for commands that are executed repeatedly
+          or for complex queries. It also provides the ability to define positional parameters,
+          which when used with the alias command is very useful and a powerful feature for
+          developers.</li>
+      </ul></p>
+    <section id="cbq-connection-mgmt"><title>Connection Management</title>
+      <p>These commands help manage the connection between the cbq shell and the query service or Couchbase cluster endpoint. </p><dl>
+        <dlentry>
+          <dt>Managing Connections to the Cluster or Query Node</dt>
+          <dd>You can connect the cbq shell to Couchbase Server either through the query service or
+            through the cluster endpoint. There are two ways to establish a connection: <ul>
+              <li>Using an option on startup:
+                <codeblock>-e &lt;<varname>url to query engine or Couchbase cluster</varname>&gt;
+--engine=&lt;<varname>url to query engine or Couchbase cluster</varname>&gt;</codeblock></li>
+              <li>Using a shell command:
+                <codeblock>cbq> \CONNECT <varname>url</varname>;</codeblock></li>
+            </ul><p>The <varname>url</varname> is made up of two components: the URL and a port
+              number. The URL can be any valid IP address or URL. The URL is optional and if it is
+              not specified, the default URL <codeph>http://localhost:8091</codeph> is used. An
+              error is thrown if the URL is invalid. </p><p>When connecting to the query service,
+              use the query port 8093. When connecting to the cluster endpoint, use the admin port
+              8091.</p><p>You can close the connection with an existing node or cluster without
+              exiting the shell at any given time during the session using the
+                <cmdname>\DISCONNECT;</cmdname> command. If the shell is not connected to any
+              endpoint, an error with a message that the shell is not connected to any instance is
+              thrown.
+            </p><codeblock spectitle="Examples">./cbq -e=http://localhost:8091;
+Connected to : http://localhost:8091/. Type Ctrl-D to exit.
+
+cbq> \DISCONNECT;
+Couchbase query shell not connected to any endpoint. Use \CONNECT command to connect.                   
+
+cbq> \CONNECT http://127.0.0.1:8091;
+Connected to : http://127.0.0.1:8091 . Type Ctrl-D / \exit / \quit to exit.
+
+cbq> \EXIT;
+Exiting the shell.
+
+$./cbq -e=http://127.0.0.1:8091;
+Connected to : http://127.0.0.1:8091/. Type Ctrl-D to exit.
+cbq></codeblock></dd>
+        </dlentry> 
+        <dlentry>
+          <dt>Bringing Up an Unconnected Instance</dt>
+          <dd>You can bring up the shell without connecting to any query service or cluster endpoint
+            by using the <option>-ne</option> or <option>--no-engine</option> option. After starting
+            cbq without any service, you can connect to a specific endpoint using the
+              <cmdname>CONNECT</cmdname> command.
+            <codeblock spectitle="Example">$ ./cbq -ne
+cbq> \CONNECT http://127.0.0.1:8091;
+Connected to : http://127.0.0.1:8091 . Type Ctrl-D / \exit / \quit to exit.</codeblock></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Exiting the cbq Shell</dt>
+          <dd>You can exit the cbq shell using one of the following commands:
+              <codeblock>\EXIT; | \QUIT; | Ctrl-D </codeblock><p>When you run the exit command, the
+              cbq shell first saves the history, closes existing connections, saves the current
+              session in a session file, resets all environment variables, and then closes the shell
+              liner
+            interface.</p><codeblock spectitle="Example">$ ./cbq
+No Input Credentials. In order to connect to a server with authentication, please provide credentials.
+Connected to : http://localhost:8091/. Type Ctrl-D to exit.
+
+cbq> select name from `travel-sample` WHERE type="airline"  LIMIT 1;
+{
+    "requestID": "3a86dcf2-3bb4-445c-b419-a5eabd327a1d",
+    "signature": {
+        "name": "json"
+    },
+    "results": [
+        {
+            "name": "40-Mile Air"
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "20.564ms",
+        "executionTime": "20.539035ms",
+        "resultCount": 1,
+        "resultSize": 45
+    }
+}
+
+cbq> \EXIT;
+Exiting the shell.
+$</codeblock></dd>
+        </dlentry>
+      </dl>
+    </section>
+    <section id="cbq-security-mgmt"><title>Security Management</title>
+      <p>The cbq shell supports self-signed certificates for encrypting communication between
+        clusters. </p>
+      <p> <b>Providing Multiple Credentials for Authorization</b></p>
+      <p>Using the cbq shell, you can set the credentials for different users on startup or by using
+        the SET shell commands to set the credentials query parameter. You can also use this to
+        provide authentication credentials for multiple SASL buckets per session. Depending on the
+        type of credential being set, there are multiple possible values for the credentials query
+        parameter. </p>
+      <p>To set the credentials for different users on startup, use one of the following options:
+        <codeblock>-c=<varname>list-of-creds</varname>
+--credentials=<varname>list-of-creds</varname></codeblock>
+        The <varname>list-of-creds</varname> can take either one or multiple credentials. The
+        credentials consist of an identity and a password separated by a colon ":". To specify
+        multiple credentials, append all the user names and passwords to the same credentials array.
+        For example: <codeblock>-c=beer-sample:pwd1,travel-sample:pwd2</codeblock></p>
+      <p>You can pass a single user name credential to the cbq shell on startup:
+        <codeblock>-u=<varname>username</varname>
+--user=<varname>username</varname></codeblock>The
+        shell then prompts you for a password. You can also provide a single password credential.
+        Note that you can use this option only when the -u option is used.
+        <codeblock>-p=<varname>password</varname>
+--password=<varname>password</varname></codeblock><codeblock spectitle="Example">$ ./cbq -u=Administrator
+Enter Password: 
+Connected to : http://localhost:8091/. Type Ctrl-D to exit.</codeblock></p>
+      <p>The query REST API defines two types of credentials: local per bucket and admin. You can
+        provide the credential types using the SET command. </p>
+      <note>The credentials are set for the shell session and not on a per query basis. You can use
+        the SET, PUSH, POP and UNSET commands to reset the credentials during a session.</note>
+      <p>To pass authentication credentials per query, set the query parameter to a new value using
+        the SET shell command before executing the query.</p>
+      <p>You can also switch between users and change credentials during a session. To do so, set
+        the <parmname>-creds</parmname> query parameter for the session using the following command:
+        <codeblock>\SET -creds beer-sample:b1, session:s1;</codeblock></p>
+      
+      <p><b>Passing Credentials Using Query REST API</b></p>
+      <p>You can use query REST API to pass credentials from clients. </p>
+      <p>For SASL buckets, you can pass the credentials
+        as:<codeblock>[
+  {
+    "user":"beer-sample",     
+    "pass”:"password"
+  }  
+]</codeblock></p>
+      <p>If you are using the Administrator credentials:
+        <codeblock>[
+        {
+        "user":"Administrator",     
+        "pass”:"password"
+        }  
+]</codeblock></p>
+      <p>For multiple SASL protected buckets, you can pass an array of authentication credentials:
+        <codeblock>[
+        {
+        "user":"beer-sample",     
+        "pass”:"password1"
+        },
+        {
+        "user":"travel-sample",     
+        "pass”:"password2"
+        }
+]</codeblock></p>
+      <p><b>Displaying the Credentials</b></p>
+      <p>You can display the credentials for the current session using the ECHO shell command. This
+        command displays only the user names (and not the passwords).
+        <codeblock>cbq> \ECHO -creds;
+        
+Administrator:*  </codeblock></p>
+      <p>You can also display a full list of variables using the SET command specified without any
+        arguments.
+        <codeblock>cbq> \SET;
+Query Parameters :: 
+Parameter name : timeout Value  ["3ms" "4s"]
+
+Named Parameters :: 
+Parameter name : r Value  [9.5 9.5]
+
+User Defined Session Parameters :: 
+
+Predefined Session Parameters :: 
+Parameter name : histfile Value  [".cbq_history"]</codeblock></p>
+    </section>
+    <section id="cbq-session-mgmt"><title>Session Management</title>
+      <p>The session management commands enable you to set user preferences and manage different shell sessions.</p><dl>
+        <dlentry>
+          <dt>Parameter Configuration</dt>
+          <dd>When using parameters, you can set a stack of values for each parameter. You can
+            either push a new value onto the stack using the PUSH command, or set the current value
+            for a parameter using the SET command. The SET command always modifies the top of a
+            variable's stack while the PUSH command adds to the stack. When you use PUSH with no
+            arguments, it copies the top element of every parameter's (except the predefined
+            parameters) stack and pushes that copy to the top of its respective stack. As a result,
+            each stack grows by 1, but the values are preserved. You can then use the SET command to
+            modify the top value. <p>To unset the values from a parameter's stack, you can use the
+              UNSET command to remove all the values from the stack and delete the corresponding
+              parameter stack. However, if you want to delete a single value from the settings, use
+              the POP command. When you use the POP command with no arguments, it pops the one value
+              from the top of each parameter's stack. </p><p><b>Setting Variable Values</b></p>Each
+            variable has a separate stack associated with it and the <varname>prefix</varname>
+            <varname>name</varname> argument helps distinguish between the stacks. <p>The SET
+              command always modifies the top value of a variable. You can use the SET command to
+              set different kinds of parameters: query parameter, predefined session variables,
+              user-defined session variables and named parameters.
+              <codeblock>\SET &lt;<varname>prefix</varname>>&lt;<varname>name</varname>> <varname>value</varname>;</codeblock></p><p>where
+                <varname>name</varname> is the name of the parameter, <varname>value</varname> is
+              the value to be set, and <varname>prefix</varname> is one of the following depending
+              on the parameter type. </p><p>You can use the <cmdname>cbq</cmdname> shell to set all
+              the REST API settings by specifying the settings as query parameters prefixed by '-'.
+                <table frame="all" rowsep="1" colsep="1" id="table_ltk_c5s_5v">
+                <title>Prefixes for Parameters</title>
+                <tgroup cols="2">
+                  <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+                  <colspec colname="c2" colnum="2" colwidth="2.5*"/>
+                  <thead>
+                    <row>
+                      <entry>Prefix</entry>
+                      <entry>Parameter Type</entry>
+                    </row>
+                  </thead>
+                  <tbody>
+                    <row>
+                      <entry>- </entry>
+                      <entry>Query parameter</entry>
+                    </row>
+                    <row>
+                      <entry>-$</entry>
+                      <entry>Named parameters</entry>
+                    </row>
+                    <row>
+                      <entry>No prefix</entry>
+                      <entry>Predefined (built-in) session variable</entry>
+                    </row>
+                    <row>
+                      <entry>$</entry>
+                      <entry>User defined session variable</entry>
+                    </row>
+                  </tbody>
+                </tgroup>
+              </table></p><note>Positional parameters are set using the <parmname>-args</parmname>
+              query parameter.</note><p>
+              <codeblock spectitle="Examples">cbq> \SET -$airport "SJC";
+cbq> \PUSH -args ["LAX", 6];
+cbq> \SET;
+Query Parameters :: 
+Parameter name : args Value  [["LAX",6]]
+
+Named Parameters :: 
+Parameter name : airport Value  ["SJC"]
+
+User Defined Session Parameters :: 
+
+Predefined Session Parameters :: 
+Parameter name : histfile Value  [".cbq_history"]
+
+cbq> \PUSH -$airport "SFO";
+cbq> \PUSH;
+cbq> \SET;
+Query Parameters :: 
+Parameter name : args Value  [["LAX",6] ["LAX",6]]
+
+Named Parameters :: 
+Parameter name : airport Value  ["SJC" "SFO" "SFO"]
+
+User Defined Session Parameters :: 
+
+Predefined Session Parameters :: 
+Parameter name : histfile Value  [".cbq_history"]
+
+cbq> \SET -args ["SFO", 8];
+cbq> \SET;
+Query Parameters :: 
+Parameter name : args Value  [["LAX",6] ["SFO",8]]
+
+Named Parameters :: 
+Parameter name : airport Value  ["SJC" "SFO" "SFO"]
+
+User Defined Session Parameters :: 
+
+Predefined Session Parameters :: 
+Parameter name : histfile Value  [".cbq_history"]
+
+cbq> \POP;
+cbq> \SET;
+Query Parameters :: 
+Parameter name : args Value  [["LAX",6]]
+
+Named Parameters :: 
+Parameter name : airport Value  ["SJC" "SFO"]
+
+User Defined Session Parameters :: 
+
+Predefined Session Parameters :: 
+Parameter name : histfile Value  [".cbq_history"]
+
+cbq> \POP -$airport;
+cbq> \SET;
+Query Parameters :: 
+Parameter name : args Value  [["LAX",6]]
+
+Named Parameters :: 
+Parameter name : airport Value  ["SJC"]
+
+User Defined Session Parameters :: 
+
+Predefined Session Parameters :: 
+Parameter name : histfile Value  [".cbq_history"]
+
+cbq> \UNSET -$airport;
+cbq> \SET;
+Query Parameters :: 
+Parameter name : args Value  [["LAX",6]]
+
+Named Parameters :: 
+
+User Defined Session Parameters :: 
+
+Predefined Session Parameters :: 
+Parameter name : histfile Value  [".cbq_history"]</codeblock>
+            </p><p>To display all the parameters defined in a session, use the SET command with no
+              arguments.
+              <codeblock>cbq> \SET;
+Query Parameters :: 
+Parameter name : timeout Value  ["100m"]
+
+Named Parameters :: 
+Parameter name : r Value  [9.5]
+
+User Defined Session Parameters :: 
+
+Predefined Session Parameters :: 
+Parameter name : histfile Value  [".cbq_history"]</codeblock></p><p>The
+              following table lists the available predefined session variables. <table frame="all"
+                rowsep="1" colsep="1" id="table_p4d_pvs_5v">
+                <title>Prefixes for Parameters</title>
+                <tgroup cols="3">
+                  <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+                  <colspec colname="c2" colnum="2" colwidth="1.0*"/>
+                  <colspec colname="c3" colnum="3" colwidth="2.0*"/>
+                  <thead>
+                    <row>
+                      <entry>Variable Name</entry>
+                      <entry>Possible Values</entry>
+                      <entry>Description</entry>
+                    </row>
+                  </thead>
+                  <tbody>
+                    <!--<row>
+                      <entry>WORDWRAP</entry>
+                      <entry>True or False</entry>
+                      <entry>Specifies whether to use multiline mode or not. <p>Default:
+                        true</p></entry>
+                    </row>-->
+                    <row>
+                      <entry>HISTFILE</entry>
+                      <entry>Valid file name</entry>
+                      <entry>Specifies the file name to store the command history. By default the
+                        file is saved in the user's home
+                            directory.<p>Default:<filepath>.cbq_history</filepath></p></entry>
+                    </row>
+                  </tbody>
+                </tgroup>
+              </table></p><p><b>Resetting Variable Values</b></p><p>You can reset the value of a
+              variable by either popping it or deleting it altogether. To pop the top of a
+              parameter's stack use:
+              <codeblock>cbq>\POP &lt;<varname>prefix</varname>>&lt;<varname>name</varname>>;</codeblock>
+              To pop the top of every parameter's stack once, use the POP command without any
+              arguments: <codeblock>cbq>\POP;</codeblock></p><p>To pop all the values of a
+              parameter's stack and then delete the parameter, use:
+              <codeblock>cbq> \UNSET &lt;<varname>prefix</varname>>&lt;<varname>name</varname>>;</codeblock></p></dd>
+        </dlentry>
+        <dlentry>
+          <dt>ECHO: Displaying Values of Parameters and More</dt>
+          <dd>The ECHO command displays the current values of the parameters set for a session. You
+            can use it to display any input string or command aliases that have been created using
+            the ALIAS shell command. To display parameters, you must include their prefixes. If not,
+            the shell considers the parameters as generic statements and displays the parameter as
+            is. <codeblock>\ECHO <varname>input</varname> ... ;</codeblock>where
+              <varname>input</varname> can be a parameter with prefix
+              (<varname>&lt;prefix>&lt;parameter-name></varname>), an alias
+              (\\<varname>command-alias</varname>), a N1QL statement, or a string.
+            <codeblock spectitle="Examples">cbq> \ECHO hello;
+hello 
+
+cbq> \ECHO \\travel-alias1;
+SELECT * from `travel-sample` LIMIT 1 
+            
+cbq> \ECHO -$r;
+9.5 </codeblock></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Command Alias</dt>
+          <dd>Using the ALIAS shell command, you can define and store aliases for commands. This is
+            useful when you have lengthy queries that need to be executed often. Run the following
+            command to define an alias:
+            <codeblock>\ALIAS <varname>command-alias</varname> <varname>command</varname></codeblock><codeblock spectitle="Example">cbq> \ALIAS travel-alias1 SELECT * from `travel-sample` LIMIT 1;</codeblock>To
+            run the command alias, use <codeph>\\<varname>command-alias</varname></codeph>.
+            <codeblock spectitle="Example">cbq> \\travel-alias1;
+
+{
+    "requestID": "01f25f87-bd6c-4686-8852-ab81795290d1",
+    "signature": {
+        "*": "*"
+    },
+    "results": [
+        {
+            "travel-sample": {
+                "callsign": "MILE-AIR",
+                "country": "United States",
+                "iata": "Q5",
+                "icao": "MLA",
+                "id": 10,
+                "name": "40-Mile Air",
+                "type": "airline"
+            }
+        }
+    ],
+    "status": "success",
+    ...
+}</codeblock>
+            To list all the existing aliases, use:
+              <codeblock>\ALIAS;</codeblock><codeblock spectitle="Example">cbq> \ALIAS;
+serverversion  select version()
+travel-alias1  SELECT * from `travel-sample` LIMIT 1</codeblock><p>You
+              can delete a defined alias using the \UNLIAS
+              command.<codeblock>\UNALIAS alias-name ... ;</codeblock><codeblock>cbq> \UNALIAS serverversion travel-alias1;
+
+/* Check existing aliases */
+cbq> \ALIAS;
+ ERROR 141 : Alias does not exist :</codeblock>This
+              command can take multiple arguments and deletes the defined alias for every input
+              name.</p></dd>
+        </dlentry>
+        <dlentry>
+          <dt>History</dt>
+          <dd>The <cmdname>cbq</cmdname> shell stores the history for every session. All the
+            commands executed in a session are stored in history. By default, history is stored in
+              <filepath>~/.cbq_history</filepath>. You can change the name of the file using the SET
+            command to set the predefined parameter <varname>HISTFILE</varname>.
+            <codeblock>\SET HISTFILE <varname>filename</varname>;</codeblock> By default, all the
+            commands are stored in the specified file. You can scroll through history and retrieve
+            the commands from history using the scrolling arrow keys. Once the query is on the
+            command prompt, you can edit it before executing the updated query. </dd>
+        </dlentry>
+        <dlentry>
+          <dt>Exit Status</dt>
+          <dd>The cbq shell returns the exit status 0 for successful exit with no errors and 1 if an
+            error was encountered before exiting.</dd>
+        </dlentry>
+        <!--<dlentry>
+          <dt>Extending the cbq Shell Command Set</dt>
+          <dd>The clean design of the cbq shell allows the command set to be extensible. The
+            following is the interface design. All commands can implement these methods.
+            <codeblock>/*
+Interface to be implemented by shell commands.
+*/
+type ShellCommand interface {
+
+  /* Name of the command */
+  Name() string
+            
+  /* Return true if included in shell command completion */
+  CommandCompletion() bool
+
+  /* Returns the Minimum number of input arguments required by the function */
+  MinArgs() int
+            
+  /* Returns the Maximum number of input arguments allowed by the function */
+  MaxArgs() int
+            
+  /* Method that implements the functionality */
+  ExecCommand(args []string) (int, string)
+
+  /* Print Help information for command and its usage with an example */
+  PrintHelp(desc bool) (int, string)
+            
+} </codeblock></dd>
+        </dlentry>-->
+      </dl>
+    </section>
+    
+    <section id="cbq-query-mgmt"><title>Query Management</title>
+      <p>The cbq shell provides commands to interact with the query service. You can use these commands to execute prepared statements, handle named and positional parameters, cancel a query, and so on. </p>
+      <dl>
+        <dlentry>
+          <dt>Executing Prepared Statements</dt>
+          <dd>You can use the shell command to execute prepared statements. As a pre-requisite, you must first prepare a statement using the N1QL PREPARE statement. To execute prepared statements, follow these steps: <ol>
+            <li>Set the named and positional parameters that are present in the prepared statement. </li>
+            <li>Prepare using the N1QL PREPARE statement. This can be either prepared statement or a named prepared statement. If you do not specify a name for the prepared statement (<codeph>PREPARE <varname>query</varname>;</codeph>), a unique name is assigned. You can use this auto-assigned name when executing the prepared statement. If you specify a name (PREPARE <varname>name</varname> FROM <varname>query</varname>;), you can use this name to run the prepared statement. </li>
+            <li>Execute the prepared statement using the shell command:
+                <codeblock>EXECUTE <varname>name-of-prepared-stmt</varname>;</codeblock></li>
+          </ol></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Handling Named Parameters</dt>
+          <dd>Use the SET command to define named parameters. For each named parameter, prefix the
+            variable name with '-$'. The following example creates named parameters 'r' and 'date'
+            with values 9.5 and "1-1-2016"
+            respectively.<codeblock>\SET -$r 9.5;
+\SET -$date "1-1-2016";</codeblock></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Handling Positional Parameters</dt>
+          <dd>Use the SET shell command with the <parmname>-args</parmname> query parameter to
+            define positional parameters:
+            <codeblock>\SET -args <varname>value</varname>;</codeblock> The <varname>value</varname>
+            contains the different values that correspond to positions within the query. For
+            example, <codeblock>\SET -args [ 9.5, "1-1-2016"];</codeblock></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Canceling a Query</dt>
+          <dd>You can cancel a running query by using the Ctrl+C keys.<p><b>Connection Timeout
+                Parameter</b></p><p>You can use the timeout parameter to limit the running time of a
+              query. This parameter specifies the time to wait before returning an error when
+              executing a query.
+              <codeblock>--t=<varname>value</varname>
+--timeout=<varname>value</varname></codeblock>Timeout
+              can be specified in the following units: "ns" for nanoseconds, "μs" for microseconds,
+              "ms" for milliseconds, "s" for seconds, "m" for minutes, and "h" for hours. Examples
+              of valid values include "0.5s", "10ms", or "1m".</p><p>You can also the SET shell
+              command to set this parameter. An error is thrown if the timeout is invalid.
+              <codeblock>$ ./cbq --timeout="2s"
+
+$ ./cbq -q
+cbq> \SET -TIMEOUT 1ms</codeblock></p></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Handling Comments</dt>
+          <dd>The shell considers anything preceded by a '#' or a '--' as a comment. While parsing
+            the input, if it encounters a line that starts with '#' or '--', it logs the line into
+            history and returns a new prompt. No other action is taken.
+              <codeblock>cbq> select *
+> #This is the first comment
+> from `travel-sample`
+> --This is the second comment
+> LIMIT 1; </codeblock><p>However,
+              if a comment exists within a statement, it is considered as part of the N1QL command.
+              If the shell encounters block comments (enclosed within /* ... */) within a statement,
+              it sends it to the query service.
+              <codeblock>cbq> select * from `travel-sample` /* This statement includes a block comment */ LIMIT 1;</codeblock></p></dd>
+        </dlentry>
+      </dl>
+    </section>
+    <section id="cbq-server-shell-info"><title>Server and Shell Information</title>
+      <p>Cbq provides commands that convey information about the shell or cluster endpoints. </p>
+      <dl>
+        <dlentry>
+          <dt>Version</dt>
+          <dd>You can find the version of the client (shell) by using either the command line option
+            to display the current version of the shell and exit, or as a shell command to print the
+            version of the shell during the shell session.
+              <codeblock spectitle="Example Using the Command-line Option">./cbq -v
+SHELL VERSION : 1.0 
+          
+$ ./cbq --version
+SHELL VERSION : 1.0</codeblock><codeblock spectitle="Example Using the Shell Command">cbq> \VERSION;
+SHELL VERSION : 1.0 </codeblock><p>To
+              display the version of the query service, use the N1QL commands <codeph>SELECT
+                version();</codeph> and <codeph>SELECT min_version();</codeph>. </p></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Help</dt>
+          <dd>Help displays the help information for the shell commands and for the general usage of
+            cbq. Use the help option when bringing up the shell to display the information for all
+            available options: <codeblock>$ ./cbq -h
+$ ./cbq --help</codeblock> Use the HELP shell
+            command during a session to display information for specific shell commands. If you
+            specify one or more commands, the shell displays the usage information for the
+            commands.<codeblock>cbq> \HELP <varname>command-name</varname>;</codeblock> If you do
+            not specify a command, the cbq shell lists all the commands for which syntax help is
+            available. <codeblock>cbq> \HELP;</codeblock></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Copyright</dt>
+          <dd>You can view the copyright, attributions, and distribution terms of the command line
+            query tool using the <codeph>\COPYRIGHT;</codeph> command.
+            <codeblock>cbq> \COPYRIGHT;
+Copyright (c) 2015 Couchbase, Inc. Licensed under the Apache License, Version 2.0 (the "License"); 
+you may not use this file except in compliance with the License. You may obtain a copy of the 
+License at http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software distributed under the
+License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+either express or implied. See the License for the specific language governing permissions
+cbq></codeblock></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Shortcut Keys Used in the cbq Shell</dt>
+          <dd>The following table lists the shortcut keys used by the <cmdname>cbq</cmdname> shell. <table frame="all" rowsep="1" colsep="1" id="table_qty_jhf_5v">
+              <title>Shortcut Keys for cbq Shell</title>
+              <tgroup cols="2" align="left">
+                <colspec colname="c1" colnum="1" colwidth="1*"/>
+                <colspec colname="c2" colnum="2" colwidth="1.97*"/>
+                <thead>
+                  <row>
+                    <entry>Keystroke</entry>
+                    <entry>Action</entry>
+                  </row>
+                </thead>
+                <tbody>
+                  <row>
+                    <entry>Ctrl-A, Home</entry>
+                    <entry>Move cursor to beginning of line</entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-E, End </entry>
+                    <entry>Move cursor to end of line</entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-B, Left</entry>
+                    <entry> Move cursor one character left </entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-F, Right </entry>
+                    <entry>Move cursor one character right </entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-Left </entry>
+                    <entry>Move cursor to previous word </entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-Right </entry>
+                    <entry>Move cursor to next word </entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-D, Del </entry>
+                    <entry>(if line is not empty) Delete character under cursor </entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-D</entry>
+                    <entry>(if line is empty) End of File - usually quits application </entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-C</entry>
+                    <entry>Reset input (create new empty prompt) </entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-L</entry>
+                    <entry>Clear screen (line is unmodified) </entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-T</entry>
+                    <entry>Transpose previous character with current character</entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-H, BackSpace </entry>
+                    <entry>Delete character before cursor </entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-W </entry>
+                    <entry>Delete word leading up to cursor</entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-K</entry>
+                    <entry>Delete from cursor to end of line </entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-U </entry>
+                    <entry>Delete from start of line to cursor</entry>
+                  </row>
+                  <row>
+                    <entry> Ctrl-P, Up</entry>
+                    <entry>Previous match from history</entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-N, Down</entry>
+                    <entry>Next match from history</entry>
+                  </row>
+                  <row>
+                    <entry> Ctrl-R </entry>
+                    <entry>Reverse Search history (Ctrl-S forward, Ctrl-G cancel)</entry>
+                  </row>
+                  <row>
+                    <entry>Ctrl-Y</entry>
+                    <entry>Paste from Yank buffer (Alt-Y to paste next yank instead) </entry>
+                  </row>
+                  <row>
+                    <entry>Tab </entry>
+                    <entry>Next completion </entry>
+                  </row>
+                  <row>
+                    <entry>Shift-Tab</entry>
+                    <entry>(after Tab) Previous completion</entry>
+                  </row>
+                </tbody>
+              </tgroup>
+          </table> Source: <cite>https://github.com/peterh/liner</cite></dd>
+        </dlentry>
+      </dl>
+      
+    </section>
+    <section id="cbq-scripting-support"><title>Support for Scripting</title>
+      <p>The <cmdname>cbq</cmdname> shell can interpret and run single and multiple shell and N1QL
+        commands. </p>
+<dl>
+  <!--<dlentry>
+    <dt>Word wrap</dt>
+    <dd>By default, the shell is set to multi-line mode. You can choose to disable it.
+              <draft-comment author="amarantha">Using /SET multiline false?? </draft-comment></dd>
+  </dlentry>-->
+  <dlentry>
+    <dt>Single Command Mode</dt>
+    <dd>You can use the <parmname>--script</parmname> option to execute a single N1QL query and exit
+            the shell:
+            <codeblock>./cbq --script="select * from `travel-sample` LIMIT 1"</codeblock><codeblock spectitle="Results">Connected to : http://localhost:8091/. Type Ctrl-D to exit.
+{
+  ...
+}</codeblock></dd>
+  </dlentry>
+  <dlentry>
+    <dt>Multi-line Input</dt>
+    <dd>You can enter N1QL statements and shell commands that spans multiple lines. The command
+            prompt ">" indicates that the shell is in multi-line mode. End the command by specifying
+            the ";" at the end.
+            <codeblock>cbq> select *
+> from `travel-sample`
+> LIMIT 1;</codeblock></dd>  
+  </dlentry>
+  <dlentry>
+    <dt>Run Commands by Redirection and Piping</dt>
+    <dd>You can use redirection and piping to run commands on the cbq shell.
+            <codeblock>$ echo "select * from \`beer-sample\` limit 10;" | ./cbq
+ …
+$ cat file.txt | ./cbq
+ …
+$ ./cbq &lt; file.txt
+…</codeblock></dd>
+  </dlentry>
+  <dlentry>
+    <dt>Exit on Error</dt>
+    <dd>When you specify the argument <codeph>--exit-on-error</codeph>, the cbq shell checks the
+            result returned after executing the query for any error and exits when the first error
+            is encountered. </dd>
+  </dlentry>
+  <dlentry>
+    <dt>File Based Operations</dt>
+    <dd>Using the file based commands and options, the cbq shell can execute N1QL and shell commands
+            contained in files. There are two ways to accomplish this: <ul>
+              <li>Using an option on startup:
+                  <codeblock>-f=<varname>input-file</varname>
+--file=<varname>input-file</varname></codeblock><p>The
+                  cbq shell executes the commands present in the input file, prints them to stdout
+                  (or to a file if using redirects), and exits.</p></li>
+              <li>Using a shell command:
+                  <codeblock>\SOURCE <varname>input-file</varname>;</codeblock><p>Runs the commands
+                  present in the input file and prints the result to stdout. </p></li>
+            </ul><p>Consider the input file, <filepath>sample.txt</filepath>, containing the
+              following commands:
+              <codeblock>CREATE PRIMARY INDEX on `beer-sample` USING GSI;
+SELECT * from `beer-sample` LIMIT 2;
+SELECT abv from `beer-sample` LIMIT 3;
+\HELP; </codeblock></p><p>To
+              execute the commands contained in sample.txt using the -f option, run <codeph>$./cbq
+                -f=sample.txt</codeph>
+              <codeblock spectitle="Results">Connected to : http://localhost:8091/. Type Ctrl-D to exit.
+CREATE PRIMARY INDEX on `beer-sample` USING GSI;
+{ ...
+  "results": [ ],
+  ...
+}
+SELECT * from `beer-sample` LIMIT 2;
+{ ...
+  "results": [ ],
+  ...
+}
+SELECT abv from `beer-sample` LIMIT 3;
+{ ...
+  "results": [ ],
+  ...
+}
+\HELP;
+Help Information for all Shell Commands
+… 
+$</codeblock></p><p>To
+              execute the commands contained in <filepath>sample.txt</filepath> using the shell
+              command, run <codeph>cbq> \SOURCE sample.txt;</codeph>
+              <codeblock spectitle="Results">CREATE PRIMARY INDEX on `beer-sample` USING GSI;
+{ ...
+  "results": [ ],
+ ...
+}
+SELECT * from `beer-sample` LIMIT 2;
+{ ...
+  "results": [ ],
+  ...
+}
+SELECT abv from `beer-sample` LIMIT 3;
+{ ...
+  "results": [ ],
+  ...
+}
+\HELP;
+Help Information for all Shell Commands
+… 
+cbq> </codeblock></p><p><b>Redirecting
+                Results to a File</b></p><p>You can redirect all the output for a session or part of
+              a session to a specified file by using the following option:
+              <codeblock>-o <varname>filename</varname>
+--output=<varname>filename</varname></codeblock></p><p>To
+              redirect a specific set of commands during a session, you must specify the commands
+              between REDIRECT and REDIRECT OFF as shown:
+              <codeblock>cbq> \REDIRECT filename;
+command-1; command-2;, ..., command-n;
+\REDIRECT OFF;</codeblock>
+              All the commands specified after <codeph>\REDIRECT</codeph> and before
+                <codeph>\REDIRECT OFF</codeph> are saved into the specified output file. If the file
+              doesn't exist then it is created.
+              <codeblock spectitle="Example">cbq> \REDIRECT temp_output.txt;
+> CREATE PRIMARY INDEX on `beer-sample` USING GSI;
+> SELECT * from `beer-sample` LIMIT 1;
+> \HELP;
+> \REDIRECT OFF;</codeblock></p>You
+            can specify multiple <codeph>REDIRECT</codeph> commands. When you do so, the output file
+            changes to the specified files and switches back to <systemoutput>stdout</systemoutput>
+            only when you specify "<codeph>\REDIRECT OFF</codeph>;".</dd>
+  </dlentry></dl></section>
+  </body>
+  <related-links><link href="https://github.com/couchbase/query/tree/master/shell/cbq/examples" scope="external"
+      format="html">
+      <linktext>More cbq Examples</linktext>
+    </link></related-links>
+</topic>

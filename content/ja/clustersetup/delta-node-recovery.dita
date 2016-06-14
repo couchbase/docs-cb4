@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_gsv_g24_vs">
+  <title>Delta Node Recovery</title><shortdesc>Delta node recovery permits nodes to be re-added to the cluster 
+    and incrementally caught up with the data changes.</shortdesc>
+  <body>
+    
+    <p>Delta node recovery permits a failed over node to be recovered by re-using the data on its 
+      disk and then resynchronizing the data based on the delta change. 
+      The failed over node is checked to identify the point when data mutations stopped and resynchronized beginning at that point. 
+      The server node catches up on data mutations for its vBuckets and starts serving data. 
+      Because the original data and data buckets are retained, the cluster starts functioning with minimal downtime. 
+      This operation improves recovery time and network resource usage.
+      
+      Server nodes are removed from clusters under many circumstances. 
+      The following are circumstances (among many others) where a server node might be re-added to the cluster after being failed over.
+    </p>
+    <ul>
+      <li>Node goes down for a short period of time</li>
+      <li>Routine maintenance is scheduled</li>
+      <li>Network connectivity is briefly disrupted</li>
+    </ul>
+    <p>When a node is failed over, data files are preserved. 
+      The data files are used either for Couchbase support, data recovery, or delta node recovery.</p>
+    <p>In the process of failing over a node, performing maintenance, adding the node back into the cluster, 
+      and rebalancing, data is recovered via either full recovery mode or delta recovery mode. 
+      With delta recovery mode, Couchbase detects (with the Database Change Protocol) 
+      which data files are up-to-date and which are out-of-date and then, during rebalance, 
+      the existing data files on the failed over server node are retained and the out-of-date files are updated.</p>
+    <p>From the web console, the Delta Recovery and Full Recovery options display after the server node is failed over. 
+      Both recovery methods add the server node back into the cluster during the rebalance operation, 
+      however, full recovery removes the node's data prior to the rebalance and delta recovery 
+      schedules the node's existing data to be re-used.</p>
+    <p>Delta recovery requirements:</p>
+    <ul>
+      <li>A healthy server node and a healthy state for the cluster.</li>
+      <li>The server node is failed over. Delta recovery is not possible for 
+        a rebalance-in operation (add server) or rebalance-out operation (remove server).</li>
+      <li>Delta recovery must be possible for all buckets. 
+        For example, if delta recovery is possible for a subset of buckets but not possible for another 
+        subset of buckets, then the Couchbase cluster does not permit a rebalance operation.</li>
+      <li>Because delta recovery relies on the existing data files on the failed over server node's disk, 
+        the exact same set of buckets must be transferred to the failed over server node.</li>
+      
+    </ul>
+    <p>Delta recovery characteristics:</p>
+    <ul>
+      <li>Data files are "warmed up" into memory. Warmed up into memory means that data is loaded into memory. 
+        As a minimum, depending on whether metadata is retained in or not, all data file keys are loaded
+        from disk prior to the rebalance operation.</li>
+      <li>Indexes must be rebuilt on the server node that is being re-added.</li>
+      <li>Use in deployments where data size is much greater than RAM size, 
+        bucket eviction is set to full eviction (metadata is not retained in memory), 
+        and indexes are not defined.</li>
+    </ul>   
+    
+    <note type="tip">An environment with a large data footprint might use delta node recovery when re-adding a failed over server node.</note>
+    <section><title>Failure Scenarios</title>
+      <p>There are conditions where delta node recovery either defaults to full recovery or is not available.</p>
+      <p>The following are conditions for delta node recovery failures:</p>
+      <ul>
+        <li>If topology changes occur while a node is pending delta recovery, delta node recovery is impacted. 
+          For example, another node is added, a node is removed, or a node is swapped.</li>
+        <li>If a down node is hard failed over and is marked for removal.</li>
+        <li>If rebalance-in-out operations are performed where the number of in and out nodes do not match (swap rebalance works in this case).</li>
+        <li>If certain bucket operations are performed while a node is pending delta recovery, delta node recovery is impacted. 
+          For example, a new bucket is added, a bucket's replica configuration is changed, or a bucket is flushed.</li>
+      </ul>
+      <p>The following describes scenarios where delta node recovery either defaults to full recovery or is not available.</p>
+      <dl>
+        <dlentry>
+          <dt>Node 1 is in delta recovery and Node 2, an active server node, crashes.</dt>
+          <dd>
+            <ol>
+              <li>Node 1 is failed over and delta recovery is specified. Now, Node 1 is pending delta recovery.</li>
+              <li>Node 2, an active server, goes down.
+                <note type="note">The rebalance operation is not available.</note></li>
+              <li>Fail over Node 2.</li>
+              <li>Cancel the pending delta recovery, specify full recovery, and rebalance.</li>
+              <li>Repair Node 2, add the server to the cluster, and rebalance.</li>
+            </ol>   
+          </dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Node 1 is in delta recovery and Node 1 crashes during rebalance.</dt>
+          <dd>
+            <ol>
+              <li>Node 1 is failed over, delta recovery is specified, and the rebalance operation is started.</li>
+              <li>Node 1 crashes and the rebalance operation fails.</li>
+              <li>Repair Node 1, re-start the server node, and rebalance. Node1 is added back to the cluster using full recovery.</li>
+            </ol>
+            
+          </dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Node 1 is in delta recovery and a bucket operation is performed.</dt>
+          <dd>The bucket operations that cause rebalance to fail are adding bucket, changing replica configuration, or flushing bucket</dd>
+          <dd>
+            <ol>
+              <li>Node 1 is failed over, delta recovery is specified, and then a bucket operation is performed.</li>
+              <li>Rebalance is performed and fails. <p><image href="../admin/picts/delta-node-01.png"
+                id="image_rdf_1z3_dt" align="left"/></p></li>
+              <li>Cancel the pending delta recovery, specify full recovery, and rebalance.
+                <note type="note">Bucket deletion does not lead to delta recovery failure.</note>    
+              </li>
+            </ol> 
+            
+          </dd>
+        </dlentry>
+      </dl>
+      
+      <dl>
+        <dlentry>
+          <dt>Node 1 and Node 2 are in delta node recovery and Node 2 crashes.</dt>
+          <dd>
+            <ol>
+              <li>Both Node 1 and Node 2 are failed over, delta recovery is specified.</li>
+              <li>Node 2 crashes.</li>
+              <li>Rebalance is performed and fails. <p><image href="../admin/picts/delta-node-02.png"
+                id="image_wxh_cz3_dt" align="left"/></p></li>
+            </ol>
+            
+          </dd>
+        </dlentry>
+      </dl>
+    
+    </section>
+  </body>
+</topic>

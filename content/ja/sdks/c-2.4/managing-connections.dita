@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "generalTask.dtd">
+<concept id="concept_ppz_lhq_44">
+ <title>Managing server connections </title>
+ <shortdesc>This section will guide you through the process and steps of configuring the client to
+    talk to a variety of cluster setups and options. </shortdesc>
+ <conbody>
+    <section id="concept_khq_vhq_44">
+      <title>Connection parameters</title>
+      <p>The client object must first be instantiated using the
+        <apiname>lcb_create_st</apiname>structure. It  contains fields needed to initialize the
+        client with the proper parameters to connect to a bucket. The structure contains these
+        notable fields: <codeph>connstr</codeph> and <codeph>passwd</codeph>.</p>
+      <p> The <codeph>connstr</codeph> field accepts a specifier known as a <term>connection
+          string</term> that indicates which bucket to connect to and which hosts comprise the
+        cluster. The <codeph>passwd</codeph><i/> field should contain your bucket password if your
+        bucket has been configured with authentication.</p>
+      <p>In the simplest form, initialize your structure like so:
+				<codeblock outputclass="language-c">struct lcb_create_st cropts;
+memset(&amp;cropts, 0, sizeof cropts);
+cropts.version = 3;
+cropts.v.v3.connstr = "couchbase://localhost/mybucket";
+cropts.v.v3.passwd = "topsecret";</codeblock>In
+				the example, <codeph>localhost</codeph> is a host of your cluster,
+					<codeph>mybucket</codeph> is the bucket you want to connect to, and
+					<codeph>passwd</codeph> is the bucket password.</p>
+      <p>For increased redundancy, you can specify <i>multiple</i> hosts, separated by a semicolon,
+        like <codeph>"couchbase://host1.net;host2.net/mybucket"</codeph>. Specifying multiple hosts
+        allows the library to connect to the cluster as long as any of the hosts specified are
+        up.</p>
+    </section>
+    <section>
+      <title>Initializing the client handle</title>
+      <p>After the <apiname>lcb_create_st</apiname> structure has been initialized, you can create
+				your instance object - or the opaque handle that represents the connection to your
+				bucket:<codeblock outputclass="language-c">lcb_t instance = NULL;
+lcb_error_t err = lcb_create(&amp;instance, &amp;cropts);
+if (err != LCB_SUCCESS) {
+    fprintf(stderr, “Could not create library handle: %s\n”, lcb_strerror(NULL, err));
+}</codeblock></p>
+      <p>The <apiname>lcb_create()</apiname> function initializes and allocates a new handle with
+        the settings provided inside the <apiname>lcb_create_st</apiname> object.</p>
+      <p>After the handle has been initialized, a connection to the cluster must be scheduled.
+				Invoke the <apiname>lcb_connect()</apiname> call to initiate the connection sequence.
+				After the connection is scheduled, you need to wait for the connection to actually
+				complete by using the <apiname>lcb_wait()</apiname> function, which waits for pending
+				I/O to complete on behalf of the library. Finally, when lcb_wait() returns, use the
+					<apiname>lcb_get_bootstrap_status()</apiname> function to determine if the connection
+				completed successfully or if an error occurred:</p>
+      <codeblock outputclass="language-c">lcb_error_t err;
+lcb_connect(instance);
+lcb_wait(instance);
+err = lcb_get_bootstrap_status(instance);
+if (err != LCB_SUCCESS) {
+  fprintf(stderr, “Couldn’t bootstrap: %s\n”, lcb_strerror(instance, err));
+}</codeblock>
+    </section>
+   <section id="ssl">
+     <title>Connecting with SSL</title>
+     <p>Couchbase Sever features the ability to have clients communicate securely via SSL.</p>
+     <p>To use SSL, you need Couchbase Server Enterprise 3.0 or later</p>
+     <ol>
+       <li>Obtain the SSL certificate used by the Cluster (...). </li>
+				<li>Make the certificate available to the file system of the client host.</li>
+       <li>Employ the <codeph>couchbases://</codeph> scheme for the <codeph>connstr</codeph>
+					field.</li>
+       <li>Specify the local path to the certificate as the value for the <codeph>certpath</codeph>
+					field.</li>
+     </ol>
+     <p>To connect to the <codeph>mybucket</codeph> bucket on SSL-enabled Cluster at the node
+				10.3.4.33, with the certificate saved as <codeph>/var/cbcert.pem</codeph>:
+				<codeblock outputclass="language-c">cropts.v.v3.connstr = "couchbases://10.3.4.33/mybucket?certpath=/var/cbcert.pem";</codeblock>
+			</p>
+   </section>
+   <section>
+     <title>Closing the connection</title>     
+   <p>When you no longer need the connection, destroy the library handle by using
+					<apiname>lcb_destroy()</apiname>.
+				<codeblock outputclass="language-c">lcb_destroy(instance);</codeblock> After
+					<apiname>lcb_destroy()</apiname> is called on an instance, the instance may no longer
+				be passed to any other function.</p>
+     </section>
+  </conbody>
+  </concept>
