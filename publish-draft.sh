@@ -2,6 +2,16 @@
 
 echo "building draft documentation"
 
+# set language
+CBLANG="en"
+while getopts l: OPT
+do
+    case $OPT in
+        l) CBLANG=$OPTARG
+            ;;
+    esac
+done
+
 # get full directory name of the script
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
@@ -59,7 +69,7 @@ ant -f integrator.xml
 
 # build server guide
 echo "building server guide"
-./bin/dita -f com.couchbase.docs.html-draft -i $INDIR/content/cb4.ditamap -o $OUTDIR/4.0
+./bin/dita -f com.couchbase.docs.html-draft -i $INDIR/content/$CBLANG/cb4.ditamap -o $OUTDIR/4.0
 
 echo "draft documentation build complete"
 
