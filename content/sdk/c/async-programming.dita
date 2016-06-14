@@ -16,66 +16,64 @@
                         reading</li>
                     <li>Scheduling a callback to be invoked after a certain period has elapsed</li>
                 </ul></p>
-            <section><title>Using a Built-In I/O implementation</title><p>The library contains
-                    predefined implementations of this API for common event libraries, such as
+            <section><title>Using a Built-In I/O implementation</title><p>The library contains predefined implementations of this API for common event libraries, such as
                         <i>libevent</i>, <i>libev</i>, and <i>libuv</i>. If your application makes
                     use of any of these libraries for its purposes, integrating with the library is
                     as simple as providing an instance of such an implementation to the
                         <codeph>lcb_create_st</codeph> structure. Here is an example using
-                        <apiname>libevent</apiname>:<codeblock outputclass="language-c">#include &lt;stdio.h>
-#include &lt;stdlib.h>
-#include &lt;string.h>
-#include &lt;event2/event.h>
-#include &lt;libcouchbase/couchbase.h>
-
-static void bootstrap_callback(lcb_t instance, lcb_error_t err)
+                        <apiname>libevent</apiname>:<codeblock outputclass="language-c">static void
+bootstrap_callback(lcb_t instance, lcb_error_t err)
 {
-    lcb_store_cmd_t cmd = { 0 };
-    const lcb_store_cmd_t *cmdlist = &amp;cmd;
-
+    lcb_CMDSTORE cmd = { 0 };
     if (err != LCB_SUCCESS) {
         fprintf(stderr, "ERROR: %s\n", lcb_strerror(instance, err));
         exit(EXIT_FAILURE);
     }
-
-    // The client is now connected. We may start performing operations
-    cmd.v.v0.key = "foo";
-    cmd.v.v0.nkey = 3;
-    cmd.v.v0.bytes = "bar";
-    cmd.v.v0.nbytes = 3;
-    cmd.v.v0.operation = LCB_SET;
-    lcb_store(instance, NULL, 1, &amp;cmdlist);
+    /* Since we've got our configuration, let's go ahead and store a value */
+    LCB_CMD_SET_KEY(&amp;cmd, "foo", 3);
+    LCB_CMD_SET_VALUE(&amp;cmd, "bar", 3);
+    cmd.operation = LCB_SET;
+    err = lcb_store3(instance, NULL, &amp;cmd);
+    if (err != LCB_SUCCESS) {
+        fprintf(stderr, "Failed to set up store request: %s\n", lcb_strerror(instance, err));
+        exit(EXIT_FAILURE);
+    }
 }
 
-static void get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
-                         const lcb_get_resp_t *resp)
+static void get_callback(lcb_t instance, int cbtype, const lcb_RESPBASE *rb)
 {
-    if (error != LCB_SUCCESS) {
-        fprintf(stderr, "Failed to get key: %s\n", lcb_strerror(instance, error));
+    const lcb_RESPGET *rg = (const lcb_RESPGET *)rb;
+    if (rg->rc != LCB_SUCCESS) {
+        fprintf(stderr, "Failed to get key: %s\n", lcb_strerror(instance, rg->rc));
         exit(EXIT_FAILURE);
     }
 
-    fprintf(stdout, "I stored and retrieved the key 'foo'. Terminate program\n");
+    fprintf(stdout, "I stored and retrieved the key 'foo'. Value: %.*s. Terminate program\n", (int)rg->nvalue, rg->value);
     event_base_loopbreak((void *)lcb_get_cookie(instance));
+    (void)cbtype;
 }
 
-static void store_callback(lcb_t instance, const void *cookie, lcb_storage_t operation,
-                           lcb_error_t error, const lcb_store_resp_t *resp)
+static void store_callback(lcb_t instance, int cbtype, const lcb_RESPBASE *rb)
 {
-    lcb_get_cmd_t cmd = { 0 };
-    const lcb_get_cmd_t *cmdlist = &amp;cmd;
+    lcb_error_t rc;
+    lcb_CMDGET gcmd =  { 0 };
 
-    if (error != LCB_SUCCESS) {
-        fprintf(stderr, "Failed to store key: %s\n", lcb_strerror(instance, error));
+    if (rb->rc != LCB_SUCCESS) {
+        fprintf(stderr, "Failed to store key: %s\n", lcb_strerror(instance, rb->rc));
         exit(EXIT_FAILURE);
     }
 
-    cmd.v.v0.key = "foo";
-    cmd.v.v0.nkey = 3;
-    lcb_get(instance, NULL, 1, cmds);
+    LCB_CMD_SET_KEY(&amp;gcmd, rb->key, rb->nkey);
+    rc = lcb_get3(instance, NULL, &amp;gcmd);
+    if (rc != LCB_SUCCESS) {
+        fprintf(stderr, "Failed to schedule get request: %s\n", lcb_strerror(NULL, rc));
+        exit(EXIT_FAILURE);
+    }
+    (void)cbtype;
 }
 
-static lcb_io_opt_t create_libevent_io_ops(struct event_base *evbase)
+static lcb_io_opt_t
+create_libevent_io_ops(struct event_base *evbase)
 {
     struct lcb_create_io_ops_st ciops;
     lcb_io_opt_t ioops;
@@ -87,52 +85,68 @@ static lcb_io_opt_t create_libevent_io_ops(struct event_base *evbase)
 
     error = lcb_create_io_ops(&amp;ioops, &amp;ciops);
     if (error != LCB_SUCCESS) {
-        fprintf(stderr, "Failed to create IOPS: %s\n", lcb_strerror(NULL, error));
+        fprintf(stderr, "Failed to create an IOOPS structure for libevent: %s\n", lcb_strerror(NULL, error));
         exit(EXIT_FAILURE);
     }
 
     return ioops;
 }
 
-static lcb_t create_libcouchbase_handle(lcb_io_opt_t ioops)
+static lcb_t
+create_libcouchbase_handle(lcb_io_opt_t ioops)
 {
     lcb_t instance;
     lcb_error_t error;
-    struct lcb_create_st copts = { 0 };
+    struct lcb_create_st copts;
 
-    copts.version = 3;
-    copts.v.v3.connstr ;
-    copts.v.v3.io = ioops;
-    lcb_create(&amp;instance, &amp;copts);
-    lcb_connect(instance);
+    memset(&amp;copts, 0, sizeof(copts));
+
+    /* If NULL, will default to localhost */
+    copts.v.v0.host = getenv("LCB_EVENT_SERVER");
+    copts.v.v0.io = ioops;
+    error = lcb_create(&amp;instance, &amp;copts);
+
+    if (error != LCB_SUCCESS) {
+        fprintf(stderr, "Failed to create a libcouchbase instance: %s\n", lcb_strerror(NULL, error));
+        exit(EXIT_FAILURE);
+    }
+
+    /* Set up the callbacks */
     lcb_set_bootstrap_callback(instance, bootstrap_callback);
-    lcb_set_get_callback(instance, get_callback);
-    lcb_set_store_callback(instance, store_callback);
+    lcb_install_callback3(instance, LCB_CALLBACK_GET, get_callback);
+    lcb_install_callback3(instance, LCB_CALLBACK_STORE, store_callback);
+
+    if ((error = lcb_connect(instance)) != LCB_SUCCESS) {
+        fprintf(stderr, "Failed to connect libcouchbase instance: %s\n", lcb_strerror(NULL, error));
+        lcb_destroy(instance);
+        exit(EXIT_FAILURE);
+    }
+
     return instance;
 }
 
+/* This example shows how we can hook ourself into an external event loop.
+ * You may find more information in the blogpost: http://goo.gl/fCTrX */
 int main(void)
 {
     struct event_base *evbase = event_base_new();
     lcb_io_opt_t ioops = create_libevent_io_ops(evbase);
     lcb_t instance = create_libcouchbase_handle(ioops);
 
-    // Store the evbase structure as the 'cookie' for this instance
+    /*Store the event base as the user cookie in our instance so that
+     * we may terminate the program when we're done */
     lcb_set_cookie(instance, evbase);
 
-    // Run the event loop. The rest of the program will be executed from this
-    // function.
+    /* Run the event loop */
     event_base_loop(evbase, 0);
 
-    // Cleanup
+    /* Cleanup */
     event_base_free(evbase);
     lcb_destroy(instance);
     exit(EXIT_SUCCESS);
-}
-</codeblock></p><p><note>The
-                        previous example has some error checking left out for brevity. A fuller
-                        example can be found inside the <filepath>example/ibeventdirect</filepath>
-                        directory within the source tree.</note>In the above example, the
+}</codeblock></p><p><note>The previous example has some error checking left out for brevity. A fuller example can be
+                        found inside the <filepath>example/libeventdirect</filepath> directory
+                        within the source tree.</note>In the above example, the
                         <apiname>lcb_create_io_opts()</apiname> function is used to instantiate the
                     built-in <i>libevent</i> implementation of the <ph>IOPS</ph> API. Note that the
                         <codeph>lcb_create_io_ops_st</codeph> structure contains a
