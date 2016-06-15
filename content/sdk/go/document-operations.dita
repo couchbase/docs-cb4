@@ -10,12 +10,12 @@
             marshaling functionality. <p>All Go data types that can be serialized via the JSON
                 encoding library are supported by default. All textual data is represented by UTF-8
                 when stored in Couchbase Server. If you do not wish to use Go's JSON functionality
-                and handle your own encoding and decoding, you can implement your own transcoder
-                [TODO:link, below] </p><p>When retrieving documents, documents are received via an <i>out</i> pointer: simply pass a
-                pointer to an object of the appropriate type (or an empty interface) and the decoder
-                will set it to an object of the appropriate type. If you wish to convert to a
-                specific type, simply pass a pointer of the appropriate type and object will be
-                populated with the appropriate
+                and handle your own encoding and decoding, you can implement your own
+                <xref href="#toplevel/non-json">transcoder</xref>.</p><p>When retrieving documents, documents are received via an
+                    <i>out</i> pointer: simply pass a pointer to an object of the appropriate type
+                (or an empty interface) and the decoder will set it to an object of the appropriate
+                type. If you wish to convert to a specific type, simply pass a pointer of the
+                appropriate type and object will be populated with the appropriate
                 values.<codeblock>var value = interface{}
 cas, err := bucket.Get("document_id", &amp;value)</codeblock><codeblock>var value MyObject{}
 cas, err := bucket.Get("document_id", &amp;value)</codeblock></p></section>
@@ -65,12 +65,13 @@ cas, err := myBucket.Get("document_name", &amp;value)</codeblock>The
                 pointer:<codeblock>var value = interface{}
 // expires in 5 minutes:
 cas, err := myBucket.GetAndTouch("document_name", 300, &amp;value)</codeblock></p>
-            <p>You may perform a [TODO: link] replica read by using the
-                    <apiname>Bucket.GetReplica()</apiname> method. The last argument is the replica
-                index, and should be set to 0 unless you desire accessing a specific replica. Note
-                that the results from a replica read may not be consistent with the latest version
-                of the document within the
-                cluster.<codeblock>var value = interface{}
+            <p>You may perform a replica read by using the <apiname>Bucket.GetReplica()</apiname>
+                method. The last argument is the replica index, and should be set to 0 unless you
+                desire accessing a specific replica. Note that the results from a replica read may
+                not be consistent with the latest version of the document within the cluster and
+                should only be used if the <xref href="failure-considerations.dita#topic_wxg_cwb_mv"
+                    >active node is
+                unavailable</xref>.<codeblock>var value = interface{}
 cas, err := myBucket.GetReplica("document_name", &amp;value, 0)</codeblock></p>
         </section>
         <section id="deletingdocuments">
@@ -183,9 +184,54 @@ if frag.Exists("check.path.exists") {
                 mutation:<codeblock>myBucket.UpsertDura("document_id", "value", 0, 1, 2)</codeblock></p>The
             above snippet will perform an upsert operation with a <i>persist-to</i> of 2 and a
                 <i>replicate-to</i> of 2</section>
-        <section>
+        <section id="non-json">
             <title>Non-JSON Documents</title>
-            <p>TODO</p>
+            <p>The term Non-JSON documents refers to any kind of document which, when stored on the
+                server in serialized form, cannot be parsed as valid JSON. While non-JSON encodings
+                may offer more CPU and space efficiency for certain documents, some Couchbase
+                services (such as Query) may not be able to search or query non-JSON documents.</p>
+            <p>In the Go SDK you can either use an existing <codeph>[]byte</codeph> (in which case
+                the contents will be stored as-is) or implement the <apiname>Transcoder</apiname>
+                interface to automatically convert items of given types to your own format.</p>
+            <p>The snippet below impelements a <apiname>Transcoder</apiname> which adds Zlib
+                compression to serialized
+                JSON<codeblock>type ZlibJsonTranscoder struct {
+}
+
+const FmtZLib = 1&lt;&lt;24 // i.e. FmtPrivate
+
+func (ZlibJsonTranscoder) Decode(content []byte, formatFlags uint32, out interface{}) error {
+	if ((formatFlags &amp; FmtZLib) != 0) {
+		r, err := zlib.NewReader(bytes.NewReader(content))
+		if err != nil {
+			return err
+		}
+		jsonDecoder := json.NewDecoder(r)
+		return jsonDecoder.Decode(out)
+	} else {
+		return gocb.DefaultTranscoder{}.Decode(content, formatFlags, out)
+	}
+}
+
+func (ZlibJsonTranscoder) Encode(input interface{}) (encoded []byte, flags uint32, err error) {
+	// Always compress
+	buf := bytes.NewBuffer([]byte{})
+	zw := zlib.NewWriter(buf)
+	e := json.NewEncoder(zw)
+	err = e.Encode(input)
+	zw.Flush()
+	log.Printf("Buffer is %d bytes long\n", buf.Len())
+	return buf.Bytes(), FmtZLib, err
+}</codeblock>The
+                above example makes use of the <i>private flag</i>, so as to disambiguate it from
+                    <xref href="../nonjson.dita#devguide_nonjson/table_wrc_2nb_bt">other recognized
+                    SDK value formats</xref>. When encoding a value (to be stored on the server) it
+                applies the flag. When retrieving the value, it checks for the presence of that flag
+                and decodes it as Zlib-compressed JSON. If the flag is absent, it delegates the
+                decoding to the default transcoder in the Go SDK.</p>
+            <p>To actually use the transcoder, you can use the
+                    <apiname>Bucket.SetTranscoder</apiname>
+                function<codeblock>bucket.SetTranscoder(ZlibJsonTranscoder{})</codeblock></p>
         </section>
     </body>
 </topic>
