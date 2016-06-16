@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="toplevel">
+    <title>MapReduce Views</title>
+    <shortdesc>You can use MapReduce views to create queryable indexes in Couchbase Server.</shortdesc>
+    <body>
+        <section id="views-intro">
+            <p>The normal CRUD methods allow you to look up a document by its ID. A MapReduce
+                (<i>view</i> query) allows you to look up one or more documents based on various
+                criteria. MapReduce views are comprised of a <i>map</i> function that is executed once per
+                document (this is done incrementally, so this is not run each time you query the view) and
+                an optional <i>reduce</i> function that performs aggregation on the results of the
+                <i>map</i> function. The <i>map</i> and <i>reduce</i> functions are stored on the server
+                and written in JavaScript.</p>
+            <p>MapReduce queries can be further customized during query time to allow only a subset (or range) of the data
+                to be returned.</p>
+            <note type="tip">See the <xref href="../../architecture/incremental-map-reduce-views.dita"></xref> and
+                <xref href="../../architecture/querying-data-with-views.dita"></xref> sections of the general documentation to learn more about views and their architecture.</note>
+        </section>
+
+        <section id="example-beer">
+            <p>The following example is the definition of a <codeph>by_name</codeph> view in a <i>"beer"</i> design
+                document. This view checks whether a document is a beer and has a name. If it does, it emits the
+                beer's name into the index. This view allows beers to be queried for by name. For
+                example, it's now possible to ask the question "What beers start with A?"</p>
+            <codeblock outputclass="language-javascript">function (doc, meta) {
+  if (doc.type &amp;&amp; doc.type == "beer" &amp;&amp; doc.name) {
+     emit(doc.name, null);
+  }
+}</codeblock>
+        </section>
+
+        <section id="example-travel">
+            <p>The following example is the definition of a <codeph>by_name</codeph> view in a <i>"landmarks"</i> design
+              document in the<i> "travel-sample"</i> sample dataset. This view checks whether a document is
+              a landmark and has a name. If it does, it emits the landmark's name into the index. This view
+              allows landmarks to be queried for by it's <i>"name" </i>field.</p>
+            <codeblock outputclass="language-javascript">function (doc, meta) {
+    if (doc.type &amp;&amp; doc.type == "landmark" &amp;&amp; doc.name) {
+        emit(doc.name, null);
+    }
+}</codeblock>
+        </section>
+
+        <section id="example-geo-travel">
+            <p>A Spatial View can instead be queried with a <parmname>range</parmname> or <i>bounding box</i>.
+                For example, let's imagine we have stored landmarks with coordinates for their home city (eg. Paris,
+                Vienna, Berlin and New York) under <parmname>geo</parmname>, and each city's coordinates is represented
+                as two attributes, <parmname>lon</parmname> and <parmname>lat</parmname>. The following spatial view map
+                function could be used to find landmarks within Europe, as a <i>"by_location"</i> view in a
+                <i>"spatial"</i> design document:</p>
+            <codeblock>function (doc) {
+    if (doc.type &amp;&amp; doc.type == "landmark" &amp;&amp; doc.geo) {
+        emit([doc.geo.lon, doc.geo.lat], null);
+    }
+}</codeblock>
+        </section>
+
+        <section id="misc">
+            <note id="geo-note">Geospatial queries are present since Couchbase Server 3.0.1 (as experimental), and since Couchbase Server 4.0.0 (as stable).</note>
+
+            <p id="retry">SDK retries view requests automatically on certain known conditions, which represented in the following table:</p>
+            <table>
+                <tgroup cols="2">
+                    <colspec colname="c1" colnum="1" />
+                    <colspec colname="c2" colnum="2" />
+                    <thead>
+                        <row>
+                            <entry>HTTP status code</entry>
+                            <entry>Behavior</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry>200</entry>
+                            <entry>Do not retry request.</entry>
+                        </row>
+                        <row>
+                            <entry>300, 301, 302, 303, 307, 401, 408, 409, 412, 416, 417, 501, 502, 503, 504</entry>
+                            <entry>Retry request.</entry>
+                        </row>
+                        <row>
+                            <entry>404</entry>
+                            <entry>In case the library detects yet unprovisioned node, it will
+                                retry. Otherwise, it will report
+                                    <codeph>ViewDoesNotExistException</codeph>.</entry>
+                        </row>
+                        <row>
+                            <entry>500</entry>
+                            <entry>If the error payload reports missing view document or badly
+                                formed query, it will not retry. Otherwise, it will retry
+                                request.</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+            <p id="retry-end">All codes not listed in the table will not be retried by default.</p>
+        </section>
+    </body>
+</topic>
