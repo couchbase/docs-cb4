@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
-<concept id="document-kv-operations-dotnet">
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="document-operations-dotnet">
     <title>Document Operations</title>
-    <conbody>
+    <body>
 
     <p> You can access documents in Couchbase using methods of the
         <apiname>Couchbase.CouchbaseBucket</apiname> object. The methods for retrieving documents
@@ -13,7 +13,7 @@
     <p> Examples are shown using the synchronous methods. See the section on <xref
         href="async-programming.dita">Async Programming</xref> for information on other methods. </p>
 
-    <section id="net-additional-options">
+    <section id="dotnet-additional-options">
         <title>Additional options</title>
         <p> Update operations also accept a <xref
           href="../core-operations.dita#devguide_kvcore_generic/expiry">TTL
@@ -32,7 +32,7 @@
         will contain the new CAS value. </p>
     </section>
 
-    <section id="net-mutation-input">
+    <section id="dotnet-mutation-input">
         <title>Document input and output types</title>
         <p>
             Couchbase stores documents. From an SDK point of view, those
@@ -91,7 +91,7 @@
           <li><apiname>DocumentResult</apiname>: The return type for any
               <apiname>IDocument</apiname> centric operation requests.</li>
           <li><apiname>OperationResult&lt;T></apiname>: The return type for any binary operations
-            that return a value. See <xref href="#document-kv-operations/net-binary-document">the
+            that return a value. See <xref href="#document-operations/dotnet-binary-document">the
               section about binary documents</xref>.  TODO: fix xref.</li>
         </ul>
       </p>
@@ -102,7 +102,7 @@
         outside the scope of this inroduction.</p>
     </section>
 
-    <section id="net-creating-updating-full-docs">
+    <section id="dotnet-creating-updating-full-docs">
         <title>Creating and updating full documents</title>
         <p> Documents may be created and updated using the <apiname>Bucket#Upsert&lt;T>()</apiname>,
           <apiname>Bucket#Insert&lt;T>()</apiname>, and <apiname>Bucket#Replace&lt;T>()</apiname>
@@ -124,7 +124,7 @@
             server does not match the CAS supplied to the method, the operation will fail with a
               <apiname>CASMismatchException</apiname>. See <xref
               href="../concurrent-mutations-cluster.dita"/> for more information on the usage
-            of CAS values.  Note that the Cas is represented here as a <apiname>UInt64</apiname>,
+            of CAS values.  Note that the <codeph>Cas</codeph> is represented here as a <apiname>UInt64</apiname>,
             but you should consider it an opaque value in your programs.</li>
         </ul>
       </p>
@@ -144,105 +144,82 @@
           <parmname>IDocumentResult</parmname>.</p>
         <p>Inserting a document works like this:</p>
 
-<codeblock outputclass="language-net"><![CDATA[var doc = new Document&lt;string>() {   Id = "document_id",   Content = "Hello World!" };
-bucket.Upsert(doc);]]></codeblock>
+        <codeblock outputclass="language-csharp"><![CDATA[﻿            var doc = new Document<dynamic>
+            {
+                Id = "document_id",
+                Content = new
+                {
+                    some = "value"
+                }
+            };
+            var result = _bucket.Insert(doc);
+            Console.WriteLine(result.Success);]]></codeblock>
 
-<screen>Output: JsonDocument{id='document_id', cas=216109389250560, expiry=0, content={"some":"value"}, mutationToken=null}</screen>
+<screen>Output: True</screen>
 
         <p>
             If the same code is called again, a
-            <codeph>DocumentAlreadyExistsException</codeph> will be
-            thrown. If you don't care that the document is overridden,
+            <codeph>False</codeph> will be
+            returned. If you don't care that the document is overwritten,
             you can use <apiname>upsert</apiname> instead:
         </p>
 
-<codeblock outputclass="language-java"><![CDATA[JsonDocument doc = JsonDocument.create("document_id", JsonObject.empty().put("some", "other value"));
-System.out.println(bucket.upsert(doc));]]></codeblock>
+        <codeblock outputclass="language-csharp"><![CDATA[﻿            doc = new Document<dynamic>
+            {
+                Id = "document_id",
+                Content = new
+                {
+                    some = "other value"
+                }
+            };
+            result = _bucket.Upsert(doc);
+            Console.WriteLine(result.Success);]]></codeblock>
 
-<screen>Output: JsonDocument{id='document_id', cas=216109392920576, expiry=0, content={"some":"other value"}, mutationToken=null}</screen>
+<screen>Output: True</screen>
 
 
         <p>
             Finally, a full document can be replaced if it existed
             before. If it didn't exist, then a
-            <codeph>DocumentDoesNotExistException</codeph> will be
-            thrown:
+            <codeph>False</codeph> will be
+            returned in the <codeph>IDocument.Success</codeph>:
         </p>
 
-<codeblock outputclass="language-java"><![CDATA[JsonDocument doc = JsonDocument.create("document_id", JsonObject.empty().put("more", "content"));
-System.out.println(bucket.replace(doc));]]></codeblock>
+        <codeblock outputclass="language-csharp"><![CDATA[﻿            result = _bucket.Replace(doc);
+            Console.WriteLine(result.Success);]]></codeblock>
 
-<screen>Output: JsonDocument{id='document_id', cas=216109395083264, expiry=0, content={"more":"content"}, mutationToken=null}</screen>
+<screen>Output: True</screen>
 
     </section>
 
-    <section id="net-retrieving-full-docs">
-        <title>Retrieving full documents</title>
-
-        <p>
-            Documents may be retrieved using the
-            <apiname>Bucket#get()</apiname>,
-            <apiname>Bucket#getAndLock()</apiname>,
-            <apiname>Bucket#getAndTouch()</apiname> and
-            <apiname>Bucket#getFromReplica()</apiname>methods. All
-            of those serve different distinct purposes and accept
-            different parameters.
-        </p>
-        <p>
-            Most of the time you use the <apiname>get()</apiname>
-            method. It accepts one mandatory argument:
-        </p>
-
-        <ul>
-            <li><parmname>id</parmname>: The document ID to retrieve</li>
-        </ul>
-
-<codeblock outputclass="language-java"><![CDATA[System.out.println(bucket.get("document_id"));]]></codeblock>
-
-<screen>Output: JsonDocument{id='document_id', cas=216109395083264, expiry=0, content={"more":"content"}, mutationToken=null}</screen>
-
-        <p>Other overloads are available for advanced purposes:</p>
-
-        <ul>
-            <li><parmname>document</parmname>: Instead of just passing an Id a full document can be passed in. If so, the ID is extracted and used.</li>
-            <li><parmname>target</parmname>: A custom Document type (other than <codeph>JsonDocument</codeph>) can be specified.</li>
-            <li><parmname>timeout</parmname>, <parmname>timeUnit</parmname>: Specify a custom
-            timeout which overrides the default timeout setting.</li>
-        </ul>
-
-<codeblock outputclass="language-java"><![CDATA[// Use a Document where ID is extracted
-JsonDocument someDoc = JsonDocument.create("document_id");
-System.out.println(bucket.get(someDoc));]]></codeblock>
-
-<screen>Output: JsonDocument{id='document_id', cas=216109395083264, expiry=0, content={"more":"content"}, mutationToken=null}</screen>
-
-<codeblock outputclass="language-java"><![CDATA[// A custom Document type, here it returns the plain raw JSON String, encoded.
-RawJsonDocument doc = bucket.get("document_id", RawJsonDocument.class);
-String content = doc.content();
-System.out.println(content);]]></codeblock>
-
-<screen>Output: {"more":"content"}</screen>
-
-<codeblock outputclass="language-java"><![CDATA[// Wait only 1 second instead of the default timeout
-JsonDocument doc = bucket.get("document_id", 1, TimeUnit.SECONDS);]]></codeblock>
-
-        <p>
-            It is also possible to read from a replica if you want to
-            explicitly trade availability for consistency during the
-            timeframe when the active partition is not reachable (for
-            example during a node failure or netsplit).
-        </p>
-
-        <p><codeph>getFromReplica</codeph> has one mandatory argument as well:</p>
-
-        <ul>
-            <li><parmname>id</parmname>: The document ID to retrieve</li>
-        </ul>
-
-        <p>
+    <section id="dotnet-retrieving-full-docs">
+            <title>Retrieving full documents</title>
+            <p> Documents may be retrieved using <apiname>Bucket#GetDocument&lt;T&gt;()</apiname>.
+                You may also retrieve items from the or the <apiname>Bucket#Get&lt;T&gt;()</apiname>
+                method. The former is for situaitons where you want an
+                    <codeph>IDocumentResult</codeph> and the latter for situations where you want an
+                    <codeph>IOperationResult</codeph></p>
+            <p> Most of the time you use the <apiname>GetDocument()</apiname> method. It accepts one
+                mandatory argument: </p>
+            <ul>
+                <li><parmname>key</parmname>: The document ID (or key) to retrieve</li>
+            </ul>s <codeblock outputclass="language-csharp"><![CDATA[﻿            var getRes = _bucket.GetDocument<dynamic>("document_id");
+            Console.WriteLine(getRes.Document.Content);]]></codeblock>
+            <screen>Output: ﻿{
+  "some": "other value"
+}</screen>
+            <!-- TODO: add a discussion of the Get() and the IOperationResult interface -->
+            <p> It is possible to read from a replica if you want to explicitly trade availability
+                for consistency during the timeframe when the active partition is not reachable (for
+                example during a node failure or netsplit). </p>
+            <p><codeph>GetFromReplica</codeph> has one mandatory argument as well:</p>
+            <ul>
+                <li><parmname>key</parmname>: The document ID (or key) to retrieve</li>
+            </ul>
+            <!-- TODO: need to enhancet this with a description of how this works <p>
             Since you can have 0 to 3 replicas (and they can change at
             runtime of your application) the
-            <codeph>getFromReplica</codeph> returns Lists or Iterators.
+            <codeph>GetFromReplica</codeph> returns Lists or Iterators.
             It is recommended to use the Iterator APIs since they
             provide more flexibility during error conditions (since only
             partial responses may be retreived).
@@ -252,74 +229,59 @@ JsonDocument doc = bucket.get("document_id", 1, TimeUnit.SECONDS);]]></codeblock
 while(docIter.hasNext()) {
     JsonDocument replicaDoc = docIter.next();
     System.out.println(replicaDoc);
-}]]></codeblock>
+}]]></codeblock> -->
+            <note type="important"> Since a replica is updated asynchronously and eventually
+                consistent, reading from it may return stale and/or outdated results! </note>
+            <p> If you need to use pessimistic write locking on a document you can use the
+                    <parmname>GetAndLock</parmname> which will retreive the document if it exists
+                and also return its <parmname>CAS</parmname> value. You need to provide a time that
+                the document is maximum locked (and the server will unlock it then) if you don't
+                update it with the valid cas. Also note that this is a pure write lock, reading is
+                still allowed. </p>
+            <!-- TODO: write a sample for this.  I tried one at https://gist.github.com/ingenthr/ac1a72090528c3438dda764cf36d3f9c but failed -->
+            <codeblock outputclass="language-java"><![CDATA[﻿            // Get and Lock for max of 10 seconds
+            var ownedDoc = _bucket.GetWithLock<dynamic>("document_id", 10);
+
+            // Do something with your document
+            ReplacementDocument modifiedDoc = modifyDocument<IDocument>(ownedDoc);
+
+            // Write it back with the correct CAS
+            var replaceResponse = _bucket.Replace(modifiedDoc);
+            Console.WriteLine("Replace success? "+ replaceResponse.Success);]]></codeblock>
+            <p>This uses a private method and a class implementing <codeph>IDocument</codeph></p>
+        <codeblock>﻿<![CDATA[﻿        private ReplacementDocument modifyDocument<T>(IOperationResult<dynamic> ownedDoc)
+        {
+            var response =  new ReplacementDocument("document_id", ownedDoc);
+            return response;
+        }
+
+        ﻿    class ReplacementDocument : IDocument<object>
+    {
+        public ulong Cas { get; }
+        public dynamic Content { get; private set; }
+        public int Expiry { get; private set; }
+        public string Id { get; private set; }
+
+        private IOperationResult<dynamic> ownedDoc;
 
 
-    <p>Other overloads are available for advanced purposes:</p>
+        public ReplacementDocument(String id, IOperationResult<dynamic> ownedDoc)
+        {
+            this.ownedDoc = ownedDoc;
+            this.Cas = ownedDoc.Cas;
+            this.Content = ownedDoc.Value;
+            this.Expiry = 0;
+            this.Id = id;
 
-    <ul>
-        <li><parmname>replicaMode</parmname>: Allows to configure from
-        which replicas to read from (defaults to all).</li>
-        <li><parmname>document</parmname>: Instead of just passing an Id
-        a full document can be passed in. If so, the ID is extracted and
-        used.</li>
-        <li><parmname>target</parmname>: A custom Document type (other
-        than <codeph>JsonDocument</codeph>) can be specified.</li>
-        <li><parmname>timeout</parmname>, <parmname>timeUnit</parmname>:
-        Specify a custom timeout which overrides the default timeout
-        setting.</li>
-    </ul>
+        }
+    }
 
-    <note type="tip">
-        In general, always use the <parmname>ReplicaMode.ALL</parmname>
-        option and not <parmname>ReplicaMode.FIRST</parmname> and
-        similar to just get the first replica. The reason is that is
-        that ALL will also try the active node, leading to more reliable
-        behavior during failover. If you just need the first replica use
-        the iterator approach and <codeph>break;</codeph> once you have
-        enough data from the replicas.
-    </note>
+        ]]></codeblock>
+            <p> If the document is locked already and you are trying to lock it again, the response
+                will have <codeph>False</codeph> for <codeph>Success</codeph> and additional information in the <codeph>Message</codeph>.</p>
+        </section>
 
-    <note type="important">
-        Since a replica is updated asynchronously and eventually
-        consistent, reading from it may return stale and/or outdated
-        results!
-    </note>
-
-    <p>
-        If you need to use pessimistic write locking on a document you
-        can use the <parmname>getAndLock</parmname> which will retreive
-        the document if it exists and also return its
-        <parmname>CAS</parmname> value. You need to provide a time that
-        the document is maximum locked (and the server will unlock it
-        then) if you don't update it with the valid cas. Also note that
-        this is a pure write lock, reading is still allowed.
-    </p>
-
-<codeblock outputclass="language-java"><![CDATA[// Get and Lock for max of 10 seconds
-JsonDocument ownedDoc = bucket.getAndLock("document_id", 10);
-
-// Do something with your document
-JsonDocument modifiedDoc = modfiyDocument(ownedDoc);
-
-// Write it back with the correct CAS
-bucket.replace(modifiedDoc);]]></codeblock>
-
-    <p>
-        If the document is locked already and you are trying to lock it
-        again you will receive a
-        <codeph>TemporaryLockFailureException</codeph>.
-    </p>
-
-    <p>
-          It is also possible to fetch the document and reset its
-          expiration value at the same time. See
-          <xref href="document-operations.dita#net-modifying-expiration"> Modifying Expiration</xref>
-          for more information.
-    </p>
-    </section>
-
-    <section id="net-removing-full-docs">
+    <section id="dotnet-removing-full-docs">
         <title>Removing full documents</title>
 
         <p>
@@ -356,7 +318,7 @@ JsonDocument removed = bucket.remove(loaded);]]></codeblock>
 
     </section>
 
-    <section id="net-modifying-expiration">
+    <section id="dotnet-modifying-expiration">
         <title>Modifying expiraton</title>
 
         <p>
@@ -393,7 +355,7 @@ System.out.println(bucket.get("expires"));]]></codeblock>
 
     </section>
 
-    <section id="net-atomic-modifications">
+    <section id="dotnet-atomic-modifications">
         <title>Atomic document modifications</title>
 
         Additional atomic document modifications can be performing using
@@ -405,7 +367,7 @@ System.out.println(bucket.get("expires"));]]></codeblock>
         <xref href="../core-operations.dita#devguide_kvcore_generic/devguide_kvcore_append_prepend_generic" >raw byte concatenation</xref>.
     </section>
 
-    <section id="net-batching-ops">
+    <section id="dotnet-batching-ops">
         <title>Batching Operations</title>
         <p>
             Since the Java SDK uses RxJava as its asynchronous
@@ -513,7 +475,7 @@ Observable
     .single();]]></codeblock>
     </section>
 
-    <section id="net-subdocs">
+    <section id="dotnet-subdocs">
         <title>Operating with sub-documents</title>
         <note type="tip">See <xref href="../subdocument-operations.dita#subdoc-operations"/> for an overview</note>
         <hazardstatement><messagepanel id="messagepanel_edy_qwm_qv">
@@ -588,7 +550,7 @@ res.content(0);]]></codeblock>
         </p>
     </section>
 
-    <section id="net-formats-non-json">
+    <section id="dotnet-formats-non-json">
         <title>Formats and Non-JSON Documents</title>
         <note type="tip">See <xref href="../nonjson.dita#devguide_nonjson"/> for a general overview of using non-JSON documents with Couchbase</note>
         <p>
@@ -680,7 +642,7 @@ res.content(0);]]></codeblock>
         </p>
     </section>
 
-    <section id="net-binary-document">
+    <section id="dotnet-binary-document">
         <title>Correctly managing BinaryDocuments</title>
         <p>
             The <codeph>BinaryDocument</codeph> can be used to store and
@@ -692,7 +654,7 @@ res.content(0);]]></codeblock>
             Because the raw data is exposed, it is important to free it
             after it has been properly used. Not freeing it will result
             in increased garbage collection and memory leaks and should
-            be avoided by all means. See <xref href="#document-kv-operations-dotnet/binary-memory"/>.
+            be avoided by all means. See <xref href="#document-operations-dotnet/binary-memory"/>.
         </note>
         <p>
             Because binary data is arbitrary anyway, it is backward
@@ -853,5 +815,5 @@ finally {
 }]]></codeblock>
     </section>
 
-    </conbody>
-</concept>
+    </body>
+</topic>
