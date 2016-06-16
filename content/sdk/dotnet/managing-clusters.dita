@@ -1,8 +1,234 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
-<topic id="topic_rjv_p1n_bw">
+<topic id="managing-clusters-dotnet">
   <title>Managing Clusters</title>
-  <body>
-    <p>TODO</p>
+  <shortdesc>The Couchbase .NET SDK provides an API for managing a Couchbase cluster
+   programmatically: list, configure and create buckets, get cluster information, manipulate nodes in a cluster...</shortdesc>
+   <body>
+       <p conref="../shared/flush-info-pars.dita#toplevel/management-intro"/>
+       <p>The .NET SDK also comes with some convenience functionality for common Couchbase management requests.</p>
+       <p>Management operations in the .NET SDK may be performed through several interfaces depending on the object:
+           <ul id="ul_scg_czl_2w">
+            <li><apiname>ClusterProvisioner</apiname></li>
+            <li><apiname>ClusterManager</apiname> class (obtained via <apiname>Cluster#CreateManager(string, string)</apiname>
+            with the administrative username and password).</li>
+            <li><apiname>BucketManager</apiname> class (obtained via <apiname>Bucket#CreateManager(string, string)</apiname> with
+            the bucket name/password or administrative username and password).</li>
+           </ul></p>
+
+        <section><title>Getting Information About the Cluster</title>
+            <p>When you call <codeph>ClusterManager#ClusterInfo()</codeph>, the <codeph>Result&lt;&gt;</codeph>
+                it returns is an <codeph>IClusterInfo</codeph> object that contains typed information about
+                the general status and configuration of the cluster (as a <apiname>Pools</apiname> object) and
+                the configuration of all the buckets (as a <apiname>List&lt;IBucketConfig&gt;</apiname>).</p>
+        </section>
+
+        <section><title>Creating and Removing Buckets</title>
+            <p>The <apiname>ClusterManager</apiname> class may be used to create and delete buckets from the Couchbase
+                cluster. It is instantiated through the <apiname>Cluster</apiname>'s <apiname>CreateManager</apiname> method, providing the administrative username and password.</p>
+            <p><codeblock>Cluster cluster = new Cluster();
+ClusterManager clusterManager = cluster.CreateManager("Administrator", "123456");</codeblock></p>
+
+            <p>To create a bucket, use the <apiname>ClusterManager#CreateBucket(string)</apiname> method. The method has
+                additional parameters that each have a default value, but can be set explicitely in order to use a custom
+                value.</p>
+
+            <p>Only <parmname>name</parmname> parameter is mandatory. Here is the list of parameters available:</p>
+            <ul id="ul_ngw_cbm_2w">
+                <li><parmname>name</parmname>: The name of the bucket (mandatory to create one, cannot be updated).</li>
+                <li><parmname>bucketType</parmname>: The type of the bucket (mandatory to create one, cannot be changed).
+                    Defaults to <codeph>BucketTypeEnum.Couchbase</codeph>, but can also be
+                    <codeph>BucketTypeEnum.Memcached</codeph> to create a cache bucket.</li>
+                <li><parmname>ramQuota</parmname>: How much memory should each node use for the bucket. This number is
+                    specified in megabytes.</li>
+                <li><parmname>saslPassword</parmname>: If specified, makes this bucket password protected, forcing future
+                    connects (using the <apiname>Bucket</apiname>) class to specify the <parmname>password</parmname>
+                    parameter.</li>
+                <li><parmname>flushEnabled</parmname>: Enables the <apiname>BucketManager#Flush()</apiname> operation to be
+                    performed on this bucket (see the <xref href="#managing-clusters-dotnet/flushing"/> section below).</li>
+                <li><parmname>replicaNumber</parmname>: The number of replicas to use for the bucket as a
+                    <apiname>ReplicaNumber</apiname> enum.</li>
+                <li><parmname>indexReplicas</parmname>: Wether or not to replicate indexes.</li>
+                <li><parmname>parallelDbAndViewCompaction</parmname>: Indicates whether database and view files on disk can be
+                    compacted simultaneously.</li>
+                <li><parmname>threadNumber</parmname>: Integer from 2 to 8. Change the number of concurrent readers and writers
+                    for the data bucket.</li>
+        </ul>
+        <p>The following example creates a "new_bucket" password-protected bucket:</p>
+        <!-- TODO Jeff: how to update a bucket? -->
+        <codeblock>manager.CreateBucket("new_bucket",
+    bucketType: BucketTypeEnum.Couchbase,
+    saslPassword: "s3cr3t",
+    ramQuota: 120, // megabytes
+    replicaNumber: ReplicaNumber.TWO,
+    indexReplicas: true,
+    flushEnabled: true);</codeblock>
+
+            <p>Once you no longer need to use the bucket, you may delete the bucket using the
+                <apiname>ClusterManager#RemoveBucket(string)</apiname>
+                method:<codeblock>clusterManager.RemoveBucket("new_bucket");</codeblock></p></section>
+
+        <section id="flushing">
+            <title>Flushing Buckets</title>
+            <p conref="../shared/flush-info-pars.dita#toplevel/flush-intro"/>
+            <p>You may flush a bucket in the .NET SDK by using the <apiname>BucketManager#Flush()</apiname>
+                method:<codeblock>bucket.CreateManager("new_bucket", "s3cr3t").Flush()</codeblock></p>
+            <p>The <apiname>Flush</apiname> operation may fail if the bucket does not have flush
+                enabled, returning an error <apiname>IResult</apiname>.</p>
+        </section>
+
+        <section>
+            <title>N1QL Index Management</title>
+            <p conref="../shared/flush-info-pars.dita#toplevel/index-management"/>
+            <p>You can manage indexes in the .NET SDK using the <apiname>BucketManager</apiname>
+                class, with its various N1QL related methods: <apiname>ListN1qlIndexes()</apiname>, <apiname>CreateN1qlIndex(...)</apiname>, etc...</p>
+            <p>The following example creates a N1QL secondary index named "fooBar" on the "test" bucket,
+                indexing fields "foo" and "bar":</p>
+            <codeblock>//getting the bucket manager is omitted
+testManager.CreateN1qlIndex("fooBar", defer: false, "foo", "bar");</codeblock>
+            <p>Note that the methods return an <apiname>IResult</apiname>, which could represent a failure notably
+                if the index you attempt to create already exists (or when attempting to delete an index that doesn't
+                exist).</p>
+        </section>
+
+        <section>
+            <title>View Management</title>
+            <p conref="../shared/flush-info-pars.dita#toplevel/view-management"/>
+            <p> In the .NET SDK, design documents are simply represented as a <codeph>string</codeph>, the JSON
+                representation of the design document. All operations on design documents are performed on a
+                <codeph>IBucketManager</codeph> instance.</p>
+            <p>To inspect design documents, you can either retrieve them by name
+                (<codeph>bucketManager.GetDesignDocument("landmarks")</codeph>) or iterate through a list of documents
+                (<codeph>bucketManager.GetDesignDocuments()</codeph>). The later can include design documents that are
+                still in <i>development mode</i> (that is, running only on a small fraction of the documents) by using
+                the <parmname>includeDevelopment</parmname> parameter.</p>
+            <p>To create or update design documents, use the <apiname>InsertDesignDocument(string, string)</apiname> and
+                <apiname>UpdateDesignDocument(string, string)</apiname> methods.</p>
+            <p>The following example inserts a design document with two regular views and one spatial
+                view into a bucket named <codeph>travel-sample</codeph>:</p>
+
+            <codeblock outputclass="language-csharp">//shortcut for the purpose of this snippet only
+BucketManager bucketManager = new Cluster().OpenBucket("travel-sample").CreateManager("travel-sample", "");
+
+// the design document string
+string designDoc = "{"
+ + "    \"views\": {"
+ + "        \"by_country\": {"
+ + "            \"map\": \"function (doc, meta) { if (doc.type == 'landmark') { emit([doc.country, doc.city], null); } }\""
+ + "        }, \"by_activity\": {"
+ + "            \"map\": \"function (doc, meta) { if (doc.type == 'landmark') { emit(doc.activity, null); } }\","
+ + "            \"reduce\": \"_count\""
+ + "        }"
+ + "    }, \"spatialViews\": {"
+ + "        \"by_coordinates\": {"
+ + "            \"map\": \"function (doc, meta) { if (doc.type == 'landmark') { emit([doc.geo.lon, doc.geo.lat], null); } }\""
+ + "        }"
+ + "    }"
+ + "}";
+
+// Insert design document into the bucket
+bucketManager.InsertDesignDocument("landmarks", designDoc);</codeblock>
+
+            <note conref="../shared/flush-info-pars.dita#toplevel/one-view-update-warning"/>
+            <p>To remove a design document from a bucket, pass its name to the <codeph>RemoveDesignDocument</codeph> method.</p>
+        </section>
+
+    <section>
+        <title>Using the ClusterProvisioner to create a whole cluster</title>
+        <p>Alternatively to the methods exposed above for dealing with buckets creation, the .NET SDK offers a
+            <apiname>ClusterProvisioner</apiname> API that can also create buckets, but goes a little bit beyond
+            as it can be used to provision an entire cluster, including adding/removing nodes.</p>
+
+        <note><p>In order to follow this example, you will need to provision the nodes that will make up the
+            Couchbase cluster. These can be any supported OS, but each must have Couchbase Server installed
+            and the basic networking done so that they can communicate to each other over common networking
+            protocols such as TCP and HTTP.</p>
+            <p>In this example, we will use Vagrant, Puppet and the "vagrants" project found here: <xref
+                format="html" href="https://github.com/couchbaselabs/vagrants"
+                >https://github.com/couchbaselabs/vagrants</xref> to provision a cluster. Additional steps for
+                installing Puppet, Vagrant and VirtualBox can be found here: <xref format="html"
+                href="http://nitschinger.at/A-Couchbase-Cluster-in-Minutes-with-Vagrant-and-Puppet"
+                >http://nitschinger.at/A-Couchbase-Cluster-in-Minutes-with-Vagrant-and-Puppet</xref></p>
+                <p>Once the nodes are provisioned, we can continue with the rest of the example.</p></note>
+
+        <p>Using the IP's of your nodes that have been provisioned, the client can bootstrap to the
+            entry-point or "EP" node. This done either through a configuration object or through the
+            App.config or Web.config (for ASP.NET projects). In this example we will use a
+            ClientConfiguration object to programmatically create a configuration and bootstrap to the EP
+            node:</p>
+        <codeblock outputclass="language-csharp">
+    var config = new ClientConfiguration
+    {
+        Servers = new List&lt;Uri&gt;
+        {
+            new Uri("http://192.168.77.101:8091/"),
+            new Uri("http://192.168.77.102:8091/"),
+            new Uri("http://192.168.77.103:8091/"),
+            new Uri("http://192.168.77.104:8091/")
+        }
+    };
+
+    var cluster = new Cluster(config);
+    var provisioner = new ClusterProvisioner(cluster, "Administrator", "password");
+    var results = await provisioner.ProvisionEntryPointAsync();
+    foreach (var res in results.Results)
+    {
+        Console.WriteLine(res.Message);
+    }</codeblock>
+        <p>In this example, you create a <apiname>ClientConfiguration</apiname> and specify the URI's for each of the four nodes
+            you provisioned in the previous step. The entry-point node or EP node will be the first node in the
+            list. You then create a <apiname>Cluster</apiname> object passing in the <apiname>ClientConfiguration</apiname>
+            and then create a <apiname>ClusterProvisioner</apiname> object passing in the Cluster references and the user and
+            password. Then we call <codeph>ProvisionEntryPointAsync()</codeph> which will create an EP node from the first
+            URI in the <parmname>Servers</parmname> list that has a "default" Couchbase (persistent) bucket. The password and
+            username will be the administrative password and since we are using the defaults, all three services (data, query,
+            and index) will be enabled. Finally we output the results.</p>
+
+        <p>Next you will optionally add two sample buckets: travel-sample and beer-sample.</p>
+        <codeblock outputclass="language-csharp">
+     var result = await provisioner.ProvisionSampleBucketAsync("beer-sample");
+     Console.WriteLine(result.Message);
+
+     var result = await provisioner.ProvisionSampleBucketAsync("travel-sample");
+     Console.WriteLine(result.Message);</codeblock>
+
+        <p>Once again optionally, you may want to <b>add additional buckets</b>. In this case we will add a SASL
+            authenticated Couchbase bucket and a MemcachedBucket:</p>
+        <codeblock outputclass="language-csharp">
+    var result = await provisioner.ProvisionBucketAsync(new BucketSettings
+    {
+        Name = "authenticated",
+        SaslPassword = "secret",
+        AuthType = AuthType.Sasl,
+        BucketType = BucketTypeEnum.Couchbase
+    });
+    Console.WriteLine(result.Message);</codeblock>
+        <p>As you can see the provisioner uses a <apiname>BucketSettings</apiname> object rather than named method
+            parameter to define options.The name of the bucket is "authenticated", the password is "secret", and the
+            <parmname>BucketType</parmname> is Couchbase, so this will create a persistent bucket.</p>
+        <codeblock outputclass="language-csharp">
+    var result = await provisioner.ProvisionBucketAsync(new BucketSettings
+    {
+        Name = "memcached",
+        SaslPassword = "",
+        AuthType = AuthType.Sasl,
+        BucketType = BucketTypeEnum.Memcached
+    });
+    Console.WriteLine(result.Message);</codeblock>
+    <p>The name of the bucket is "memcached" with no password and the <parmname>BucketType</parmname> is Memcached,
+        so this will create an in-memory bucket.</p>
+
+        <p><b>Adding nodes to the cluster</b>: Once you have provisioned and bootstrapped to an EP node, you can
+            add nodes to create a cluster. In order to do this, the <apiname>ClusterProvisioner</apiname> object
+            created earlier will be used to add the rest of the nodes defined in the <apiname>ClientConfiguration</apiname>
+            in the first step (102, 103, and 104).</p>
+        <codeblock outputclass="language-csharp">var results = await provisioner.ProvisionNodesAsync(
+    CouchbaseService.Index,
+    CouchbaseService.KV,
+    CouchbaseService.N1QL);</codeblock>
+        <p>This will provision the rest of the nodes in the ClientConfiguration. If you want finer grained control of
+            which services are enabled on each node, you can you use <apiname>ProvisionNodeAsync</apiname>.
+            <apiname>ProvisionNodeAsync</apiname> provisions a single node.</p>
+   </section>
   </body>
 </topic>
