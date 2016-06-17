@@ -1,79 +1,75 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
-<concept id="concept_tvx_nhq_44">
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="concept_tvx_nhq_44">
     <title>MapReduce Views</title>
     <shortdesc>You can use MapReduce views to create queryable secondary indexes in Couchbase
         Server. </shortdesc>
-    <conbody>
-        <p>The primary index for documents is the key you use when performing the standard CRUD
-			methods. In the C client library, query results are delivered on a per-row basis to a given
-			callback, which is specified at query time.</p>
-        <p>The following example queries a <codeph>by_name</codeph> view in a beer design document.
-            This view checks whether a document is a beer and has a name. If it does, it emits the
-            beer's name into the index. This view allows beers to be queried for by name. For
-            example, it's now possible to ask the question "What beers start with A?"</p>
-        <codeblock outputclass="language-javascript">function (doc, meta) {
-  if (doc.type &amp;&amp; doc.type == "beer" &amp;&amp; doc.name) {
-     emit(doc.name, null);
-  }
-}</codeblock>
-        <p>Querying a view is performed through the <apiname>lcb_view_query()</apiname> function. To
-			use this function, include the <filepath>&lt;libcouchbase/views.h></filepath> file.</p>
-        <p>First, a handler function is defined to deal with each row (and at the end, any metadata)
-            of the query:</p>
-        <p><codeblock outputclass="language-c" spectitle="Per-Row callback">static void viewCallback(lcb_t instance, int ign, const lcb_RESPVIEWQUERY *rv)
-{
-    if (rv->rflags &amp; LCB_RESP_F_FINAL) {
-        printf("*** META FROM VIEWS ***\n");
-        fprintf(stderr, "%.*s\n", (int)rv->nvalue, rv->value);
-        return;
-    }
+    <body>
+        <section conref="../shared/views.dita#toplevel/views-intro"/>
+        <section conref="../shared/views.dita#toplevel/example-beer"/>
+        <section>
+            <title>Querying Views through the C SDK</title>
+            <p>In the C client library, query results are delivered on a per-row basis to a given
+                callback, which is specified at query time.</p>
+            <p>Querying a view is performed through the <apiname>lcb_view_query()</apiname> function. To
+                use this function, include the <filepath>&lt;libcouchbase/views.h></filepath> file.</p>
+            <p>First, a handler function is defined to deal with each row (and at the end, any metadata)
+                of the query:</p>
+            <p><codeblock outputclass="language-c" spectitle="Per-Row callback">static void viewCallback(lcb_t instance, int ign, const lcb_RESPVIEWQUERY *rv)
+                {
+                if (rv->rflags &amp; LCB_RESP_F_FINAL) {
+                printf("*** META FROM VIEWS ***\n");
+                fprintf(stderr, "%.*s\n", (int)rv->nvalue, rv->value);
+                return;
+                }
 
-    printf("Got row callback from LCB: RC=0x%X, DOCID=%.*s. KEY=%.*s\n",
-        rv->rc,
-        (int)rv->ndocid, rv->docid,
-        (int)rv->nkey, rv->key);
+                printf("Got row callback from LCB: RC=0x%X, DOCID=%.*s. KEY=%.*s\n",
+                rv->rc,
+                (int)rv->ndocid, rv->docid,
+                (int)rv->nkey, rv->key);
 
-    if (rv->docresp) {
-        printf("   Document for response. RC=0x%X. CAS=0x%lx\n",
-            rv->docresp->rc, rv->docresp->cas);
-    }
-}
-</codeblock>This
-			callback is invoked for each row. The end of the query (when no more rows to return) is
-			signaled by having the <codeph>LCB_RESP_F_FINAL</codeph> bit set in the response's
-				<codeph>rflags</codeph> field.</p>
-        <p>The response structure contains a <codeph>key</codeph> and <codeph>nkey</codeph>,
-				<codeph>value</codeph> and <codeph>nvalue</codeph>, and <codeph>docid</codeph> and
-				<codeph>ndodic</codeph> fields that contain the buffer and lengths for the emitted keys
-			and values of the view result and the corresponding document ID. The final row (the one
-			with the <codeph>LCB_RESP_F_FINAL</codeph> flag set) contains the "shell" of the response
-			(that is, any errors, debug information, and the <codeph>total_rows</codeph> field) in the
-				<codeph>value</codeph> field.</p>
-        <p>All the fields (except <codeph>docid</codeph>) are JSON encoded and should be decoded by
-            a JSON decoder before use.</p>
-        <p>To actually invoke the query, populate the request
-            structure:<codeblock outputclass="language-c">lcb_CMDVIEWQUERY vq = { 0 };
-lcb_view_query_initcmd(&amp;vq, "beer", "by_name", NULL, viewCallback);
-lcb_error_t rc = lcb_view_query(instance, NULL, &amp;vq);
-if (rc != LCB_SUCCESS) {
-    // Handle error
-}
-lcb_wait(instance);</codeblock>The
+                if (rv->docresp) {
+                printf("   Document for response. RC=0x%X. CAS=0x%lx\n",
+                rv->docresp->rc, rv->docresp->cas);
+                }
+                }
+            </codeblock>This
+                callback is invoked for each row. The end of the query (when no more rows to return) is
+                signaled by having the <codeph>LCB_RESP_F_FINAL</codeph> bit set in the response's
+                <codeph>rflags</codeph> field.</p>
+            <p>The response structure contains a <codeph>key</codeph> and <codeph>nkey</codeph>,
+                <codeph>value</codeph> and <codeph>nvalue</codeph>, and <codeph>docid</codeph> and
+                <codeph>ndodic</codeph> fields that contain the buffer and lengths for the emitted keys
+                and values of the view result and the corresponding document ID. The final row (the one
+                with the <codeph>LCB_RESP_F_FINAL</codeph> flag set) contains the "shell" of the response
+                (that is, any errors, debug information, and the <codeph>total_rows</codeph> field) in the
+                <codeph>value</codeph> field.</p>
+            <p>All the fields (except <codeph>docid</codeph>) are JSON encoded and should be decoded by
+                a JSON decoder before use.</p>
+            <p>To actually invoke the query, populate the request
+                structure:<codeblock outputclass="language-c">lcb_CMDVIEWQUERY vq = { 0 };
+                    lcb_view_query_initcmd(&amp;vq, "beer", "by_name", NULL, viewCallback);
+                    lcb_error_t rc = lcb_view_query(instance, NULL, &amp;vq);
+                    if (rc != LCB_SUCCESS) {
+                    // Handle error
+                    }
+                    lcb_wait(instance);</codeblock>The
                 <apiname>lcb_view_query_initcmd()</apiname> convenience function allows you to
-            populate the command structure with common parameters. Unlike most library operations,
-            the callback here is specific to the operation rather than global.</p>
-        <p>Of course, the command structure can also be populated manually:</p>
-        <codeblock outputclass="language-c">lcb_CMDVIEWQUERY vq = { 0 };
-vq.ddoc = "beer";
-vq.nddoc = strlen(vq.ddoc);
-vq.view = "by_name";
-vq.nview = strlen(vq.view);
-vq.callback = viewCallback;
-lcb_error_t rc = lcb_view_query(instance, NULL, &amp;vq);
-if (rc != LCB_SUCCESS) {
-    // ...
-}
-lcb_wait(instance);</codeblock>
-    </conbody>
-</concept>
+                populate the command structure with common parameters. Unlike most library operations,
+                the callback here is specific to the operation rather than global.</p>
+            <p>Of course, the command structure can also be populated manually:</p>
+            <codeblock outputclass="language-c">lcb_CMDVIEWQUERY vq = { 0 };
+                vq.ddoc = "beer";
+                vq.nddoc = strlen(vq.ddoc);
+                vq.view = "by_name";
+                vq.nview = strlen(vq.view);
+                vq.callback = viewCallback;
+                lcb_error_t rc = lcb_view_query(instance, NULL, &amp;vq);
+                if (rc != LCB_SUCCESS) {
+                // ...
+                }
+                lcb_wait(instance);</codeblock>
+        </section>
+
+    </body>
+</topic>
