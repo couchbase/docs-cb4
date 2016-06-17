@@ -281,24 +281,23 @@ mgr.watch_n1ql_indexes(('ix_name', 'ix_email', '#primary'), timeout=120)</codebl
             </p></section>
         <section>
             <title id="consistency">Index Consistency</title>
-            <p>Because indexes are by design outside the data service, they are eventually consistent
-               and may at times not contain the most up-to-date information.
-                This may especially be the case when deployed in a write-heavy environment: changes
-                may take some time to propagate over to the index nodes.</p>
-            <p>The asynchronous updating nature of indexes mean that they are very quick to query
-                and do not cause any performance hit on the data service: N1QL queries are forwarded
-                to the relevant indexes and the queries are done based on indexed information,
-                rather than the documents as they exist in the data service. This also means however
-                that changes made in the data service but have not yet been received in the index
-                service are not visible to the query.</p>
-            <p>By default, the query service will rely on the current index state: the most
-                up-to-date document versions are not retrieved, and only the indexed versions are
-                queried. This provides the best performance, and does not usually sacrifice on
-                consistency - only updates occurring with a small time frame may not yet have been
-                indexed.</p>
-            <p>You can instruct the query service to use the latest versions of documents by
-                modifying the <apiname>consistency</apiname> of the query. This is done by setting
-                the <apiname>consistency</apiname> or <apiname>scan_consistency</apiname> property
+            <p>Because indexes are by design outside the data service, they are eventually
+                consistent with respect to changes to documents and, depending on how you issue the
+                query, may at times not contain the most up-to-date information.   This may
+                especially be the case when deployed in a write-heavy environment: changes may take
+                some time to propagate over to the index nodes.</p>
+            <p>The asynchronous updating nature of global secondary indexes means that they can be
+                very quick to query and do not require the additional overhead of index
+                recaclculations at the time documents are modified. N1QL queries are forwarded to
+                the relevant indexes and the queries are done based on indexed information, rather
+                than the documents as they exist in the data service. </p>
+            <p>With default query options, the query service will rely on the current index state:
+                the most up-to-date document versions are not retrieved, and only the indexed
+                versions are queried. This provides the best performance. Only updates occurring
+                with a small time frame may not yet have been indexed.</p>
+            <p>The query service can use the latest versions of documents by modifying the
+                    <apiname>consistency</apiname> of the query. This is done by setting the
+                    <apiname>consistency</apiname> or <apiname>scan_consistency</apiname> property
                 of the query to <apiname>REQUEST_PLUS</apiname>. When using this consistency mode,
                 the query service will ensure that the indexes are synchronized with the data
                 service before querying.</p>
@@ -321,14 +320,18 @@ row = cb.n1ql_query(query).get_single_result()</codeblock>The
                 above query may not return the newly inserted document because it has not yet been
                 indexed. The query is issued immediately after document creation, and in this case
                 the query engine may process the query before the index has been updated.</p>
-            <p>If the above code is modified to use <apiname>CONSISTENT_REQUEST</apiname>, the new
-                server will wait until all updates (current to the point in time the query was
-                received) are
-                indexed:<codeblock outputclass="language-python">query = N1QLQuery(
+            <p>If the above code is modified to use <i>request_plus</i> (currently mapped to the
+                    <apiname>CONSISTENT_REQUEST</apiname> constant in the Python SDK), query
+                processing will wait until all updates have been processed and recalculated into the
+                index from the point in time the query was
+                received:<codeblock outputclass="language-python">query = N1QLQuery(
     'SELECT name, email, random, META(default).id FROM default WHERE $1 IN name', 'Brass')
 # If this line is removed, the latest 'random' field might not be present
 <b>query.consistency = CONSISTENCY_REQUEST</b>
 row = cb.n1ql_query(query).get_single_result()</codeblock></p>
+            <p> This gives you as an application developer more control over the balance between
+                performance and consistency with respect to other actions on your distributed
+                database. </p>
         </section>
     </body>
 </topic>
