@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_u21_zcf_3w">
+  <title>Deploying Multi-node Cluster</title>
+  <shortdesc>There are two popular topologies for Couchbase Server multi-node clusters: all Couchbase Server containers on one physical machine and each Couchbase Server container on its own machine. </shortdesc>
+  <body>
+    <p>All Couchbase Server containers on one physical machine - This model is commonly used for scale-minimized deployments simulating production deployments for development and test purposes.</p>
+    <p>Each Couchbase Server container on its own machine - This model is commonly used for production deployments. This is the only supported topology in production with Couchbase Server version 4.5 and higher.</p>
+    <section><title>Deploying Multiple Couchbase Server Containers on One Physical Machine</title>
+      <p>In this deployment model all containers are placed on the same physical node. Placing all containers on a single physical machine means all containers will compete for the same resources. That is okay for test systems, however it isn’t recommended for applications sensitive to performance.</p>
+      <p>In this example, we'll sets up a 3 node Couchbase Server cluster with all Couchbase Server containers running on one physical machine.</p><ol>
+        <li>Start the Couchbase Server containers, db1, db2 and db3, using the following command:
+            <codeblock>docker run -d --name db1 couchbase
+docker run -d --name db2 couchbase
+docker run -d --name db3 -p 8091-8094:8091-8094 -p 11210:11210 couchbase</codeblock><p>These
+            commands download and run 3 Couchbase containers tagged "latest" from the Couchbase repo
+            on Docker Hub. <note>If you are using encrypted communication for Web Console, client
+              and server, and using XDCR, you need to open up additional ports. For details, see
+                <xref href="install-ports.dita"/>.</note></p><p>Check the Docker logs to verify that
+            the containers have started:
+            <codeblock>docker logs db1
+docker logs db2
+docker logs db3</codeblock></p><p>If the
+            containers have started, all the above commands should return the following output:
+            <codeblock>Starting Couchbase Server -- Web UI available at http://&lt;ip&gt;:8091</codeblock></p><note>If
+            Couchbase Server is running locally on the machine without containers, the port mappings
+            above under the <codeph>-p</codeph> option may fail. Ensure that you stop your local
+            instance of Couchbase Server before running the above command.</note></li>
+        <li>Run <cmdname>docker inspect</cmdname> to discover the local IP addresses for each container. You will need the IP addresses for db1 and db2 to set up the 3 node Couchbase Server cluster. The initial cluster setup will automatically pick up the IP address for db3. <codeblock>docker inspect --format '{{ .NetworkSettings.IPAddress }}' db1
+docker inspect --format '{{ .NetworkSettings.IPAddress }}' db2</codeblock></li>
+        <li>From the browser, access the Web Console using
+            <filepath>http://localhost:8091</filepath>. You are now connected to container named
+          db3. If the container is up and running, you will see the Couchbase Server Setup
+            Screen.<image placement="break" href="picts/setup-screen.png" width="570"
+            id="image_y3p_fgg_3w"/></li>
+        <li>Walk through the Setup wizard and accept the default values. <p>You may need to lower
+          the RAM allocated to various services to fit within the bounds of the resource for the
+          containers.  Enable the `travel-sample` and `beer-sample` buckets to load some sample
+          data. </p><p>For detailed information on configuring the server, see <xref
+            href="init-setup.dita"/></p></li>
+        <li>Next, we need to add the db1 and db2 containers to the cluster. <ol>
+          <li>On the Web Console, go to the Server Nodes tab and click <uicontrol>Add
+                Server</uicontrol> and specify the IP address you captured for db1. <image
+                placement="break" href="picts/cluster-setup-add-servers.png" width="570"
+                id="image_kxc_lgg_3w"/></li>
+          <li>Click <uicontrol>Add Server</uicontrol> again and specify the IP address you captured for db2</li>
+          <li>Click <uicontrol>Rebalance</uicontrol>.<image placement="break"
+                href="picts/docker-single-node-rebalance.png" width="570" id="image_ybp_2gg_3w"
+              /></li>
+        </ol></li>
+      </ol>
+      <p>This is all that is needed for a multi-node Couchbase Server cluster deployment using a single physical machine.</p>
+      <p><b>Running a N1QL Query</b></p>
+      <p>Open the Web Console at <filepath>http://localhost:8091</filepath> and switch to the Query tab. Run the following N1QL query: <codeblock>SELECT name FROM `beer-sample` WHERE  brewery_id ="mishawaka_brewing";</codeblock></p>
+      <p>To run a query from command line query tool: <ol>
+        <li>Run the interactive shell on the container:
+          <codeblock>bash -c "clear &amp;&amp; docker exec -it db1 sh"</codeblock></li>
+        <li>Navigate to the <filepath>bin</filepath> directory: 
+          <codeblock># cd /opt/couchbase/bin</codeblock></li>
+        <li>Run the <cmdname>cbq</cmdname> command line tool: <codeblock># ./cbq</codeblock></li>
+        <li>Execute a N1QL query on the `beer-sample` bucket:
+          <codeblock>cbq> SELECT name FROM `beer-sample` WHERE  brewery_id ="mishawaka_brewing";</codeblock></li>
+      </ol></p>
+      <p>For more query samples, see <xref href="../getting-started/first-n1ql-query.dita"></xref>. </p>
+      <p><b>Connect via SDK</b></p>
+      <p>Couchbase Server SDKs communicate with Couchbase Server services over various
+        ports using the name that is used to register each node in the Server Nodes tab. Given
+        each node is registered using the local IP address, applications using the SDK need to be
+        within the private IP network the Couchbase Server containers are in. You can do this by
+        running your application in another container on the same physical machine.</p><p>For more information on deploying a sample application to a container, see  <xref
+          href="../travel-app/index.dita"/>. </p>
+    </section>
+    <section><title>Deploying Couchbase Server Containers across Many Physical Machines</title>
+      <p>In this deployment model each container is placed on its own physical machine. This is the supported model for production deployments with Couchbase Server containers.</p>
+      <p>In this example, we’ll set up a 3 nodes Couchbase Server cluster, with each Couchbase Server container running on its own physical machine.</p><ol>
+        <li>On all 3 physical hosts, start the Couchbase Server container, db, using the following
+            command:<codeblock>docker run -d --name db -v ~/couchbase:/opt/couchbase/var --net=host couchbase</codeblock><p>This
+            command downloads and runs Couchbase container tagged “latest” from the Couchbase repo
+            on Docker Hub. The <cmdname>docker run -v</cmdname> option is recommended for better IO
+            performance and persists the data stored by Couchbase on the local host. The
+              <codeph>--net=host</codeph> option provides better network performance and maps the
+            host network stack to the container.</p><p>Check the Docker logs on each host to verify
+            that the containers have started: <codeblock>docker logs db</codeblock></p><p>If the
+            containers have started, the command should return the following output:
+            <codeblock>Starting Couchbase Server -- Web UI available at http://&lt;ip&gt;:8091</codeblock></p></li>
+        <li>On all 3 physical hosts, run the command <cmdname>docker inspect</cmdname> to discover the local IP addresses for each container. You will need the IP addresses for each container on all the nodes in the Couchbase Server cluster.<codeblock>docker inspect --format '{{ .NetworkSettings.IPAddress }}' db</codeblock></li>
+        <li>On one of the physical hosts, access the Web Console from the browser using
+            <filepath>http://node-ip:8091</filepath>. If the container is up and running, you will
+          see the Couchbase Server Setup Screen. <image placement="break"
+            href="picts/setup-screen.png" width="570" id="image_v4x_zfg_3w"/><p>Click Setup, select
+            the Start a new cluster option, and walk through the Setup wizard . For detailed
+            information on configuring the server, see <xref href="init-setup.dita"/></p></li>
+        <li>On the remaining physical hosts, access the Web Console from the browse using <filepath>http://node-ip:8091</filepath>. If the container is up and running, you will see the Couchbase Server Setup Screen on each node.<p>Click <uicontrol>Setup</uicontrol>, select the <uicontrol>Join a cluster</uicontrol> option, and walk through the Setup wizard. </p></li>
+        <li>On the last physical host, after you join the cluster, switch to the Server Nodes tab
+          and click <uicontrol>Rebalance</uicontrol>. <image placement="break"
+            href="picts/docker-multi-node-rebalance.png" id="image_kkp_wfg_3w" width="570"/></li>
+      </ol>
+      <p>This all that is needed for a multi-node Couchbase Server cluster deployment across multiple physical machines. </p>
+      <p><b>Running A N1QL Query on the Cluster</b></p>
+      <p>Open the Web Console at <filepath>http://node-ip:8091</filepath> and switch to the Query tab. Run the following N1QL query: <codeblock>SELECT name FROM `beer-sample` WHERE  brewery_id ="mishawaka_brewing";</codeblock></p>
+      <p>To run a query from command line query tool: <ol>
+        <li>Run the interactive shell on the container:
+          <codeblock>bash -c "clear &amp;&amp; docker exec -it db sh"</codeblock></li>
+        <li>Navigate to the <filepath>bin</filepath> directory: 
+          <codeblock># cd /opt/couchbase/bin</codeblock></li>
+        <li>Run the <cmdname>cbq</cmdname> command line tool: <codeblock># ./cbq</codeblock></li>
+        <li>Execute a N1QL query on the `beer-sample` bucket:
+          <codeblock>cbq> SELECT name FROM `beer-sample` WHERE  brewery_id ="mishawaka_brewing";</codeblock></li>
+      </ol></p>
+      <p>For more query samples, see <xref href="../getting-started/first-n1ql-query.dita"></xref>. </p>
+      <p><b>Connect via SDK</b></p>
+      <p>The SDKs communicate with Couchbase Server services over various ports using the name that is used to register each node in the Server Nodes tab. Given each node is registered using the IP address of the hosts, applications using the SDK can be run from any host that can reach the nodes of the cluster. </p><p>For more information on deploying a sample application to a container, see  <xref
+          href="../travel-app/index.dita"/>. </p>
+    </section>
+  </body>
+</topic>
