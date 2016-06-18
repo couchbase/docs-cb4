@@ -36,7 +36,7 @@
           asynchronous programming. The <codeph>async</codeph> keyword is part of the signature of the
           method, lambda expression or anonymous that will be executing the non-blocking,
           asynchronous code. A method signature with the the async keyword is called an
-          "async method".<codeblock><![CDATA[public async Task<IDocumentResult<T>> GetDocumentAsync<T>(string id){
+          "async method".<codeblock outputclass="language-csharp"><![CDATA[public async Task<IDocumentResult<T>> GetDocumentAsync<T>(string id){
     //code goes here
 }]]></codeblock></p>
         <p>Above is the signature of the <apiname>GetDocumentAsync</apiname> method of the <apiname>CouchbaseBucket</apiname>
@@ -55,78 +55,68 @@
           in offloading execution to the thread pool if the task has already
           completed).</p>
       </section>
-      <section id="dotnet-task-and-task_Result"><title>Task and Task&lt;Result></title><p>In TAP, the
-        <apiname>Task</apiname> and <apiname>Task&lt;Result></apiname> are equivalent to "futures" which is a special type
-        that will notify the caller when they have completed. A <apiname>Task</apiname> represents a void
-        return type (a method whose return type is void) and a <apiname>Task&lt;Result></apiname>
-        represents the return type of the generic result - in the <apiname>GetDocumentAsync</apiname>
-        method above, its a class that implements <apiname>IDocumentResult</apiname>. Within your code you
-        will await on the <apiname>Task</apiname> or <apiname>Task&lt;Result></apiname> returned by the asynchronous method
-        you are
-        calling:</p><codeblock>DocumentResult&lt;string> docResult = await GetDocumentAsync&lt;string>("somekey");</codeblock>Note
-        that if the await keyword is omitted, then a <apiname>Task&lt;IDocumentResult&lt;string>></apiname>
-        would be
-        returned:<codeblock><![CDATA[Task<DocumentResult<string>> docTask = GetDocumentAsync<string>("somekey");]]></codeblock>In
-        this case the <apiname>Task</apiname> has not been awaited and it may or may have not been executed
-        (remember its a "future"). In order to execute it the docResult would have to be
-        awaited:
-        <codeblock><codeph>DocumentResult&lt;string> docResult = await docTask;</codeph></codeblock>In
-        this case we have seperated out the call to <apiname>GetDocumentAsync(..)</apiname> and awaiting for
-        the execution of the <apiname>Task&lt;DocumentResult></apiname> it returned to be completed. Note that
-        by the time <codeph>docTask</codeph> has been awaited, the execution may actually have already been
-        completed. In this case the await will simply return the result of the operation;
-        the document stored under the id or key "somekey".</section>
-      <section id="dotnet-async-example"><title>An In-depth Example</title><p>Continuing from
-        the section above, we will make a call to retrieve a document with an Id of
-        "somekey" and display the results. We will assume that the server is installed
-        on localhost and that we have a "default" CouchbaseBucket set
-        up.</p><p><codeblock>using System;
-          using System.Collections.Generic;
-          using System.Threading.Tasks;
-          using Couchbase;
-          using Couchbase.Configuration.Client;
+      <section id="dotnet-task-and-task_Result"><title>Task and Task&lt;Result></title><p>In TAP,
+                the <apiname>Task</apiname> and <apiname>Task&lt;Result></apiname> are equivalent to
+                "futures"– a special type that will notify the caller when they have completed. A
+                    <apiname>Task</apiname> represents a void return type (a method whose return
+                type is void) and a <apiname>Task&lt;Result></apiname> represents the return type of
+                the generic result - in the <apiname>GetDocumentAsync</apiname> method above, its a
+                class that implements <apiname>IDocumentResult</apiname>. Within your code you will
+                await on the <apiname>Task</apiname> or <apiname>Task&lt;Result></apiname> returned
+                by the asynchronous method you are
+            calling:</p><codeblock outputclass="language-csharp"><![CDATA[DocumentResult<string> docResult = await GetDocumentAsync<string>("somekey");]]></codeblock>Note
+            that if the await keyword is omitted, then a
+                <apiname><![CDATA[Task&lt;IDocumentResult&lt;string>>]]></apiname> would be
+            returned:<codeblock outputclass="language-csharp"><![CDATA[Task<DocumentResult<string>> docTask = GetDocumentAsync<string>("somekey");]]></codeblock>In
+            this case the <apiname>Task</apiname> has not been awaited and it may or may have not
+            been executed (remember its a "future"). In order to execute it the docResult would have
+            to be awaited:
+            <codeblock>DocumentResult&lt;string> docResult = await docTask;</codeblock>In this case
+            we have seperated out the call to <apiname>GetDocumentAsync(..)</apiname> and awaiting
+            for the execution of the <apiname>Task&lt;DocumentResult></apiname> it returned to be
+            completed. Note that by the time <codeph>docTask</codeph> has been awaited, the
+            execution may actually have already been completed. In this case the await will simply
+            return the result of the operation; the document stored under the id or key
+            "somekey".</section>
+      <section id="dotnet-async-example"><title>An In-depth Example</title><p>Continuing from the
+                section above, we will make a call to retrieve a document with an Id of "somekey"
+                and display the results. We will assume that the server is installed on localhost
+                and that we have a "default" CouchbaseBucket set up.</p><p><codeblock outputclass="language-csharp"><![CDATA[static void Main(string[] args){
+    Console.WriteLine("Before calling PrintDocumentAsync on thread {0}.",
+       Thread.CurrentThread.ManagedThreadId);
+    new AsyncExample().ExecuteAsync().Wait();
+    Console.WriteLine("After calling PrintDocumentAsync on thread {0}.",
+     Thread.CurrentThread.ManagedThreadId);
+}
 
-          namespace ConsoleApplication8 {
-          class Program {
-          static void Main(string[] args) {
-          var config = new ClientConfiguration{
-          Servers = new List&lt;Uri>{
-          new Uri("http://localhost:8091/")
-          }
-          };
-          ClusterHelper.Initialize(config);
-          Console.WriteLine("Before calling PrintDocumentAsync on thread {0}.",
-          Thread.CurrentThread.ManagedThreadId);
-          Task.Run(async () => await PrintDocumentAsync("somekey"));
-          Console.WriteLine("After calling PrintDocumentAsync on thread {0}.",
-          Thread.CurrentThread.ManagedThreadId);
-          Console.Read();
-          ClusterHelper.Close();
-          }
+public override async Task ExecuteAsync(){
+    //call it asynchronously with await
+    await PrintDocumentAsync("somekey");
+}
 
-          public static async Task PrintDocumentAsync(string id) {
-          Console.WriteLine("Before awaiting GetDocumentAsync on thread {0}.",
-          Thread.CurrentThread.ManagedThreadId);
-          var bucket = ClusterHelper.GetBucket("default");
-          var doc = await bucket.GetDocumentAsync&lt;string>(id);
-          Console.WriteLine("After awaiting GetDocumentAsync on thread {0}.",
-          Thread.CurrentThread.ManagedThreadId);
-          Console.WriteLine(doc.Content);
-          }
-          }
-          }</codeblock>In
-          this example we construct a simple .NET Console application that initializes a
-          ClusterHelper and makes a single call to an async method we have defined called
-          <apiname>PrintDocumentAsync(..)</apiname>. To demonstrate that we are doing asynchronous
-          programming and that the <apiname>Task</apiname> is being executed on a thread other than the main
-          thread, we put some stdio output that shows the order of execution and then
-          thread the code is running on:<codeblock><![CDATA[Before calling PrintDocumentAsync on thread 8.
+public async Task PrintDocumentAsync(string id){
+    Console.WriteLine("Before awaiting GetDocumentAsync on thread {0}.",
+        Thread.CurrentThread.ManagedThreadId);
+    var doc = await _bucket.GetDocumentAsync<string>(id);
+    Console.WriteLine("After awaiting GetDocumentAsync on thread {0}.",
+        Thread.CurrentThread.ManagedThreadId);
+    Console.WriteLine(doc.Content);
+}]]></codeblock>In this example (full source in <xref
+                    href="https://github.com/couchbaselabs/devguide-examples/blob/server-4.5/dotnet/AsyncExample.cs"
+                    format="html" scope="external">AsyncExample.cs</xref>) we construct a simple .NET Console
+                application that initializes a ClusterHelper and makes a single call to an async
+                method we have defined called <apiname>PrintDocumentAsync(..)</apiname>. To
+                demonstrate that we are doing asynchronous programming and that the
+                    <apiname>Task</apiname> is being executed on a thread other than the main
+                thread, we put some stdio output that shows the order of execution and then thread
+                the code is running on:<codeblock><![CDATA[Before calling PrintDocumentAsync on thread 8.
 After calling PrintDocumentAsync on thread 8.
 Before awaiting GetDocumentAsync on thread 10.
 After awaiting GetDocumentAsync on thread 15.]]></codeblock></p>In the output above we see that the
-        order of execution went from the main thread (8) to the main thread before jumping
-        onto thread ten (10) and finally completing on thread fifteen (15)! This make sense
-        because this is completely non-blocking code until we hit <apiname>Console.Read()</apiname>.</section>
+            order of execution went from the main thread (8) to the main thread before jumping onto
+            thread ten (10) and finally completing on thread fifteen (15)! This make sense because
+            this is completely non-blocking code until we hit
+            <apiname>Console.Read()</apiname>.</section>
       <section id="dotnet-calling-tap-methods-synchronously">
         <title>Calling TAP Methods Synchronously</title>
         <p>The SDK has an equivalent non-async API with the only difference being that the
@@ -134,93 +124,65 @@ After awaiting GetDocumentAsync on thread 15.]]></codeblock></p>In the output ab
           of <apiname>GetDocumentAsync()</apiname> looks like this:<codeblock><![CDATA[public IDocumentResult<T> GetDocument<T>(string id){
     ...
 }]]></codeblock></p>
-      <p>However, in some situations you may want to call the
-        asynchronous methods synchronously. To do this you would not use the <codeph>async</codeph> and <codeph>await</codeph>
-        keywords (since you are not awaiting anything); instead you would use <apiname>Task.Wait(..)</apiname> and Task.Result:<codeblock><![CDATA[using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using Couchbase;
-using Couchbase.Configuration.Client;
-
-namespace ConsoleApplication1 {
-    class Program {
-        static void Main(string[] args) {
-            var config = new ClientConfiguration
-            {
-                Servers = new List<Uri>{
-                    new Uri("http://10.141.151.101:8091/")
-                }
-            };
-            ClusterHelper.Initialize(config);
-            Console.WriteLine("Before calling PrintDocumentAsync on thread {0}.",
-                Thread.CurrentThread.ManagedThreadId);
-            PrintDocumentAsync("somekey").Wait();
-            Console.WriteLine("After calling PrintDocumentAsync on thread {0}.",
-                Thread.CurrentThread.ManagedThreadId);
-            Console.Read();
-            ClusterHelper.Close();
-        }
-
-        public static async Task PrintDocumentAsync(string id) {
-            Console.WriteLine("Before awaiting GetDocumentAsync on thread {0}.",
-                Thread.CurrentThread.ManagedThreadId);
-            var bucket = ClusterHelper.GetBucket("default");
-            var doc = bucket.GetDocumentAsync<string>(id).Result;
-            Console.WriteLine("After awaiting GetDocumentAsync on thread {0}.",
-                Thread.CurrentThread.ManagedThreadId);
-            Console.WriteLine(doc.Content);
-        }
-    }
+      <p>However, in some situations you may want to call the asynchronous methods synchronously. To
+                do this you would not use the <codeph>async</codeph> and <codeph>await</codeph>
+                keywords (since you are not awaiting anything); instead you would use
+                    <apiname>Task.Wait(..)</apiname> and Task.Result:<codeblock outputclass="language-csharp"><![CDATA[using System;
+static void Main(string[] args){
+    Console.WriteLine("Before calling PrintDocumentAsync on thread {0}.",
+      Thread.CurrentThread.ManagedThreadId);
+    new SyncExample().ExecuteAsync().Wait();
+    Console.WriteLine("After calling PrintDocumentAsync on thread {0}.",
+        Thread.CurrentThread.ManagedThreadId);
 }
-]]></codeblock>Note that by calling these asynchronous methods synchronously, you are adding
-        additional overhead which is why in most cases you'll want to just use the
-        synchronous API instead.</p></section>
+
+public override Task ExecuteAsync(){
+    //call it synchronously with no await
+    PrintDocumentAsync("somekey").Wait();
+    return Task.FromResult(0);
+}
+
+public Task PrintDocumentAsync(string id){
+    Console.WriteLine("Before awaiting GetDocumentAsync on thread {0}.",
+        Thread.CurrentThread.ManagedThreadId);
+    var doc = _bucket.GetDocumentAsync<string>(id).Result;
+    Console.WriteLine("After awaiting GetDocumentAsync on thread {0}.",
+        Thread.CurrentThread.ManagedThreadId);
+    Console.WriteLine(doc.Content);
+    return Task.FromResult(0);
+}]]></codeblock>Note that by calling these asynchronous methods synchronously, you are adding
+                additional overhead which is why in most cases you'll want to just use the
+                synchronous API instead. The entire source for this example is in <xref
+                    href="https://github.com/couchbaselabs/devguide-examples/blob/server-4.5/dotnet/SyncExample.cs"
+                    format="html" scope="external">SyncExample.cs</xref>.</p></section>
       <section id="dotnet-batch-execution-of-tasks">
-          <title>Batch Execution of Tasks</title>A common use-case
-          is to execute a series of operations in parallel in a batch-like fashion. To do
-          this you'll create a list of Task operations and then await on <apiname>Task.WhenAll(..)</apiname>
-          to execute them:<codeblock><![CDATA[using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Couchbase;
-using Couchbase.Configuration.Client;
+            <title>Batch Execution of Tasks</title>A common use-case is to execute a series of
+            operations in parallel in a batch-like fashion. To do this you'll create a list of Task
+            operations and then await on <apiname>Task.WhenAll(..)</apiname> to execute them:<codeblock outputclass="language-csharp"><![CDATA[static void Main(string[] args){
+    new AsyncBatch().ExecuteAsync().Wait();
+    Console.Read();
+}
 
-namespace ConsoleApplication8 {
-    class Program {
-        static void Main(string[] args) {
-            var config = new ClientConfiguration{
-                Servers = new List<Uri>{
-                    new Uri("http://10.141.151.101:8091/")
-                }
-            };
-            ClusterHelper.Initialize(config);
-            Task.Run(async () => {
-                var ids = new List<string> { "doc1", "doc2", "doc4" };
-                await PrintAllDocumentsAsync(ids);
-            });
-            Console.Read();
-            ClusterHelper.Close();
-        }
+public override async Task ExecuteAsync(){
+    var ids = new List<string> { "doc1", "doc2", "doc4" };
+    await PrintAllDocumentsAsync(ids);
+}
 
-        public static async Task PrintAllDocumentsAsync(List<string> ids) {
-            var bucket = ClusterHelper.GetBucket("default");
+public async Task PrintAllDocumentsAsync(List<string> ids){
+    var tasks = new List<Task<IDocumentResult<string>>>();
+    ids.ForEach(x => tasks.Add(_bucket.GetDocumentAsync<string>(x)));
 
-            var tasks = new List<Task>IDocumentResult<string>>>();
-            ids.ForEach(x => tasks.Add(bucket.GetDocumentAsync<string>(x)));
-
-            var results = await Task.WhenAll(tasks);
-            results.ToList().ForEach(doc => Console.WriteLine(doc.Status));
-        }
-    }
-}]]></codeblock><p>The <apiname>Task.WhenAll(..)</apiname> method execute the entire list of in parallel in a
-          non-blocking, asynchronous fashion. Note that there is a similarly named method
-          for executing the list in a blocking manner: <apiname>Task.WaitAll(..)</apiname>. Depending upon
-          your use-case you should understand the subtle differences between these two
-          methods and use the one that fits your scenario - in most cases this will be
-          <apiname>Task.WhenAll(..)</apiname>.</p></section>
+    var results = await Task.WhenAll(tasks);
+    results.ToList().ForEach(doc => Console.WriteLine(doc.Status));
+}]]></codeblock><p>The <apiname>Task.WhenAll(..)</apiname> method execute the entire list of in
+                parallel in a non-blocking, asynchronous fashion. Note that there is a similarly
+                named method for executing the list in a blocking manner:
+                    <apiname>Task.WaitAll(..)</apiname>. Depending upon your use-case you should
+                understand the subtle differences between these two methods and use the one that
+                fits your scenario. In most cases this will be <apiname>Task.WhenAll(..)</apiname>.
+                The source for this example can be found in the <xref
+                    href="https://github.com/couchbaselabs/devguide-examples/blob/server-4.5/dotnet/AsyncBatch.cs"
+                    format="html" scope="external">AsyncBatch.cs example</xref>.</p></section>
       <section id="dotnet-synchronization-contexts">
         <title>Handling Synchronization Contexts</title>
         <p>Every CLR hosting environment (ASP.NET, WinForms, etc) has its own specific
@@ -228,7 +190,7 @@ namespace ConsoleApplication8 {
           note that in some cases (especially ASP.NET) using the default
           SynchronizationContext may cause deadlocks. The simplest way to handle these
           deadlocks is by using <apiname>Task.ConfigureAwait(false)</apiname>. You can read more about this
-          <xref href="http://blog.stephencleary.com/2012/07/dont-block-on-async-code.html" format="html" scope="external">here</xref>.</p>
+          <xref href="http://blog.stephencleary.com/2012/07/dont-block-on-async-code.html" format="html" scope="external">in Stephen Cleary's blog on async and blocking</xref>.</p>
       </section>
     </body>
 </topic>
