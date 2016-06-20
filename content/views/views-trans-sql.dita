@@ -18,12 +18,12 @@
   	
   	<p>Here's an example of a SQL statement that you might want to translate:</p>
   	
-    <codeblock><codeph>SELECT fieldlist FROM table
+    <codeblock>SELECT fieldlist FROM table
     WHERE condition
     GROUP BY groupfield
     ORDER BY orderfield
     LIMIT limitcount OFFSET offsetcount
-</codeph></codeblock>
+</codeblock>
     <p>The different elements within the SQL statement affect how a view is written. The following
 			table describes how each clause is handled in a MapReduce view:</p>
     <table frame="all" rowsep="1" colsep="1" id="table_q4l_pzm_2r">
@@ -221,7 +221,7 @@
         want to perform range or multiple selections. For example, using our recipe database, if you
         want to select recipes that use the ingredient ‘carrot’ and have a cooking time of exactly
         20 minutes, then you can specify these two fields in the <codeph>map()</codeph>
-        function:</p><codeblock><codeph>function(doc, meta)
+        function:</p><codeblock>function(doc, meta)
 {
   if (doc.ingredients)
   {
@@ -231,25 +231,25 @@
     }
   }
 }
-</codeph></codeblock><p>Then
+</codeblock><p>Then
         the query is an array of the two selection
-        values:</p><codeblock><codeph>?key=["carrot",20]
-</codeph></codeblock><p>This is equivalent
+        values:</p><codeblock>?key=["carrot",20]
+</codeblock><p>This is equivalent
         to the SQL
-        query:</p><codeblock><codeph>SELECT recipeid FROM recipe JOIN ingredients on ingredients.recipeid = recipe.recipeid
+        query:</p><codeblock>SELECT recipeid FROM recipe JOIN ingredients on ingredients.recipeid = recipe.recipeid
     WHERE ingredient = 'carrot' AND totaltime = 20
-</codeph></codeblock><p>If,
+</codeblock><p>If,
         however, you want to perform a query that selects recipes containing carrots that can be
         prepared in less than 20 minutes, a range query is possible with the same
           <codeph>map()</codeph>
-        function:</p><codeblock><codeph>?startkey=["carrot",0]&amp;endkey=["carrot",20]
-</codeph></codeblock><p>This works because of the sorting mechanism in a view, which outputs the information sequentially
+        function:</p><codeblock>?startkey=["carrot",0]&amp;endkey=["carrot",20]
+</codeblock><p>This works because of the sorting mechanism in a view, which outputs the information sequentially
 				with carrots first and a sequential number.</p><p>More complex queries though are more difficult. What if you want to select
         recipes with carrots and rice, still preparable in under 20 minutes?</p><p>A standard <codeph>map()</codeph> function like that above wont work. A range query on both
 				ingredients will list all the ingredients between the two. There are a number of
 				solutions available to you. First, the easiest way to handle the timing selection is to
 				create a view that explicitly selects recipes prepared within the specified time. Here's
-				an example:</p><codeblock><codeph>function(doc, meta)
+				an example:</p><codeblock>function(doc, meta)
 {
   if (doc.totaltime &lt;= 20)
   {
@@ -262,7 +262,7 @@
 				recipes that can be prepared in 17 minutes, so such granular selection is overkill.</p><p>The multiple ingredients is more
         difficult to solve. One way is to use the client to perform two queries and merge the data.
         For example, the <codeph>map()</codeph>
-        function:</p><codeblock><codeph>function(doc, meta)
+        function:</p><codeblock>function(doc, meta)
 {
   if (doc.totaltime &amp;amp;&amp;amp; doc.totaltime &lt;= 20)
   {
@@ -275,11 +275,11 @@
     }
   }
 }
-</codeph></codeblock><p>Two
+</codeblock><p>Two
         queries, one for each ingredient can easily be merged by performing a comparison and count
         on the document ID output by each view.</p><p>The alternative is to output the ingredients
         twice within a nested loop, like
-        this:</p><codeblock><codeph>function(doc, meta)
+        this:</p><codeblock>function(doc, meta)
 {
   if (doc.totaltime &amp;amp;&amp;amp; doc.totaltime &lt;= 20)
   {
@@ -295,12 +295,12 @@
     }
   }
 }
-</codeph></codeblock><p>Now
+</codeblock><p>Now
         you can perform an explicit query on both
-        ingredients:</p><codeblock><codeph>?key=["carrot","rice"]
-</codeph></codeblock><p>If you
+        ingredients:</p><codeblock>?key=["carrot","rice"]
+</codeblock><p>If you
         really want to support flexible cooking times, then you can also add the cooking
-        time:</p><codeblock><codeph>function(doc, meta)
+        time:</p><codeblock>function(doc, meta)
 {
   if (doc.ingredients)
   {
@@ -313,18 +313,18 @@
     }
   }
 }
-</codeph></codeblock><p>And
+</codeblock><p>And
         now you can support a ranged query on the cooking time with the two ingredient
-        selection:</p><codeblock><codeph>?startkey=["carrot","rice",0]&amp;key=["carrot","rice",20]
-</codeph></codeblock><p>This
+        selection:</p><codeblock>?startkey=["carrot","rice",0]&amp;key=["carrot","rice",20]
+</codeblock><p>This
         would be equivalent
-        to:</p><codeblock><codeph>SELECT recipeid FROM recipe 
+        to:</p><codeblock>SELECT recipeid FROM recipe 
 JOIN ingredients i1 ON ingredients.recipeid = recipe.recipeid
 JOIN ingredients i2 ON ingredients.recipeid = recipe.recipeid
 WHERE (i1.ingredient IN ('carrot',rice')) AND 
 (i2.ingredient IN ('carrot',rice')) AND 
 (totaltime &lt; 20 AND totaltime &gt; 0)
-</codeph></codeblock></section>
+</codeblock></section>
     
     
     
@@ -335,23 +335,23 @@ WHERE (i1.ingredient IN ('carrot',rice')) AND
           <codeph>WHERE</codeph> clause, the emitted key can entirely support the sorting you want.
         For example, to sort by the city and salesman name, the following <codeph>map()</codeph>
         will achieve the required
-        sorting:</p><codeblock><codeph>function(doc, meta)
+        sorting:</p><codeblock>function(doc, meta)
 {
    emit([doc.city, doc.name], null)
 }
-</codeph></codeblock><p>If
+</codeblock><p>If
         you need to query on a value, and that query specification is part of the order sequence
         then you can use the format above. For example, if the query basis is city, then you can
         extract all the records for ‘London’ using the above view and a suitable range
-        query:</p><codeblock><codeph>?endkey=["London\u0fff"]&amp;startkey=["London"]
-</codeph></codeblock><p>However,
+        query:</p><codeblock>?endkey=["London\u0fff"]&amp;startkey=["London"]
+</codeblock><p>However,
         if you want to query the view by the salesman name, you need to reverse the field order in
         the <codeph>emit()</codeph>
-        statement:</p><codeblock><codeph>function(doc, meta)
+        statement:</p><codeblock>function(doc, meta)
 {
    emit([doc.name,doc.city],null)
 }
-</codeph></codeblock><p>Now
+</codeblock><p>Now
         you can search for a name while still getting the information in city order.</p><p>The order
         the output can be reversed (equivalent to <codeph>ORDER BY field DESC</codeph> ) by using
         the <codeph>descending</codeph> query parameter. </p></section>
@@ -362,8 +362,8 @@ WHERE (i1.ingredient IN ('carrot',rice')) AND
         parameter within SQL provides summary information for a group of matching records according
         to the specified fields, often for use with a numeric field for a sum or total value, or
         count operation.</p><p>For
-        example:</p><codeblock><codeph>SELECT name,city,SUM(sales) FROM sales GROUP BY name,city
-</codeph></codeblock><p>This query groups the information by the two fields ‘name’ and ‘city’ and produces a sum total of
+        example:</p><codeblock>SELECT name,city,SUM(sales) FROM sales GROUP BY name,city
+</codeblock><p>This query groups the information by the two fields ‘name’ and ‘city’ and produces a sum total of
 				these values. To translate this into a MapReduce function within Couchbase Server:</p><ul>
         <li><p>From the list of selected fields, identify the field used for the calculation. These
             will need to be exposed within the value emitted by the <codeph>map()</codeph>
@@ -375,11 +375,11 @@ WHERE (i1.ingredient IN ('carrot',rice')) AND
             custom function, within the <codeph>reduce()</codeph> function of the view.</p></li>
       </ul><p>For example, in the above case, the corresponding map function can be written as
           <codeph>map()</codeph>
-        :</p><codeblock><codeph>function(doc, meta)
+        :</p><codeblock>function(doc, meta)
 {
    emit([doc.name,doc.city],doc.sales);
 }
-</codeph></codeblock><p>This
+</codeblock><p>This
         outputs the name and city as the key, and the sales as the value. Because the
           <codeph>SUM()</codeph> function is used, the built-in <codeph>reduce()</codeph> function
           <codeph>_sum</codeph> can be used.</p><p>An example of this MapReduce combination can be seen <codeph>_sum</codeph>.</p><p>More complex grouping operations may require a custom reduce function.
@@ -390,13 +390,13 @@ WHERE (i1.ingredient IN ('carrot',rice')) AND
     <section><title>Translating SQL LIMIT and OFFSET</title><p>Within SQL, the
           <codeph>LIMIT</codeph> and <codeph>OFFSET</codeph> clauses to a given query are used as a
         paging mechanism. For example, you might
-        use:</p><codeblock><codeph>SELECT recipeid,title FROM recipes LIMIT 100</codeph></codeblock><p>To
+        use:</p><codeblock>SELECT recipeid,title FROM recipes LIMIT 100</codeblock><p>To
         get the first 100 rows from the database, and then use the <codeph>OFFSET</codeph> to get
         the subsequent groups of
-        records:</p><codeblock><codeph>SELECT recipeid,title FROM recipes LIMIT 100 OFFSET 100</codeph></codeblock><p>With
+        records:</p><codeblock>SELECT recipeid,title FROM recipes LIMIT 100 OFFSET 100</codeblock><p>With
         Couchbase Server, the <codeph>limit</codeph> and <codeph>skip</codeph> parameters when
         supplied to the query provide the same basic
-        functionality:</p><codeblock><codeph>?limit=100&amp;skip=100</codeph></codeblock><p>Performance
+        functionality:</p><codeblock>?limit=100&amp;skip=100</codeblock><p>Performance
         for high values of skip can be affected.</p></section>
   </body>
  
