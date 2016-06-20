@@ -5,6 +5,11 @@
     <shortdesc>At the core of a database is its ability to store and retrieve data. This section
         discusses the various ways in which you can access data (Documents) in Couchbase: creating,
         updating, retrieving, querying, and deleting documents.</shortdesc>
+    <prolog>
+        <metadata>
+            <othermeta name="langSelector" content="hidden"/>
+        </metadata>
+    </prolog>
   <body>
         <section>
             <title>Document</title>
@@ -25,9 +30,9 @@
                     >counter</xref> to increment a serial number.</p>
             <p>The <b>document value</b> contains the actual application data; for example, a
                     <i>product</i> document may contain information about the price and description.
-                Documents are usually (<xref href="http://google.com" format="cmo" scope="external"
-                    >but not always</xref>) stored as JSON on the server. Because JSON is a
-                structured format, it can be subsequently searched and
+                Documents are usually (<xref href="nonjson.dita#devguide_nonjson">but not
+                    always</xref>) stored as JSON on the server. Because JSON is a structured
+                format, it can be subsequently searched and
                 queried.<codeblock>{
     "type": "product",
     "sku": "CBSRV45DP",
@@ -57,32 +62,36 @@ remove(docid)</codeblock>
             </ul><p>Documents can be retrieved using the <i>get</i> operation, and finally removed
                 using the <i>remove</i> operations.</p><p>Since Couchbase’s KV store may be thought
                 of as a distributed hashmap or dictionary, the following code samples are
-                explanatory of Couchbase’ update
-            operations:</p><codeblock outputclass="language-python">KV_STORE = {}
+                explanatory of Couchbase’ update operations in
+            pseudo-code:</p><codeblock outputclass="language-cpp">map&lt;string,object> KV_STORE;
 
-def insert(doc_id, value):
-    if doc_id not in KV_STORE:
-        KV_STORE[doc_id] = value
-    else:
-        raise KeyAlreadyExists()
+void insert(string doc_id, object value) {
+    if (!KV_STORE.contains(doc_id)) {
+        KV_STORE.put(doc_id, value);
+    } else {
+        throw DocumentAlreadyExists();
+    }
+}
 
-def replace(doc_id, value):
-    if doc_id in KV_STORE:
-        KV_STORE[doc_id] = value
-    else:
-        raise KeyNotFound()
+void replace(string doc_id, object value) {
+    if (KV_STORE.contains(doc_id)) {
+        KV_STORE.put(doc_id, value);
+    } else {
+        throw DocumentNotFound();
+    }
+}
 
-def upsert(doc_id, value):
-    KV_STORE[doc_id] = value
+void upsert(string doc_id, object value) {
+    KV_STORE.put(doc_id, value);
+}
 
-def get(doc_id):
-    if doc_id in KV_STORE:
-        return KV_STORE[doc_id]
-    else:
-        raise KeyNotFound()
-
-def delete(doc_id):
-    del KV_STORE[doc_id]</codeblock>You
+object get(string doc_id) {
+    if (KV_STORE.contains(doc_id)) {
+        return KV_STORE.get(doc_id);
+    } else {
+        throw DocumentNotFound();
+    }
+}</codeblock>You
             can also use <xref href="n1ql-query.dita#toplevel">N1QL queries</xref> and <xref
                 href="full-text-search-overview.dita#full-text-search">Full Text Search</xref> to
             access documents by means other than their IDs, however these query operations Couchbase
@@ -142,9 +151,9 @@ docid                CAS=0x8234c3c0f213, Flags=0x0. Size=16
                 stored; meaning that if you stored the document as a list, it is now available as a
                 list again. The SDK will automatically deserialize the document from its stored
                 format (usually JSON) to a native language type. It is possible to store and
-                retrieve non-JSON documents as well, using a <xref href="http://google.com"
-                    format="cmo" scope="external">transcoder</xref>.</p><p>You can also modify a
-                document's expiration time while retrieving it; this is known as
+                retrieve non-JSON documents as well, using a <xref
+                    href="nonjson.dita#devguide_nonjson">transcoder</xref>.</p><p>You can also
+                modify a document's expiration time while retrieving it; this is known as
                     <i>get-and-touch</i> and allows you to keep temporary data alive while
                 retrieving it in one atomic and efficient operation.</p>Documents can also be
             retrieved with N1QL. While N1QL is generally used for secondary queries, it can also be
@@ -224,12 +233,7 @@ prepend(docid, fragment)</codeblock><p>The
                 functions may be used to add efficiency for custom binary data structures (such as
                 logs), as they avoid transferring the contents of the entire document for each
                 operation. Consider the following versions (which are
-                equivalent)</p><p><codeblock outputclass="language-python" spectitle="Append using get() and replace() (slow)">import couchbase
-import couchbase.exceptions
-import couchbase.bucket
-
-cb = couchbase.bucket.Bucket('couchbase://10.0.0.31/default')
-# Store the document
+                equivalent)</p><p><codeblock outputclass="language-python" spectitle="Append using get() and replace() (slow)"># Store the document
 cb.upsert('binary_doc', '\x01', format=couchbase.FMT_BYTES)
 
 while True:
@@ -243,12 +247,7 @@ while True:
     except couchbase.exceptions.KeyExistsError:
         continue
 
-print repr(cb.get('binary_doc').value)</codeblock><codeblock spectitle="Append using append() (fast)" outputclass="language-python">import couchbase
-import couchbase.exceptions
-import couchbase.bucket
-
-cb = couchbase.bucket.Bucket('couchbase://10.0.0.31/default')
-# Store the document
+print repr(cb.get('binary_doc').value)</codeblock><codeblock spectitle="Append using append() (fast)" outputclass="language-python"># Store the document
 cb.upsert('binary_doc', '\x01', format=couchbase.FMT_BYTES)
 
 # Append a fragment

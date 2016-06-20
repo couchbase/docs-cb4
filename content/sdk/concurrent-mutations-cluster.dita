@@ -5,12 +5,17 @@
     <shortdesc>You can use the CAS value to control how concurrent document modifications are
         handled. It helps avoid and control potential race conditions in which some mutations may be
         inadvertently lost or overridden by other mutations.</shortdesc>
+    <prolog>
+        <metadata>
+            <othermeta name="langSelector" content="hidden"/>
+        </metadata>
+    </prolog>
     <conbody>
         <p>The <term>CAS</term> is a value representing the current state of an item. Each time the item
             is modified, its CAS changes.</p>
         <p>The CAS value itself is returned as part of a document’s metadata whenever a document is
-            accessed. In the SDK this is present as the <apiname>lcb_RESPBASE::cas</apiname> field
-            when an operation is successful.</p>
+            accessed. In the SDK this is present as the <apiname>cas</apiname> field in the
+            applicable document container object when an operation is successful.</p>
         <p>CAS is an acronym for <i>Compare And Swap</i>, and is known as a form of optimistic
             locking. The CAS can be supplied as parameters to the <i>insert</i>, <i>upsert</i>,
                 <i>replace</i>, and <i>remove</i> operations. When applications provide the CAS,
@@ -18,16 +23,26 @@
                 CAS:<ul id="ul_cxq_3ts_zs">
                 <li>If the two CAS values match (they compare successfully), then the mutation
                     operation succeeds.</li>
-                <li>If the two CAS values differ, then the mutation operation fails </li>
-            </ul></p>
+                <li>If the two CAS values differ, then the mutation operation fails.</li>
+            </ul>CAS, on the server-side might be implemented along these
+            lines<codeblock>uint Replace(string docid, object newvalue, uint oldCas=0) {
+    object existing = this.kvStore.get(docid);
+    if (!existing) {
+        throw DocumentDoesNotExist();
+    } else if (oldCas != 0 &amp;&amp; oldCas != existing.cas) {
+        throw CasMismatch();
+    }
+    uint newCas = ++existing.cas;
+    existing.value = newValue;
+    return newCas;
+}</codeblock></p>
         <section><title>Demonstration</title>The following demonstrates how the server handles CAS.
             A use case for employing the CAS is when adding a new field to an existing document. At
             the application level, this requires the following steps:<ol id="ul_ehb_nts_zs">
                 <li>Read entire document.</li>
                 <li>Perform modification locally.</li>
                 <li>Store new document to server.</li>
-            </ol>
-            <p>Assume the following two blocks of code are executing concurrently in different
+            </ol><p>Assume the following two blocks of code are executing concurrently in different
                 application instances: <table frame="all" rowsep="2" colsep="2"
                     id="table_x23_rts_zs">
                     <title>CAS flow</title>
@@ -60,50 +75,50 @@
                 </table>Retrieving the document again
                 yields:<codeblock>>>> cb1.get('docid').value
 {u'field2': u'value2', u'a_field': u'a_value'}</codeblock></p><p>Note
-    that <codeph>field1</codeph> is not present, even though the application inserted it
-    into the document. The reason is because the replace on Thread #2 happened to run
-    after the replace on Thread #1, however Thread #1’s replace was executed after
-    Thread #2’s get: Since the local version of the document on Thread #2 did not
-    contain field1 (because Thread #1’s update was not stored on the server yet), by
-    executing the replace, it essentially overrode the replace performed by Thread
-    #1.</p><table id="table_jvd_b5s_zs">
-        <tgroup cols="2">
-            <colspec colnum="1" colname="col1" colwidth="1*"/>
-            <colspec colnum="2" colname="col2" colwidth="14.38*"/>
-            <tbody>
-                <row>
-                    <entry dir="ltr">0.00ms</entry>
-                    <entry dir="ltr">(#2): <codeph>new_doc =
-                        get(‘docid’).value</codeph></entry>
-                </row>
-                <row>
-                    <entry dir="ltr">0.00ms</entry>
-                    <entry dir="ltr">(#1): <codeph>new_doc =
-                        get(‘docid’).value</codeph></entry>
-                </row>
-                <row>
-                    <entry dir="ltr">0.00ms</entry>
-                    <entry dir="ltr">(#1): <codeph>new_doc[‘field1’] =
-                        ‘value1’</codeph></entry>
-                </row>
-                <row>
-                    <entry dir="ltr">0.00ms</entry>
-                    <entry dir="ltr">(#2): <codeph>new_doc[‘field2’] =
-                        ‘value2’</codeph></entry>
-                </row>
-                <row>
-                    <entry dir="ltr">0.01ms</entry>
-                    <entry dir="ltr">(#1): <codeph>cb.replace(‘docid’,
-                        new_doc)</codeph></entry>
-                </row>
-                <row>
-                    <entry dir="ltr">0.02ms</entry>
-                    <entry dir="ltr">(#2): <codeph>cb.replace(‘docid’,
-                        new_doc)</codeph></entry>
-                </row>
-            </tbody>
-        </tgroup>
-    </table></section>
+                that <codeph>field1</codeph> is not present, even though the application inserted it
+                into the document. The reason is because the replace on Thread #2 happened to run
+                after the replace on Thread #1, however Thread #1’s replace was executed after
+                Thread #2’s get: Since the local version of the document on Thread #2 did not
+                contain field1 (because Thread #1’s update was not stored on the server yet), by
+                executing the replace, it essentially overrode the replace performed by Thread
+                #1.</p><table id="table_jvd_b5s_zs">
+                <tgroup cols="2">
+                    <colspec colnum="1" colname="col1" colwidth="1*"/>
+                    <colspec colnum="2" colname="col2" colwidth="14.38*"/>
+                    <tbody>
+                        <row>
+                            <entry dir="ltr">0.00ms</entry>
+                            <entry dir="ltr">(#2): <codeph>new_doc =
+                                get("docid").value</codeph></entry>
+                        </row>
+                        <row>
+                            <entry dir="ltr">0.00ms</entry>
+                            <entry dir="ltr">(#1): <codeph>new_doc =
+                                get("docid").value</codeph></entry>
+                        </row>
+                        <row>
+                            <entry dir="ltr">0.00ms</entry>
+                            <entry dir="ltr">(#1): <codeph>new_doc["field1"] =
+                                "value1"</codeph></entry>
+                        </row>
+                        <row>
+                            <entry dir="ltr">0.00ms</entry>
+                            <entry dir="ltr">(#2): <codeph>new_doc["field2"] =
+                                "value2"</codeph></entry>
+                        </row>
+                        <row>
+                            <entry dir="ltr">0.01ms</entry>
+                            <entry dir="ltr">(#1): <codeph>cb.replace("docid",
+                                new_doc)</codeph></entry>
+                        </row>
+                        <row>
+                            <entry dir="ltr">0.02ms</entry>
+                            <entry dir="ltr">(#2): <codeph>cb.replace("docid",
+                                new_doc)</codeph></entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table></section>
         <section>
             <title>Using CAS - Example</title>
             <p>In the prior example, we saw that concurrent updates to the same document may result
@@ -225,11 +240,13 @@
                 value.</p>
             <p>A document can be locked for a maximum of 15 seconds, after which the server will
                 unlock it. This is to prevent misbehaving applications from blocking access to
-                documents inadvetrtantly. You can modify the time the lock is held for (though it
-                can be no longer than 15 seconds).</p>
+                documents inadvertently. You can modify the time the lock is held for (though it can
+                be no longer than 15 seconds).</p>
             <p>Be sure to keep note of the <i>cas</i> value when locking a document. You will need
-                it when
-                unlocking.<codeblock>lcb_CMDGET cmd = { 0 };
+                it when unlocking. The following blocks show how to use <apiname>lock</apiname> and
+                    <apiname>unlock</apiname> with the C SDK. This process should be similar for
+                other
+                SDKs.<codeblock>lcb_CMDGET cmd = { 0 };
 LCB_CMD_SET_KEY(&amp;cmd, "key", 3);
 cmd.lock = 1;
 cmd.exptime = 5;
