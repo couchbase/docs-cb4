@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_ah5_5hn_qv">
+    <title>Managing Clusters using the Python SDK with Couchbase Server</title>
+    <titlealts><navtitle>Managing Clusters</navtitle></titlealts>
+  <body>
+        <p conref="../shared/flush-info-pars.dita#toplevel/management-intro"/>
+        <p>You may perform Couchbase management operations from any HTTP client (e.g.
+                <codeph>urllib</codeph> or <codeph>requests</codeph>). The Python SDK also comes
+            with some convenience functionality for common Couchbase management requests.</p>
+        <p>Mangement operations in the Python SDK may be performed through several interfaces
+            depending on the object:<ul id="ul_scg_czl_2w">
+                <li><apiname>couchbase.admin.Admin</apiname> class</li>
+                <li><apiname>couchbase.bucket.BucketManager</apiname> class (obtained
+                        via<apiname>Bucket.bucket_manager()</apiname>)</li>
+                <li>As a direct API of <apiname>Bucket</apiname></li>
+            </ul></p>
+        <section><title>Creating and removing buckets</title><p>The <apiname>Admin</apiname> class
+                may be used to create and delete buckets from the Couchbase cluster. It is
+                instantiated using the administrative username and password, followed by a cluster
+                node.</p><p>
+                <codeblock>from couchbase.admin import Admin
+adm = Admin('Administrator', '123456', host='localhost', port=8091)</codeblock>
+            </p><p>To create a bucket, use the <apiname>Admin.bucket_create()</apiname> function,
+                passing the bucket name as the first argument. Other arguments may also be specified
+                using keyword
+                arguments<codeblock>adm.bucket_create('new-bucket',
+                  bucket_type='couchbase',
+                  bucket_password='s3cr3t')</codeblock></p>Some
+            useful parameters:<ul id="ul_ngw_cbm_2w">
+                <li><parmname>bucket_type</parmname>: Defaults to <codeph>"couchbase"</codeph>, but
+                    can also be <codeph>"memcached"</codeph> to create a cache bucket</li>
+                <li><parmname>ram_quota</parmname>: How much memory should each node use for the
+                    bucket. This number is specified in megabytes</li>
+                <li><parmname>bucket_password</parmname>: If specified, makes this bucket password
+                    protected, forcing future connects (using the <apiname>Bucket</apiname>) class
+                    to specify the <parmname>password</parmname> parameter</li>
+                <li><parmname>flush_enabled</parmname>: Enables the
+                        <apiname>Bucket.flush()</apiname> operation to be performed on this
+                    bucket</li>
+            </ul><p conref="../shared/flush-info-pars.dita#toplevel/after-creation"/>The
+                <apiname>Admin</apiname> class also has a convenience method to wait until the
+            bucket becomes
+                ready<codeblock># Wait for bucket to become ready
+adm.wait_ready('new-bucket', timeout=30)</codeblock><p>You
+                can now create to the
+                bucket<codeblock>bucket = Bucket('couchbase://localhost/new-bucket', password='s3cr3t')</codeblock></p><p>Once
+                you no longer need to use the bucket, you may delete the bucket using the
+                    <apiname>Admin.bucket_remove</apiname>
+                function:<codeblock>adm.bucket_remove('new-bucket')</codeblock></p></section>
+        <section>
+            <title>Flushing Buckets</title>
+            <p conref="../shared/flush-info-pars.dita#toplevel/flush-intro"/>
+            <p>You may flush a bucket in the Python SDK by using the
+                    <apiname>Bucket.flush()</apiname><codeblock>bucket.flush()</codeblock></p>
+            <p>The <apiname>flush</apiname> operation may fail if the bucket does not have flush
+                enabled:<screen>Traceback (most recent call last):
+  File "python/flush.py", line 6, in &lt;module>
+    cb.flush()
+  File "/usr/local/lib/python2.7/site-packages/couchbase/bucket.py", line 1715, in flush
+    path=path, method=_LCB.LCB_HTTP_METHOD_POST)
+couchbase.exceptions.HTTPError: &lt;Key='/pools/default/buckets/travel-sample/controller/doFlush', RC=0x3B[HTTP Operation failed. Inspect status code for details], HTTP Request failed. Examine 'objextra' for full result, Results=1, C Source=(src/http.c,140), OBJ=HttpResult&lt;rc=0x0, value={u'_': u'Flush is disabled for the bucket'}, http_status=400, url=/pools/default/buckets/travel-sample/controller/doFlush>></screen></p>
+        </section>
+        <section>
+            <title>N1QL Index Management</title>
+            <p conref="../shared/flush-info-pars.dita#toplevel/index-management"/>
+            <p>You can manage indexes in the Python SDK using the <apiname>BucketManager</apiname>
+                class</p>
+            <codeblock>manager = cb.bucket_manager()
+manager.n1ql_index_create_primary(ignore_exists=True)</codeblock>
+            <codeblock>manager.n1ql_index_remove_primary(ignore_missing=True)</codeblock>
+        </section>
+        <section>
+            <title>Design Document Management</title>
+            <p conref="../shared/flush-info-pars.dita#toplevel/ddoc-intro"/>
+            <p>Using the Python SDK you may use the <codeph>design_*</codeph> methods of the
+                    <apiname>BucketManager</apiname> class to modify design documents.</p>
+            <codeblock>DESIGN_DOC = {
+    'views': {
+        'by_zipcode': {
+            'map': '''
+            function(doc, meta) {
+                if (doc.country &amp;&amp; doc.zipcode) {
+                    emit([doc.country, doc.zipcode], null)
+                }
+            }
+            '''
+        }
+    }
+}
+mgr.design_create('locations', DESIGN_DOC, use_devmode=True)
+for row in cb.query('locations', 'by_zipcode'):
+    pass
+mgr.design_publish('locations')
+mgr.design_delete('locations', use_devmode=False)</codeblock>
+            <note conref="../shared/flush-info-pars.dita#toplevel/ddoc-async-warning">
+                You may have the Python SDK perform the polling for you automatically by using the
+                <parmname>syncwait</parmname> keyword argument, which indicates how long the SDK
+                should wait (in seconds) before failing with a timeout
+                error:<codeblock>mgr.design_create('locations', DESIGN_DOC, use_devmode=True, syncwait=30)</codeblock>
+            </note>
+            <p>You can use the <parmname>use_devmode</parmname> (the default) parameter to indicate
+                that the view should initially be a <i>development mode view</i>.</p>
+        </section>
+    </body>
+</topic>

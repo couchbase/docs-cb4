@@ -1,0 +1,1314 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+  <topic id="async-programming-java">
+      <title>Asynchronous Progamming Using the Java SDK with Couchbase Server</title>
+      <titlealts><navtitle>Asynchronous Programming</navtitle></titlealts>
+      <shortdesc>The Couchbase Java SDK has a complete asynchronous API based in part on RxJava.  This section provides information on how the asynchronous API can be used, how it works with Java platform and RxJava features and the kinds of error handling you will need to consider in application development.</shortdesc>
+	<body>
+
+		<section><title>Java 8, Lambdas and Anonymous Classes</title><p>Before jumping into the details,
+                one thing warrants clarification: RxJava and, therefore, the Java SDK, fully support
+                Java 8. This support brings some great improvements, most prominently support for
+                    <term>lambdas</term> and <term>method references</term>.</p><p>Because the Java
+                SDK has support for Java 6 and 7, most of the examples shown in the documentation
+                use anonymous classes instead of lambdas. You are free and even encouraged to use
+                them if you can, but Java 8 may not be an option for some.</p><p>To whet your
+                appetite for why you may want to strongly consider these features, compare the same
+                Java 6 code to Java 8:</p>
+            <codeblock outputclass="language-java"><![CDATA[// Loads 3 documents in parallel
+Observable
+    .just("doc1", "doc2", "doc3")
+    .flatMap(new Func1<String, Observable<JsonDocument>>() {
+        @Override
+        public Observable<JsonDocument> call(String id) {
+            return bucket.get(id);
+        }
+    }).forEach(new Action1<JsonDocument>() {
+        @Override
+        public void call(JsonDocument document) {
+            System.out.println("Got: " + document);
+        }
+    });]]></codeblock> Versus: <codeblock outputclass="language-java"><![CDATA[// Loads 3 documents in parallel
+Observable
+    .just("doc1", "doc2", "doc3")
+    .flatMap(bucket::get)
+    .forEach(document -> System.out.println("Got: " + document));]]></codeblock><p>RxJava has
+                additional support for other languages such as Scala, Groovy, Kotlin or Clojure
+                through language adapters. If you are using one of those, refer to the RxJava
+                documentation on how to use the adapters.</p></section>
+
+		<section>
+			<title>Understanding Observables</title>
+
+			<p>You can think of an <term>Observable</term> as the push-based, asynchronous cousin
+                ("dual") of the pull-based, synchronous <term>Iterable</term>. The contract of
+                an <codeph>Observable</codeph> is that zero to N data events can happen, followed by
+                a complete event. An error event can also happen at any time and complete the
+                    <codeph>Observable</codeph>.</p>
+
+			<table frame="all" rowsep="1" colsep="1" id="table_qpl_ttq_44">
+   <title>The duality of Iterable and Observable</title>
+
+   <tgroup cols="3">
+    <colspec colname="c1" colnum="1" colwidth="4.39*"/>
+    <colspec colname="c2" colnum="2" colwidth="4.29*"/>
+    <colspec colname="c3" colnum="3" colwidth="4.4*"/>
+    <thead>
+     <row>
+      <entry>Event</entry>
+      <entry>Iterable (Pull)</entry>
+      <entry>Observable (Push)</entry>
+     </row>
+    </thead>
+    <tbody>
+      <row>
+        <entry>retrieve data</entry>
+        <entry><codeph>T next()</codeph></entry>
+        <entry><codeph>onNext(T)</codeph></entry>
+      </row>
+      <row>
+        <entry>discover error</entry>
+        <entry><codeph>throws Exception</codeph></entry>
+        <entry><codeph>onError(Exception)</codeph></entry>
+      </row>
+      <row>
+        <entry>complete</entry>
+        <entry><codeph>returns</codeph></entry>
+        <entry><codeph>onCompleted()</codeph></entry>
+      </row>
+    </tbody>
+   </tgroup>
+</table>
+
+		<p>You can convert an <codeph>Observable</codeph> into a <codeph>BlockingObservable</codeph>,
+                    which then behaves very much like the <codeph>Iterable</codeph>.</p>
+
+		<p>The key element to take away is that an <codeph>Observable&lt;T&gt;</codeph> can emit 0 to N
+                events, which is very different than a <codeph>Future&lt;T&gt;</codeph> that only
+                contains one value. After you start to work on streams instead of single values, you
+                will very much appreciate this fact.</p>
+
+		<p>By definition, an <codeph>Observable</codeph> does not imply that the underlying code is
+                executed asynchronously. As a consumer of an <codeph>Observable</codeph>, you leave
+                the actual implementation to the supplier, who can change it later on without you
+                having to adapt your code. Imagine, you are consuming this API:</p>
+
+<codeblock outputclass="language-java"><![CDATA[public interface FooService {
+    Observable<String> load();
+}]]></codeblock>
+
+		<p>It could be that when <codeph>load()</codeph> is called, the <codeph>String</codeph> value is
+                fetched right out of a <codeph>Map</codeph> in memory (or even a hard-coded value).
+                In this case, there is no need to move the execution away from the caller thread,
+                because the value will be returned instantaneously. If later the implementation
+                needs to be changed so that the <codeph>String</codeph> is loaded through a web
+                service (introducing latency and other semantics), the API doesn't need to be
+                changed because the underlying implementation is free to move it to a
+                    <codeph>Scheduler</codeph>.</p>
+
+		</section>
+
+		<section>
+			<title>Consuming Observables</title>
+
+			<p>The first thing you want to do when working with <codeph>Observables</codeph> is to consume them. Consuming an
+				<codeph>Observable</codeph> means subscribing to it. Here is an example that subscribes and prints out
+				all the items emitted:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .just(1, 2, 3)
+    .subscribe(new Subscriber<Integer>() {
+        @Override
+        public void onCompleted() {
+            System.out.println("Completed Observable.");
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            System.err.println("Whoops: " + throwable.getMessage());
+        }
+
+        @Override
+        public void onNext(Integer integer) {
+            System.out.println("Got: " + integer);
+        }
+    });]]></codeblock>
+
+    <p>The example prints the following lines:</p>
+
+<codeblock><![CDATA[Got: 1
+Got: 2
+Got: 3
+Completed Observable.]]></codeblock>
+
+	<p>You can see that our <codeph>Subscriber</codeph> gets notified of every event and also receives
+                the completed event.<note>A well-formed <codeph>Observable</codeph> invokes its subscriber’s
+                        <codeph>onNext</codeph> method zero or more times and then invokes either
+                    the <codeph>onCompleted</codeph> or <codeph>onError</codeph> method exactly
+                    once.</note></p>
+
+	<p>You can also test the error case by throwing an artificial exception when the value 2 is emitted:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .just(1, 2, 3)
+    .doOnNext(new Action1<Integer>() {
+        @Override
+        public void call(Integer integer) {
+            if (integer.equals(2)) {
+                throw new RuntimeException("I don't like 2");
+            }
+        }
+    })
+    .subscribe(new Subscriber<Integer>() {
+        @Override
+        public void onCompleted() {
+            System.out.println("Completed Observable.");
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            System.err.println("Whoops: " + throwable.getMessage());
+        }
+
+        @Override
+        public void onNext(Integer integer) {
+            System.out.println("Got: " + integer);
+        }
+    });]]></codeblock>
+
+    <p>The example prints:</p>
+
+<codeblock><![CDATA[Got: 1
+Whoops: I don't like 2]]></codeblock>
+
+	<p>The first value gets through without problems, the second value throws an exception and,
+                therefore, terminates the <codeph>Observable</codeph>. No subsequent values are allowed to be emitted
+                after an error event.</p>
+
+	<p><note>The <codeph>subscribe</codeph> method also returns a <codeph>Subscription</codeph> that you
+                    can use to <codeph>unsubscribe</codeph> and not receive further events.</note></p>
+
+	<p>Even if you don't unsubscribe explicitly, operations like <codeph>take</codeph> do that for you
+				implicitly. The following code only takes the first five values and then
+				unsubscribes:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .just("The", "Dave", "Brubeck", "Quartet", "Time", "Out")
+    .take(5)
+    .subscribe(new Subscriber<String>() {
+        @Override
+        public void onCompleted() {
+            System.out.println("Completed Observable.");
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            System.err.println("Whoops: " + throwable.getMessage());
+        }
+
+        @Override
+        public void onNext(String name) {
+            System.out.println("Got: " + name);
+        }
+    });]]></codeblock>
+
+	<p>This prints:</p>
+
+<codeblock><![CDATA[Got: The
+Got: Dave
+Got: Brubeck
+Got: Quartet
+Got: Time
+Completed Observable.]]></codeblock>
+
+		<p>You do not need to implement the full subscriber every time. If you are only interested in the
+				data events, you can subscribe like this:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .just(1, 2, 3)
+    .subscribe(new Action1<Integer>() {
+        @Override
+        public void call(Integer integer) {
+            System.out.println("Got: " + integer);
+        }
+    });]]></codeblock>
+
+    <p>Be aware though that if an error happens, the following exception will be propagated:</p>
+
+<codeblock><![CDATA[Exception in thread "main" rx.exceptions.OnErrorNotImplementedException
+	at rx.Observable$36.onError(Observable.java:8412)
+	at rx.observers.SafeSubscriber._onError(SafeSubscriber.java:128)
+	at rx.observers.SafeSubscriber.onError(SafeSubscriber.java:97)
+	at rx.internal.operators.OperatorDoOnEach$1.onError(OperatorDoOnEach.java:67)
+	at rx.internal.operators.OperatorDoOnEach$1.onNext(OperatorDoOnEach.java:78)
+	at rx.internal.operators.OnSubscribeFromIterable$IterableProducer
+          .request(OnSubscribeFromIterable.java:76)
+	...]]></codeblock>
+
+	<p>It is recommended always to implement an error handler right from the beginning since things can
+                and will go wrong at some point. It can come in handy though if you just want to try
+                things out quickly or for illustrative purposes.</p>
+
+		</section>
+
+		<section>
+			<title>From Asynchronous to Synchronous</title>
+
+			<p>As long as your <codeph>Observable</codeph> works on the same thread all the time, there is no
+                need for communication between threads since only one is executing. When your
+                    <codeph>Observable</codeph> flow gets executed on a different thread, you need
+                to take some extra care to make sure you are not missing values. This is not
+                specific to <codeph>Observables</codeph>: every time you need to deal with parallel
+                threads you need to think about synchronization and communication.</p>
+
+            <p><note>Most of the snippets in this documentation only call <codeph>subscribe</codeph>. You should
+                    ensure that your program doesn't terminate before <codeph>onCompleted()</codeph>
+                    is called (e.g., via <codeph>toBlocking()</codeph> or a
+                        <apiname>CountDownLatch</apiname>) and be aware of that when trying to
+                    replicate a snippet in its Main class.</note></p>
+
+            <p><note>You should never perform long-running blocking operations inside of an asynchronous stream
+                    (e.g. inside of <codeph>map</codeph>s or <codeph>flatMap</codeph>s).</note></p>
+
+			<p>The following code emits an increasing value every second, which is done on a different
+                thread:</p>
+
+<codeblock outputclass="language-java"><![CDATA[public static void main(String... args) {
+    Observable
+        .interval(1, TimeUnit.SECONDS)
+        .subscribe(new Action1<Long>() {
+            @Override
+            public void call(Long counter) {
+                System.out.println("Got: " + counter);
+            }
+        });
+}]]></codeblock>
+
+    <p>It works perfectly fine; the only problem is though chances are you won't see anything
+                printed out. Your main thread exits before the background thread had a chance to run
+                and emit values.</p>
+
+    <p>A common way to deal with such a situation is to add a <codeph>CountDownLatch</codeph>, which
+                allows you to synchronize between different threads. One thread counts down the
+                latch; the other one waits until it is counted down:</p>
+
+<codeblock outputclass="language-java"><![CDATA[final CountDownLatch latch = new CountDownLatch(5);
+Observable
+    .interval(1, TimeUnit.SECONDS)
+    .subscribe(new Action1<Long>() {
+        @Override
+        public void call(Long counter) {
+            latch.countDown();
+            System.out.println("Got: " + counter);
+        }
+    });
+
+latch.await();]]></codeblock>
+
+    <p>The example prints the following lines and then exits:</p>
+
+<codeblock><![CDATA[Got: 0
+Got: 1
+Got: 2
+Got: 3
+Got: 4]]></codeblock>
+
+	<p><note>One common mistake is to use <codeph>Thread.sleep()</codeph> instead of a latch to synchronize
+                    the execution between threads. This is a bad idea because it synchronizes
+                    nothing and just keeps one thread alive for a specific amount of time. If the
+                    actual calls take less time you are wasting time, and if it takes longer you
+                    won't get the desired effect. If you do this in unit tests, be prepared for a
+                    good amount of non-determinism and randomly failing tests. <p><b>Always use a
+                            <codeph>CountDownLatch</codeph>!</b></p></note></p>
+
+	<p>A technique unique to <codeph>Observables</codeph> is to convert it into a <codeph>BlockingObservable</codeph> to
+                achieve the same effect. In simple terms, it converts an <codeph>Observable</codeph>
+                into an <codeph>iterable</codeph> and makes it execute on the caller thread,
+                blocking it until one or more values arrive. This technique is used extensively in
+                the documentation to show concepts, while not having to deal with count-down latches
+                all the time. It can also be used if you for some reason are not able to use
+                asynchronous computations.</p>
+
+	<p>The conversion itself doesn't do any blocking in the first place, only subsequent calls will:</p>
+
+<codeblock outputclass="language-java"><![CDATA[// This does not block.
+BlockingObservable<Long> observable = Observable
+    .interval(1, TimeUnit.SECONDS)
+    .toBlocking();
+
+// This blocks and is called for every emitted item.
+observable.forEach(new Action1<Long>() {
+    @Override
+    public void call(Long counter) {
+        System.out.println("Got: " + counter);
+    }
+});]]></codeblock>
+
+    <p>Because this will run forever, you are free to chain any asynchronous computations before.
+				Thus, you can build an asynchronous workflow and then block at the very end. This
+				resembles the same code as with the <codeph>CountDownLatch</codeph> before:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .interval(1, TimeUnit.SECONDS)
+    .take(5)
+    .toBlocking()
+    .forEach(new Action1<Long>() {
+        @Override
+        public void call(Long counter) {
+            System.out.println("Got: " + counter);
+        }
+    });]]></codeblock>
+
+    <p>If you know that only a single value is ever returned, you can use the
+					<apiname>single()</apiname> method:</p>
+
+<codeblock outputclass="language-java"><![CDATA[int value = Observable
+    .just(1)
+    .toBlocking()
+    .single();]]></codeblock>
+
+    <p>Be aware though that if more items get emitted, you get an exception:</p>
+
+<codeblock><![CDATA[Exception in thread "main" java.lang.IllegalArgumentException: Sequence contains too many elements
+	at rx.internal.operators.OperatorSingle$1.onNext(OperatorSingle.java:58)
+	at rx.internal.operators.OnSubscribeFromIterable$IterableProducer.request(OnSubscribeFromIterable.java:76)
+	at rx.Subscriber.setProducer(Subscriber.java:148)
+	at rx.Subscriber.setProducer(Subscriber.java:144)
+	....]]></codeblock>
+
+	<p>The same thing happens if no value gets emitted:</p>
+
+<codeblock><![CDATA[Exception in thread "main" java.util.NoSuchElementException: Sequence contains no elements
+	at rx.internal.operators.OperatorSingle$1.onCompleted(OperatorSingle.java:82)
+	at rx.internal.operators.OnSubscribeFromIterable$IterableProducer.request(OnSubscribeFromIterable.java:79)
+	at rx.Subscriber.setProducer(Subscriber.java:148)
+	at rx.Subscriber.setProducer(Subscriber.java:144)
+	at rx.Subscriber.setProducer(Subscriber.java:144)
+	at rx.Subscriber.setProducer(Subscriber.java:144)
+	....]]></codeblock>
+
+	<p>As an alternative, you can use <codeph>singleOrDefault()</codeph> so that a fallback value gets returned.</p>
+
+	<p>You can use this technique with the Java SDK if you are loading a document and it does not exist:</p>
+
+<codeblock outputclass="language-java"><![CDATA[JsonDocument doc = bucket.get("id").toBlocking().singleOrDefault(null);
+if (doc == null) {
+    System.err.println("Document not found!");
+} else {
+    System.out.println(doc);
+}]]></codeblock>
+
+	<p>If you check out the API documentation of the <apiname>BlockingObservable</apiname>, you will
+                discover many more possibilities, including iterators or grabbing the first and last
+                values.</p>
+
+	<p>One last thing that comes in handy with blocking calls: sometimes you want to collect all emitted values into a list. You can combine the blocking calls with the toList() operator to achieve something like this:</p>
+
+<codeblock outputclass="language-java"><![CDATA[List<Integer> list = Observable
+    .just(1, 2, 3)
+    .toList()
+    .toBlocking()
+    .single();
+
+// Prints: [1, 2, 3]
+System.out.println(list);]]></codeblock>
+
+		</section>
+
+		<section>
+			<title>Creating Observables</title>
+
+			<p>There are many ways to create <codeph>Observables</codeph>, and you've already seen <apiname>just()</apiname>
+                and <apiname>interval()</apiname>. There are much more such  convenience methods
+                available on the <codeph>Observable</codeph> class, but they all boil down to the
+                    <apiname>create()</apiname> method. You can simulate the example from before
+                with this:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable.create(new Observable.OnSubscribe<Integer>() {
+    @Override
+    public void call(Subscriber<? super Integer> subscriber) {
+        try {
+            if (!subscriber.isUnsubscribed()) {
+                for (int i = 0; i < 5; i++) {
+                    subscriber.onNext(i);
+                }
+                subscriber.onCompleted();
+            }
+        } catch (Exception ex) {
+            subscriber.onError(ex);
+        }
+    }
+}).subscribe(new Action1<Integer>() {
+    @Override
+    public void call(Integer integer) {
+        System.out.println("Got: " + integer);
+    }
+});]]></codeblock>
+
+		<p>Every time a Subscriber subscribes, the <apiname>call()</apiname> method is executed. You can
+				then call <codeph>onNext</codeph>, <codeph>onComplete</codeph> and
+					<codeph>onError</codeph> as you wish, but keep in mind that both
+					<codeph>onComplete</codeph> and <codeph>onError</codeph> should only be called once,
+				and afterward no subsequent <apiname>onNext</apiname> is allowed to follow so that the
+				contract is met.</p>
+
+		    <p><note>This example shows why it is crucial to call <apiname>subscribe()</apiname> on the <codeph>Observable</codeph>, because only such a call triggers the actual execution of the pipeline. This is a little different with subjects, which are covered later in this guide. Nevertheless, always call <apiname>subscribe()</apiname> on your observables.</note></p>
+		</section>
+
+		<section>
+			<title>Transforming Observables</title>
+
+			<p>Observables can transform their values in various ways. One of the most basic ones is <apiname>map()</apiname>, which converts the incoming value into a different one. You surely like division, so here is the FizzBuzz game:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .interval(10, TimeUnit.MILLISECONDS)
+    .take(20)
+    .map(new Func1<Long, String>() {
+        @Override
+        public String call(Long input) {
+            if (input % 3 == 0) {
+                return "Fizz";
+            } else if (input % 5 == 0) {
+                return "Buzz";
+            }
+            return Long.toString(input);
+        }
+    })
+    .toBlocking()
+    .forEach(new Action1<String>() {
+        @Override
+        public void call(String s) {
+            System.out.println(s);
+        }
+    });]]></codeblock>
+
+    <p>The map function is used to convert the input number into a string and do some checks to satisfy the FizzBuzz game. As a more practical example, consider loading a document from the Java SDK and only extracting the first name of a user before passing it on:</p>
+
+<codeblock outputclass="language-java"><![CDATA[bucket
+    .get("id")
+    .map(new Func1<JsonDocument, String>() {
+        @Override
+        public String call(JsonDocument document) {
+            return document.content().getString("firstname");
+        }
+    }).subscribe();]]></codeblock>
+
+    <p>A variation of <apiname>map()</apiname> is called <apiname>flatMap()</apiname>, which allows
+				you to do those transformations with asynchronous calls. Taking the example from above,
+				we want to map from String (the document ID) to a <codeph>JsonDocument</codeph> (the
+				loaded document). With a normal <apiname>map()</apiname>, call you would either need to
+        block on the <codeph>Observable</codeph> or at some point deal with an
+					<codeph>Observable&lt;Observable&lt;JsonDocument&gt;&gt;</codeph>.</p>
+
+    <p>Thankfully, <apiname>flatMap()</apiname> flattens the resulting values for us and return them
+				into the original flow:</p>
+
+<codeblock outputclass="language-java"><![CDATA[// Loads 3 documents in parallel
+Observable
+    .just("doc1", "doc2", "doc3")
+    .flatMap(new Func1<String, Observable<JsonDocument>>() {
+        @Override
+        public Observable<JsonDocument> call(String id) {
+            return bucket.get(id);
+        }
+    }).subscribe(new Action1<JsonDocument>() {
+        @Override
+        public void call(JsonDocument document) {
+            System.out.println("Got: " + document);
+        }
+    });]]></codeblock>
+
+ 	<p>You can see that <apiname>flatMap()</apiname> returns an Observable&lt;T&gt; whereas the normal map just returns &lt;T&gt;. You will use <apiname>flatMap()</apiname> a lot when dealing with flows like this, so keep it in mind.</p>
+
+ 	<p>Another helpful transformation is <apiname>scan()</apiname>. It applies a function to each
+ 	    value emitted by an <codeph>Observable</codeph>, sequentially, and emits each
+                successive value. We can use it to aggregate values like this:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .just(1, 2, 3, 4, 5)
+    .scan(new Func2<Integer, Integer, Integer>() {
+        @Override
+        public Integer call(Integer sum, Integer value) {
+            return sum + value;
+        }
+    }).subscribe(new Action1<Integer>() {
+        @Override
+        public void call(Integer integer) {
+            System.out.println("Sum: " + integer);
+        }
+    });]]></codeblock>
+
+         <p>This prints:</p>
+
+<codeblock><![CDATA[Sum: 1
+Sum: 3
+Sum: 6
+Sum: 10
+Sum: 15]]></codeblock>
+
+		    <p>Finally, <apiname>groupBy()</apiname> comes in handy, which emits one <codeph>Observable</codeph> by each group, defined by a function. The following example emits two <codeph>Observables</codeph>, one for even and one for odd values:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .just(1, 2, 3, 4, 5)
+    .groupBy(new Func1<Integer, Boolean>() {
+        @Override
+        public Boolean call(Integer integer) {
+            return integer % 2 == 0;
+        }
+    }).subscribe(new Action1<GroupedObservable<Boolean, Integer>>() {
+        @Override
+        public void call(GroupedObservable<Boolean, Integer> grouped) {
+            grouped.toList().subscribe(new Action1<List<Integer>>() {
+                @Override
+                public void call(List<Integer> integers) {
+                    System.out.println(integers + " (Even: " + grouped.getKey() + ")");
+                }
+            });
+        }
+    });]]></codeblock>
+
+   <p>The example prints:</p>
+
+<codeblock><![CDATA[[1, 3, 5] (Even: false)
+[2, 4] (Even: true)]]></codeblock>
+
+	<p>Combined with the Java SDK, this technique can be used to separate returned Documents based on their content. The following example uses a view to load all documents from the <codeph>beer-sample</codeph> bucket, groups them by type and counts the number of occurrences:</p>
+
+<codeblock outputclass="language-java"><![CDATA[bucket
+    .query(ViewQuery.from("my_design_doc", "my_view"))
+    .flatMap(ViewResult::rows)
+    .flatMap(ViewRow::document)
+    .groupBy(document -> document.content().getString("type"))
+    .subscribe(observable ->
+        observable.count().subscribe(integer ->
+            System.out.println(observable.getKey() + ": " + integer)
+        )
+    );]]></codeblock>
+
+		    <p>This code queries the view, extracts all rows, loads the full document for each row, groups it by the <codeph>type</codeph> property in the JSON document and then uses the <apiname>count()</apiname> operator to count the number of rows emitted by each <codeph>Observable</codeph>. This prints something like the following:</p>
+
+<codeblock><![CDATA[brewery: 1412
+beer: 5891]]></codeblock>
+
+		</section>
+
+		<section>
+			<title>Filtering Observables</title>
+
+			<p>In addition to transforming observables, you can also filter them. Filtering doesn't change the emitted values itself, but rather how much and at which point (and if at all) they are emitted.</p>
+
+			<p>For example, you can filter based on some criteria:</p>
+
+<codeblock outputclass="language-java"><![CDATA[// This will only let 3 and 4 pass.
+Observable
+    .just(1, 2, 3, 4)
+    .filter(new Func1<Integer, Boolean>() {
+        @Override
+        public Boolean call(Integer integer) {
+            return integer > 2;
+        }
+    }).subscribe();]]></codeblock>
+
+			<p>Or take only the first N values emitted and then unsubscribe:</p>
+
+<codeblock outputclass="language-java"><![CDATA[// Only 1 and 2 will pass.
+Observable
+    .just(1, 2, 3, 4)
+    .take(2)
+    .subscribe();]]></codeblock>
+
+			<p>Or use only the first or last value emitted:</p>
+
+<codeblock outputclass="language-java"><![CDATA[// Only 1 will pass
+Observable
+    .just(1, 2, 3, 4)
+    .first()
+    .subscribe();]]></codeblock>
+
+<codeblock outputclass="language-java"><![CDATA[// Only 4 will pass
+Observable
+    .just(1, 2, 3, 4)
+    .last()
+    .subscribe();]]></codeblock>
+
+			<p>Finally, you can use distinct() to suppress duplicate values:</p>
+
+<codeblock outputclass="language-java"><![CDATA[// 1, 2, 3, 4 will be emitted
+Observable
+    .just(1, 2, 1, 3, 4, 2)
+    .distinct()
+    .subscribe();]]></codeblock>
+
+    <p><note><apiname>distinct()</apiname> also allows you to pass in a function that returns the key to select by. You can use this, for example, to separate out duplicate <codeph>JsonDocument</codeph> objects.</note></p>
+		</section>
+
+		<section>
+			<title>Combining Observables</title>
+
+		    <p>Multiple <codeph>Observables</codeph> can also be merged to form a combined one. Depending on how you want those to be merged, there are different operators available. Two of the most used ones are <apiname>merge()</apiname> and <apiname>zip()</apiname> which are covered here.</p>
+
+			<p><apiname>Merge</apiname> only merges all emitted values by the source
+			    <codeph>Observables</codeph> in the order they arrive:</p>
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .merge(evens, odds)
+    .subscribe(new Action1<Integer>() {
+        @Override
+        public void call(Integer integer) {
+            System.out.println(integer);
+        }
+    });]]></codeblock>
+
+    	<p>The example prints something similar to the following:</p>
+
+<codeblock><![CDATA[2
+4
+6
+8
+10
+1
+3
+5
+7
+9]]></codeblock>
+
+		<p>With the zip operator, you can combine two streams in the strictly same order, defined by a function:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable<Integer> evens = Observable.just(2, 4, 6, 8, 10);
+Observable<Integer> odds = Observable.just(1, 3, 5, 7, 9);
+
+Observable
+    .zip(evens, odds, (v1, v2) -> v1 + " + " + v2 + " is: " + (v1 + v2))
+    .subscribe(System.out::println);]]></codeblock>
+
+    	<p>This zips the pairs together in order and prints:</p>
+
+<codeblock><![CDATA[2 + 1 is: 3
+4 + 3 is: 7
+6 + 5 is: 11
+8 + 7 is: 15
+10 + 9 is: 19]]></codeblock>
+
+		</section>
+
+		<section>
+			<title>Error Handling</title>
+
+		    <p>Error handling is a vital component of every real world application and needs to be considered from the start. RxJava provides sophisticated mechanisms to deal with errors that happen inevitably in your <codeph>Observable</codeph> flows.</p>
+
+			<p>In general, you want to react in the following ways:</p>
+
+			<ul>
+				<li>Return a default value instead.</li>
+			    <li>Flip over to a backup <codeph>Observable</codeph>.</li>
+			    <li>Retry the <codeph>Observable</codeph> (immediately or with backoff).</li>
+			</ul>
+
+			<p>Returning a default value is a good idea if you cannot afford to retry or you just don't care
+                (maybe because the flow is not crucial to your data flow). The following code throws
+                an exception at the first emitted item, but falls back to a default value:</p>
+
+			<p>Note that you can pass in a function that also takes the exception, so you can return
+                different values for different exception types or use it for logging purposes.</p>
+
+<codeblock outputclass="language-java"><![CDATA[// Prints:
+// Default
+// Oops: I don't like: Apples
+Observable
+    .just("Apples", "Bananas")
+    .doOnNext(s -> {
+        throw new RuntimeException("I don't like: " + s);
+    })
+    .onErrorReturn(throwable -> {
+        System.err.println("Oops: " + throwable.getMessage());
+        return "Default";
+    }).subscribe(System.out::println);]]></codeblock>
+
+		    <p>You can also flip to a backup <codeph>Observable</codeph> that will be called if the first one fails. The
+                Java SDK has a<apiname> getFromReplica()</apiname> command that  allows you to read
+                stale data from its replicas and treat availability for consistency on reads. You
+                can use this approach to fall back:</p>
+
+<codeblock outputclass="language-java"><![CDATA[bucket
+    .get("id")
+    .onErrorResumeNext(bucket.getFromReplica("id", ReplicaMode.ALL))
+    .subscribe();]]></codeblock>
+
+		    <p>Normally you want to have more control on which <codeph>Observable</codeph> should be run next depending on
+				the type of error. The following example will only go to the replica if a
+					<codeph>TimeoutException</codeph> happened (if not the error is passed down):</p>
+
+<codeblock outputclass="language-java"><![CDATA[bucket
+    .get("id")
+    .timeout(500, TimeUnit.MILLISECONDS)
+    .onErrorResumeNext(new Func1<Throwable, Observable<? extends JsonDocument>>() {
+        @Override
+        public Observable<? extends JsonDocument> call(Throwable throwable) {
+            if (throwable instanceof TimeoutException) {
+                return bucket.getFromReplica("id", ReplicaMode.ALL);
+            }
+            return Observable.error(throwable);
+        }
+    });]]></codeblock>
+
+		    <p>Finally, it is possible to retry the <codeph>Observable</codeph> by resubscribing. This can be done as quickly as possible, or with a backoff interval, which is preferred when external resources are involved.</p>
+
+    	<p>The following program desperately tries to read the numbers from 1 to 10, but a (not so hidden) flaw makes it randomly throw an exception. If that happens, the code retries. Since lots of values might be already emitted, we can use <apiname>distinct()</apiname> to filter those out.</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .just(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    .doOnNext(integer -> {
+        if (new Random().nextInt(10) + 1 == 5) {
+            throw new RuntimeException("Boo!");
+        }
+    })
+    .retry()
+    .distinct()
+    .subscribe(System.out::println);]]></codeblock>
+
+    	<p><note>If you only want to retry for a max amount, replace the <apiname>retry()</apiname> with a <apiname>retry(count)</apiname> call.</note></p>
+
+    	<p>If you want to retry with backoff, you can use a technique like this:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .range(1, 10)
+    .doOnNext(integer -> {
+        if (new Random().nextInt(10) + 1 == 5) {
+            throw new RuntimeException("Boo!");
+        }
+    })
+    .retryWhen(attempts ->
+        attempts.zipWith(Observable.range(1, 3), (n, i) -> i)
+        .flatMap(i -> {
+            System.out.println("delay retry by " + i + " second(s)");
+            return Observable.timer(i, TimeUnit.SECONDS);
+        }))
+    .distinct()
+    .subscribe(System.out::println);]]></codeblock>
+
+    <p>The attempts get passed into the <apiname>retryWhen()</apiname> method and zipped with the number of seconds to wait. The timer method is used to complete once its timer is done. If you run this code a few times to generate an exception (or more), you will see something similar to this:</p>
+
+<codeblock><![CDATA[1
+2
+3
+4
+delay retry by 1 second(s)
+delay retry by 2 second(s)
+5
+6
+7
+8
+9
+10]]></codeblock>
+
+<p>With the Java SDK the advanced <codeph>retryWhen</codeph> is easier to write using the
+                    <codeph>RetryBuilder</codeph> helper class. These can be used to specify a
+                filter on which kind of <codeph>Exception</codeph> to retry, for how many attempts,
+                with any <codeph>Delay</codeph>.</p>
+<codeblock outputclass="language-java"><![CDATA[
+Observable
+    .range(1, 10)
+    .doOnNext(integer -> {
+         if (new Random().nextInt(10) + 1 == 5) {
+             throw new RuntimeException("Boo!");
+         }
+    })
+    .retryWhen(
+         RetryBuilder
+             .anyOf(RuntimeException.class)
+             .delay(Delay.exponential(TimeUnit.MILLISECONDS, 100))
+             .max(5)
+             .build())
+    .distinct()
+    .subscribe(System.out::println);
+]]></codeblock>
+
+		</section>
+
+		<section>
+			<title>Schedulers and Threads</title>
+
+			<p>Schedulers in RxJava are used to manage and control concurrency. Some operators implicitly use
+				one or allow you to pass in a custom one.</p>
+
+			<p>RxJava ships with a bunch of pre-configured Schedulers by default, which are all accessible
+                through the Schedulers class:</p>
+
+			<ul>
+				<li><apiname>Schedulers.computation()</apiname>: Event-loop style scheduler for purely computational work.</li>
+		        <li><apiname>Schedulers.immediate()</apiname>: Executes the work immediately on the current thread.</li>
+		        <li><apiname>Schedulers.io()</apiname>: Executes work on an Executor-backed pool that
+                    grows as needed.</li>
+		        <li><apiname>Schedulers.newThread()</apiname>: Creates a new thread for each unit of work.</li>
+		        <li><apiname>Schedulers.trampoline()</apiname>: Queues the work on the current thread and gets executed after the current work completes.</li>
+		        <li><apiname>Schedulers.test()</apiname>: Test the <codeph>scheduler</codeph> used for
+                    testing and debugging, which allows manual advancing of the clock.</li>
+			</ul>
+
+			<p>As a rule of thumb, the computation <codeph>scheduler</codeph> should always be used for
+                in-memory processing, while the I/O scheduler should only be used for blocking-style
+                I/O operations (so do not use it together with the Java SDK because it is
+                asynchronous anyway).</p>
+
+			<p>You can instruct an <codeph>observable</codeph> to be executed on such a
+                    <codeph>scheduler</codeph> in the following ways:</p>
+
+			<ul>
+				<li>Implicitly by using an operator that makes use of one</li>
+				<li>Explicitly by passing the Scheduler to such an operator</li>
+				<li>By using <apiname>subscribeOn(Scheduler)</apiname></li>
+				<li>By using <apiname>observeOn(Scheduler)</apiname></li>
+			</ul>
+
+			<p>Operators like <codeph>buffer</codeph>, <codeph>replay</codeph>, <codeph>skip</codeph>,
+                    <codeph>delay</codeph>, <codeph>parallel</codeph> and so on use a
+                    <codeph>scheduler</codeph> by default if not instructed otherwise. A list of
+                default <codeph>schedulers</codeph> can be found <xref
+                    href="https://github.com/ReactiveX/RxJava/wiki/Scheduler#default-schedulers-for-rxjava-observable-operators"
+                    format="html" scope="external">here</xref>.</p>
+
+			<p>As a rule of thumb, all of those operators allow you to pass in a custom
+                    <codeph>scheduler</codeph> if needed, but most of the time sticking with the
+                defaults is a good idea.</p>
+
+			<p><note>The Java SDK uses an <term>internal scheduler</term> similar to the <term>computation
+                        scheduler</term> to proper isolate the inner mechanisms from user-land. It
+                    is possible to change that <codeph>scheduler</codeph> through the environment,
+                    but it is not recommended.</note></p>
+
+			<p>If you want the whole subscribe chain to be executed on a specific <codeph>scheduler</codeph>,
+                you use the <apiname>subscribeOn()</apiname> operator. Without a scheduler set, the
+                following code executes on the main thread:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .range(1, 5)
+    .map(integer -> {
+        System.out.println("Map: (" + Thread.currentThread().getName() + ")");
+        return integer + 2;
+    })
+    .subscribe(integer ->
+        System.out.println("Got: " + integer + " (" + Thread.currentThread().getName() + ")")
+    );]]></codeblock>
+
+            <p>The example prints:</p>
+
+<codeblock><![CDATA[Map: (main)
+Got: 3 (main)
+Map: (main)
+Got: 4 (main)
+Map: (main)
+Got: 5 (main)
+Map: (main)
+Got: 6 (main)
+Map: (main)
+Got: 7 (main)]]></codeblock>
+
+		<p>This example shows the <apiname>subscribeOn()</apiname> method added to the flow (it doesn't
+				matter where you add it):</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .range(1, 5)
+    .map(integer -> {
+        System.out.println("Map: (" + Thread.currentThread().getName() + ")");
+        return integer + 2;
+    })
+    .subscribeOn(Schedulers.computation())
+    .subscribe(integer ->
+            System.out.println("Got: " + integer + " (" + Thread.currentThread().getName() + ")")
+    );]]></codeblock>
+
+        <p>In the output of the example that uses <apiname>subscribeOn()</apiname>, you can see it
+				is executed on the same thread, but on the computation thread pool:</p>
+
+<codeblock ><![CDATA[Map: (RxComputationThreadPool-6)
+Got: 3 (RxComputationThreadPool-6)
+Map: (RxComputationThreadPool-6)
+Got: 4 (RxComputationThreadPool-6)
+Map: (RxComputationThreadPool-6)
+Got: 5 (RxComputationThreadPool-6)
+Map: (RxComputationThreadPool-6)
+Got: 6 (RxComputationThreadPool-6)
+Map: (RxComputationThreadPool-6)
+Got: 7 (RxComputationThreadPool-6)]]></codeblock>
+
+		<p>If you need tighter control regarding which parts are executed on what pool, use
+					<apiname>observeOn()</apiname>. Here, the order matters:</p>
+
+<codeblock outputclass="language-java"><![CDATA[Observable
+    .range(1, 5)
+    .map(integer -> {
+        System.out.println("Map: (" + Thread.currentThread().getName() + ")");
+        return integer + 2;
+    })
+    .observeOn(Schedulers.computation())
+    .subscribe(integer ->
+            System.out.println("Got: " + integer + " (" + Thread.currentThread().getName() + ")")
+    );]]></codeblock>
+
+       <p>Everything before the <apiname>observeOn()</apiname> call is executed in
+					<codeph>main</codeph>, everything below in the scheduler:</p>
+
+<codeblock><![CDATA[Map: (main)
+Map: (main)
+Map: (main)
+Got: 3 (RxComputationThreadPool-6)
+Got: 4 (RxComputationThreadPool-6)
+Got: 5 (RxComputationThreadPool-6)
+Map: (main)
+Map: (main)
+Got: 6 (RxComputationThreadPool-6)
+Got: 7 (RxComputationThreadPool-6)]]></codeblock>
+
+		<p>There is also a way to use <codeph>schedulers</codeph> directly to schedule operations. For
+                more information about <codeph>schedulers</codeph>, refer to the RxJava
+                documentation about <xref
+                    href="https://github.com/ReactiveX/RxJava/wiki/Scheduler#default-schedulers-for-rxjava-observable-operators"
+                    format="html" scope="external">schedulers</xref>. </p>
+		</section>
+
+    <section id="topic_drb_nrp_f5">
+  <title>Writing Resilient Reactive Applications</title>
+    <note type="note">Many concepts can be applied for both synchronous and asynchronous access.
+      When necessary, both patterns are discussed separately. The focus is on database interaction,
+      but if you are using RxJava as part of your stack, you can and should apply most of the
+      principles there as well.</note>
+  </section>
+
+  <section><title>Error Recovery</title>
+  <p>This section discusses different strategies to mitigate errors that might come up during
+        operations. Some of
+        them are shown to make a point, but the techniques apply to all different types of errors
+        and can be applied as you see fit.</p>
+
+  <sectiondiv><p><b>Defaults</b></p><p>Another possibility that requires intervention on the application side are
+            <codeph>Observables</codeph> that do not emit a single value. This can happen because
+          operators filtered the <codeph>Observable</codeph> so that nothing is left, or they did
+          not produce any values in the first place. One common case in the Java SDK is
+            <apiname>get()</apiname>. If the Document is not found, the <codeph>Observable</codeph>
+          will complete without emitting anything.</p><p>RxJava provides helper operators that all end with <apiname>*OrDefault()</apiname> and allow you
+          to return default values if no item is emitted when the <codeph>Observable</codeph>
+          completes.</p><p>In most cases, you want to use <apiname>singleOrDefault()</apiname> and return a default value
+          when not a single item is emitted by the source <codeph>Observable</codeph>:</p>
+    <codeblock outputclass="language-java">Observable
+      .&lt;String&gt;empty()
+        .singleOrDefault("Default")
+        .subscribe(); </codeblock>
+
+          <p>If you are dealing with potentially more than one item emitted in your
+            <codeph>Observable</codeph> and you only want to emit either the first or the last
+          value, there are also operators that allow you to emit a default if it's unexpectedly
+          empty. See <apiname>firstOrDefault()</apiname> as well as
+            <apiname>lastOrDefault()</apiname> for more details.</p><p>Lastly, RxJava offers the method <apiname>defaultIfEmtpy</apiname>, which allows you to return a
+          value if the source doesn't emit anything. In recent versions, the method
+            <apiname>switchIfEmpty</apiname> allows you to switch to a different
+            <codeph>Observable</codeph> in that same case.</p></sectiondiv>
+  <sectiondiv>
+    <p><b>Error Handling in Bulk Scenarios</b></p>
+
+    <p>Bulk operations are used to handle more data in one batch and, therefore, benefit from better
+          resource utilization. However,  error handling becomes more complicated. There are three
+          high-level cases to consider:</p>
+
+    <ul>
+      <li><b>Best Effort</b>: Keep going and just use the results that succeeded when errors
+            happen.</li>
+      <li><b>Full Retry</b>: Retry the complete Observable when errors happen.</li>
+      <li><b>Incremental Retry</b>: Only retry specific events of the Observable.</li>
+    </ul>
+    <p>Before we "dig" into the specific approaches, let's revisit the contract of Observables:</p>
+    <codeblock outputclass="language-java">onNext* (onError | onComplete)</codeblock>
+    <p>Zero or more events are followed by either an error event or a complete event.
+      This provides an important clue right away: once our <codeph>Observable</codeph> fails, no more events can be passed through.
+      Therefore,
+      you need to make sure that errors are handled at the smallest scope possible, only letting it proceed
+      if you cannot handle it right away.</p>
+
+  <dl>
+    <dlentry>
+      <dt>Best Effort Bulk Handling</dt>
+      <dd>Sometimes it is more important to get data in a timeframe, or maybe with a short timeout,
+                            then getting all data. In general, you want to keep a timeout that lets
+                            you fetch all the data, but depending on the use case you are fine with
+                            only getting a subset of the data returned. <p>To ignore errors and turn
+                                them into "noops", you can utilize
+                                    <apiname>onErrorResumeNext()</apiname>:</p><codeblock outputclass="language-java">    Observable
+          .create(new Observable.OnSubscribe&lt;String&gt;() {
+            @Override
+            public void call(Subscriber&lt;? super String&gt; subscriber) {
+            subscriber.onNext("A");
+            subscriber.onNext("B");
+            subscriber.onError(new IllegalStateException("Woops"));
+            subscriber.onNext("C");
+        }
+    })
+    .onErrorResumeNext(Observable.&lt;String&gt;empty())
+    .toBlocking()
+    .forEach(new Action1&lt;String&gt;() {
+        @Override
+        public void call(String s) {
+            System.out.println("Got: " + s);
+        }
+    });</codeblock>
+                            <p>This will not raise any exception to your calling thread, but it will
+                                never process "C" because, based on the <codeph>Observable</codeph>
+                                contract, once <apiname>onError</apiname> is called no more events
+                                are allowed to be generated.</p><p>To keep going in case an event
+                                fails, you need to turn each event into a single
+                                    <codeph>Observable</codeph> and then merge it back together to
+                                either defer the error handling (through
+                                    <apiname>Observable#mergeDelayError</apiname>) or use
+                                    <apiname>flatMap</apiname> and make sure to contain the errors
+                                before flattening.</p><p>This code provides some fake data with
+                                which you can work. It will emit four <codeph>Observables</codeph>
+                                where one of them will
+                                fail:</p><codeblock outputclass="language-java">    Observable&lt;Observable&lt;String&gt;&gt; dataObservables = Observable
+          .just("a", "b", "c", "d")
+          .map(new Func1&lt;String, Observable&lt;String&gt;&gt;() {
+            @Override
+            public Observable&lt;String&gt; call(String s) {
+              if (s.equals("b")) {
+              return Observable.error(new IllegalStateException("I dont like b"));
+              }
+              return Observable.just(s);
+              }
+              });</codeblock><p>You
+                                can then use <apiname>mergeDelayError</apiname> to defer error
+                                handling until the end. If you un-comment the
+                                    <apiname>onErrorResumeNext</apiname>, it will silently discard
+                                any errors as well leaving you with an <codeph>Observable</codeph>
+                                that provides best-effort processing of the source
+                                    <codeph>Observables</codeph>.
+                                </p><codeblock outputclass="language-java">   Observable.mergeDelayError(dataObservables)
+          //.onErrorResumeNext(Observable.&lt;String&gt;empty())
+            .toBlocking()
+            .forEach(new Action1&lt;String&gt;() {
+              @Override
+              public void call(String s) {
+              System.out.println(s);
+              }
+              });        </codeblock><p>Alternatively,
+                                you can use <apiname>flatMap</apiname> and make sure the errors are
+                                contained for each emitted
+                                <codeph>Observable</codeph>:</p><codeblock outputclass="language-java">    Observable
+          .just("a", "b", "c", "d")
+          .flatMap(new Func1&lt;String, Observable&lt;String&gt;&gt;() {
+            @Override
+            public Observable&lt;String&gt; call(String s) {
+              // Simulate some observable that sometimes fails
+              Observable&lt;String&gt; obs;
+                if (s.equals("b")) {
+                obs = Observable.error(new IllegalStateException("I dont like b"));
+                } else {
+                obs = Observable.just(s);
+                }
+
+                // Here comes the actual handling part before we flatten it back
+                return obs.onErrorResumeNext(Observable.&lt;String&gt;empty());
+                  }
+                  })
+                  .toBlocking()
+                  .forEach(new Action1&lt;String&gt;() {
+                    @Override
+                    public void call(String s) {
+                    System.out.println(s);
+                    }
+                    });
+        </codeblock><p>As
+                                a more practical example here is a best effort bulk loading of
+                                documents from Couchbase Server that just discards operations that
+                                fail: </p><codeblock outputclass="language-java">    private static Observable&lt;JsonDocument&gt; loadDocsBestEffort(Bucket bucket, List&lt;String&gt; ids) {
+            return Observable
+            .from(ids)
+            .flatMap(new Func1&lt;String, Observable&lt;JsonDocument&gt;&gt;() {
+              @Override
+              public Observable&lt;JsonDocument&gt; call(String id) {
+                return bucket
+                .async()
+                .get(id)
+                .onErrorResumeNext(Observable.&lt;JsonDocument&gt;empty());
+                  }
+                  });
+                  }
+        </codeblock>
+                            <p>Of course, you can add more logic onto each emitted
+                                    <codeph>Observable</codeph> and also proper logging so that you
+                                at least know which errors occurred.</p></dd>
+    </dlentry>
+  </dl>
+    <dl>
+      <dlentry>
+        <dt>Full Retry Bulk Handling</dt>
+        <dd>Full retry bulk handling can be done by just chaining one of the retry operators right
+              at the end of the <codeph>Observable</codeph> chain. <note type="note">This example
+                uses Java 8 Lambda syntax for conciseness.</note><codeblock outputclass="language-java">    private static Observable&lt;JsonDocument&gt; loadDocsFullRetry(Bucket bucket, List&lt;String&gt; ids) {
+              return Observable
+              .from(ids)
+              .flatMap(id -> return bucket.async().get(id))
+              .retry(4);
+              } </codeblock>
+              <p>This is, however, a bit crude because the whole list of IDs will be retried if
+                there is an error. This is the case even if the error happens late in the stream and
+                some items have already been emitted. Imagine that you retrieve items
+                  <codeph>A</codeph>, <codeph>B</codeph>, <codeph>C</codeph>, <codeph>D</codeph> and
+                that an error occurs just the first time the SDK retrieves C. What you will see is
+                  <codeph>A</codeph>, <codeph>B</codeph>, <codeph>A</codeph>, <codeph>B</codeph>,
+                  <codeph>C</codeph>, <codeph>D</codeph>.</p><p>This can be mitigated by using the
+                  <apiname>distinct()</apiname> operator, but keep in mind the memory tradeoff
+                (distinct will maintain a set of values it saw in the background, which can be
+                problematic for infinite or very large streams).</p></dd>
+      </dlentry>
+    </dl>
+    <dl>
+      <dlentry>
+        <dt>Incremental Retry Bulk Handling</dt>
+        <dd>Incremental retry improves on full retry by only actually retrying elements that
+              couldn't be loaded. It is easily done by chaining the retry operators inside the
+                <apiname>flatMap</apiname> instead of outside of it.
+              <codeblock outputclass="language-java">    private static Observable&lt;JsonDocument&gt; loadDocsIncrementalRetry(Bucket bucket, List&lt;String&gt; ids) {
+              return Observable
+              .from(ids)
+              .flatMap(id -> return bucket.async().get(id)
+              .retry(4)
+              );
+              }         </codeblock>
+              One thing to keep in mind with <apiname>flatMap</apiname> is that the order of
+              emissions isn't guaranteed to be the same as the source emissions. This can be
+              especially visible in this case since individual streams are retried on their own:
+              retried keys could come back with a value much later than other keys, more often
+              changing the order in which they appear.</dd>
+      </dlentry>
+    </dl>
+    <dl>
+      <dlentry>
+        <dt>Bulk Pattern, <apiname>BackpressureException</apiname> and Reactive Pull
+                            Backpressure</dt>
+        <dd>The bulk pattern is powerful, but if you try it with a very large collection, it is
+              especially susceptible to a <apiname>BackpressureException</apiname>. This exception
+              is a way for the SDK to tell you that you're asking for too much in a short amount of
+              time, and requests have piled up too much while waiting for a server response to free
+              up a spot. <p>By default, the internal structure that holds pending requests is sized
+                to a little over 16 000 slots. Since <apiname>from</apiname> iterates over a
+                collection in memory, which is <i>very</i> fast, it can easily flood the SDK if the
+                size of it is over or close to 16K.</p><p>You could try to react to that by
+                implementing a retry strategy, but it is hard to get it right. Fortunately, RxJava
+                comes with an even better solution, a form of flow-control called <term>reactive
+                  pull backpressure</term> that you can leverage to avoid getting a
+                  <apiname>BackpressureException</apiname>. </p><p>This is done through the
+                Subscriber, its <apiname>onStart()</apiname> method and the
+                  <apiname>request(n)</apiname> method.</p><note type="note">You have to use the
+                Subscriber to <apiname>subscribe()</apiname> instead of the convenience methods that
+                just take <apiname>Action</apiname> individually for <apiname>next</apiname>,
+                  <apiname>error</apiname> and <apiname>completed</apiname> handlers.</note>
+              <codeblock outputclass="language-java">
+    Observable&lt;JsonDocument&gt; largeBulk = Observable
+              .from(oneMillionIds)
+              .flatMap(id -> return bucket.async().get(id));
+
+              //the subscription is where reactive pull backpressure happens
+              largeBulk.subscribe(new Subscriber&lt;JsonDocument&gt;() {
+
+                //onStart initiates the backpressure
+                @Override
+                public void onStart() {
+                request(100);
+                }
+
+                @Override
+                public void onNext(JsonDocument jsonDocument) {
+                System.out.println(jsonDocument.content());
+                request(100); //request more items
+                }
+
+                //onCompleted and onError are less relevant.
+                //Note that if you want to block you'd need a CountDownLatch in this case
+
+                @Override public void onCompleted() { System.out.println("Done"); }
+
+                @Override public void onError(Throwable e) { e.printStackTrace(); }
+
+                });
+          </codeblock>
+              <p>The <apiname>request(n)</apiname> method allows to notify the upstream source that
+                the consumer is ready for more, and is prepared to consume <codeph>n</codeph> items.
+                For example, this avoids instant iteration of the collection in the case of
+                  <apiname>from</apiname>. And as long as responses come in from Couchbase Server,
+                we continue asking for more.</p><p> This is a form of <term>error mitigation</term>,
+                and we'll see a few others in the next section. </p></dd>
+      </dlentry>
+    </dl>
+  </sectiondiv>
+</section>
+<section><title>Error Mitigation</title>
+  <p>The idea behind <term>error mitigation</term> is to limit the impact a failing piece had on the
+        rest of the system. When an error occurs, you don't want it to cause failures downstream.
+        You also want to prevent as much of the error conditions to happen as possible.</p>
+  <p>The <apiname>BackpressureException</apiname> and RxJava's <term>reactive pull
+          backpressure</term> are forms of error mitigation we already saw since they both allow a
+        form of flow control that avoids overloading the system.</p>
+<sectiondiv>
+  <p><b>Slowing Down</b></p>
+  <p>Rate limiting of the requests can be a way to keep the system within parameters that are known
+          to be stable, thus mitigating overloading errors. This can happen in the client-to-server
+          direction, which avoids making more requests than can be processed later. It can also
+          happen in the server-to-client direction, when the client can't keep up with the bandwidth
+          at which data is sent from the server because, for instance, it has to process it through
+          long-running tasks. Rather than choking on that data when backpressure mechanisms are not
+          available, the client can decide to discard some of the data. This is referred to as
+            <term>Load Shedding</term>.</p>
+  <p>For example, consider a system where multiple sensors write data into Couchbase, and the client
+          application reads that data and displays it in a UI. The graphs in the UI can be built on
+          a <codeph>sample</codeph> of the data, and that's the key point. The processing rate of
+          the data is lower than its producing rate, but at the same time the resolution is also
+          lower. That means we can simply ignore some of the data and only consume what's needed,
+          such as take the data point at every second to trigger a refresh of the graph in the
+          UI.</p>
+  <p>RxJava allows you to do that through several operators:</p>
+  <ul>
+    <li><apiname>sample</apiname> (alternatively <apiname>throttleLast</apiname>) periodically looks at an Observable and emits the item last seen during this period.</li>
+    <li><apiname>throttleFirst</apiname> does the same except it emits the <codeph>first</codeph> item seen during the period.</li>
+    <li><apiname>debounce</apiname> only emits an item if a given timespan has passed since the last emission, eliminating items that are rapidly following another item.</li>
+  </ul>
+  <p>The operator <apiname>sample</apiname> is useful for sources that are "too chatty" even at a
+                    regular rate. The operator <apiname>debounce</apiname>, on the other hand, is
+                    really shining with sources that have a variable rate of emission. The sources
+                    only trigger a web search for auto-complete suggestions from an input form once
+                    the user has stopped typing for 500ms.</p>
+
+</sectiondiv>
+  <sectiondiv>
+    <p><b>Semaphore</b></p>
+    <p>To limit the strain put on dependencies of your application, one possibility is to put hard
+          limits on how many concurrent threads can access a resource. This is done with the classic
+          concurrency programming pattern of the <apiname>Semaphore</apiname>, which is implemented
+          in <apiname>java.util.concurrent</apiname> since Java 7.</p>
+
+    <p>Note that Semaphores are a bit different from locks since they don't have a notion of
+          ownership. For example, two different threads can respectively
+            <apiname>acquire()</apiname> and <apiname>release()</apiname> a
+            <apiname>Semaphore</apiname> permit), which can avoid things like deadlocks.</p>
+    <p>The same concept could also be implemented using a fixed-size thread pool. Such thread pool
+          adds overhead but allows upstream code to just "walk away" from the call if it takes too
+          long for a slot to become available, providing an even better isolation.</p>
+
+  </sectiondiv>
+  <sectiondiv>
+    <p><b>Collapsing Requests</b></p>
+    <p>Another way of mitigating errors is to batch similar requests together and "collapse" them
+                    into one request to the subsystem. If you have multiple threads that potentially
+                    ask for the same data, the benefit can be immediate by just putting a facade on
+                    your calls that will de-duplicate parallel requests.</p>
+    <p>You can go beyond and trade a little bit of latency to allow for more potential
+                    de-duplication. Wait a little longer to see if any duplicate request comes in
+                    before firing the actual de-duplicated request.</p>
+  </sectiondiv> <sectiondiv>
+    <p><b>Implementation</b></p>
+    <p>All the mentioned techniques can be easily implemented in an application in a
+          RxJava-compatible way by using another library from Netflix, <xref
+            href="https://github.com/Netflix/Hystrix/wiki" format="html" scope="external"
+            >Hystrix</xref>. It is a very comprehensive library for building resilient applications,
+          including techniques for error mitigation but also failing fast. Here, the circuit-breaker
+          pattern short-circuits calls to a service that is known to be down until we detect it is
+          back up, which stops cascading failures, provides fallbacks and gathers metrics.</p>
+  </sectiondiv>
+</section>
+  </body>
+</topic>

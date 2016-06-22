@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="toplevel">
+    <title>Collecting Information and Logging in the C (libcouchbase) SDK with Couchbase Server</title>
+    <titlealts><navtitle>Collecting Information</navtitle></titlealts>
+    <shortdesc>This page describes how to enable debug logging in the C SDK and debug application
+        crashes and potential bugs. Basic C SDK logging can be enabled using environment variables,
+        and may also be controlled from the SDK API itself.</shortdesc>
+ <body id="body">
+     <section id="begin"/>
+        <section><title>Library logging</title><p>The C SDK offers a basic logging facility through
+                which its various subsystems can output debug and error information. This
+                information provides details of the library's internals and additional error
+                information which may otherwise not be accessible via other APIs. Logging may be
+                enabled using environment variables, a connection string directive, or
+                    <apiname>lcb_cntl</apiname></p><p>The most common way to enable logging is to
+                set the <codeph>LCB_LOGLEVEL</codeph> environment variable to a number between 1 and
+                5, with 5 being the most verbose and 1 being the least verbose. Note that the client
+                logs will go to standard
+                error:<codeblock>shell$ LCB_LOGLEVEL=5 ./my_couchbase_app</codeblock></p><p>The
+                default logger can also be enabled programmatically via the
+                    <codeph>LCB_CNTL_CONLOGGER_LEVEL</codeph> setting or the
+                    <codeph>console_log_level</codeph> option in the connection string.</p><p>If
+                you wish to control where the logs are output or what information is displayed
+                (beyond basic verbosity filtering) you can install a logging callback via the
+                    <codeph>LCB_CNTL_LOGGER</codeph> setting.</p><p>If you wish to change the actual
+                destination of the logs (for example, log to a file) you may set the
+                    <codeph>console_log_file</codeph> directive in the connection string.</p>When
+            logging is turned on, the library will output messages similar to
+                this:<codeblock>1ms [I0] {14780} [DEBUG] (lcbio_mgr - L:383) &lt;localhost:11210> (HE=0xe56760) 
+Creating new connection because none are available in the pool</codeblock><note>The
+                output format is subject to change. It is intended for human consumption and is not
+                designed to be parseable.</note><p>The following table describes the components of
+                the log entries:</p><table id="table_jnv_fv4_p4">
+                <tgroup cols="2">
+                    <colspec colnum="1" colname="c1" colwidth="1*" rowsep="1" colsep="1"/>
+                    <colspec colnum="2" colname="c2" colwidth="4.26*" rowsep="1" colsep="0"/>
+                    <thead>
+                        <row>
+                            <entry>Format</entry>
+                            <entry>Description</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry><codeph><i>n</i>ms</codeph></entry>
+                            <entry>The number of milliseconds elapsed since the loading of the
+                                library</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>[I<i>n</i>]</codeph></entry>
+                            <entry>The identifier of the <codeph>lcb_t</codeph> object associated
+                                with the current message. This allows you to determine the origin of
+                                the message in the case where the application contains multiple such
+                                    <codeph>lcb_t</codeph> objects. The number is incremented for
+                                each call to <apiname>lcb_create()</apiname></entry>
+                        </row>
+                        <row>
+                            <entry><codeph>{<i>PID</i>}</codeph></entry>
+                            <entry>The current thread/process identifier. On Linux this is also the
+                                process ID for single-threaded programs, further helping distinguish
+                                between multiple forks of an application.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>[<i>LEVEL</i>]</codeph></entry>
+                            <entry>A string representing the severity of the level</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>(<i>subsystem</i> - L:<i>line</i>)</codeph></entry>
+                            <entry>The <i>subsystem</i> that produced this message, followed by the
+                                source code line at which this message was created. The subsystem
+                                will typically, but not always, resemble the source code file. It is
+                                a small string describing what the current line is doing.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>&lt;<i>host:port</i>></codeph></entry>
+                            <entry>The host and port, if any, associated with the message. This is
+                                supplied for messages that relate to the state of a particular
+                                connection.</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table></section>
+        <section>
+            <title>Getting stack traces</title>
+            <p><note>The following section applies to Linux, Mac OS X, and other Unix-like
+                    systems.</note>Stack traces and core dumps may be required if your application
+                is hanging or crashing. In this case knowing in which location the library (or
+                application) is misbehaving becomes useful.</p>
+            <p>To get a stack trace you need to have <xref href="http://www.gnu.org/software/gdb/"
+                    format="html" scope="external">GDB</xref> installed on your machine and be
+                familiar with its use. If you cannot run your application from within GDB, you can
+                attach GDB to an existing process.</p>
+            <p>To generate a useful stack trace, you need to run your application with a debug build
+                of the Couchbase C library because the released binaries are optimized. During
+                optimization the compiler might rearrange the code, which can result in misleading
+                source file and line number information in the stack trace. </p>
+            <p>To make a debug build of the C library, build the library yourself from source with
+                the <codeph>&#x2011;&#x2011;enable&#x2011;debug</codeph> option applied to the
+                    <codeph>configure</codeph> script, as shown in the following example:</p>
+            <codeblock outputclass="language-bash">$ ./cmake/configure --enable-debug
+Detected in-source build. Making 'build' directory
+cmake ../ \
+    "-DCMAKE_BUILD_TYPE=DEBUG" \
+    "-DCMAKE_INSTALL_PREFIX=/usr/local" \
+    "-GUnix Makefiles" \
+# SNIP</codeblock>
+            <p>Ensure debugging symbols for the C client are installed. If you are using a binary
+                distribution, use your package manager to install the
+                    <codeph>libcouchbase-dbg</codeph> or <codeph>libcouchbase-debuginfo</codeph>
+                package. If you are using a version of the C library built from source, ensure that
+                    <codeph>&#x2011;&#x2011;enable&#x2011;debug</codeph> was passed to the
+                    <codeph>configure</codeph> script. </p>
+            <p>You should also build your application with debug symbols, though not strictly
+                required.</p>
+            <p>If your application crashes within the C library, examine the stack trace
+                information. The C library is asynchronous in its core, so almost everything happens
+                from within the <apiname>lcb_wait()</apiname> function. Tracing actual state changes
+                and events within the library is only possible by using <xref
+                    href="collecting-information-and-logging.dita#concept_ff3_2jq_44">logging</xref>.</p>
+            <p>The following example shows how to run an application from GDB and how to get a stack
+                trace when it crashes:</p>
+            <codeblock outputclass="language-bash">$ gdb --args ./bin/cbc cat foo -U couchbase://192.168.33.101/default
+# SNIP
+(gdb) r
+Starting program: /Users/mnunberg/Source/libcouchbase/build/bin/cbc cat foo -U couchbase://192.168.33.101/default
+Reading symbols for shared libraries .
+# SNIP
+Program received signal EXC_BAD_ACCESS, Could not access memory.
+Reason: KERN_INVALID_ADDRESS at address: 0x0000000000000020
+0x00000001000bacb9 in try_read (ctx=0x100703760, server=0x100700660, ior=0x1007037a8) at /Users/mnunberg/Source/libcouchbase/src/mcserver/mcserver.c:198
+198	        pl2->index++;
+(gdb) thread apply all bt
+
+Thread 1 (process 7377):
+#0  0x00000001000bacb9 in try_read (ctx=0x100703760, server=0x100700660, ior=0x1007037a8) at /Users/mnunberg/Source/libcouchbase/src/mcserver/mcserver.c:198
+#1  0x00000001000baa29 in on_read (ctx=0x100703760, nb=31) at /Users/mnunberg/Source/libcouchbase/src/mcserver/mcserver.c:299
+#2  0x0000000100090935 in invoke_read_cb (ctx=0x100703760, nb=31) at /Users/mnunberg/Source/libcouchbase/src/lcbio/ctx.c:273
+#3  0x0000000100090a23 in E_handler (sock=4, which=2, arg=0x100703760) at /Users/mnunberg/Source/libcouchbase/src/lcbio/ctx.c:290
+#4  0x000000010030d422 in event_base_loop ()
+#5  0x00000001003068e1 in lcb_io_run_event_loop (iops=0x100405e50) at /Users/mnunberg/Source/libcouchbase/plugins/io/libevent/plugin-libevent.c:202
+#6  0x00000001000c1d4d in lcb_wait (instance=0x100405910) at /Users/mnunberg/Source/libcouchbase/src/wait.c:88
+#7  0x0000000100003be9 in cbc::GetHandler::run (this=0x100801200) at /Users/mnunberg/Source/libcouchbase/tools/cbc.cc:317
+#8  0x000000010000318f in cbc::Handler::execute (this=0x100801200, argc=4, argv=0x7fff5fbffac8) at /Users/mnunberg/Source/libcouchbase/tools/cbc.cc:219
+#9  0x000000010000e93c in main (argc=4, argv=0x7fff5fbffac8) at /Users/mnunberg/Source/libcouchbase/tools/cbc.cc:1204
+</codeblock>
+        </section>
+        <section>
+            <title>Detecting invalid memory accesses</title>
+            <p><xref href="http://valgrind.org" format="html" scope="external">Valgrind</xref> can
+                help you detect issues in your application (or the library itself) related to
+                accessing invalid (already freed or unallocated) memory or uninitialized memory
+                regions. This information is useful when debugging application behavior before a
+                crash because crashes are often caused by entering a normally impossible state
+                induced by a previous write or read to an invalid memory location.</p>
+            <p>You can install Valgrind through your package manager.</p>
+            <p>Valgrind will slow down execution time significantly, often by a factor of 20x. To
+                lessen this impact on an application that performs lots of load, temporarily reduce
+                the amount of CPU it uses.</p>
+            <p> Valgrind typically does not work well with dynamic language interpreters such as
+                Python, Ruby, or Perl due to the way these languages optimize memory allocation. To
+                effectively use Valgrind with these languages, you often need to use a special debug
+                build of the interpreter. To find out more about using Valgrind with interpreters,
+                refer to the documentation for the language you are using.</p>
+            <p>The following example shows how to run an application with Valgrind. In the example,
+                the operation appears to time out, but the real cause of the problem is
+                uninitialized memory access that causes the client to incorrectly read the response
+                from the server.</p>
+            <codeblock>$ valgrind ./bin/cbc cat foo -U couchbase://192.168.33.101/default
+==29887== Memcheck, a memory error detector
+==29887== Copyright (C) 2002-2011, and GNU GPL'd, by Julian Seward et al.
+==29887== Using Valgrind-3.7.0 and LibVEX; rerun with -h for copyright info
+==29887== Command: ./bin/cbc cat foo -U couchbase://192.168.33.101/default
+==29887== 
+==29887== Conditional jump or move depends on uninitialised value(s)
+==29887==    at 0x4E6D801: try_read (mcserver.c:221)
+==29887==    by 0x4E6DD64: on_read (mcserver.c:294)
+==29887==    by 0x4E4B8AA: invoke_read_cb (ctx.c:273)
+==29887==    by 0x4E4B92B: E_handler (ctx.c:290)
+==29887==    by 0x6E55EEB: event_base_loop (in /usr/lib/x86_64-linux-gnu/libevent_core-2.0.so.5.1.7)
+==29887==    by 0x6C49610: lcb_io_run_event_loop (plugin-libevent.c:202)
+==29887==    by 0x4E73D75: lcb_wait (wait.c:88)
+==29887==    by 0x410964: cbc::GetHandler::run() (cbc.cc:317)
+==29887==    by 0x41036F: cbc::Handler::execute(int, char**) (cbc.cc:219)
+==29887==    by 0x414E03: main (cbc.cc:1204)
+==29887== 
+==29887== Conditional jump or move depends on uninitialised value(s)
+==29887==    at 0x4E4BF07: E_schedule (ctx.c:447)
+==29887==    by 0x4E4BFD4: lcbio_ctx_schedule (ctx.c:471)
+==29887==    by 0x4E4BA21: E_handler (ctx.c:320)
+==29887==    by 0x6E55EEB: event_base_loop (in /usr/lib/x86_64-linux-gnu/libevent_core-2.0.so.5.1.7)
+==29887==    by 0x6C49610: lcb_io_run_event_loop (plugin-libevent.c:202)
+==29887==    by 0x4E73D75: lcb_wait (wait.c:88)
+==29887==    by 0x410964: cbc::GetHandler::run() (cbc.cc:317)
+==29887==    by 0x41036F: cbc::Handler::execute(int, char**) (cbc.cc:219)
+==29887==    by 0x414E03: main (cbc.cc:1204)
+==29887== 
+foo                  Client-Side timeout exceeded for operation. Inspect network conditions or increase the timeout (0x17)
+==29887== Conditional jump or move depends on uninitialised value(s)
+==29887==    at 0x4E4B4EB: lcbio_ctx_close_ex (ctx.c:156)
+==29887==    by 0x4E4B640: lcbio_ctx_close (ctx.c:192)
+==29887==    by 0x4E6EFB8: finalize_errored_ctx (mcserver.c:720)
+==29887==    by 0x4E6EEE3: start_errored_ctx (mcserver.c:698)
+==29887==    by 0x4E6ED98: mcserver_close (mcserver.c:646)
+==29887==    by 0x4E6A943: lcb_destroy (instance.c:491)
+==29887==    by 0x41020C: cbc::Handler::~Handler() (cbc.cc:208)
+==29887==    by 0x42222D: cbc::GetHandler::~GetHandler() (in /sources/lcb-packet-ng/build/bin/cbc)
+==29887==    by 0x422297: cbc::GetHandler::~GetHandler() (cbc-handlers.h:31)
+==29887==    by 0x414E3D: main (cbc.cc:1221)
+==29887== 
+==29887== 
+==29887== HEAP SUMMARY:
+==29887==     in use at exit: 4,994 bytes in 20 blocks
+==29887==   total heap usage: 602 allocs, 582 frees, 588,374 bytes allocated
+==29887== 
+==29887== LEAK SUMMARY:
+==29887==    definitely lost: 35 bytes in 1 blocks
+==29887==    indirectly lost: 0 bytes in 0 blocks
+==29887==      possibly lost: 28 bytes in 1 blocks
+==29887==    still reachable: 4,931 bytes in 18 blocks
+==29887==         suppressed: 0 bytes in 0 blocks
+==29887== Rerun with --leak-check=full to see details of leaked memory
+==29887== 
+==29887== For counts of detected and suppressed errors, rerun with: -v
+==29887== Use --track-origins=yes to see where uninitialised values come from
+==29887== ERROR SUMMARY: 3 errors from 3 contexts (suppressed: 10 from 6)</codeblock>
+        </section>
+        <section>
+            <title>Getting core dumps</title>
+            <p>Core dumps might be generated when an application crashes (though on many systems
+                core file generation is off by default). The core dump contains a memory dump of
+                your application that can be inspected on a different system. This lets you inspect
+                the state of the library to determine what the error was at the time of the
+                crash.</p>
+            <p>Core dumps can only be analyzed if the binaries that generated them are accessible
+                and have debugging symbols. Binaries in this sense includes the client library, the
+                application, and any other shared libraries loaded by the application. This means
+                that the platform (and distribution) that generated the core dump must be available
+                and loadable (or at least reproducible) when analyzing the core dump.</p>
+            <note type="warning">A core file contains the memory contents of your application.
+                Anyone who can read your core file can access potentially sensitive data that your
+                application was processing at the time of the crash. If possible, have your
+                application operate on sample data.</note>
+            <p>To get a core dump:</p>
+            <ol id="ol_h5z_vbl_gv">
+                <li>Invoke <codeph>ulimit -c unlimited</codeph> in the same shell that your
+                    application will run (or a parent thereof) prior to the invocation of that
+                    application. The <codeph>ulimit</codeph> command instructs the kernel to
+                    generate core dump files for all subsequent processes that terminate abnormally
+                    and are executed within the current shell or any child shell.</li>
+                <li>Ensure you are either using a binary installation of the client library (which
+                    was installed from an official Couchbase repository) or are using a source build
+                    with debug symbols enabled.</li>
+                <li>When the application crashes, a core file is created. The exact location and
+                    name of the file is dependent on the specific kernel configuration. For more
+                    information about where core files are located, see t<xref
+                        href="http://stackoverflow.com/questions/2065912/core-dumped-but-core-file-is-not-in-current-directory"
+                        format="html" scope="external">his Stack Overflow discussion on how core
+                        location may be configured</xref>.</li>
+                <li>Compress the core file using <cmdname>gzip</cmdname> or a similar utility before
+                        <xref href="https://issues.couchbase.com" format="html" scope="external"
+                        >filing an issue</xref> or sending this to <xref
+                        href="https://support.couchbase.com" format="html" scope="external"
+                        >Couchbase support</xref>. Compressing the file makes the upload and
+                    download times quicker for analyzing the core file.</li>
+                <li>Disable core dumps once completed. Core dumps are disabled by default on most
+                    Linux distributions because they may potentially write sensitive information to
+                    disk and many core dump files can quickly fill up a file system.</li>
+            </ol>
+            <p>The following example shows how to enable and collect a core dump with a modification
+                to the <codeph>cbc</codeph> program to abort:</p>
+            <codeblock>$ ulimit -c unlimited
+$ ./bin/cbc cat foo -U couchbase://192.168.33.101
+Aborted (core dumped)
+# Showing the effects of compressing the core file:
+$ ls -lsh core
+961K -rw------- 1 mnunberg mnunberg 1.3M Nov 21 12:53 core
+$ gzip core
+$ ls -lsh core.gz
+136K -rw------- 1 mnunberg mnunberg 133K Nov 21 12:53 core.gz</codeblock>
+        </section>
+     <section id="end"/>
+  </body>
+</topic>

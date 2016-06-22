@@ -1,0 +1,356 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="document-kv-operations-dotnet">
+    <title>CRUD Document Operations Using the .NET SDK with Couchbase Server</title>
+    <titlealts><navtitle>Document Operations</navtitle></titlealts>
+    <conbody>
+        <p> You can access documents in Couchbase using methods of the
+                <apiname>Couchbase.CouchbaseBucket</apiname> object. The methods for retrieving
+            documents are <apiname>Get&lt;T>()</apiname> and
+                <apiname>LookupIn&lt;TDocument>()</apiname> and the methods for mutating documents
+            are <apiname>Upsert&lt;T>()</apiname>, <apiname>Insert&lt;T>()</apiname>,
+                <apiname>Replace&lt;T>()</apiname> and <apiname>MutateIn&lt;TDocument>()</apiname>. </p>
+        <p> Examples are shown using the synchronous methods. See the section on <xref
+                href="async-programming.dita">Async Programming</xref> for information on other
+            methods. </p>
+        <section id="net-additional-options">
+            <title>Additional options</title>
+            <p>Update operations also accept a <xref
+                    href="../core-operations.dita#devguide_kvcore_generic/expiry">TTL
+                    (expiry)</xref> value (<parmname>Expiry</parmname>) on the passed
+                    <parmname>IDocument</parmname> which will instruct the server to delete the
+                document after a given amount of time. This option is useful for transient data
+                (such as sessions). By default documents do not expire. See <xref
+                    href="../core-operations.dita#devguide_kvcore_generic/expiry"/> for more
+                information on expiration. </p>
+            <p>Update operations can also accept a <xref href="../concurrent-mutations-cluster.dita"
+                    >CAS</xref> (<parmname>Cas</parmname>) value on the passed document to protect
+                against concurrent updates to the same document. See <xref
+                    href="../concurrent-mutations-cluster.dita">CAS</xref> for a description on how
+                to use CAS values in your application. Since CAS values are opaque, they are
+                normally retreived when a Document is loaded from Couchbase and then used
+                subsequently (without modification) on the mutation operations. If a mutation did
+                succeed, the returned Document will contain the new CAS value. </p>
+        </section>
+        <section id="net-mutation-input">
+            <title>Document input and output types</title>
+            <p>Couchbase stores documents. From an SDK point of view, those documents contain the
+                actual value (like a JSON object) and associated metadata. Every document in the
+                Java SDK contains the following properties, some of them optional depending on the
+                context: </p>
+            <table>
+                <tgroup cols="2">
+                    <thead>
+                        <row>
+                            <entry>Name</entry>
+                            <entry>Description</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry>
+                                <codeph>Id</codeph>
+                            </entry>
+                            <entry>The (per bucket) unique identifier of the document.</entry>
+                        </row>
+                        <row>
+                            <entry>
+                                <codeph>Content</codeph>
+                            </entry>
+                            <entry>The actual content of the document.</entry>
+                        </row>
+                        <row>
+                            <entry>
+                                <codeph>Cas</codeph>
+                            </entry>
+                            <entry>The CAS (Compare And Swap) value of the document.</entry>
+                        </row>
+                        <row>
+                            <entry>
+                                <codeph>Expiry</codeph>
+                            </entry>
+                            <entry>The expiration time of the document.</entry>
+                        </row>
+                        <row>
+                            <entry>
+                                <codeph>Token</codeph>
+                            </entry>
+                            <entry>The optional MutationToken after a mutation.</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+            <p> There are a few different results using <codeph>IDocument</codeph> you may
+                encounter: <ul>
+                    <li><apiname>Document</apiname>: The default one in most methods and is backed
+                        by a JSON document when stored to Couchbase. Commonly this is a
+                            <apiname>Document&lt;dynamic></apiname> object, which the API will
+                        handle automatically on behalf of your program.</li>
+                    <li><apiname>DocumentResult</apiname>: The return type for any
+                            <apiname>IDocument</apiname> centric operation requests.</li>
+                    <li><apiname>OperationResult&lt;T></apiname>: The return type for any binary
+                        operations that return a value.</li>
+                </ul></p>
+            <p>Because Couchbase Server can store anything and not just JSON, there is the
+                possibility for other implementations of the <apiname>IDocument</apiname> interface
+                or the <apiname>IOperationResult</apiname> interface. These are usually returned by
+                other methods on the <apiname>Bucket</apiname> or are implemented using an
+                    <apiname>ITypeTranscoder</apiname>, which is outside the scope of this
+                introduction.</p>
+        </section>
+        <section id="net-creating-updating-full-docs">
+            <title>Creating and updating full documents</title>
+            <p> Documents may be created and updated using the
+                    <apiname>IBucket.Upsert&lt;T>()</apiname>,
+                    <apiname>IBucket.Insert&lt;T>()</apiname>, and
+                    <apiname>IBucket.Replace&lt;T>()</apiname> family of methods. Read more about
+                the difference between these methods at <xref
+                    href="../core-operations.dita#devguide_kvcore_generic/crud-overview"/> in the
+                Couchbase developer guide. </p>
+            <p> These methods accept an IDocument instance where the following properties are
+                considered if set: <ul>
+                    <li><parmname>Id</parmname> (mandatory): The ID of the document to modify
+                        (String).</li>
+                    <li><parmname>Content</parmname> (mandatory): The desired new content of the
+                        document, this varies per document type used. This Type of the content is
+                        specified by the generic Type T parameter.</li>
+                    <li><parmname>Expiry</parmname> (optional): Specify the expiry time for the
+                        document. If specified, the document will expire and no longer exist after
+                        the given number of seconds. See <xref href="../core-operations.dita#expiry"
+                        /> for more information.</li>
+                    <li><parmname>Cas</parmname> (optional): The CAS value for the document. If the
+                        CAS on the server does not match the CAS supplied to the method, the
+                        operation will fail. See <xref href="../concurrent-mutations-cluster.dita"/>
+                        for more information on the usage of CAS values. Note that the Cas is
+                        represented here as a <apiname>UInt64</apiname>, but you should consider it
+                        an opaque value in your programs.</li>
+                </ul></p>
+            <p> Other optional arguments are also available for more advanced usage: <ul>
+                    <li><parmname>TimeSpan</parmname>: A value for the <apiname>Expiry</apiname> on
+                        this document.</li>
+                    <li><parmname>PersistTo</parmname>, <parmname>ReplicateTo</parmname>: Specify
+                            <xref href="../durability.dita#concept_gyg_14s_zs"> durability
+                            requirements</xref> for the operations.</li>
+                </ul></p>
+            <p> Upon success, the returned <apiname>IDocumentResult</apiname> instance will contain
+                the new <xref href="../concurrent-mutations-cluster.dita#concept_iq4_bts_zs"
+                    >CAS</xref> value of the document. If the document is not mutated successfully,
+                an exception is raised depending on the type of error. Further details on the
+                exceptional case may be on the <parmname>Exception</parmname> property of the
+                returned <parmname>IDocumentResult</parmname>.</p>
+            <p>Inserting a document works like this:</p>
+            <codeblock outputclass="language-net"><![CDATA[var doc = new Document<dynamic>{ Id = "document_id", Content = new {Some="value"} };
+var result = bucket.Insert(doc);]]>
+Console.WriteLine(JsonConvert.SerializeObject(result.Document));</codeblock>
+            <screen>Output: {"Id":"document_id","Cas":1466044876366741504,"Expiry":0,"Content":null,"Token":null}</screen>
+            <p> If the same code is called again, a <codeph>ResponseStatus.KeyExists</codeph> will
+                be returned. If you don't care that the document is overridden, you can use
+                    <apiname>Upsert</apiname> instead: </p>
+            <codeblock outputclass="language-csharp"><![CDATA[var doc = new Document<dynamic>{ Id = "document_id", Content = new {Some="other value"} };
+var result = bucket.Upsert(doc);]]><![CDATA[
+Console.WriteLine(JsonConvert.SerializeObject(result.Document));]]></codeblock>
+            <screen>Output: {"Id":"document_id","Cas":1466044876366741599,"Expiry":0,"Content":null,"Token":null}</screen>
+            <p> Finally, a full document can be replaced if it existed before. If it didn't exist,
+                then a <codeph>ResponseStatus.KeyExists</codeph> will be returned: </p>
+            <codeblock outputclass="language-csharp"><![CDATA[var doc = new Document<dynamic>{ Id = "document_id", Content = new {Some="other value"} };
+var result = bucket.Replace(doc);]]>
+Console.WriteLine(result.Status);</codeblock>
+            <screen>Output: KeyExists</screen>
+        </section>
+        <section id="net-retrieving-full-docs">
+            <title>Retrieving full documents</title>
+            <p> Documents may be retrieved using the <apiname>IBucket.Get()</apiname>,
+                    <apiname>IBucket.GetWithLock()</apiname>,
+                    <apiname>IBucket.GetAndTouch()</apiname> and
+                    <apiname>IBucket.GetFromReplica()</apiname>methods. All of those serve different
+                distinct purposes and accept different parameters. </p>
+            <p> Most of the time you use the <apiname>get()</apiname> method. It accepts one
+                mandatory argument: </p>
+            <ul>
+                <li><parmname>id</parmname>: The document ID to retrieve</li>
+            </ul>
+            <codeblock outputclass="language-csharp"><![CDATA[Console.WriteLine(bucket.GetDocument<dynamic>("document_id").Content);]]></codeblock>
+            <screen>Output: { "some": "value" }</screen>
+            <p> It is also possible to read from a replica if you want to explicitly trade
+                availability for consistency during the timeframe when the active partition is not
+                reachable (for example during a node failure or netsplit). </p>
+            <p><codeph>GetFromReplica</codeph> has one mandatory argument as well:</p>
+            <ul>
+                <li><parmname>id</parmname>: The document ID to retrieve</li>
+            </ul>
+            <codeblock outputclass="language-csharp"><![CDATA[var result = bucket.getFromReplica("document_id");
+Console.WriteLine(result.Status);]]></codeblock>
+            <note type="important"> Since a replica is updated asynchronously and eventually
+                consistent, reading from it may return stale and/or outdated results! </note>
+            <p> If you need to use pessimistic write locking on a document you can use the
+                    <parmname>GetWithLock</parmname> which will retreive the document if it exists
+                and also return its <parmname>CAS</parmname> value. You need to provide a time that
+                the document is maximum locked (and the server will unlock it then) if you don't
+                update it with the valid cas. Also note that this is a pure write lock, reading is
+                still allowed. </p>
+            <codeblock outputclass="language-csharp"><![CDATA[// Get and Lock for max of 10 seconds
+var ownedDoc = bucket.GetWithLock<dynamic>("document_id", new TimeSpan(0, 0, 10));
+
+// Do something with your document
+var modifiedDoc = ModfiyDocument(ownedDoc.Document);
+
+// Write it back with the correct CAS
+bucket.Replace(modifiedDoc);]]></codeblock>
+            <p> It is also possible to fetch the document and reset its expiration value at the same
+                time. See <xref href="document-operations.dita#net-modifying-expiration"> Modifying
+                    Expiration</xref> for more information. </p>
+        </section>
+        <section id="net-removing-full-docs">
+            <title>Removing full documents</title>
+            <p> Documents may be removed using the <apiname>IBucket.Remove()</apiname> method. This
+                method takes a single mandatory argument: </p>
+            <ul>
+                <li><parmname>id</parmname>: The ID of the document to remove.</li>
+            </ul>
+            <p>Some additional options:</p>
+            <ul>
+                <li><parmname>PersistTo</parmname>, <parmname>ReplicateTo</parmname>: Specify <xref
+                        href="../durability.dita#concept_gyg_14s_zs">durability requirements</xref>
+                    for the operations.</li>
+                <li><parmname>Timeout</parmname>: Specify a custom timeout which overrides the
+                    default timeout setting.</li>
+            </ul>
+            <p> If the <codeph>cas</codeph> value is set on the Document overload, it is used to
+                provide optimistic currency, very much like the <codeph>Replace</codeph> operation. </p>
+            <codeblock outputclass="language-csharp"><![CDATA[// Remove the document
+var result = bucket.Remove("document_id");]]></codeblock>
+            <codeblock outputclass="language-csharp"><![CDATA[var loaded = bucket.GetDocument<dynamic>("document_id");
+
+// Remove and take the CAS into account
+var removed = bucket.Remove(loaded);]]></codeblock>
+        </section>
+        <section id="net-modifying-expiration">
+            <title>Modifying expiraton</title>
+            <p> Modifying the <xref href="../core-operations.dita#devguide_kvcore_generic/expiry"
+                    >Document expiration</xref> can be performed using the
+                    <apiname>IBucket.Touch()</apiname> method. In addition, many methods support
+                setting the expiry value as part of their other primary operations: </p>
+            <ul>
+                <li><apiname>IBucket.Touch</apiname>: Resets the expiry time for the given document
+                    ID to the value provided.</li>
+                <li><apiname>IBucket.GetAndTouchDocument</apiname>: Fetches the document and resets
+                    the expiry to the given value provided.</li>
+                <li><apiname>IBucket.Insert</apiname>, <apiname>IBucket.Upsert</apiname>,
+                        <apiname>IBucket.Replace</apiname>: Stores the expiry value alongside the
+                    actual mutation when set on the <codeph>Document&lt;T></codeph> instance.</li>
+            </ul>
+            <p> The following example stores a document with an expiry, waits a bit longer and as a
+                result no document is found on the subsequent get: </p>
+            <codeblock outputclass="language-csharp"><![CDATA[uint expiry = 2000; // milliseconds
+var stored = bucket.Upsert(new Document<dynamic>
+{
+    Id = "expires",
+    Expiry = expiry,
+    Content = new {Some = "value"}
+});
+
+Thread.Sleep(3000);
+
+//will be expired, thus KeyNotFound
+Console.WriteLine(bucket.GetDocument<dynamic>("expires").Status);]]></codeblock>
+            <screen>KeyNotFound</screen>
+        </section>
+        <section id="net-atomic-modifications"><title>Atomic document
+            modifications</title>Additional atomic document modifications can be performing using
+            the .NET SDK. You can increase or decrease the value of a document using the
+                <apiname>IBucket.Increment</apiname> or  <apiname>IBucket.Decrement</apiname>
+            methods. You can also use the <apiname>IBucket.Append()</apiname> and
+                <apiname>Bucket.Prepend()</apiname> methods to perform <xref
+                href="../core-operations.dita#devguide_kvcore_generic/devguide_kvcore_append_prepend_generic"
+                >raw byte concatenation</xref>. </section>
+        <section id="net-batching-ops">
+            <title>Batching Operations</title>
+            <p>The .NET SDK supports the async/await keywords so batching can easily be done by
+                utilizing the Task.WhenAll method:<codeblock><![CDATA[var tasks = new List<Task>IDocumentResult<string>>>();
+ids.ForEach(x => tasks.Add(bucket.GetDocumentAsync<string>(x)));
+
+var results = await Task.WhenAll(tasks);
+results.ToList().ForEach(doc => Console.WriteLine(doc.Status));]]></codeblock></p>
+            <p>In addition, there are overloads of the standard CRUD methonds on IBucket which take
+                a list or dictionary of keys and/or documents and internally batch them asynchronously:<codeblock><![CDATA[var keys = new []{"key1", "key2", "key3"};
+var results = bucket.Get<dynamic>(keys).Values;]]>
+results.ToList().ForEach(x=>Console.WriteLine(x.Value));</codeblock></p>
+            <p>The main difference between the two is that the second way will block while the
+                results are returned (even if they are retrieved in parrallel), and the first is
+                non-blocking from the calling thread.</p>
+        </section>
+        <section id="net-subdocs">
+            <title>Operating with sub-documents</title>
+            <note type="tip">See <xref href="../subdocument-operations.dita#subdoc-operations"/> for
+                an overview</note>
+            <hazardstatement>
+                <messagepanel id="messagepanel_edy_qwm_qv">
+                    <typeofhazard>Sub-Document API is experimental</typeofhazard>
+                    <howtoavoid>Sub-Document is a feature to be released in Couchbase 4.5. It is
+                        available as an experimental feature in 4.5 pre-release builds.</howtoavoid>
+                </messagepanel>
+            </hazardstatement>
+            <p> Sub-document operations save network bandwidth by allowing you to specify
+                    <i>paths</i> of a document to be retrieved or updated. The document is parsed on
+                the server and only the relevant sections (indicated by <i>paths</i>) are
+                transferred between client and server. You can execute <xref
+                    href="../subdocument-operations.dita#subdoc-operations">sub-document</xref>
+                operations in the .NET SDK using the <apiname>IBucket.LookupIn()</apiname> and
+                    <apiname>IBucket.MutateIn()</apiname> methods. </p>
+            <p> Each of these methods accepts a <parmname>key</parmname> as its mandatory first
+                argument and give you a builder that you can use to chain several <i>command
+                    specifications</i>, each specifying the path to be impacted by the specified
+                operation and a document field operand. You may find all the operations in the
+                    <apiname>LookupInBuilder</apiname> and <apiname>MutateInBuilder</apiname>
+                classes. </p>
+            <codeblock outputclass="language-csharp"><![CDATA[bucket.LookupIn("docid")
+    .Get("path.to.get")
+    .Exists("check.path.exists")
+    .Execute();
+
+boolean createParents = true;
+bucket.MutateIn("docid")
+    .Upsert("path.to.upsert", value, createParents)
+    .Remove("path.to.del"))
+    .Execute();]]></codeblock>
+            <p> All sub-document operations return a special
+                    <apiname>IDocumentFragment&lt;T></apiname> object rather than a
+                    <apiname>IDocument&lt;T></apiname>. It shares the <codeph>Id</codeph>,
+                    <codeph>Cas</codeph> and <codeph>MutationToken</codeph> fields of a document,
+                but in contrast with a normal <apiname>IDocument&lt;T></apiname> object, a
+                    <apiname>IDocumentFragment&lt;T></apiname> object contains multiple results with
+                multiple statuses, one result/status pair for every input operation. So it exposes
+                method to get the <codeph>Content()</codeph> and <codeph>Status()</codeph> of each
+                spec, either by index or by path. It also allows to check that a response for a
+                particular spec <codeph>Exists()</codeph>: </p>
+            <codeblock outputclass="language-csharp"><![CDATA[var res =
+bucket.LookupIn("docid")
+    .Get("foo")
+    .Exists("bar")
+    .Exists("baz")
+    .Execute();
+// First result
+res.Content("foo");
+// or
+res.Content(0);]]></codeblock>
+            <p> Using the <codeph>Content(...)</codeph> methods will raise an exception if the
+                individual spec did not complete successfully. You can also use the
+                    <codeph>Status(...)</codeph> methods to return an error code (a
+                    <apiname>ResponseStatus</apiname>) rather than throw an exception. </p>
+        </section>
+        <section id="net-formats-non-json">
+            <title>Formats and Non-JSON Documents</title>
+            <note type="tip">See <xref href="../nonjson.dita#devguide_nonjson"/> for a general
+                overview of using non-JSON documents with Couchbase</note>
+            <p>The .NET SDK supports documents in the form of POCOs (plain old csharp objects) as
+                long as they are serializable (public getter/setter properties), dynamic types, and
+                most of the representations of JSON objects from the 3rd party API's such as
+                NewtonSoft.JSON. In general, if the Type you are storing is an object capable of
+                being serialized, it will be stored natively as JSON in couchbase. Exceptions
+                include non-JSON strings, byte arrays, and any value that is not representable as
+                JSON. If the value is not serializable to JSON, then it will be treated as a binary
+                document. Note that binary documents cannot be queried using N1QL nor do the
+                Sub-Document methods work on them.</p>
+        </section>
+    </conbody>
+</concept>

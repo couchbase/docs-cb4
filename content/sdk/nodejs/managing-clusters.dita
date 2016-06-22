@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="managing-cluster-node">
+    <title>Managing Clusters using the Node SDK with Couchbase Server</title>
+    <titlealts><navtitle>Managing Clusters</navtitle></titlealts>
+  <body>
+        <p conref="../shared/flush-info-pars.dita#toplevel/management-intro"/>
+        <p>The Node SDK also comes with some convenience functionality for common Couchbase management requests.</p>
+        <p>You can manage Couchbase clusters by using the <codeph>ClusterManager</codeph> and <codeph>BucketManager</codeph>
+          interfaces that are available through the <apiname>manager(login, password)</apiname> and <apiname>manager()</apiname> methods exposed in <codeph>Cluster</codeph> and
+          <codeph>Bucket</codeph> instances.</p>
+
+    <section><title>Creating and removing buckets</title>
+        <p>Creating buckets and removing buckets is performed, for example,  when running unit tests.</p>
+        <p>The <apiname>ClusterManager</apiname> class may be used to create and delete buckets from the Couchbase cluster.
+            It is instantiated through the <apiname>Cluster</apiname>'s <apiname>manager()</apiname> method, providing the
+            administrative username and password.</p>
+        <codeblock>var clusterManager = cluster.manager("Administrator", "123456")</codeblock>
+
+        <p>To create a bucket, use the <apiname>createBucket(name, opts, callback)</apiname> method. The <parmname>opts</parmname>
+        represents the options of the bucket, an object with the following structure (shown with default values):</p>
+        <codeblock>var myOpts = {
+    authType: 'sasl',
+    bucketType: 'couchbase',
+    ramQuotaMB: 100,
+    replicaNumber: 1,
+    saslPassword: null,
+    flushEnabled: null
+  };</codeblock>
+
+        <p>The parameters correspond to those in the REST API, most notably:</p>
+        <ul><li><parmname>bucketType</parmname>: Defaults to <codeph>"couchbase"</codeph>, but can also be
+            <codeph>"memcached"</codeph> to create a cache bucket.</li>
+            <li><parmname>ramQuotaMB</parmname>: How much memory should each node use for the bucket. This number is specified in megabytes.</li>
+            <li><parmname>saslPassword</parmname>: If specified, makes this bucket password protected, forcing future connects
+                (using the <apiname>Bucket</apiname>) to specify the <parmname>password</parmname> parameter. Must be
+                used together with the <parmname>authType: 'sasl'</parmname> (which is the default).</li>
+            <li><parmname>flushEnabled</parmname>: Enables the <apiname>BucketManager#flush()</apiname> operation to be performed
+                on this bucket (see the <xref href="#managing-cluster-node/node-flushing"/> section below).</li>
+            <li><parmname>replicaNumber</parmname>: The number of replicas to use for the bucket.</li>
+            <li><parmname>replicaIndex</parmname>: Wether or not to replicate indexes.</li>
+        </ul>
+        <p>The following example creates an "hello" bucket with only the <parmname>flushEnabled</parmname> differing from the
+            defaults shown above:</p>
+        <codeblock>var manager = cluster.manager("Administrator", "123456");
+manager.createBucket("hello", { flushEnabled: true }, function(err) {
+    console.log('Creation of hello bucket failed:', err);
+});</codeblock>
+
+<!-- TODO does the Node SDK automatically wait for the bucket to be ready, or is there some polling involved?
+     if polling, the shared content <p conref="../shared/flush-info-pars.dita#toplevel/after-creation"/> should be added -->
+
+        <p>You can completely delete a bucket using the <apiname>removeBucket(name)</apiname> method:
+        <codeblock>manager.removeBucket("hello", function(err) {
+    console.log('Could not delete hello bucket: ', err);
+});</codeblock></p></section>
+
+    <section id="node-flushing">
+        <title>Flushing Buckets</title>
+        <p conref="../shared/flush-info-pars.dita#toplevel/flush-intro"/>
+        <p>You may flush a bucket in the Node SDK by using the <apiname>BucketManager</apiname>'s
+                    <apiname>flush()</apiname>
+                method:<codeblock>var bucketMgr = bucket.manager();
+bucketMgr.flush(function(err, status) {
+    if (status) {
+        console.log('Bucket flushed');
+    } else {
+        console.log('Could not flush bucket: ', err);
+    }
+});</codeblock></p>
+        <p>The <apiname>flush</apiname> operation may notably fail if the bucket does not have flush enabled.</p>
+    </section>
+
+    <!-- TODO uncomment when index management is available -->
+    <!--<section>
+        <title>N1QL Index Management</title>
+        <p conref="../shared/flush-info-pars.dita#toplevel/index-management"/>
+        <p>You can manage indexes in the Node SDK using the <apiname>BucketManager</apiname>
+            class, with its various N1QL related methods: <apiname>listN1qlIndexes()</apiname>, <apiname>createN1qlIndex(...)</apiname>, etc...</p>-->
+        <!-- TODO: example -->
+    <!--</section>-->
+
+
+    <section id="node-view-management">
+        <title>View Management</title>
+        <p conref="../shared/flush-info-pars.dita#toplevel/view-management"/>
+        <p>To create a view, you can use the <codeph>manager()</codeph> method of your bucket instance to retrieve a
+          <codeph>BucketManager</codeph> instance. After you have a <codeph>BucketManager</codeph> instance, invoke the
+          <codeph>upsertDesignDocument</codeph> method to store the design document for later querying.</p>
+        <p>The following example creates or updates a "ddocname" design document with a single "by_name" view on the "hello"
+            bucket (because it is created through hello's <apiname>BucketManager</apiname>):</p>
+        <codeblock outputclass="language-javascript">var bucket = cluster.openBucket("hello");
+var bucketMgr = bucket.manager();
+
+var ddocdata = {
+views: {
+by_name: {
+map: [ 'function(doc, meta) {',
+     '  if (doc.type &amp;&amp; doc.type == "beer") {',
+     '    emit(doc.name, null);',
+     '  }',
+     '}'
+   ].join('\n')
+},
+}
+};
+bucketMgr.upsertDesignDocument('ddocname', ddocdata, function(err) {
+console.log('Insertion of design document completed with error:', err);
+});</codeblock>
+
+        <p>Alternatively, you can just pass a JavaScript function into the design document manipulation methods and they
+        will automatically be serialized to JavaScript. For instance, the following code snippets are
+        functionally equivalent:</p>
+        <codeblock>// Using a string
+var ddocdata = {
+views: {
+by_name: {
+map: [ 'function(doc, meta) {',
+     '  if (doc.type &amp;&amp; doc.type == "beer") {',
+     '    emit(doc.name, null);',
+     '  }',
+     '}'
+   ].join('\n')
+},
+}
+};
+
+// Using a function
+var ddocdata = {
+views: {
+by_name: {
+map: function(doc, meta) {
+     if (doc.type &amp;&amp; doc.type == "beer") {
+       emit(doc.name, null);
+     }
+   }
+},
+}
+};</codeblock>
+
+            <note conref="../shared/flush-info-pars.dita#toplevel/one-view-update-warning"/>
+            <p>Here is an example of deleting a view from an existing document, which follows the same principle:</p>
+            <codeblock>var bucket = cluster.openBucket();
+var bucketMgr = bucket.manager();
+
+function deleteView(ddocname, viewname, callback) {
+    bucketMgr.getDesignDocument(ddocname, function(err, ddoc, meta) {
+        if (err) {
+            return callback(err);
+        }
+
+        //we have the current exhaustive list of views, delete the one we want to remove
+        delete ddoc.views[viewname];
+
+        //update the new exhaustive design document
+        bucketMgr.upsertDesignDocument(ddocname, ddoc, function(err) {
+            if (err) {
+                return callback(err);
+            }
+
+            callback(null);
+            });
+        });
+}
+
+deleteView('ddoc', 'view', function(err) {
+    console.log('Deletion completed with error:', err);
+});</codeblock>
+
+        <p>To remove a complete design document from a bucket, pass its name to the <codeph>removeDesignDocument</codeph>
+            method.</p>
+    </section>
+  </body>
+</topic>

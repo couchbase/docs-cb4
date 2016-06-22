@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "generalTask.dtd">
+<concept id="toplevel">
+    <title>Managing Connections Using the C (libcouchbase) SDK with Couchbase Server</title>
+    <titlealts><navtitle>Managing Connections</navtitle></titlealts>
+    <shortdesc>This section describes how to connect the C SDK to a Couchbase cluster and bucket. It contains best
+        practices as well as information on the connection string,  SSL and other advanced connection options.</shortdesc>
+    <conbody>
+
+
+        <section>
+            <title>Creating a handle</title>
+            <p>A library handle is created using the <apiname>lcb_create()</apiname> function which
+                accepts an out-pointer to a handle and a parameters structure specifying some core
+                options.</p>
+            <codeblock>lcb_t instance = NULL;
+lcb_create_st options;
+memset(&amp;options, 0, sizeof options);
+options.version = 3;
+options.v.v3.connstr = "couchbase://10.3.53.2/my-bucket";
+options.v.v3.passwd = "s3cr3t";
+lcb_error_t rc = lcb_create(&amp;instance, &amp;options);
+if (rc != LCB_SUCCESS) {
+    printf("Couldn't create handle: %s\n", lcb_strerror(NULL, rc));
+}</codeblock>
+            <p conref="lcb-pars-shared.dita#toplevel/connstr-intro"> You can use the
+                    <parmname>connstr</parmname> field to specify the connection string </p>
+            <p>Because the C SDK is used as a foundation for other SDKs, it allows for a common
+                connection specification over all those other SDKs.<note>See <xref
+                        href="client-settings.dita#toplevel"/>, which contains some additional
+                    connection string options.
+                </note></p>
+            <p>If the bucket is password protected, the <parmname>passwd</parmname> field may be
+                set. Note that the bucket password (set when creating a bucket) is not the same as
+                the administrative password for Couchbase.</p>
+            <p>When creating a new handle, you can also specify an alternate event loop plugin to
+                use. This is required if you want to use your library in non-blocking mode with your
+                existing non-blocking application.</p>
+            <p>Once your handle has been instantiated you may configure it additionally using the
+                <apiname>lcb_cntl()</apiname> family of functions.</p>
+            <p>Note that a successful <apiname>lcb_create</apiname> invocation does not mean the
+                handle has been connected to the bucket, but rather that memory has been allocated
+                for the handle so that it may be connected in subsequent calls.</p>
+        </section>
+        <section><title>Connecting a handle</title><p>Once a handle has been instantiated it should
+            be connected. Connecting a handle involves performing the following steps:<ol
+                id="ol_n3l_kfb_mv">
+                <li>Calling <apiname>lcb_connect</apiname> to schedule the connection.</li>
+                <li>Yielding to network I/O, either explicitly via <apiname>lcb_wait</apiname>
+                    or implicitly by returning control to the event loop</li>
+                <li>Retrieving the connection status via
+                    <apiname>lcb_get_bootstrap_status</apiname>. If running in non-blocking
+                    mode, installing the bootstrap callback
+                    (<apiname>lcb_get_bootstrap_callback</apiname>) should have a similar
+                    effect<codeblock>lcb_error_t rc;
+rc = lcb_connect(instance);
+if (rc != LCB_SUCCESS) {
+    /* Couldn't schedule connection. Internal issue or problem with the socket */
+    printf("Couldn't schedule bootstrap!: %s\n", lcb_strerror(NULL, rc));
+    lcb_destroy(instance);
+}
+lcb_wait(instance);
+rc = lcb_get_bootstrap_status(instance);
+if (rc != LCB_SUCCESS) {
+    printf("Bootstrapping failed: %s\n", lcb_strerror(NULL, rc));
+    lcb_destroy(instance);
+}</codeblock></li>
+            </ol></p>Always check the return value of
+            <apiname>lcb_get_bootstrap_status</apiname> to ensure the handle is properly
+            connected. Performing operations on a non-bootstrapped handle will fail with
+            <apiname>LCB_CLIENT_ETMPFAIL</apiname>.</section>
+        <section><title>Handle lifetime</title><p>The <apiname>lcb_t</apiname> object (commonly
+            referred to as <i>instance</i>) represents a connection between your application and
+            a Couchbase bucket. Because the bucket itself may consist of several TCP
+            connections, and because there is a substantial amount of CPU and kernel overhead in
+            creating and destroying these connections, it is recommended that
+            <apiname>lcb_t</apiname> objects be kept alive for the lifetime of the
+            application rather than creating and destroying them frequently.</p>Once the
+            <apiname>lcb_t</apiname> is no longer required, you can call
+            <apiname>lcb_destroy()</apiname> on it. The handle should not be destroyed within a
+            callback as it will likely cause it to crash. Additionally, memory leaks may occur if
+            there are pending uncompleted operations (e.g. <apiname>lcb_get3</apiname>,
+            <apiname>lcb_store3</apiname>).</section>
+        <section><title>Configuring the handle</title>Once the handle is created, it may be <xref
+                href="client-settings.dita#toplevel">configured</xref> by the
+                <apiname>lcb_cntl</apiname> and <apiname>lcb_cntl_string</apiname>
+            functions.</section>
+        <section id="connstr-begin"/>		
+        <section id="ssl">
+            <title>Connecting with SSL</title>
+            <p>Couchbase Sever features the ability to have clients communicate securely via
+                SSL.</p>
+            <p>To use SSL, you need Couchbase Server Enterprise 3.0 or later</p>
+            <ol id="ol_x3l_kfb_mv">
+                <li>Obtain the SSl certificate used by the Cluster</li>
+                <li>Make the certificate available to the file system of the client host.</li>
+                <li>Employ the <codeph>couchbases://</codeph> scheme for the connection string.</li>
+                <li>Specify the local path to the certificate as the value for the
+                    <codeph>certpath</codeph> field.</li>
+            </ol>
+            <p>To connect to a bucket on an SSL-enabled Cluster at the node 10.3.4.33, with the
+                certificate saved as <codeph>/var/cbcert.pem</codeph>:
+                <codeblock outputclass="language-c">couchbases://10.3.4.33?certpath=/var/cbcert.pem</codeblock></p>
+        </section>
+        <section id="multihost">
+            <title>Specifying Multiple Hosts</title>
+            <p>You can specify multiple hosts in the connection string so that the client may be
+                able to connect even if the cluster topology changed. To specify multiple hosts,
+                separate them using a
+                comma:<codeblock>couchbase://host1.com,host2.com,host3.com</codeblock>See <xref
+                    href="failure-considerations.dita#topic_wxg_cwb_mv"/> for more information about
+                handling cluster topology changes.<note>You are not required to enumerate or pass
+                    all Couchbase cluster nodes to the client. The client only needs to know about a
+                        <i>single</i> node which is a member of the cluster. Once the client has
+                    connected to the node, it will query that node about the cluster topology, which
+                    in turn contains information about all Couchbase nodes and the services they
+                    contain.</note></p>
+        </section>
+        <section id="configcache">
+            <title>Configuration Cache</title>
+            <p>In environments when lots of short-lived connections are made to Couchbase (for
+                example, a small command-line utility or a fork-and-execute CGI application) the
+                overhead in actually bootstrapping the client may be significant. This is because
+                the client must retrieve the configuration from the cluster, and involves several
+                additional TCP requests and in many cases an additional TCP connection.</p>
+            <p>You can bypass the initial network bootstrap phase by using the
+                    <codeph>config_cache</codeph> directive in the connection string. The
+                    <codeph>config_cache</codeph> option accepts a path to a local file (the file
+                should not exist when using for the first time). When performing the bootstrap
+                process, the client will first check the contents of the given file to see if it
+                contains an existing cluster configuration, and if it does, will use the file as the
+                bootstrap source. If the file does not contain a configuration the client will then
+                retrieve the configuration from the network and then write it to the file, so that
+                future attempts will use the configuration file.<note type="danger">The
+                        <codeph>config_cache</codeph> feature is intended only for short-lived
+                    connections. During a cluster-side topology change the client <i>will</i> need
+                    to retrieve the configuration from the network as the file-based configuration
+                    will become invalid.</note></p>
+        </section>
+        <section>
+            <title>Additional Options</title>
+            <p>You can pass additional options in the connection string using the URL query format:
+                        <codeph>couchbase://<i>location-info</i>?option1=value1&amp;option2=value2&amp;optionN=valueN</codeph>.
+                A list of options may be found in <xref keyref="client-settings" href="client-settings.dita" format="dita">Client Settings</xref></p>
+        </section>
+        <section id="connstr-end"/>
+    </conbody>
+  </concept>

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="dotnet-fts">
+  <title>Full Text Search (FTS) Using the .NET SDK with Couchbase Server</title>
+  <titlealts><navtitle>Searching from the SDK</navtitle></titlealts>
+  <shortdesc>You can use the Full Text Search service (FTS) to create queryable full-text indexes in Couchbase Server.</shortdesc>
+  <body>
+    <p>Full Text Search or FTS allows you to create, manage and query full text indexes on JSON
+      documents stored in Couchbase buckets. It uses natural language processing for querying
+      documents, provides relevence scoring on the results of your queries and has fast indexes for
+      querying a wide range of possible text searches. Some of the supported query-types include
+      simple queries like Match and Term queries, range queries like Date Range and Numeric Range
+      and compound queries for conjunctions, disjunctions and/or boolean queries. The .NET SDK
+      exposes an API for performing FTS queries which abstracts some of the complexity of using the
+      underlying REST API. </p>
+    <note conref="../shared/experimental-pars.dita#experimental/fts"/>
+    <p>Querying a FTS index using the .NET SDK is performed through the <codeph>Query(SearchQuery
+        query)</codeph> method on the <apiname>CouchbaseBucket</apiname> class. This method returns
+      a <apiname>ISearchQueryResult</apiname> that when enumerated yields the results of the query
+      (in the form of <apiname>ISearchQueryRow</apiname> objects). Additionally, you can access the
+      rows via the <apiname>Hits</apiname> property, which returns list containing all rows
+      returned. Other important ISearchQueryResult properties include:<ul id="ul_d3v_4qr_dw">
+        <li>Status: a <apiname>SearchStatus</apiname> value indicating the result of the query -
+          Success or Failed.</li>
+        <li>Errors: a list of any errors that may have occurred</li>
+        <li>Facets: a list of <apiname>SearchFacet</apiname> objects if any were returned</li>
+      </ul></p>
+    <p> The <apiname>ISearchQueryRow</apiname> interface is implemented as a SearchQueryRow object
+      and contains the <codeph>Index</codeph>, <codeph>Id</codeph> and <codeph>Score</codeph>
+      properties, respectively identifying the exact FTS index that returned the hit, the id of the
+      document that matched and a score for the match. It also contains optional properties
+      depending on the request and the availability of all relevant settings in the FTS mapping.
+      Those are:<ul id="ul_mzh_r5r_dw">
+        <li><codeph>Explanation</codeph>: an explanation of the plan followed by the FTS index to
+          execute the query as a dynamic Type.</li>
+        <li><codeph>Locations</codeph>: a map-like listing of the location of all matching terms
+          inside each relevant field that was queried as a dynamic Type.</li>
+        <li><codeph>Fragments</codeph>: a map-like listing of occurrences of the search terms in
+          each field, with the context of the terms.</li>
+        <li><codeph>Fields</codeph>: a map of the complete value of each requested field). Most of
+          these need that the index be configured to store the data of a searched field</li>
+      </ul></p>
+    <p> Here is an example of a very simple example using a <apiname>MatchQuery</apiname>, which is a very generic Full
+      Text Search that will search within the text of the fields that were indexed: </p>
+    <codeblock outputclass="language-csharp" spectitle="Querying and FTS index">
+  ClusterHelper.Initialize(new ClientConfiguration());
+  var bucket = ClusterHelper.GetBucket("travel-sample");
+  var results = bucket.Query(new SearchQuery
+  {
+      Index = "idx_travel_content",
+      Query = new MatchQuery("inn"),
+      SearchParams = new SearchParams().Limit(10).Timeout(TimeSpan.FromMilliseconds(10000))
+  });
+
+  foreach (var result in results)
+  {
+      Console.WriteLine(result);
+  }</codeblock>
+    <p> First we open a <apiname>CouchbaseBucket</apiname>, in this case we are opening the
+        <i>"travel-sample"</i> bucket which comes is a sample bucket and dataset that comes
+      pre-installed with Couchbase server (but must be configured via the Management Console). In
+      the bucket, using the Management Console, we have created an index named
+        <i>"idx_travel_content"</i> which will index on the<i> "content" </i>field of the
+        <i>"landmark"</i> document type.</p>
+    <p>We then create a high-level <apiname>SearchQuery</apiname> object with our parameters to
+      apply to the entire request. A <apiname>SearchQuery</apiname> can be composed of one or more
+      queries, thus the parameters on the <apiname>SearchQuery</apiname> apply to all queries within
+      that instance. Here are some of the more important parameters:<ul id="ul_ypk_x2y_dw">
+        <li><apiname>Limit</apiname>: limits the number of matching results from a returned
+          result-set by <i>"n"</i>.</li>
+        <li><apiname>Skip</apiname>: indicates how many matching results to skip on the result set
+          before returning matches.</li>
+        <li><apiname>Explain</apiname>: if true, the response will include additional search score
+          explanations.</li>
+        <li><apiname>Highlighting</apiname>: allows setting of additional highlighting on the result
+          set of matching terms.</li>
+        <li><apiname>Fields</apiname>: a list of fields values that should be returned in the result
+          assuming that they were indexed.</li>
+        <li><apiname>Facets</apiname>: a list of facets used to aggregate information collected on a
+          particluar result set.</li>
+        <li><apiname>Timeout</apiname>: a server side timeout allows to specify an upper boundary of
+          request execution so that it potentially doesn't run infinitely.</li>
+      </ul>The <apiname>SearchQuery</apiname> is a "fluent" interface, so you can chain method calls
+      togather making it a bit easier to see which options you have available using IntelliSense in
+      Visual Studio. The index we defined above <i>"idx_travel_content"</i> is assigned to the Index
+      property and the MatchQuery is defined, which will search for the letters <i>"inn"</i> in the
+        <i>"content"</i> field of every <i>"landmark"</i> document in the <i>"travel-sample"</i>
+      bucket.</p>
+    <p>We then call the <apiname>CouchbaseBucket.Query(SearchQuery query)</apiname> method and
+      iterate over the <apiname>ISearchQueryResult</apiname> object which will gives the results of
+      the query.</p>
+  </body>
+</topic>

@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_vpj_dh5_xv">
+  <title>Install and Start Using the Java SDK with Couchbase Server</title>
+  <titlealts><navtitle>Start Using the SDK</navtitle></titlealts>
+  <shortdesc>The Couchbase Java SDK allows Java applications to access a
+    Couchbase cluster. It offers traditional synchronous APIs as well as
+    scalable asynchronous APIs to maximize performance.</shortdesc>
+    <body>
+        <section conref="../shared/install-couchbase.dita#ReusableComponent_fb4_psc_kv/section_gb4_psc_kv"/>
+
+    <section id="java-installing-sdk">
+      <title>Installing the SDK</title>
+
+
+        <note type="important">At least Java 6 is required, all newer Java versions are supported (and encouraged). Especially
+          Java 8 is recommended since it brings performance enhancements and lambda expressions which are very
+          convenient when used in an asynchronous context.</note>
+
+        <p>All stable releases of the Java SDK are primarily distributed through Maven. As a result the dependency can be included easily using your favourite package manager. For Maven itself, it typically looks like this:</p>
+
+<codeblock outputclass="language-xml"><![CDATA[<dependencies>
+  <dependency>
+    <groupId>com.couchbase.client</groupId>
+    <artifactId>java-client</artifactId>
+    <version>2.3.0</version>
+  </dependency>
+</dependencies>]]></codeblock>
+
+      <p>The <codeph>java-client</codeph> dependency will pull in two more transitive dependencies. One is called <codeph>com.couchbase.client.core-io</codeph> and is a internal dependency which performs all the underlying tasks like IO and cluster management. The other dependency is <codeph>RxJava</codeph> which is both used internally and exposed as a first-class API to the user in order to perform scalable and performant asynchronous, reactive operations.</p>
+
+			<p>Information on new features, fixes, known issues as well as information on how to install
+        older release versions is <xref
+          href="/server/other-products/release-notes-archives/java-sdk" format="html"
+          scope="peer">in the release notes</xref>.  You will also find other install options
+        there, including a zip file which includes all transitive dependencies and javadocs.</p>
+    </section>
+
+    <section id="java-using-sdk">
+      <title>Using the SDK</title>
+
+          <p>The code snippet below shows how the Java SDK may be used for some common operations:</p>
+
+<codeblock outputclass="language-java"><![CDATA[import com.couchbase.client.java.*;
+import com.couchbase.client.java.document.*;
+import com.couchbase.client.java.document.json.*;
+import com.couchbase.client.java.query.*;
+
+public class Example {
+
+    public static void main(String... args) throws Exception {
+        // Initialize the Connection
+        Cluster cluster = CouchbaseCluster.create("localhost");
+        Bucket bucket = cluster.openBucket("default");
+
+        // Create a JSON Document
+        JsonObject arthur = JsonObject.create()
+            .put("name", "Arthur")
+            .put("email", "kingarthur@couchbase.com")
+            .put("interests", JsonArray.from("Holy Grail", "African Swallows"));
+
+        // Store the Document
+        bucket.upsert(JsonDocument.create("u:king_arthur", arthur));
+
+        // Load the Document and print it
+        // Prints Content and Metadata of the stored Document
+        System.out.println(bucket.get("u:king_arthur"));
+
+        // Create a N1QL Primary Index (but ignore if it exists)
+        bucket.bucketManager().createN1qlPrimaryIndex(true, false);
+
+        // Perform a N1QL Query
+        N1qlQueryResult result = bucket.query(
+            N1qlQuery.parameterized("SELECT name FROM default WHERE $1 IN interests",
+            JsonArray.from("African Swallows"))
+        );
+
+        // Print each found Row
+        for (N1qlQueryRow row : result) {
+            // Prints {"name":"Arthur"}
+            System.out.println(row);
+        }
+    }
+}]]></codeblock>
+
+    </section>
+        <section id="java-connect-disconnect">
+            <title>Connecting &amp; Disconnecting</title>
+
+            <p>Most of the operations performed against Couchbase are done against a
+              <apiname>Bucket</apiname> instance. A <apiname>Bucket</apiname> reference
+              can be obtained through a <apiname>Cluster</apiname> reference which allows
+              you to manage more buckets at the same time and reuse the underlying IO
+              and computation resources efficiently.</p>
+
+            <p>To obtain a <apiname>Cluster</apiname> the <apiname>CouchbaseCluster#create</apiname>
+            method needs to be called. If no arguments are provided it will connect to a cluster
+            listening on <codeph>localhost</codeph>. Note that not all nodes of the cluster need to
+            be passed it, just a few to allow it to bootstrap itself are enough. We recommend more
+            than one though since if one of the nodes happens to be not available during application
+            startup it still has a chance to try another one and bootstrap properly.</p>
+
+            <p>Once the SDK has successfully reached one node it will throw your bootstrap list
+              away and replace it with a complete up-to-date list of nodes in the cluster.</p>
+
+            <p>Here is how you can create a <apiname>Cluster</apiname> reference in a few different
+            ways:</p>
+
+        <codeblock outputclass="language-java"><![CDATA[// Connects to localhost
+Cluster cluster = CouchbaseCluster.create();
+
+// Connects to a cluster on 10.0.0.1 and tries 10.0.0.2
+// if the other one does not respond during bootstrap.
+Cluster cluster = CouchbaseCluster.create("10.0.0.1", "10.0.0.2");]]></codeblock>
+
+            <p>Now that the <apiname>Cluster</apiname> reference is available, you can open
+            <apiname>Bucket</apiname> instances and then perform operations on them:</p>
+
+        <codeblock outputclass="language-java"><![CDATA[// Connects to localhost
+Cluster cluster = CouchbaseCluster.create();
+
+// Opens the "default" bucket
+Bucket defaultBucket = cluster.openBucket();
+
+// Opens the "travel-sample" bucket without password
+Bucket tsBucket = cluster.openBucket("travel-sample");
+
+// Opens a bucket with password
+Bucket secureBuckt = cluster.openBucket("mybucket", "mypassword");]]></codeblock>
+
+          <note type="important">It is very important that cluster and bucket instances are
+          created during startup and are then reused until the application shuts down. Connection
+          setup is expensive and the SDK is designed to be thread safe and can be efficiently used
+          across all your application threads.</note>
+
+          <p>Finally you need to close the buckets and/or disconnect from the <apiname>Cluster</apiname>. If
+          a cluster disconnect is issued, all buckets will be automatically closed.</p>
+
+        <codeblock outputclass="language-java"><![CDATA[// Just close a single bucket
+bucket.close();
+
+// Disconnect and close all buckets
+cluster.disconnect();]]></codeblock>
+
+            <p>More information on managing connections including error handling can be found <xref
+                href="managing-connections.dita">here</xref>.</p>
+        </section>
+
+        <section id="java-api-reference">
+          <title>API Reference</title>
+
+          <p>Each stable Java SDK version has the Javadocs API reference published. The reference for the latest version can be found <xref href="http://docs.couchbase.com/sdk-api/couchbase-java-client-2.2.7/" format="html" scope="external">here</xref>.</p>
+
+        </section>
+        <section id="java-contributing">
+          <title>Contributing</title>
+          <p>Couchbase welcomes community contributions to the Java SDK. The <xref
+              href="https://github.com/couchbase/couchbase-java-client" format="html"
+              scope="external">Java SDK source code</xref> is available on GitHub. Please see the <xref
+              href="https://github.com/couchbase/couchbase-java-client/blob/master/CONTRIBUTING.md" format="html"
+              scope="external">CONTRIBUTING</xref> file for further information.</p>
+        </section>
+
+    </body>
+</topic>

@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="toplevel">
+    <title>Failure Considerations</title>
+    <shortdesc id="shortdesc">Networks and nodes may fail from time to time. Often, Couchbase will automatically
+        handle the failure transparently and not require any user intervention. In some cases
+        however, Couchbase may be unable to automatically handle the failure condition, which will
+        result in errors reported to the application. This page discusses how to develop Couchbase
+        applications to function in times of node or network failure.</shortdesc>
+    <body>
+        <section id="begin"/>
+        <section>
+            <p>Failover is the means by which a node is removed from the cluster and all its owned vBuckets
+            are immediately:<ul id="ul_afc_lwb_mv">
+                <li>Transferred to a replica node (if there are replica nodes)</li>
+                <li>Marked offline (if there are no replica nodes).</li>
+            </ul></p>
+        </section>
+        <section>
+            <title>What to expect in an application during failure</title>
+            <p>When a node fails (as opposed to <i>fails over</i>) the client library will be unable
+                to contact the node. Operations may either time out (if the node has become
+                unresponsive; for example if the OS kernel has crashed) or fail immediately with a
+                network error (if the node is actively rejecting connections; for example if the
+                Couchbase service was shut down).</p>
+            <p>Your life can be made much simpler by simply receiving a code of
+                <i>SERVER</i>_IS_DOWN the moment a node became unavailable. This, however, is
+                usually not the case. The most common type of failure is an unresponsive node or
+                broken network - which results in often-cryptic <i>Timeout</i> errors (or <i>Queue
+                    Full</i>). Unfortunately timeout errors can also be received when a network (or
+                server) is genuinely slow (as opposed to crashed).</p>
+            <p>The client library will generally not retry timed-out operations: by definition, a
+                timed out operation is an operation which could not be completed within a given
+                amount of time. Likewise the application should not retry a timed-out operation. The
+                recommended action is to report the failure up the stack.</p>
+        </section>
+        <section>
+            <title>What to expect during Failover</title>
+            <p>Couchbase offers a feature called <i>Failover</i> which allows an offending node to
+                be removed from the cluster, immediately transferring all its vBucket resources (as
+                opposed to rebalance, which transfers these resources incrementally). Failover can
+                either be done manually, or automatically (more on this later).</p>
+            <p>After the offending node has been failed over the client will detect the node down
+                within a matter of seconds. When the SDK detects a node has been failed over, it
+                will remove it internally from its list of cluster nodes.</p>
+            <p>Further operations operations will either succeed or fail depending on the status of
+                the cluster after the failover:<ul id="ul_u4y_ywb_mv">
+                    <li>If there are remaining replicas the operations will succeed as normal - just
+                        as before the server failed</li>
+                    <li>If there are no remaining replicas, operations destined for the failed node
+                        will now fail with a “NO NODE AVAILABLE” error. This error will continue to
+                        be returned for operations belonging to the relevant vBuckets until
+                        either:<ul id="ul_ljb_1xb_mv">
+                            <li>The failed node is re-added to the cluster</li>
+                            <li>The cluster is rebalanced (and thus any data on the old node is
+                                lost)</li>
+                        </ul></li>
+                </ul></p>
+        </section>
+        <section id="missing-nodes">
+            <title>Handling missing nodes</title>
+            <p>A <i>Missing Node</i> error is reported when the cluster is in a degraded state. One
+                of the cluster nodes has been failed over and no replica exists to take its place.
+                As a result, a portion of the cluster’s dataset becomes unavailable.</p>
+            <p>Recovering from this scenario is possible only through administrative action. The
+                administrator must either re-add the node or rebalance the cluster in order to make
+                the rest of the cluster’s data accessible again.</p>
+            <p>The SDK will periodically check to see if the cluster is no longer in a degraded
+                state; thus even when the cluster’s state is corrected it may still take some time
+                for this information to be propagated across the clients.</p>
+            <p>Missing nodes may also affect client bootstrap, as the IP or hostname present in the
+                connection parameters may no longer be up or part of the cluster. You may specify
+                    <i>multiple</i> hostnames or IP addresses in the connection parameters. When
+                multiple hosts are supplied, the SDK will attempt to connect to each host in the
+                list until a bootstrap attempt has succeeded, or until a timeout has been
+                reached.</p>
+        </section>
+        <section>
+            <title>Timeouts</title>
+            <p>Timeouts are returned by the client when an operation is waiting too long for an
+                acknowledgment from the server. The length of time a client waits for an a response
+                from the server is configurable (see your language’s Couchbase SDK reference for how
+                to configure it).</p>
+            <p>Timeouts are caused by an unresponsive network or software system. Possible causes
+                are:<ol id="ol_j53_lxb_mv">
+                    <li>Congested network.</li>
+                    <li>Heavy CPU load on the server.</li>
+                    <li>Heavy CPU load on the client.</li>
+                    <li>Physical disruption between client and server</li>
+                </ol>Applications should generally <b>not</b> retry an operation if it resulted in a
+                timeout before performing corrective action and/or analysis to determine the cause
+                of these timeouts.</p>
+            <p>If your application cannot simply return an error but must ensure that the operation
+                completes, it is suggested that you wait a while until retrying (similar to the
+                mechanism used when receiving a temporary failure).<hazardstatement>
+                    <messagepanel id="messagepanel_kbb_trs_zs">
+                        <typeofhazard>Timeout does not mean the operation failed.</typeofhazard>
+                        <howtoavoid>It is important to note that receipt of a timeout error does not
+                            mean the operation did not complete. It means the server did not respond
+                            in a timely fashion. It is possible that the operation completed on the
+                            server, but the acknowledgment response was not received by the client.
+                            If the CAS of the item is known, you may use it to guard against
+                            performing the same operation twice.</howtoavoid>
+                    </messagepanel>
+                </hazardstatement></p>
+        </section>
+        <section>
+            <title>Network Failures</title>
+            <p>Network errors are returned by the client if it cannot establish a network connection
+                to the server, or if an existing network connection was terminated. The cause of a
+                network error may be included in the error object itself (for example, couldn’t
+                resolve host name, connection refused, no route to host).</p>
+            <p>Like timeout errors, network errors may be transient (indicative of a bad network
+                connection). They may also be a result of a node being failed over.</p>
+            <p>Applications may retry operations which failed with network errors after waiting for
+                a while (as in timeout errors]. Retrying operations too soon may result in creating
+                massive amounts of <codeph>TIME_WAIT</codeph> connections on the client, and in
+                extreme cases, even cause system crashes or rendering it inaccessible via the network.<hazardstatement>
+                    <messagepanel id="messagepanel_sbr_zrs_zs">
+                        <typeofhazard>Network error does not indicate the failure of the
+                            operation</typeofhazard>
+                        <howtoavoid>As in timeout errors], it is not possible to determine if an
+                            operation was actually completed if it resulted in a network
+                            error.</howtoavoid>
+                    </messagepanel>
+                </hazardstatement>For cases where it is of the utmost importance to retrieve the
+                item, a <xref href="#concept_ybj_tqs_zs/devguide-replica-read" format="dita">read
+                    from a replica</xref> can be performed. This will retrieve a potentially stale
+                item.</p>
+        </section>
+        <section id="devguide-replica-read">
+            <title>Reading from replicas</title>
+            <p>High-availability applications can read documents from replicas, exchanging
+                consistency for availability.</p>
+            <p>If your bucket is configured for replication, then multiple replicas of each item
+                exist within the cluster. By default the client will attempt to access an item using
+                its computed master or active node. This returns the current and authoritative
+                version of the item as it is stored within Couchbase.</p>
+            <p>In conditions where access to the active node is unavailable (for example, it is
+                disconnected from the network), an application may be able to access a replica
+                version of the item using the <i>get-from-replica</i> operation which queries a
+                replica node for a copy of the item. <note>The item received from a replica node may
+                    be an older version. It is possible a newer version exists in the active node,
+                    but did not manage to get replicated before the active node went
+                    offline.</note></p>
+            <codeblock>try:
+  result = cb.get("docid")
+except CouchbaseNetworkError as e:
+  print "Got error. Fetching from replica!"
+  result = cb.get(‘docid’, replica=True)</codeblock>
+        </section>
+        <section id="end"/>
+    </body>
+    
+</topic>

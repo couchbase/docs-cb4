@@ -1,0 +1,448 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="java-views">
+    <title>MapReduce Views Using the Java SDK with Couchbase Server</title>
+    <titlealts><navtitle>MapReduce Views</navtitle></titlealts>
+    <shortdesc>You can use MapReduce views to create queryable indexes in Couchbase Server.</shortdesc>
+    <body>
+        <section conref="../shared/views.dita#toplevel/views-intro"/>
+        <section conref="../shared/views.dita#toplevel/example-beer"/>
+        <section conref="../shared/views.dita#toplevel/example-geo-travel"/>
+        <section><title>Querying Views through the Java SDK</title>
+            <p>Query a view through the Java client through the <codeph>query(ViewQuery q)</codeph>
+                method on the <apiname>Bucket</apiname> class. This method returns a
+                <apiname>ViewResult</apiname> whose iterator yields the results of the query (in the
+                form of <apiname>ViewRow</apiname> objects). The <apiname>ViewResult</apiname> also
+                exposes the list of rows (<codeph>allRows()</codeph>), the <codeph>success()</codeph>
+                status and potential <codeph>error()</codeph>. The <apiname>ViewRow</apiname> object
+                contains the <codeph>key</codeph> and <codeph>value</codeph> properties (which are the
+                first and second arguments to the view's <codeph>emit()</codeph> function, respectively)
+                as well as the <codeph>id</codeph> property, which may be passed to the
+                <apiname>get()</apiname> method to return the actual document. Alternatively,
+                directly call the <apiname>document()</apiname> method on the view row. </p>
+            <codeblock outputclass="language-java">Bucket bkt = CouchbaseCluster.create("192.168.33.101").openBucket("beer-sample");
+                ViewResult result = bkt.query(ViewQuery.from("beer", "by_name");
+                for (ViewRow row : result) {
+                System.out.println(row); //prints the row
+                System.out.println(row.document().content()); //retrieves the doc and prints content
+                }</codeblock>
+
+            <p>You can also set various properties on the query:</p>
+            <codeblock outputclass="language-java">Bucket bkt = CouchbaseCluster.create("192.168.33.101").openBucket("beer-sample");
+                ViewQuery q = ViewQuery.from("beer", "by_name")
+                limit(5) // Limit to 5 results
+                .startKey("A")
+                .endKey("A\u0fff");
+
+                ViewResult result = bkt.query(q);
+                for (ViewRow row : result) {
+                System.out.println(row);
+                }</codeblock>
+            <p>Here's some sample output for the previous query:</p>
+            <codeblock>DefaultViewRow{id=harvey_son_lewes-a_lecoq_imperial_extra_double_stout_1999, key=A. LeCoq Imperial Extra Double Stout 1999, value=null}
+                DefaultViewRow{id=harvey_son_lewes-a_lecoq_imperial_extra_double_stout_2000, key=A. LeCoq Imperial Extra Double Stout 2000, value=null}
+                DefaultViewRow{id=mickey_finn_s_brewery-abana_amber_ale, key=Abana Amber Ale, value=null}
+                DefaultViewRow{id=brasserie_lefebvre-abbaye_de_floreffe_double, key=Abbaye de Floreffe Double, value=null}
+                DefaultViewRow{id=brasserie_de_brunehaut-abbaye_de_saint_martin_blonde, key=Abbaye de Saint-Martin Blonde, value=null}</codeblock>
+
+            <note type="tip"><parmname>includeDocs</parmname>: This parameter allows for eager retrieval of the document associated
+                with each row.
+                <p>It is only beneficial in the synchronous API (in the async API you could just call <codeph>get(row.id())</codeph>
+                    on the async bucket with the same effects). It impacts the row's <codeph>document(...)</codeph> method by
+                    preloading the return value of said method.</p>
+                <p>However, since the simple signature of <codeph>row.document()</codeph> assumes a <codeph>JsonDocument</codeph>,
+                    if you want a different document type you have to call both <codeph>includeDocs()</codeph> and
+                    <codeph>document()</codeph> with the desired target class:
+                    <codeph>query.includeDocs(SomeDocumentClass.class)</codeph> <b>and</b>
+                    <codeph>row.document(SomeDocumentClass.class)</codeph>.</p>
+                <p>Note that the <codeph>ViewQuery</codeph> has a getter for the target class:
+                    <codeph>includeDocsTarget()</codeph>.</p>
+            </note>
+        </section>
+        <section><title>Querying Geospatial Views</title>
+
+            <p>To query a geospatial view, you will need to construct a <apiname>SpatialViewQuery</apiname> object
+                (<apiname>com.couchbase.client.java.view.SpatialViewQuery</apiname>). Spatial queries accept a
+                <parmname>startRange</parmname> and an <parmname>endRange</parmname> parameter which allow you to limit the
+                enclosing bounding boxes of the result. The arguments to these parameters are <apiname>JsonArray</apiname> with
+                each element corresponding to a component emitted by the key (the first two components implicitly being the
+                longitude and latitude of the result itself).</p>
+            <p>On output, spatial queries yield instances of <apiname>SpatialViewRow</apiname> classes. A
+                <apiname>SpatialViewRow</apiname> is similar to a <apiname>ViewRow</apiname>, with an added
+                <codeph>geometry</codeph> property.</p>
+            <codeblock outputclass="language-java" spectitle="Querying a spatial view">SpatialViewQuery q = SpatialViewQuery.from("spatial", "by_location")
+                .startRange(JsonArray.from(0, -90, null))
+                .endRange(JsonArray.from(180, 90, null));
+                SpatialViewResult result = bkt.query(q);
+
+                for (SpatialViewRow row : result) {
+                System.out.println("Key:" + row.key());
+                System.out.println("Value:" + row.value());
+                System.out.println("Geometry:" + row.geometry());
+                }</codeblock>
+            <p><apiname>SpatialView</apiname> also has the <apiname>includeDocs()</apiname>
+                parameter to preload the document for the <apiname>SpatialViewRow</apiname>'s
+                <apiname>document()</apiname> method.</p>
+        </section>
+
+        <section>
+            <title>View results details</title>
+            <p>For all types of views, a <codeph>ViewResult</codeph> is always returned, which
+                contains zero to many <codeph>ViewRows</codeph>. In addition to iterative row access,
+                more methods are available on the result:</p>
+
+            <table>
+                <tgroup cols="2">
+                    <colspec colname="c1" colnum="1" colwidth="1*"/>
+                    <colspec colname="c2" colnum="2" colwidth="1.94*"/>
+                    <thead>
+                        <row>
+                            <entry>Method</entry>
+                            <entry>Description</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry><codeph>List&lt;ViewRow&gt; allRows()</codeph></entry>
+                            <entry>Accumulates all returned rows in a List and returns it.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>Iterator&lt;ViewRow&gt; rows()</codeph></entry>
+                            <entry>Provides iterative access to rows as they arrive.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>int totalRows()</codeph></entry>
+                            <entry>The total number of rows in the index can be greater than the
+                                number of <codeph>rows()</codeph> returned.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>boolean success()</codeph></entry>
+                            <entry>True if the query was successful, false otherwise. Check
+                                    <codeph>error()</codeph> if so.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>JsonObject error()</codeph></entry>
+                            <entry>Contains the error if the query was not successful or null
+                                otherwise.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>JsonObject debug()</codeph></entry>
+                            <entry>Contains debug information if <codeph>debug()</codeph> was
+                                enabled on the query, null otherwise.</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+
+            <p>The only difference between regular and spatial view results is the fact that spatial ones do not expose the number of <codeph>totalRows</codeph>.</p>
+        </section>
+
+        <section>
+            <title>ViewQuery API details</title>
+            <p>All options shown here are available on the <codeph>ViewQuery</codeph> in a fluent
+                API manner. All of them are optional, so only when they are explicitly provided,
+                they will alter the behavior of the query.</p>
+
+            <p>As a general note, all arguments that accept JSON are provided with a higher number
+				of method overloads to accommodate all combinations in a type-safe manner.</p>
+
+            <table>
+                <tgroup cols="3">
+                    <colspec colname="c1" colnum="1" colwidth="1*"/>
+                    <colspec colname="c2" colnum="2" colwidth="1.39*"/>
+                    <colspec colname="c3" colnum="3" colwidth="2.61*"/>
+                    <thead>
+                        <row>
+                            <entry>Method</entry>
+                            <entry>Accepted Types</entry>
+                            <entry>Description</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry><codeph>development</codeph></entry>
+                            <entry><codeph>boolean</codeph></entry>
+                            <entry>When true queries the development view, false by default.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>reduce</codeph></entry>
+                            <entry><codeph>boolean</codeph></entry>
+                            <entry>Explicitly enables/disables the reduce function on the query. If
+                                not provided and the view has a reduce function, it will be
+                                used.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>limit</codeph></entry>
+                            <entry><codeph>int</codeph></entry>
+                            <entry>Limits the number of the returned documents to the specified
+                                number.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>skip</codeph></entry>
+                            <entry><codeph>int</codeph></entry>
+                            <entry>Skips the given number of records before starting to return the
+                                results.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>group</codeph></entry>
+                            <entry><codeph>boolean</codeph></entry>
+                            <entry>Groups the results using the reduce function to a group or single
+                                row.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>groupLevel</codeph></entry>
+                            <entry><codeph>int</codeph></entry>
+                            <entry>Specifies the group level to be used.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>inclusiveEnd</codeph></entry>
+                            <entry><codeph>boolean</codeph></entry>
+                            <entry>Whether the specified end key should be included in the
+                                result.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>stale</codeph></entry>
+                            <entry><codeph>Stale.TRUE, Stale.FALSE, Stale.UPDATE_AFTER
+                                    (default)</codeph></entry>
+                            <entry>Defines how stale the view results are allowed to be in the
+                                query.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>debug</codeph></entry>
+                            <entry><codeph>boolean</codeph></entry>
+                            <entry>Enabled debugging on view queries.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>onError</codeph></entry>
+                            <entry><codeph>OnError.STOP (default), OnError.CONTINUE</codeph></entry>
+                            <entry>Sets the response in the event of an error.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>descending</codeph></entry>
+                            <entry><codeph>boolean</codeph></entry>
+                            <entry>Returns the documents in descending order by key if
+                                    <codeph>true</codeph>, default is
+                                <codeph>false</codeph>.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>key</codeph></entry>
+                            <entry><codeph>JSON</codeph></entry>
+                            <entry>The exact key to return from the query.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>keys</codeph></entry>
+                            <entry><codeph>JsonArray</codeph></entry>
+                            <entry>Only the given matching keys will be returned.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>startKeyDocId</codeph></entry>
+                            <entry><codeph>String</codeph></entry>
+                            <entry>Where to start searching for the key range. Can be used for
+                                efficient pagination.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>endKeyDocId</codeph></entry>
+                            <entry><codeph>String</codeph></entry>
+                            <entry>Where to stop searching for the key range.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>startKey</codeph></entry>
+                            <entry><codeph>JSON</codeph></entry>
+                            <entry>The key where the row return range should start.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>endKey</codeph></entry>
+                            <entry><codeph>JSON</codeph></entry>
+                            <entry>The key where the row return range should end.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>includeDocs</codeph></entry>
+                            <entry><codeph>boolean</codeph>, optional <codeph>Class&lt;? extends
+                                    Document&gt;</codeph></entry>
+                            <entry>Wether or not to automatically fetch the document corresponding
+                                to each row. The second parameter is the target class for the
+                                document, <codeph>JsonDocument</codeph> if omitted. <p>This method
+                                    is needed only when using the blocking API since on the async
+                                    API there is no benefit over just calling
+                                        <apiname>.document()</apiname> in the stream. </p><p>See
+                                    note on <codeph>includeDocs</codeph> below.</p></entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+
+            <p><note><b>Important when using Grouping:</b>
+                    <codeph>group(boolean)</codeph> and <codeph>groupLevel(int)</codeph> should not
+                    be used together in the same view query. It is sufficient only to set the
+                    grouping level only and use this setter in cases where you always want the
+                    highest group level implicitly.</note></p>
+        </section>
+
+        <section>
+            <title>SpatialViewQuery API details</title>
+            <p>All options shown here are available on the <codeph>SpatialViewQuery</codeph> in a
+                fluent API manner. All of them are optional, so only when they are explicitly
+                provided, they will alter the behaviour of the query.</p>
+
+            <table>
+                <tgroup cols="3">
+                    <colspec colname="c1" colnum="1" colwidth="1*"/>
+                    <colspec colname="c2" colnum="2" colwidth="1.47*"/>
+                    <colspec colname="c3" colnum="3" colwidth="2.45*"/>
+                    <thead>
+                        <row>
+                            <entry>Method</entry>
+                            <entry>Accepted Types</entry>
+                            <entry>Description</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry><codeph>development</codeph></entry>
+                            <entry><codeph>boolean</codeph></entry>
+                            <entry>When true queries the development view, false by default.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>limit</codeph></entry>
+                            <entry><codeph>int</codeph></entry>
+                            <entry>Limits the number of the returned documents to the specified
+                                number.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>skip</codeph></entry>
+                            <entry><codeph>int</codeph></entry>
+                            <entry>Skips the given number of records before starting to return the
+                                results.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>stale</codeph></entry>
+                            <entry><codeph>Stale.TRUE, Stale.FALSE, Stale.UPDATE_AFTER
+                                    (default)</codeph></entry>
+                            <entry>Defines how stale the view results are allowed to be on
+                                query.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>debug</codeph></entry>
+                            <entry><codeph>boolean</codeph></entry>
+                            <entry>Enabled debugging on view queries.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>onError</codeph></entry>
+                            <entry><codeph>OnError.STOP (default), OnError.CONTINUE</codeph></entry>
+                            <entry>Sets the response in the event of an error.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>startRange</codeph></entry>
+                            <entry><codeph>JsonArray</codeph></entry>
+                            <entry>Where the spatial range should start. Can be
+                                multidimensional.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>endRange</codeph></entry>
+                            <entry><codeph>JsonArray</codeph></entry>
+                            <entry>Where the spatial range should end. Can be
+                                multidimensional.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>range</codeph></entry>
+                            <entry><codeph>JsonArray, JsonArray</codeph></entry>
+                            <entry>Convenience method to combine start and endrange in one
+                                argument.</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>includeDocs</codeph></entry>
+                            <entry><codeph>boolean</codeph>, optional <codeph>Class&lt;? extends
+                                    Document&gt;></codeph></entry>
+                            <entry>Weather or not to automatically fetch the document corresponding
+                                to each row. The second parameter is the target class for the
+                                document, <codeph>JsonDocument</codeph> if omitted. <p>This method
+                                    is needed only when using the blocking API since on the async
+                                    API there is no benefit over just calling
+                                        <apiname>.document()</apiname> in the stream. </p><p>See
+                                    note on <codeph>includeDocs</codeph> below.</p></entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+            <p>Here is how to use the <codeph>range</codeph> parameter to find documents with a location within a bounding box. We have stored cities Paris, Vienna, Berlin and New York. Each city's coordinates is represented as two attributes, <codeph>lon</codeph> and <codeph>lat</codeph>. The spatial view's map function is:</p>
+<codeblock outputclass="language-javascript"><![CDATA[function (doc) { if (doc.type == "city") { emit([doc.lon, doc.lat], null); } }]]></codeblock>
+
+            <p>To query the view and find cities within Europe, we use Europe's bouding box. The startRange is the most south-western point of the bounding box, the endRange is its most north-eastern point:</p>
+<codeblock outputclass="language-java"><![CDATA[JsonArray EUROPE_SOUTH_WEST = JsonArray.from(-10.8, 36.59);
+JsonArray EUROPE_NORTH_EAST = JsonArray.from(31.6, 70.67);
+
+SpatialViewResult result = bucket.query(SpatialViewQuery.from("cities", "by_location")
+            .stale(Stale.FALSE)
+            .range(EUROPE_SOUTH_WEST, EUROPE_NORTH_EAST));
+List<SpatialViewRow> allRows = result.allRows();
+
+for (SpatialViewRow row : allRows) {
+    System.out.println(row.id());
+}
+
+//prints:
+//city::Vienna
+//city::Berlin
+//city::Paris]]></codeblock>
+        </section>
+
+
+        <section id="retry">
+            <title>Retry Conditions</title>
+            <p>SDK retries view requests automatically on certain known conditions, which represented in the following table:</p>
+            <table>
+                <tgroup cols="2">
+                    <colspec colname="c1" colnum="1" colwidth="1*"/>
+                    <colspec colname="c2" colnum="2" colwidth="1.56*"/>
+                    <thead>
+                        <row>
+                            <entry>HTTP status code</entry>
+                            <entry>Behavior</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry>200</entry>
+                            <entry>Do not retry request.</entry>
+                        </row>
+                        <row>
+                            <entry>300, 301, 302, 303, 307, 401, 408, 409, 412, 416, 417, 501, 502,
+                                503, 504</entry>
+                            <entry>Retry request.</entry>
+                        </row>
+                        <row>
+                            <entry>404</entry>
+                            <entry>In case the library detects yet unprovisioned node, it will
+                                retry. Otherwise, it will report
+                                    <codeph>ViewDoesNotExistException</codeph>.</entry>
+                        </row>
+                        <row>
+                            <entry>500</entry>
+                            <entry>If the error payload reports missing view document or badly
+                                formed query, it will not retry. Otherwise, it will retry
+                                request.</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+            <p>All codes not listed in the table will not be retried by default.
+                But the client code still can use retrying framework or write a custom handler. In the example below,
+                it will retry 10 times if the view does not exist:</p>
+
+<codeblock outputclass="language-java"><![CDATA[
+bucket.query(SpatialViewQuery.from("spatial", "test"))
+      .retryWhen(
+           RetryBuilder.anyOf(ViewDoesNotExistException.class)
+                       .delay(Delay.exponential(TimeUnit.SECONDS, 1))
+                       .max(10)
+                       .build())
+      .subscribe(new Action1<AsyncSpatialViewResult>() {
+          @Override
+          public void call(AsyncSpatialViewResult result) {
+              // handle result
+          }
+      });
+]]></codeblock>
+        </section>
+	</body>
+</topic>

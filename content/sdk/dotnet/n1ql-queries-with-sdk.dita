@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="java-n1ql">
+  <title>N1QL Queries Using the .NET SDK with Couchbase Server</title>
+  <titlealts><navtitle>N1QL from the SDK</navtitle></titlealts>
+  <shortdesc>You can perform N1QL queries via the Couchbase .NET client.</shortdesc>
+  <conbody>
+    <note>See Couchbase Developer documentation for a quick intro to <xref
+      href="../../architecture/querying-data-with-n1ql.dita#concept_igg_kq4_vs"
+      >N1QL</xref>.</note>
+
+    <p>To issue N1QL queries, you should create a <apiname>QueryRequest</apiname> object, and pass
+      it to the <apiname>Query(QueryRequest query)</apiname> method in the
+        <apiname>CouchbaseBucket</apiname> class. A few variants of such a query exist: <ul>
+        <li>Simple queries, which are only strings and do not use placeholders;</li>
+        <li>Parameterized queries, which use numbered or named placeholders.</li>
+      </ul>You can create each via the corresponding factory method on
+      <codeph>QueryRequest</codeph>, which you can create using a Statement produced by the N1QL DSL
+      or using the statement directly as a String. </p>
+    <p>The return value from <apiname>Query(QueryRequest query)</apiname> is the object
+        <apiname>QueryResult</apiname>. Iterating over the <apiname>QueryResult.Rows&lt;T></apiname>
+      property will yield the rows returned by the server for the given query (as the
+        <codeph>Type</codeph> specified by <codeph>T</codeph>). Each row represents a row received
+      for the query. </p>
+    <p>Note that errors returned by the N1QL service during execution are returned in the
+        <apiname>QueryResult.Errors</apiname> property, rather than by throwing exceptions. Here is
+      a list of important <apiname>QueryResult</apiname> properties: </p>
+    <p><ul> <li><codeph>Success</codeph>: Returns <codeph>true</codeph> if the whole query could be executed
+          successfully, including retrieving all the results and streaming them to the client. </li>
+      <li><codeph>Message</codeph>: Returns a string with error information if Success is
+          false.</li>
+        <li>Exception: Returns an exception if one was thrown internally. This can be re-thrown by
+          the application level code.</li> <li><codeph>Rows</codeph>: Contains all rows returned by the query; it can be an empty list. </li> <li><codeph>RequestId</codeph>: The server-generated unique ID (<codeph>Guid</codeph>) for this
+          query (useful to find associated logs on the N1QL server). </li> <li><codeph>ClientContextId</codeph>: User-provided identifier reflected in the server's response.
+          The identifier can be useful for grouping several queries (for example, in a kind of
+          in-house transaction) and find all associated queries. </li> <li><codeph>Metrics</codeph>: Returns a <apiname>Metrics</apiname> object, which contains metrics
+          for the query (such as the number of results or processing time). </li> <li><codeph>Errors</codeph>: Returns a list of <apiname>Error</apiname> objects describing errors
+          (if any occurred during execution). </li>
+      <li><codeph>Warnings</codeph>: Returns a list of <apiname>Warning</apiname> objects describing errors (if any occurred during execution).</li>
+    </ul></p>
+    <p>You can use N1QL placeholders in the query. Placeholders allow you to specify variable
+      constraints for an otherwise constant query. There are two variants of placeholders: postional
+      and named parameters. Positional parameters use an ordinal placeholder for substitution and
+      named parameters use variables. Here are examples of using both postional and named
+      parameters:<codeblock outputclass="language-csharp" spectitle="N1QL Query with positional and named parameters">
+    //Positional parameters example
+    var queryRequest = new QueryRequest()
+      .Statement("SELECT * FROM `travel-sample` LIMIT $1")
+      .AddPositionalParameter(10)
+      .Metrics(false);
+
+    var result = await bucket.QueryAsync&lt;dynamic&gt;(queryRequest);
+    foreach (var row in result.Rows)
+    {
+    ...
+    }
+
+    //Named parameters example
+    var queryRequest = new QueryRequest()
+      .Statement("SELECT * FROM `travel-sample` LIMIT $limit")
+      .AddNamedParameter("$limit", 10);
+
+    var result = await bucket.QueryAsync&lt;dynamic&gt;(queryRequest);
+    foreach (var row in result.Rows)
+    {
+    ...
+    }
+        </codeblock></p>
+    <p>Note that named and positional parameters are optional and you could chose to construct a
+      query string at runtime and do the substitution yourself, but that takes a bit more
+      effort.</p>
+
+
+
+    <section><title>Building Statements with LINQ (Language Integrated Query)</title>
+      <p>The N1QL LINQ provider is a powerful way to guide you in building your statements: you
+        obtain Type safety and auto completion of relevant methods and N1QL clauses. It implements
+          <xref href="https://msdn.microsoft.com/en-us/library/mt693024.aspx" format="html"
+          scope="external">Microsoft's language integrated query extensions to the C#
+          language</xref> and is similar to other LINQ providers like Linq2SQL, Entity Framework and
+        NHibernate. The difference is that it emits N1QL in place of SQL. If you have used any other
+        LINQ provider, you will find its familiarity and consistency make it an easy transition. </p>
+      <p>The Linq2Couchbase, the LINQ provider for the Couchbase .NET SDK, is a stand-alone project
+        which depends on Couchbase .NET SDK and can be found on <xref
+          href="https://www.nuget.org/packages/linq2Couchbase" format="html" scope="external"
+          >NuGet</xref> and by using the NuGet package manager to include the
+        dependency:<codeblock outputclass="language-csharp">
+   PM> Install-Package Linq2Couchbase
+          </codeblock></p>
+      <p>Once you have included the dependency, you can construct queries just like any other LINQ
+        provider in a SQL-like fashion. Nearly all N1QL statements and functions are supported, for
+          example:<ul id="ul_ylp_mfp_cw">
+          <li>INNER, LEFT Outer, and Index JOINs</li>
+          <li>Math and Date functions</li>
+          <li>Filtering, projections and sorting</li>
+          <li>Grouping and aggregations</li>
+          <li>META keyword, NEST and UNNEST</li>
+          <li>Etc.</li>
+        </ul></p>
+      <p>In addition to N1QL language features, Linq2Coucbase supports ORM features like
+        Change-tracking and mapping of JSON fields to keys and other POCO properties. The provider's
+        core object is the <apiname>BucketContext</apiname>, which is a Unit of Work (UoW) type object for performing
+        querying and mutations on a per request basis. Here is an example of using Linq2Couchbase to
+        generate and execute a N1QL
+        query:<codeblock spectitle="N1QL query using Linq2Couchbase" outputclass="language-csharp">
+  ClusterHelper.Initialize();
+  var db = new BucketContext(ClusterHelper.GetBucket("travel-sample"));
+  var query = (from landmark in db.Query&lt;Landmark>()
+              where landmark.Type == "landmark"
+              where landmark.City == "Gillingham"
+               select new
+              {
+                  landmark.Name,
+                  landmark.Address
+              }).Take(10);
+
+  foreach (var l in query)
+  {
+      Console.WriteLine(l.Name);
+  }</codeblock></p>
+      <p>If you find out that the Linq2Couchbase doesn't support a particular statement, clause or
+        keyword, <b>you can always revert to providing your statement in plain string form</b>.
+        Using the string form ensures that even if LINQ provider lags behind the evolutions of the
+        language, users will always have a means of using new language features. </p>
+    </section>
+
+
+
+    <section><title>Querying Asynchronously</title><p>To perform a query asynchronously, use the <apiname>QueryAsync(QueryRequest query)</apiname>
+        method. The API is pretty similar except everything is returned as an
+          <apiname>Task&lt;QueryResult&gt;</apiname> that will have to be awaited on and you'll need
+        use the <apiname>async</apiname> and <apiname>await</apiname> keywords to execute the task
+        asynchronously or use <apiname>Task.Result()</apiname> to execute the
+          <apiname>Task</apiname> synchronously. For example, lets retrieve the first ten documents
+        from the travel-sample bucket
+        asynchronously:<codeblock outputclass="language-java" spectitle="Asynchronous N1QL query">
+  public async void PrintTenAllAsync()
+  {
+    const string query = "SELECT * FROM `travel-sample` LIMIT 10";
+
+    var result = await _bucket.QueryAsync&lt;dynamic>(query);
+    foreach(var row in result.Rows)
+    {
+      Console.Writeline(row.name);
+    }
+  }</codeblock>
+        In the code above, we have a defined a method signature for
+          <apiname>PrintTenAllAsync</apiname> that includes the <apiname>async</apiname> keyword,
+        this will allow us to use the <apiname>await</apiname> keyword within the method to
+        asynchronously execute the query. Within the body of the method, we create a N1QL statement
+        which returns the first ten (10) documents from the travel-sample bucket. Then, using the
+          <apiname>await</apiname> keyword, we execute the
+          <apiname>Task&lt;QueryResult&gt;</apiname> returned from the
+          <codeph>CouchbaseBucket.QueryAsync(…)</codeph> method. This will push the execution of the
+        query to the (likely) thread pool in a non-blocking manner. Finally, we iterate through the
+        rows returned by server in the <apiname>QueryResult</apiname> object.</p>
+    </section>
+  </conbody>
+</concept>

@@ -5,11 +5,11 @@
   <shortdesc>This example shows GeoJSON using the polygon type.</shortdesc>
   <refbody>
     
-    <section><title>Description</title>
-    <p>The GeoJSON input documents are GeoJSON containing geographic regions of different kind. 
-      The Bermuda Triangle, the Flemish Diamond and the Research Triangle in North Carolina.</p>
     
-    <codeblock>{
+    <section><b>Description</b>
+      <p>The GeoJSON input documents are GeoJSON containing geographic regions of different kind.
+        The Bermuda Triangle, the Flemish Diamond and the Research Triangle in North
+      Carolina.</p><codeblock>{
   "type": "Feature",
   "properties": {
     "name": "Bermuda Triangle",
@@ -69,7 +69,172 @@
   }
 }   </codeblock>
     </section>
-
+    <section><title>Creating a Spatial View Function</title>
+      <p>A spatial view function is created to create a multidimensional view file for GeoJSON
+        polygons.</p>
+      <p>To query based on the location and the area, create a multidimensional view function with
+        three dimensions. Based on the GeoJSON polygon data information, the first two
+        dimensions are the location and the third dimension is the area. </p>
+      <p>In the following example, a development view is created with the design document name of
+        <codeph>_design/areas</codeph> and a spatial view named <codeph>locAndArea</codeph>.</p>
+      
+      <codeblock>function(doc, meta) {
+        if (doc.geometry &amp;&amp; doc.properties
+        &amp;&amp; doc.properties.area &amp;&amp; doc.properties.name) {
+        emit([doc.geometry, doc.properties.area], doc.properties.name);
+        }
+        }</codeblock>
+</section>
+    <section><title>Querying All Data</title>
+      <p>This query retrieves all data based on the GeoJSON polygons example.</p>
+      <p><b>Description</b></p>
+      <p>The results are either viewable in the web console or are returned when the spatial view
+        is queried without any additional parameters. In both cases, all documents are
+        retrieved.</p>
+      
+      <note type="note">There isn't a specific ordering, expect it to be arbitrary. Once the view
+        file is updated, the order might change.</note>
+      <p><b>HTTP Method and URI</b></p>
+      <codeblock>GET /_design/[design-doc]/_spatial/[spatial-name]</codeblock>
+      <p><b>Syntax</b></p>
+      <p>Curl syntax:</p>
+      
+      <codeblock>curl http://[localhost]:8092/[bucket-name]/_design/[design-doc]/_spatial/[spatial-name]</codeblock>
+      
+      <p><b>Example</b></p>
+      <p>The following example is based on the GeoJSON polygon data and the associated spatial view function.</p>
+      
+      <p>Curl example:</p>
+      <codeblock>curl http://10.5.2.54:8092/default/_design/areas/_spatial/locAndArea</codeblock>
+      
+      <p><b>Response</b></p>
+      <codeblock>{"total_rows":0,"rows":[
+        {"id": "bermuda_triangle",
+        "key": [[-80.19,-64.73],[18.43,32.31],[1150180,1150180]],
+        "value": "Bermuda Triangle",
+        "geometry": {"type":"Polygon","coordinates":[[[-64.73,32.31],[-80.19,25.76],[-66.09,18.43],[-64.73,32.31]]]}},
+        {"id": "research_triangle",
+        "key": [[-79.04000000000001,-78.67],[35.78,36],[252,252]],
+        "value": "Research Triangle",
+        "geometry": {"type":"Polygon","coordinates":[[[-78.93000000000001,36],[-78.67,35.78],[-79.04000000000001,35.9],[-78.93000000000001,36]]]}},
+        {"id": "flemish_diamond",
+        "key":[[3.55,4.84],[50.73,51.3],[2947,2947]],
+        "value":"Flemish Diamond",
+        "geometry": {"type":"Polygon","coordinates":[[[3.55,51.08],[4.36,50.73],[4.84,50.85],[4.45,51.3],[3.55,51.08]]]}}}]}</codeblock>
+      
+      <p>The individual rows contain the total_rows (which is always 0), document ID, the key that
+        got stored, the emitted value, and geometry. The key gets automatically calculated and is
+        the enclosing bounding box of the emitted geometry. When refining the query, the key is
+        always used for comparison.</p>
+    </section>
+    
+    <section><title>Querying on the Area</title>
+      <p>This query retrieves data based on the GeoJSON polygon example and associated with a large square footage.</p>
+      <p><b>Description</b></p>
+      <p>In this example, all documents queried are associated with any really large area. For
+        example, the criteria could be any areas bigger than 10,000 square kilometers without
+        caring about a specific location  or query for areas bigger than 10,000 square
+        kilometers without caring where they are. </p>
+      
+      <p>In this case, the existing view can be queried with wildcards on the location 
+        (the first two dimensions) and an open range for the area.</p>
+      <p><b>HTTP method and URI</b></p>
+      <codeblock>GET [bucket-name]/_design/[design-doc]/_spatial/[spatial-name]</codeblock>
+      
+      <p><b>Syntax</b></p>
+      <p>Curl syntax:</p>
+      <codeblock>curl http://[localhost]:8092/[bucket-name]/_design/[design-doc]/_spatial/[spatial-name]?start_range=[]&amp;end_range=[]</codeblock>
+      
+      <p><b>Example</b></p>
+      <p>The following example is based on the GeoJSON polygon data and the associated spatial view function.</p>
+      <p>Curl example:</p>
+      
+      <codeblock>curl http://localhost:8092/default/_design/areas/_spatial/locAndArea?start_range=[null,null,10000]&amp;end_range=[null,null,null]</codeblock>
+      <p>Alternatively, the query could have used
+        <codeph>start_range=[-180,-90,10000]&amp;end_range=[180,90,null]</codeph>  because
+        the longitudes and latitudes have those bounds.</p>
+      
+      <p><b>Response</b></p>
+      <p>The results contain only the Bermuda Triangle:</p>
+      
+      <codeblock>{"total_rows":0,"rows":[
+        {"id": "bermuda_triangle",
+        "key": [[-80.19,-64.73],[18.43,32.31],[1150180,1150180]],
+        "value": "Bermuda Triangle",
+        "geometry": {"type":"Polygon","coordinates":[[[-64.73,32.31],[-80.19,25.76],[-66.09,18.43],[-64.73,32.31]]]}}]}</codeblock>
+    </section>
+    
+    <section><title>Querying on the East</title>
+      <p>This query retrieves data based on the GeoJSON polygons example and associated with the
+        eastern hemisphere.</p>
+      <p><b>Description</b></p>
+      <p>In this example, all documents that are on the eastern hemisphere are queried. 
+        In addition, since the area is also emitted as third dimension, queries need to contain that as well. 
+        As we don't care what the area is, we'll query it with the wildcard, null. So the final query is:</p>
+      
+      <p>This means the following coordinates are specified:</p>
+      <ul>
+        <li>longitude (first dimension) greater than 0 and smaller than 180</li>
+        <li>latitude (second dimension) between -90 and 90.</li>
+        <li>null (third dimension) as a wildcard since, in this case, the third dimension doesn't matter.</li>
+        
+      </ul>
+      
+      <p>The longitude and latitude are represented by the query parameters are <codeph>start_range=[0,-90]&amp;end_range=[180,90]</codeph>. 
+        If just those two query parameters are specified, an error message displays indicating that the dimensionality doesn't match. 
+        That's why the <codeph>null</codeph> wildcard is used to represent the third dimension.</p>
+      
+      <p><b>HTTP method and URI</b></p>
+      <codeblock>GET [bucket-name]/_design/[design-doc]/_spatial/[spatial-name]</codeblock>
+      
+      <p><b>Syntax</b></p>
+      <p>Curl syntax:</p>
+      <codeblock>curl http://[localhost]:8092/[bucket-name]/_design/[design-doc]/_spatial/[spatial-name]?start_range=[]&amp;end_range=[]</codeblock>
+      
+      <p><b>Example</b></p>
+      <p>The following example is based on the GeoJSON polygon data and the associated spatial view function.</p> 
+      <p>Curl example:</p>
+      <codeblock>curl http://10.5.2.54:8092/default/_design/areas/_spatial/locAndArea?start_range=[0,-90,null]&amp;end_range=[180,90,null]</codeblock>
+      
+      <p><b>Response</b></p>
+      <p>The results contain only the Flemish Diamond:</p>
+      
+      <codeblock>{"total_rows":0,"rows":[
+        {"id": "flemish_diamond",
+        "key":[[3.55,4.84],[50.73,51.3],[2947,2947]],
+        "value":"Flemish Diamond",
+        "geometry":{"type":"Polygon","coordinates":[[[3.55,51.08],[4.36,50.73],[4.84,50.85],[4.45,51.3],[3.55,51.08]]]}}]}</codeblock>
+    </section>
+    
+    <section><title>Querying on Non-intersect</title>
+      <p>This query retrieves data based on the GeoJSON polygon example and on bounding box parameters that are within the query range.</p>
+      <p><b>Description</b></p>
+      <p>Queries only filter on a bounding box level. This means that even if the actual geometry
+        doesn't intersect the query ranges but its bounding box does, it is still included in the result. </p>
+      <p><b>HTTP method and URI</b></p>
+      <codeblock>GET [bucket-name]/_design/[design-doc]/_spatial/[spatial-name]</codeblock>
+      <p><b>Syntax</b></p>
+      <p>Curl syntax:</p>
+      <codeblock>curl http://[localhost]:8092/[bucket-name]/_design/[design-doc]/_spatial/[spatial-name]?start_range=[]&amp;end_range=[]</codeblock>
+      <p><b>Example</b></p>
+      <p>The following example is based on the GeoJSON polygon data and the associated spatial view function.</p>
+      
+      <p>Curl example:</p>
+      <codeblock>curl http://10.5.2.54:8092/default/_design/areas/_spatial/locAndArea?start_range=[-84,29,null]&amp;end_range=[-72,37,null]</codeblock>
+      <p><b>Response</b></p>
+      <p>The response shows that the ranges don't intersect the polygon of the Bermuda Triangle, but its enclosing bounding
+        box does which can be found in its key.</p>
+      
+      <codeblock>{"total_rows":0,"rows":[
+        {"id": "bermuda_triangle",
+        "key": [[-80.19,-64.73],[18.43,32.31],[1150180,1150180]],
+        "value": "Bermuda Triangle",
+        "geometry": {"type":"Polygon","coordinates":[[[-64.73,32.31],[-80.19,25.76],[-66.09,18.43],[-64.73,32.31]]]}},
+        {"id": "research_triangle",
+        "key": [[-79.04000000000001,-78.67],[35.78,36],[252,252]],
+        "value": "Research Triangle",
+        "geometry": {"type":"Polygon","coordinates":[[[-78.93000000000001,36],[-78.67,35.78],[-79.04000000000001,35.9],[-78.93000000000001,36]]]}}]}</codeblock>
+    </section>
     
   </refbody>
 </reference>

@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="subdoc-operations">
+    <title>Sub-Document Operations</title>
+    <shortdesc><i>sub-document</i> operations can be used to efficiently access <i>parts</i> of
+        documents. Sub-document operations may be quicker and more network-efficienct than
+            <i>full-document</i> operations such as <i>upsert</i>, <i>update</i> and <i>get</i>
+        because they only transmit the accessed sections of the document over the network.
+        Sub-document operations are also atomic, allowing safe modifications to documents with
+        built-in concurrency control.</shortdesc>
+    <prolog>
+        <metadata>
+            <othermeta name="langSelector" content="hidden"/>
+        </metadata>
+    </prolog>
+    <body>
+        <section>
+            <title>Sub-documents</title>
+            <p>Starting with Couchbase Server 4.5 you can atomically and efficiently update and
+                retrieve <i>parts</i> of a document. These parts are called <i>sub documents</i>.
+                While full-document retrievals retrieve the entire document and full document
+                updates require sending the entire document, sub-document retrievals only retrieve
+                relevant parts of a document and sub-document updates only require sending the
+                updated portions of a document. You should use sub-document operations when you are
+                modifying only portions of a document, and full-document operations when the
+                contents of a document is to change significantly.</p>
+            <p>In order to use sub-document operations you need to specify a <i>path</i> indicating
+                the location of the subdocument. The <i>path</i> follows N1QL syntax. Considering
+                the
+                document<codeblock spectitle="customer123.json" outputclass="language-javascript">{
+  "name": "Douglas Reynholm",
+  "email": "douglas@reynholmindustries.com",
+  "addresses": {
+    "billing": {
+      "line1": "123 Any Street",
+      "line2": "Anytown ",
+      "country": "United Kingdom"
+    },
+    "delivery": {
+      "line1": "123 Any Street",
+      "line2": "Anytown ",
+      "country": "United Kingdom"
+    }
+  },
+  "purchases": {
+    "complete": [
+      339, 976, 442, 666
+    ],
+    "abandoned": [
+      157, 42, 999
+    ]
+  }
+}</codeblock>the
+                paths <codeph>name</codeph>, <codeph>addresses.billing.country</codeph> and
+                    <codeph>purchases.complete[0]</codeph> are all valid paths.</p>
+        </section>
+        <section><title>Retrieving</title>The <i>lookup-in</i> operations queries the document for a
+            certain path(s) and returns that/those path(s). You have a choice of actually retrieving
+            the document path using the <i>subdoc-get</i> subdocument operation, or simply querying
+            the existence of the path using the <i>subdoc-exists</i> subdocument operation. The
+            latter saves even more bandwidth by not retrieving the contents of the path if it is not
+            needed.<codeblock outputclass="language-python" spectitle="Retrieve sub-document value">rv = bucket.lookup_in('customer123', SD.get('addresses.delivery.country'))
+country = rv[0] # => 'United Kingdom'</codeblock><codeblock spectitle="Check existence of sub-document path">rv = bucket.lookup_in('customer123', SD.exists('purchases.pending[-1]'))
+rv.exists(0) # (check if path for first command exists): => False</codeblock>Multiple
+            operations can be combined as
+            well:<codeblock spectitle="Combine multiple lookup operations" outputclass="language-python">rv = bucket.lookup_in('customer123',
+                  SD.get('addresses.delivery.country'),
+                  SD.exists('purchases.pending[-1]'))
+rv[0] # => 'United Kingdom'
+rv.exists(1) # => False
+rv[1] # => SubdocPathNotFoundError</codeblock></section>
+        <section><title>Mutating</title><p>Mutation operations modify one or more paths in the
+                document. The simplest of these operations is <i>subdoc-upsert</i>, which, just like
+                the fulldoc-level <i>upsert</i>, this will either modify the value of an existing
+                path or create it if it does not
+            exist:</p><codeblock spectitle="upserting a new sub-document" outputclass="language-python">bucket.mutate_in('customer123', SD.upsert('fax', '775-867-5309'))</codeblock>Likewise,
+            the <i>subdoc-insert</i> operation will only add the new value to the path if it does
+            not
+            exist<codeblock spectitle="inserting a sub-document" outputclass="language-python">bucket.mutate_in('customer123', SD.insert('purchases.complete', [42, True, None]))
+# SubdocPathExistsError</codeblock>Dictionary
+            values can also be replaced or
+            removed<codeblock outputclass="language-python">bucket.mutate_in('customer123',
+                 SD.remove('addresses.billing'),
+                 SD.replace('email', 'doug96@hotmail.com'))</codeblock></section>
+        <section><title>Array append and prepend</title><p>The <i>subdoc-array-prepend</i> and
+                    <i>subdoc-array-append</i> operations are true array prepend and append
+                operations. Unlike fulldoc <i>append</i>/<i>prepend</i> operations (which simply
+                concatenate bytes to the existing value), <i>subdoc-array-append</i> and
+                    <i>subdoc-array-prepend</i> are
+                JSON-aware:</p><codeblock outputclass="language-python">bucket.mutate_in('customer123', SD.arrayappend('purchases.complete', 777))
+# purchases.complete is now [339, 976, 442, 666, 777]</codeblock><codeblock outputclass="language-python">bucket.mutate_in('customer123', SD.arrayprepend('purchases.abandoned', 18))
+# purchaes.abandoned in now [18, 157, 49, 999]</codeblock><p>If
+                your document only needs to contain an array, you do not have to create a top-level
+                object wrapper to contain it. Simply initialize the document with an empty array and
+                then use the empty path for subsequent sub-document array
+                operations:<codeblock outputclass="language-python" spectitle="Creating and populating an array document">bucket.upsert('my_array', [])
+bucket.mutate_in('my_array', SD.arrayappend('', 'some element'))
+# the document my_array is now ["some element"]</codeblock>If
+                you wish to add multiple values to an array, you may do so by passing multiple
+                values to the <i>array-append</i>, <i>array-prepend</i>, or <i>array-insert</i>
+                operations. Be sure to know the difference between passing a collection of multiple
+                elements (in which case the collection is inserted as a single element in the array,
+                as a sub-array) and passing multiple elements (in which case the elements are
+                appended individually to the
+                array):<codeblock spectitle="Add multiple elements to an array" outputclass="language-python">bucket.mutate_in('my_array', SD.arrayappend('', 'elem1', 'elem2', 'elem3')
+# the document my_array is now ["some_element", "elem1", "elem2", "elem3"]</codeblock><codeblock spectitle="Add single array as element to existing array" outputclass="language-python">bucket.mutate_in('my_array', SD.arrayappend('', ['elem1', 'elem2', 'elem3'])
+# the document my_array is now ["some_element", ["elem1", "elem2", "elem3"]]</codeblock>Note
+                that passing multiple values to a single <i>array-append</i> operation results in
+                greater performance increase and bandwidth savings than simply specifying a single
+                    <i>array-append</i> for each
+                element.<codeblock outputclass="language-python" spectitle="Adding multiple elements to array (slow)">bucket.mutate_in('my_array',
+                  SD.arrayappend('', 'elem1'),
+                  SD.arrayappend('', 'elem2'),
+                  SD.arrayappend('', 'elem3'))</codeblock></p>If
+            you wish to create an array if it does not exist and also push elements to it within the
+            same operation you may use the<xref href="#subdoc-operations/subdoc-create-parents"
+                format="dita"><i>create-parents</i></xref>
+            option:<codeblock outputclass="language-python">bucket.mutate_in('some_doc',
+                  SD.arrayappend('some.array', 'Hello', 'World',
+                                  create_parents=True))</codeblock></section>
+        <section><title>Arrays as unique sets</title><p>Limited support also exists for treating
+                arrays like unique sets, using the <i>subdoc-array-addunique</i> command. This will
+                do a check to determine if the given value exists or not before actually adding the
+                item to the
+            array</p><codeblock outputclass="language-python">bucket.mutate_in('customer123', SD.push_unique('purchases.complete', 95))
+# => Success
+bucket.mutate_in('customer123', SD.push_unique('purchases.abandoned', 42))
+# => SubdocPathExists exception!</codeblock>Note
+            that currently the <i>addunique</i> will fail with a <i>Path Mismatch</i> error if the
+            array contains JSON <i>floats</i>, <i>objects</i>, or <i>arrays</i>. The
+                <i>addunique</i> operation will also fail with <i>Cannot Insert</i> if the value to
+            be added is one of those types as well.<p>Note that the actual position of the new
+                element is undefined, and that the array is not ordered.</p></section>
+        <section><title>Array insertion</title>New elements can also be <i>inserted</i> into an
+            array. While <i>append</i> will place a new item at the <i>end</i> of an array and
+                <i>prepend</i> will place it at the beginning, <i>insert</i> allows an element to be
+            inserted at a specific <i>position</i>. The position is indicated by the last path
+            component, which should be an array index. For example, to insert
+                <codeph>"cruel"</codeph> as the second element in the array <codeph>["Hello",
+                "world"]</codeph>, the code would look
+            like:<codeblock outputclass="language-python">bucket.mutate_in('array', SD.arrayinsert('[1]', 'cruel'))</codeblock>Note
+            that the array must already exist and that the index must be valid (i.e. it must not
+            point to an element which is out of bounds).</section>
+        <section><title>Counters and numeric fields</title><p>Counter operations allow the
+                manipulation of a <i>numeric</i> value inside a document. These operations are
+                logically similar to the <i>counter</i> operation on an entire
+                document:<codeblock outputclass="language-python">rv = bucket.mutate_in('customer123', SD.counter('logins', 1))
+cur_count = rv[0] # => 1</codeblock>The
+                    <i>subdoc-counter</i> operation peforms simple arithmetic against a numeric
+                value, either incrementing or decrementing the existing
+            value.</p><codeblock outputclass="language-python">bucket.upsert('player432', {'gold': 1000})
+rv = bucket.mutate_in('player432', SD.counter('gold', -150))
+print('player432 now has {0} gold remaining'.format(rv[0]))
+# => player 432 now has 850 gold remaining</codeblock>The
+            existing value for <i>subdoc-counter</i> operations must be within range of a 64 bit
+            signed integer. If the value does not exist, the <i>subdoc-counter</i> operation will
+            create it (and its parents, if <i>create-parents</i> is enabled).<p>Note that there are
+                several differences between <i>subdoc-counter</i> and the full-document
+                    <i>counter</i> operations:<ul id="ul_fp2_2yw_mv">
+                    <li>Sub-document counters have a range of -9223372036854775807 to
+                        9223372036854775807 (i.e. <codeph>INT64_MIN</codeph> and
+                            <codeph>INT64_MAX</codeph>), whereas full-document counters have a range
+                        of 0 to 18446744073709551615 (<codeph>UINT64_MAX</codeph>)</li>
+                    <li>Sub-document counter operations protect against overflow and underflow,
+                        returning an error if the operation would exceed the range. Full-document
+                        counters will use normal C semantics for overflow (in which the overflow
+                        value is carried over above 0), and will silently fail on underflow, setting
+                        the value to 0 instead.</li>
+                    <li>Sub-document counter operations can operate on any numeric value within a
+                        document, while full-document counter operations require a specially
+                        formatted counter document with only the counter value.</li>
+                </ul></p></section>
+        <section>
+            <title>Executing multiple operations</title>
+            <p>Multiple subdocument operations can be executed at once on the same document,
+                allowing you to retrieve or modify several sub-documents at once. When multiple
+                operations are submitted within the context of a single <i>lookup-in</i> or
+                    <i>mutate-in</i> command, the server will execute all the operations with the
+                same version of the document.<note>Unlike <i>batched operations</i> which is simply
+                    a way of sending multiple individual operations efficiently on the network,
+                    multiple subdoc operations are formed into a single command packet, which is
+                    then executed atomically on the server.</note>When submitting multiple
+                    <i>mutation</i> operations within a single <i>mutate-in</i> command, those
+                operations are considered to be part of a single transaction: if any of the mutation
+                operations fail, the server will logically roll-back any other mutation operations
+                performed within the <i>mutate-in</i>, even if those commands would have been
+                successful had another command not failed.</p>
+            <p>When submitting multiple <i>retrieval</i> operations within a single <i>lookup-in</i>
+                command, the status of each command does not affect any other command. This means
+                that it is possible for some retrieval operations to succeed and some others to
+                fail. While their statuses are independent of each other, you should note that
+                operations submitted within a single <i>lookup-in</i> are all executed against the
+                same <i>version</i> of the document.</p>
+        </section>
+        <section id="subdoc-create-parents">
+            <title>Creating parents</title>
+            <p>Sub-document mutation operations such as <i>subdoc-upsert</i> or <i>subdoc-insert</i>
+                will fail if the <i>immediate parent</i> is not present in the document.
+                Consider:<codeblock>{
+    "level_0": {
+        "level_1": {
+            "level_2": {
+                "level_3": {
+                    "some_field": "some_value"
+                }
+            }
+        }
+    }
+}</codeblock>Looking
+                at the <codeph>some_field</codeph> field (which is really
+                    <codeph>level_0.level_1.level_2.level_3.some_field</codeph>), its
+                    <i>immediate</i> parent is <codeph>level_3</codeph>. If we were to attempt to
+                insert another field,
+                <codeph>level_0.level_1.level_2.level_3.another_field</codeph>, it would succeed
+                because the immediate parent is present. However if we were to attempt to
+                    <i>subdoc-insert</i> to <codeph>level_1.level_2.foo.bar</codeph> it would fail,
+                because <codeph>level_1.level_2.foo</codeph> (which would be the immediate parent)
+                does not exist. Attempting to perform such an operation would result in a Path Not
+                Found error.</p>
+            <p>By default the automatic creation of parents is disabled, as a simple typo in
+                application code can result in a rather confusing document structure. Sometimes it
+                is necessary to have the server create the hierarchy however. In this case, the
+                    <i>create-parents</i> or <i>create-intermediates</i> option may be
+                used.<codeblock>bucket.mutate_in('customer123',
+                 SD.upsert('level_0.level_1.foo.bar.phone',
+                           {'num': '775-867-5309', 'ext': 16},
+                           create_parents=True))</codeblock></p>
+        </section>
+        <section><title>CAS Semantics</title><p>Subdoc mostly eliminates the need for tracking the
+                    <xref href="concurrent-mutations-cluster.dita#concept_iq4_bts_zs">CAS</xref>
+                value. Subdoc operations are atomic and therefore if two different threads access
+                two different sub-documents then no conflict will arise. For example the following
+                two blocks can execute concurrently without any risk of
+                conflict<codeblock>bucket.mutate_in('customer123', SD.arrayappend('purchases.complete', 999))</codeblock><codeblock>bucket.mutate_in('customer123', SD.arrayappend('purchases.abandoned', 998))</codeblock></p>Even
+            when modifying the <i>same</i> part of the document, operations will not necessarily
+            conflict, for example two concurrent <i>subdoc-array-append</i> to the same array will
+            both succeed, never overwriting the other.<p>While CAS is no longer required to ensure
+                document updates are preserver, it may still be needed to ensure document state
+                remains consistent over multiple invocations of <i>mutate-in</i>: Sometimes it's
+                important to ensure the entire document didn't change state since the last
+                operation, such as in the case <i>subdoc-remove</i> operations to ensure that the
+                element being removed was not already replaced by something else.</p></section>
+        <section>
+            <title>Error handling</title>
+            <p>Subdoc operations have their own set of errors. When programming with subdoc, be
+                prepared any of the full-document errors (such as <i>Document Not Found</i>) as well
+                as special sub-document errors which are received when certain constraints are not
+                satisfied. Some of the errors include:<ul id="ul_yg1_slw_mv">
+                    <li><b>Path does not exist</b>: When retrieving a path, this means the path does
+                        not exist in the document. When inserting or upserting a path, this means
+                        the <i>immediate parent</i> does not exist.</li>
+                    <li><b>Path already exists</b>: In the context of a <i>insert</i>, it means the
+                        given path already exists. In the context of <i>array-add-unique</i>, it
+                        means the given value already exists.</li>
+                    <li><b>Path mismatch</b>: This means the path may exist in the document, but
+                        that there is a type conflict between the path in the document and the path
+                        in the command. Consider the
+                        document,<codeblock>{ "tags": ["reno", "nevada", "west", "sierra"] }</codeblock>The
+                        path <codeph>tags.sierra</codeph> is a mismatch, since <codeph>tags</codeph>
+                        is actually an array, while the path assumes it is a JSON object
+                        (dictionary).</li>
+                    <li><b>Document not JSON</b>: This means you are attempting to modify a binary
+                        document using sub-document operations.</li>
+                    <li><b>Invalid path</b>: This means the path is invalid for the command. Certain
+                        commands such as <i>subdoc-array-insert</i> expect array elements as their
+                        final component, while others such as <i>subdoc-upsert</i> and
+                            <i>subdoc-insert</i> expect dictionary (object) keys.</li>
+                </ul>Because subdocument operations are executed using either <i>mutate-in</i> or
+                    <i>replace-in</i>, if a command fails a top-level error is reported (<i>Multi
+                    Command Failure</i>), rather than an individual error code (e.g. <i>Path Not
+                    Found</i>). When receiving a top-level error code, you should traverse the
+                results of the command to see which individual code failed.</p>
+        </section>
+        <section>
+            <title>Path syntax</title>
+            <p>Path syntax largely follows N1QL conventions: A path is divided into components, with
+                each component referencing a specific <i>level</i> in a document hierarchy.
+                Components are separated by dots (<codeph>.</codeph>) in the case where the element
+                left of the dot is a dictionary, or by brackets (<codeph>[n]</codeph>) where the
+                element left of the bracket is an array and <codeph>n</codeph> is the index within
+                the array.</p>
+            <p>As a special extension, you can indicate the <i>last element</i> of an array by using
+                an index of <codeph>-1</codeph>, for example to get the last element of the array in
+                the document<codeblock>{"some":{"array":[1,2,3,4,5,6,7,8,9,0]}}</codeblock>Use
+                    <codeph>some.array[-1]</codeph> as the path, which will return the element
+                    <codeph>0</codeph>.</p>
+            <p>Each path component must conform as a JSON string, as if it were surrounded by
+                quotes, and any character in the path which may invalidate it as a JSON string must
+                be escaped by a backslash (<codeph>\</codeph>). In other words, the path component
+                must match exactly the path inside the document itself. For
+                example:<codeblock>{"literal\"quote": {"array": []}}</codeblock>must be referenced
+                as <codeph>literal\"quote.array</codeph>.</p>
+            <p>If the path also has special path characters (i.e. a dot or brackets) it may be
+                escaped using N1QL escapes. Considering the
+                document<codeblock>{"literal[]bracket": {"literal.dot": true}}</codeblock>A path
+                such as <codeph>`literal[]bracket`.`literal.dot`</codeph>. You can use
+                double-backticks (<codeph>``</codeph>) to reference a literal backtick.</p>
+            <p>If you need to combine both JSON <i>and</i> path-syntax literals you can do so by
+                escaping the component from any JSON string characters (e.g. a quote or backslash)
+                and then encapsulating it in backticks (<codeph>`path`</codeph>). Here is such an
+                example in Python:</p>
+            <codeblock>import json
+def escape_component(component):
+    component = json.dumps(component)[1:-1]
+    return '`' + component + '`'
+
+print escape_component("Hello!") # `Hello!`
+print escape_component("backtick[]") # `backtick[]`
+print escape_component("[\"mixed\\") # `[\"mixed\\`</codeblock>
+        </section>
+    </body>
+</topic>

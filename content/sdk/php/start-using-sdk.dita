@@ -1,0 +1,527 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_qkc_cnm_qv">
+    <title>Install and Start Using the PHP SDK with Couchbase Server</title>
+    <titlealts><navtitle>Start Using the SDK</navtitle></titlealts>
+    <shortdesc>The Couchbase PHP SDK allows you to connect to a Couchbase cluster from PHP. The
+        Couchbase PHP SDK is a native PHP extension and uses the Couchbase high-performance C library
+        to handle communicating to the cluster over Couchbase binary protocols.</shortdesc>
+    <body>
+
+        <p>Before installing the PHP SDK, you must first install the C SDK.</p>
+        <section conref="../c/start-using-sdk.dita#toplevel/install-linux"/>
+        <section conref="../c/start-using-sdk.dita#toplevel/install-osx">
+            <p>Once the C SDK has been installed, use PECL to download and install the
+                <codeph>couchbase</codeph> module:</p>
+            <codeblock outputclass="language-bash">$ pecl install couchbase</codeblock>
+        </section>
+        <section><title>Installing on Microsoft Windows</title>When using Microsoft Windows,
+            download one of the prebuilt binaries (below), matching your environment because
+            PECL does not currently support building for Windows. You also have the option of
+            downloading the <xref href="https://github.com/couchbaselabs/php-couchbase"
+                format="html" scope="external">source</xref> for the SDK and building it
+            directly.</section>
+        <section><title>php.ini</title>Once the PHP SDK has been installed, you need to specify
+            that the PHP interpreter should load the Couchbase SDK as an extension. To do
+            this:<ol id="ol_rr1_cpz_zv">
+                <li>Locate the location of your php.ini file. This can be done by <codeph>php
+                    --ini</codeph><screen>$ php --ini
+Configuration File (php.ini) Path: /usr/local/etc/php/7.0
+Loaded Configuration File:         /usr/local/etc/php/7.0/php.ini
+Scan for additional .ini files in: /usr/local/etc/php/7.0/conf.d
+Additional .ini files parsed:      (none)</screen></li>
+                <li>Insert the following line in the <codeph>php.ini</codeph> file; this should be
+                    in the <codeph>[PHP]</codeph> section. If you don't know where that is, simply
+                    search for existing commented or uncommented <codeph>extension=</codeph> entries
+                    in the
+                    file.<codeblock spectitle="Linux and OS X">extension=couchbase.so</codeblock><codeblock spectitle="Windows">extension=couchbase.dll</codeblock>
+                    The Couchbase SDK depends on JSON PHP extension, so make sure that load order is
+                    correct. For example, in case of single <codeph>php.ini</codeph> file, just
+                    insert line after <codeph>extension=json.so</codeph> Couchbase SDK, and if
+                        <codeph>conf.d</codeph>-style used, name file with Couchbase SDK ini file so
+                    that it will be alphabetically ordered after JSON extension. </li>
+            </ol></section>
+        <p>Information on
+            new features, fixes, known issues as well as information on how to install
+            older release versions is <xref
+                href="/server/other-products/release-notes-archives/php-sdk"
+                format="html" scope="peer">in the release notes</xref>.
+        </p>
+        <section>
+            <title>Hello Couchbase</title>
+            <p>The Hello Couchbase example consists of one PHP file,
+                <filepath>hello-couchbase.php</filepath>. The code opens a connection to
+                Couchbase Server, retrieves a document, modifies the document, and stores the
+                updated document in the database. Here's the
+                <filepath>hello-couchbase.php</filepath> code:</p>
+            <codeblock outputclass="language-php" spectitle="hello-couchbase.php">&lt;?php
+// Connect to Couchbase Server
+
+$cluster = new CouchbaseCluster("couchbase://127.0.0.1");
+$bucket = $cluster->openBucket("default");
+
+// Store a document
+echo "Storing u:king_arthur\n";
+$result = $bucket->upsert('u:king_arthur', array(
+    "email" => "kingarthur@couchbase.com",
+    "interests" => array("African Swallows")
+));
+
+var_dump($result);
+
+// Retrieve a document
+echo "Getting back u:king_arthur\n";
+$result = $bucket->get("u:king_arthur");
+var_dump($result->value);
+
+// Replace a document
+echo "Replacing u:king_arthur\n";
+$doc = $result->value;
+array_push($doc->interests, 'PHP 7');
+$bucket->replace("u:king_arthur", $doc);
+var_dump($result);
+
+echo "Creating primary index\n";
+// Before issuing a N1QL Query, ensure that there is
+// is actually a primary index.
+try {
+    // Do not override default name, fail if it is exists already, and wait for completion
+    $bucket->manager()->createN1qlPrimaryIndex('', false, false);
+    echo "Primary index has been created\n";
+} catch (CouchbaseException $e) {
+    printf("Couldn't create index. Maybe it already exists? (code: %d)\n", $e->getCode());
+}
+
+// Query with parameters
+$query = CouchbaseN1qlQuery::fromString("SELECT * FROM `default` WHERE \$p IN interests");
+echo "Parameterized query:\n";
+var_dump($query);
+$rows = $bucket->query($query, array("p" => "African Swallows"));
+echo "Results:\n";
+var_dump($rows);</codeblock>
+            <p>The console output should look similar to this:</p>
+            <screen>Storing u:king_arthur
+object(CouchbaseMetaDoc)#4 (4) {
+  ["error"]=>
+  NULL
+  ["value"]=>
+  NULL
+  ["flags"]=>
+  NULL
+  ["cas"]=>
+  string(9) "mdzlfqp04"
+}
+Getting back u:king_arthur
+object(stdClass)#5 (2) {
+  ["email"]=>
+  string(24) "kingarthur@couchbase.com"
+  ["interests"]=>
+  array(1) {
+    [0]=>
+    string(16) "African Swallows"
+  }
+}
+Replacing u:king_arthur
+object(CouchbaseMetaDoc)#6 (4) {
+  ["error"]=>
+  NULL
+  ["value"]=>
+  object(stdClass)#5 (2) {
+    ["email"]=>
+    string(24) "kingarthur@couchbase.com"
+    ["interests"]=>
+    array(2) {
+      [0]=>
+      string(16) "African Swallows"
+      [1]=>
+      string(5) "PHP 7"
+    }
+  }
+  ["flags"]=>
+  int(33554438)
+  ["cas"]=>
+  string(9) "mdzlfqp04"
+}
+Creating primary index
+Primary index has been created
+Parameterized query:
+object(CouchbaseN1qlQuery)#7 (2) {
+  ["options"]=>
+  array(1) {
+    ["statement"]=>
+    string(45) "SELECT * FROM `default` WHERE $p IN interests"
+  }
+  ["adhoc"]=>
+  bool(true)
+}
+Results:
+array(1) {
+  [0]=>
+  object(stdClass)#9 (1) {
+    ["default"]=>
+    object(stdClass)#8 (2) {
+      ["email"]=>
+      string(24) "kingarthur@couchbase.com"
+      ["interests"]=>
+      array(2) {
+        [0]=>
+        string(16) "African Swallows"
+        [1]=>
+        string(5) "PHP 7"
+      }
+    }
+  }
+}</screen>
+        </section>
+    </body>
+    <!-- This belongs in an external section
+    <topic id="topic_dc4_j4z_zv">
+        <title>Archives</title>
+        <body>
+            <section>
+                <title>Previous Releases</title>
+                <p>Previous releases are also available through PECL. On the command line, specify
+                    the specific version you want to install. As with our current releases, you can
+                    also download prebuilt binaries, listed below.</p>
+                <codeblock outputclass="language-bash">$ pecl install couchbase</codeblock>
+                <p>Or if specific version need to be installed</p>
+                <codeblock outputclass="language-bash">$ pecl install couchbase-2.0.0</codeblock>
+            </section>
+            <section>
+                <title>Archive Packages</title>
+                <ul id="ul_p2d_p4z_zv">
+                    <li>2.2.0beta3<msgph outputclass="beta">BETA</msgph>
+                        <ul id="ul_s4d_p4z_zv">
+                            <li><xref
+                                href="http://docs.couchbase.com/sdk-api/couchbase-php-client-2.2.0beta3/"
+                                format="html" scope="external">API Reference</xref></li>
+                            <li>PHP 5.6 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.6-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.6-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.6 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.6-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.6-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.5-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.5-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.5-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.5-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.4-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta3-5.4-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                        </ul></li>
+                    <li>2.2.0beta2<msgph outputclass="beta">BETA</msgph>
+                        <ul id="ul_s3d_p4z_zv">
+                            <li><xref
+                                href="http://docs.couchbase.com/sdk-api/couchbase-php-client-2.2.0beta2/"
+                                format="html" scope="external">API Reference</xref></li>
+                            <li>PHP 5.6 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta2-5.6-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta2-5.6-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.6 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta2-5.6-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta2-5.6-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta2-5.5-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta2-5.5-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta2-5.5-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta2-5.5-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta2-5.4-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.2.0beta2-5.4-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                        </ul></li>
+                    <li>2.1.0<msgph outputclass="stable">GA</msgph>
+                        <msgph outputclass="current">CURRENT</msgph>
+                        <ul id="ul_pld_p4z_zv">
+                            <li><xref
+                                href="http://docs.couchbase.com/sdk-api/couchbase-php-client-2.1.0/"
+                                format="html" scope="external">API Reference</xref></li>
+                            <li>PHP 5.6 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.1.0-5.6-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.1.0-5.6-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.6 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.1.0-5.6-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.1.0-5.6-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.1.0-5.5-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.1.0-5.5-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.1.0-5.5-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.1.0-5.5-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.1.0-5.4-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.1.0-5.4-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                        </ul></li>
+                    <li>2.0.7 <msgph outputclass="stable">GA</msgph>
+                        <ul id="ul_n4d_p4z_zv">
+                            <li><xref
+                                href="http://docs.couchbase.com/sdk-api/couchbase-php-client-2.0.7/"
+                                format="html" scope="external">API Reference</xref></li>
+                            <li>PHP 5.6 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.7-5.6-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.7-5.6-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.6 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.7-5.6-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.7-5.6-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.7-5.5-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.7-5.5-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.7-5.5-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.7-5.5-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.7-5.4-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.7-5.4-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                        </ul></li>
+                    <li>2.0.6 <msgph outputclass="stable">GA</msgph>
+                        <ul id="ul_mrd_p4z_zv">
+                            <li><xref
+                                href="http://docs.couchbase.com/sdk-api/couchbase-php-client-2.0.6/"
+                                format="html" scope="external">API Reference</xref></li>
+                            <li>PHP 5.6 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.6-5.6-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.6-5.6-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.6 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.6-5.6-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.6-5.6-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.6-5.5-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.6-5.5-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.6-5.5-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.6-5.5-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.6-5.4-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.6-5.4-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                        </ul></li>
+                    <li>2.0.5 <msgph outputclass="stable">GA</msgph>
+                        <ul id="ul_k5d_p4z_zv">
+                            <li><xref
+                                href="http://docs.couchbase.com/sdk-api/couchbase-php-client-2.0.5/"
+                                format="html" scope="external">API Reference</xref></li>
+                            <li>PHP 5.5 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.5-5.5-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.5-5.5-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.5-5.5-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.5-5.5-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.5-5.4-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.5-5.4-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.3 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.5-5.3-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.3 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.5-5.3-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                        </ul></li>
+                    <li>2.0.4 <msgph outputclass="stable">GA</msgph>
+                        <ul id="ul_gxd_p4z_zv">
+                            <li><xref
+                                href="http://docs.couchbase.com/sdk-api/couchbase-php-client-2.0.4/"
+                                format="html" scope="external">API Reference</xref></li>
+                            <li>PHP 5.5 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.4-5.5-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.4-5.5-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.4-5.5-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.4-5.5-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.4-5.4-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.4-5.4-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.3 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.4-5.3-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.3 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.4-5.3-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                        </ul></li>
+                    <li>2.0.3 <msgph outputclass="stable">GA</msgph>
+                        <ul id="ul_wzd_p4z_zv">
+                            <li><xref
+                                href="http://docs.couchbase.com/sdk-api/couchbase-php-client-2.0.3/"
+                                format="html" scope="external">API Reference</xref></li>
+                            <li>PHP 5.5 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.3-5.5-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.3-5.5-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.3-5.5-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.3-5.5-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.3-5.4-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.3-5.4-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.3 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.3-5.3-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.3 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.3-5.3-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                        </ul></li>
+                    <li>2.0.2 <msgph outputclass="stable">GA</msgph>
+                        <ul id="ul_mc2_p4z_zv">
+                            <li><xref
+                                href="http://docs.couchbase.com/sdk-api/couchbase-php-client-2.0.2/"
+                                format="html" scope="external">API Reference</xref></li>
+                            <li>PHP 5.5 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.2-5.5-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.2-5.5-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.2-5.5-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.2-5.5-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.2-5.4-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.2-5.4-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.3 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.2-5.3-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.3 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.2-5.3-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                        </ul></li>
+                    <li>2.0.1 <msgph outputclass="stable">GA</msgph>
+                        <ul id="ul_z22_p4z_zv">
+                            <li><xref
+                                href="http://docs.couchbase.com/sdk-api/couchbase-php-client-2.0.1/"
+                                format="html" scope="external">API Reference</xref></li>
+                            <li>PHP 5.5 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.1-5.5-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.1-5.5-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.1-5.5-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.1-5.5-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.1-5.4-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.1-5.4-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.3 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.1-5.3-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.3 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.1-5.3-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                        </ul></li>
+                    <li>2.0.0 <msgph outputclass="stable">GA</msgph>
+                        <ul id="ul_nh2_p4z_zv">
+                            <li><xref
+                                href="http://docs.couchbase.com/sdk-api/couchbase-php-client-2.0.0/"
+                                format="html" scope="external">API Reference</xref></li>
+                            <li>PHP 5.5 VC11 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.0-5.5-nts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.0-5.5-nts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.5 VC11 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.0-5.5-zts-vc11-x64.zip"
+                                format="html" scope="external">x64</xref>, <xref
+                                    href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.0-5.5-zts-vc11-x86.zip"
+                                    format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.0-5.4-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.4 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.0-5.4-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.3 VC9 NTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.0-5.3-nts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                            <li>PHP 5.3 VC9 ZTS - <xref
+                                href="http://sdk-snapshots.couchbase.com/php/php_couchbase-2.0.0-5.3-zts-vc9-x86.zip"
+                                format="html" scope="external">x86</xref></li>
+                        </ul></li>
+                </ul>
+            </section>
+        </body>
+    </topic>
+    !-->
+</topic>

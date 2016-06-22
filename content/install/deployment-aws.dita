@@ -9,6 +9,165 @@
     <p>AMIs provides the information required to launch an instance of a virtual server in the cloud
       and are available within the AWS Marketplace. <note type="note">In this guide, command line
         examples that begin with $ are run in a standard Linux shell.</note></p>
+    <section><title>Installing with AMI</title>
+      <p>You can find the
+        Couchbase Server's Amazon Machine Images (AMIs) by searching for <codeph>couchbase</codeph> in the Amazon’s EC2 portal.</p>
+      <p>To install the Couchbase Server AMI: </p>
+      <ol>
+        <li>Visit the page that contains <xref
+          href="https://aws.amazon.com/marketplace/seller-profile?id=1a064a14-5ac2-4980-9167-15746aabde72"
+          format="html" scope="external">Couchbase Server AMIs</xref>.</li>
+        <li>When prompted, sign into your AWS account.</li>
+        <li>Select the AWS Region where you want to launch your Couchbase Server instance in the
+          <wintitle>Region</wintitle> section.</li>
+        <li>Choose your preferred <codeph>instance type</codeph> in the Amazon EC2
+          <wintitle>Instance Type</wintitle> section.</li>
+        <li>Choose a <codeph>Key Pair</codeph> to associate with the instance in the <wintitle>Key
+          Pair</wintitle> section.</li>
+        <li>Select the <codeph>Key Pair</codeph> you want to use when connecting to the instance
+          over Secure Shell (SSH) in the <wintitle>Key Pair</wintitle> section.</li>
+        <li>Click <uicontrol>Launch</uicontrol> with 1-Click to create your new instance.</li>
+        <li>After the instance is created, you will be presented with the deployment details. Take
+          note of the <codeph>Instance ID</codeph>.</li>
+        <li>Sign into the AWS Management Console, select <uicontrol>EC2</uicontrol> and click the ID
+          for the instance just created. In the instance detail panel, make a note of the Public DNS
+          hostname. You will need this to log into your Couchbase Server installation.</li>
+        <li>To connect to your Couchbase Server installation, open a browser and connect to the
+          instance URL on port <codeph>8091</codeph>. For example,
+          <codeblock>http://ec2-107-21-64-139.compute-1.amazonaws.com:8091</codeblock>Answer the
+          prompts for the username and password for the Couchbase Server web console: <ul>
+            <li> Username is <codeph>Administrator</codeph></li>
+            <li> Password is your instance ID</li>
+          </ul></li>
+        <li>When you have successfully logged in, you should be presented with the Couchbase Server
+          Administration Web Console <wintitle>Cluster Overview</wintitle> window. The server is
+          automatically configured for you.</li>
+        
+      </ol>
       
+      <p>After the instance has started, it will operate just like any Couchbase Server instance. 
+        This single instance can operate independently, or can be added to a 
+        group of similar instances to create a cluster.</p>
+    </section>
+    
+    <section><title>Manual Installation</title>
+      <p>Manual AWS installation using the Amazon Linux 64-bit AMI.</p>
+      <p>To install Couchbase Server manually, follow these steps:</p>
+      <ol>
+        <li>Launch an Amazon EC2 instance using the AMI of your choice.</li>
+        <li>Create an EBS volume to use for your Couchbase Server storage, and attach it to the instance.</li>
+        <li>Connect to the instance over SSH.</li>
+        <li>Install the openssl098e that Couchbase Server X.X.X requires.
+          <codeblock> $ sudo yum install openssl098e </codeblock><p>You might also want to check the
+            latest <xref
+              href="http://aws.amazon.com/security/security-bulletins/aws-services-updated-to-address-openssl-vulnerability/"
+              format="html" scope="external">AWS security bulletin</xref> to upgrade your OpenSSL
+            version if it is affected.  </p></li>
+        <li>Download and install the Couchbase Server package. At the SSH command prompt, type the following, and then press Enter:
+          <codeblock> $ sudo rpm -i couchbase-server-enterprise_x86_64_X.X.X.rpm</codeblock></li>
+        <li>Couchbase Server will start automatically when the installation is complete. 
+          The setup process, which configures Couchbase Server and sets the data location and other details, is run separately.</li>
+        <li>Make a file system on your Amazon Elastic Block Store (EBS) volume:
+          <codeblock> $ sudo mkfs -t ext4      
+            /dev/*the_connection_you_attached_the_volume_to_for_example_sdf*</codeblock></li>
+        <li>Make a directory and mount the file system:
+          <codeblock> $ sudo mkdir -p /data/db/</codeblock></li>
+        <li>Edit your file system configuration to enumerate the volume on startup:
+          <codeblock> $ sudo su 
+            $ sudo echo '/dev/sdf /data/db auto noatime,noexec,nodiratime 0 0' >> /etc/fstab   
+            $ exit</codeblock></li>
+        <li>Mount the volume: <codeblock> $ sudo mount -a /dev/sdf /data/db </codeblock></li>
+        <li>Set the owner of the mounted volume:
+          <codeblock>  $ sudo chown couchbase /data/db </codeblock></li>
+        <li>Configure the instance to use the Amazon EBS directory for storage:
+          <codeblock>  $ /opt/couchbase/bin/couchbase-cli node-init -c localhost:8091 --node-init-data- path=/data/db </codeblock></li>
+        <li>Set the security group for the new instance, allowing connectivity for ports 8091, 8092,
+          11210, 4369 and 21100 to 21199. For communication between clients and instances, you need
+          only ports 8091, 8092, and 11210. For the complete list of ports used for Couchbase Server,
+          see <xref href="install-ports.dita#topic2659"/>.</li>
+        <li>Initialize the cluster by setting the <parmname>username</parmname>,
+          <parmname>password</parmname>, <parmname>cluster port</parmname> (default 8091) and RAM
+          allocated to Couchbase Server for data storage. To do so, access the Couchbase Server setup
+          service through the Web-based administration console, which is initially exposed on port
+          8091. If you have not configured a public IP address, or if you want to automate the
+          process, you can use the command-line tools to perform the setup operation as follows:
+          <codeblock> $ /opt/couchbase/bin/couchbase-cli cluster-init -c localhost:8091 \ --cluster-init-username=Administrator \ 
+            --cluster-init-password=password \
+            --cluster-init-port=8091 \
+            --cluster-init-ramsize=8000 </codeblock></li>
+        <li>When the cluster is initialized, you can access the Web Administration console by
+          visiting the public DNS on the port configured in the command in the previous step, for
+          example,<codeph> http://publicdns:8091</codeph>. You must log in with the username and
+          password configured in the previous step. </li>
+      </ol>
+    </section>
+    
+    <section><title>Best Practices</title>
+      <dl>
+        <dlentry>
+          <dt>Handling Instance Reboot in the Cloud</dt>
+          <dd>Many cloud providers warn users that they need to reboot certain instances for maintenance. Couchbase Server ensures these reboots won’t disrupt your application. Take the following steps to make that happen:
+            <ol><li>Install Couchbase Server on the new node.</li>
+              <li>From Couchbase Web Console, add the new node to the cluster.</li>
+              <li>From Couchbase Web Console, remove the node that you wish to reboot.</li>
+              <li>Rebalance the cluster.</li>
+              <li>Shut down the instance.</li></ol></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Local Storage</dt>
+          <dd>Dealing with local storage is not very much different than a datacenter deployment. 
+            However, EC2 provides an interesting solution: using the EBS storage you can prevent data loss when an instance fails. 
+            Writing Couchbase Server data and configuration to EBS creates a reliable medium of storage. 
+            Using EBS is definitely not required, but you should make sure to follow the best practices around performing backups.
+            Keep in mind that you will have to update the per-node disk path when configuring Couchbase Server 
+            to the point you have mounted an external volume.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>Handling IP Addresses Changes</dt>
+          <dd>When you use Couchbase Server in the cloud, server nodes can use internal or public IP addresses. 
+            Because IP addresses in the cloud can change quite frequently, you can configure Couchbase Server to use a hostname instead of an IP address.
+            For Amazon EC2,Amazon-generated hostnames are recommended that will automatically resolve to either an internal or external address. 
+            By default, Couchbase Server uses specific IP addresses as a unique identifier. If the IP changes, 
+            an individual node will not be able to identify its own address, and other servers in the same cluster will not be able to access it.
+            To configure Couchbase Server instances in the cloud to use hostnames, follow the steps later in this section. 
+            Make sure that your hostname always resolves to the IP address of the node. 
+            This can be accomplished by using a dynamic DNS service such as DNSMadeEasy which will 
+            allow you to automatically update the hostname when an underlying IP address changes.
+            The following steps completely destroy any data and configuration from the node, 
+            so you should start with a fresh Couchbase Server installation. 
+            If you already have a running cluster, you can rebalance a node out of the cluster, make the change, and then rebalance it back into the cluster.
+            Nodes with both IPs and hostnames can exist in the same cluster.
+            When you set the IP address using this method, you should not specify the address as localhost 
+            or 127.0.0.1 as this will be invalid when used as the identifier for multiple nodes within the cluster. 
+            Instead, use the correct IP address for your host.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>Linux and Windows 2.1 and Above</dt>
+          <dd>As a rule, you should set the hostname before you add a node to a cluster. 
+            You can also provide a hostname in these ways: when you install a Couchbase Server node or when you do a 
+            REST API call before the node is part of a cluster. You can also add a hostname to an existing cluster for an online upgrade. 
+            If you restart, any hostname you establish with one of these methods will be used.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>Linux and Windows 2.0.1 and Earlier</dt>
+          <dd>For Couchbase Server 2.0.1 and earlier you must follow a manual process where you edit configuration files for each node, 
+            as described for Couchbase Server in the cloud.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>Security Groups/Firewall Settings</dt>
+          <dd>It’s important to make sure you have both allowed AND restricted access to the appropriate ports in a Couchbase Server deployment. 
+            Nodes must be able to talk to one another on various ports, and it is important to restrict both external and 
+            internal access to only authorized individuals. 
+            Unlike a typical datacenter deployment, cloud systems are open to the world by default, and steps must be taken to restrict access.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>Instance Types</dt>
+          <dd>Prior to 4.x.x, the general recommendation is to use similar instance types for all the nodes in the cluster, 
+            but with Multidimensional Scaling you could take advantage of different 
+            instance types for Index and Query nodes as these nodes require less storage but more CPU cores and more RAM, 
+            and for data nodes choose similar instance types.</dd>
+        </dlentry>
+      </dl>
+    </section>
   </body>
 </topic>

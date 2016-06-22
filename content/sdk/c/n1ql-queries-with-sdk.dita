@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_bhv_nhq_44">
+    <title>N1QL Queries using the C (libcouchbase) SDK with Couchbase Server</title>
+    <titlealts><navtitle>N1QL from the SDK</navtitle></titlealts>
+    <shortdesc>This page describes how to issue N1QL queries using the C SDK. N1QL queries are
+        performed using a row-based API which invokes a callback repeatedly, once for each query
+        row. The C SDK uses a special JSON parser to invoke row callbacks as they are read from the
+        network - avoiding waiting for the entire response to be received.</shortdesc>
+	<conbody>
+        <p>N1QL queries are performed using a row-based API. This API is similar in spirit to the
+            view API (see <xref href="view-queries-with-sdk.dita#concept_tvx_nhq_44"/>). The N1QL API is
+            available when the <filepath>libcouchbase/n1ql.h</filepath> file is included.</p>
+        <p>To execute a N1QL query, first declare your handler. The handler is called once for each
+            JSON-encoded row, and then one last time with the <apiname>LCB_RESP_F_FINAL</apiname>
+            bit set in the <codeph>rflags</codeph> response member, where any result metadata
+            (including errors) is returned. To actually make sense of the row's content, use a JSON
+            decoder on the <codeph>row</codeph> and <codeph>nrow</codeph> buffer/length fields.</p>
+        <codeblock outputclass="language-c" spectitle="N1QL Row Handler">static void rowCallback(lcb_t instance, int cbtype, const lcb_RESPN1QL *resp) {
+    if (! (resp->rflags &amp; LCB_RESP_F_FINAL)) {
+        printf("Row: %.*s\n", (int)resp->nrow, resp->row);
+    } else {
+        printf("Got metadata: %.*s\n", (int)resp->nrow, resp->row);
+    }
+}</codeblock>
+        <p>To issue the actual query, populate an <codeph>lcb_CMDN1QL</codeph> structure with
+            appropriate parameters. Some of the internals of this structure may be populated using
+            the <codeph>lcb_N1QLPARAMS</codeph> object. The <codeph>lcb_N1QLPARAMS</codeph> object
+            is provided as a higher-level means by which to construct N1QL queries and supports N1QL
+            features such as query placeholders and prepared statements. For example, to issue a
+            query with a placeholder:</p>
+        <ol id="ol_hbm_zm3_kr">
+            <li>Create the <codeph>params</codeph> object (<apiname>lcb_n1p_new()</apiname>).</li>
+            <li>Set the query string (<codeph>lcb_n1p_setstmtz(params,
+                "statement_string")</codeph>).</li>
+            <li>Set the placeholders (<codeph>lcb_n1p_namedparamz(params, "$param1", "value1");
+                    lcb_n1p_namedparamz(params, "$param2", "value2")</codeph>).</li>
+            <li>Populate the <apiname>lcb_CMDN1QL</apiname> structure with the encoded query
+                    (<codeph>lcb_n1p_mkcmd(params, &amp;cmd)</codeph>).</li>
+            <li>Issue the query (<apiname>lcb_n1ql_query</apiname>).</li>
+            <li>(Optional): You can dump the encoded form of the query using the return value from
+					<apiname>lcb_n1p_encode()</apiname>. This returns a null-terminated string.</li>
+            <li>Free or clear the <codeph>params</codeph> object (<apiname>lcb_n1p_free</apiname> or
+                    <apiname>lcb_n1p_reset</apiname>).</li>
+        </ol>
+        <p>Here's a code example that uses placeholders</p>
+        <codeblock spectitle="Issuing a N1QL query with a placeholder" outputclass="language-c">lcb_N1QLPARAMS *params = lcb_n1p_new();
+lcb_CMDN1QL cmd = { 0 };
+
+// Need to make this properly formatted JSON
+std::string city_str;
+city_str += '"';
+city_str += city;
+city_str += '"';
+
+rc = lcb_n1p_setstmtz(params,
+    "SELECT airportname FROM `travel-sample` "
+    "WHERE city=$1 AND type=\"airport\"");
+rc = lcb_n1p_posparam(params, city_str.c_str(), city_str.size());
+
+cmd.callback = query_callback;
+
+rc = lcb_n1p_mkcmd(params, &amp;cmd);
+rc = lcb_n1ql_query(instance, cookie, &amp;cmd);
+lcb_n1p_free(params);
+lcb_wait(instance);</codeblock>
+        <note type="tip">See a fully compilable example using placeholders: <xref
+                href="https://github.com/couchbaselabs/devguide-examples/blob/server-4.5/c/query-placeholders.cc"
+                format="html" scope="external"/></note>
+        <p>You can also utilize the encoded query directly (without using
+                <apiname>lcb_N1QLPARAMS</apiname>). This involves using a pre-encoded query per the
+            N1QL REST API. This example issues the same query as above, bypassing the parameters
+            object, and encoding the query
+            manually.<codeblock outputclass="language-c" spectitle="User-encoded query">const char *querystr = 
+    "{"
+        /* read as SELECT fname || " " || lname FROM default WHERE age > $age LIMIT 5 */
+        "\"statement\":"SELECT fname || \" \" || lname, age FROM default WHERE age > $age LIMIT 5\","
+        "\"$age\": 27"
+    "}"
+lcb_CMDN1QL cmd = { 0 };
+cmd.query = querystr;
+cmd.nquery = strlen(querystr);
+cmd.callback = rowCallback;
+lcb_error_t rc = lcb_n1ql_query(instance, NULL, &amp;cmd);
+// ...</codeblock></p>
+        <p>
+            <note>Versions prior to 2.5.3 require the <codeph>content_type</codeph> field to be set
+                to <codeph>application/json</codeph>. Since version 2.5.3, all queries must be in
+                JSON, and the <codeph>content_type</codeph> field is ignored.</note>
+        </p>
+        <section><title>Prepared Statements</title>Since version 2.5.3, applications may optimize
+            frequently issued statements by having the client internally <i>prepare</i> them. To use
+            prepared statements, simply set the <codeph>LCB_CMDN1QL_F_PREPCACHE</codeph> bit in the
+                <varname>cmdflags</varname>
+            field<codeblock>lcb_CMDN1QL cmd = { 0 };
+// initialize other sections
+cmd.cmdflags |= LCB_CMDN1QL_F_PREPCACHE;</codeblock></section>
+    </conbody>
+</concept>

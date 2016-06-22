@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept xml:lang="en-us" id="concept2677">
+  <title>Managing Connections Using the .NET SDK with Couchbase Server</title>
+  <titlealts><navtitle>Managing Connections</navtitle></titlealts>
+  <shortdesc>This section describes how to connect the .NET SDK to a Couchbase cluster and bucket. It contains best
+      practices as well as information on the connection string,  SSL and other advanced connection options.</shortdesc>
+  <conbody>
+    <section>
+      <title>Connecting to a Cluster and Opening a Bucket</title>
+      <p>Connecting to a bucket is a two-step process: first, a <b><codeph>Cluster</codeph></b>
+        object needs to be created or the <b><apiname>ClusterHelper</apiname></b> object needs to be
+        initialized, followed by one or more calls to <apiname>OpenBucket()</apiname> or
+          <apiname>GetBucket(..)</apiname>:</p>
+      <codeblock outputclass="language-csharp"><![CDATA[var cluster = Cluster();
+var bucket = cluster.OpenBucket("default");
+
+//or alternately
+ClusterHelper.Initialize();
+var bucket = ClusterHelper.GetBucket("default);]]></codeblock>
+      <p><note>The <apiname>ClusterHelper</apiname> is a singleton/multiton that makes it easier to manage resources
+          and instances in server runtime environments such as ASP.NET and Owin/Katana. A
+        <apiname>ClusterHelper</apiname> will make a singleton instance of a <apiname>Cluster</apiname> object and configuration and
+        store references to opened <apiname>IBucket</apiname> objects that can be reused throughout the lifespan of
+          an application.</note>If no further arguments are applied, this code connects to
+          <codeph>localhost</codeph> and opens the <i>default</i> bucket. While this is suitable for
+        development, you most probably want to connect to a remote cluster and also a different
+        bucket (with a password), to do this you create a <apiname>ClientConfiguration</apiname>
+        object can be constructed with a custom configuration:</p>
+      <codeblock outputclass="language-csharp"><![CDATA[//define a configuration object
+var config = new ClientConfiguration {
+   Servers = new List<Uri> {
+       new Uri("http://192.168.56.101:8091"),
+       new Uri("http://192.168.56.102:8091")
+   }
+};
+
+//create the cluster and open the new bucket
+var cluster = new Cluster(config);
+var bucket = cluster.OpenBucket("mybucket", "mybucketpassword");
+
+//or alternately
+ClusterHelper.Initialize(config);
+var bucket = ClusterHelper.GetBucket("mybucket", "mybucketpassword");]]></codeblock>
+      <p>The ClientConfiguration object also exposes per bucket configuration settings, for
+        example:</p>
+      <codeblock outputclass="language-csharp"> <![CDATA[var config = new ClientConfiguration{
+    Servers = new List<Uri> {
+        new Uri("http://192.168.56.101:8091"),
+        new Uri("http://192.168.56.102:8091")
+    },
+    BucketConfigs = new Dictionary<string, BucketConfiguration> {{
+            "mybucket", new BucketConfiguration{
+                BucketName = "mybucket",
+                Password = "mybucketpassword"
+            }
+        }
+     }
+  };
+
+//create the cluster and open the new bucket
+var cluster = new Cluster(config);
+var bucket = cluster.OpenBucket("mybucket");
+
+//or alternately
+ClusterHelper.Initialize(config);
+var bucket = ClusterHelper.GetBucket("mybucket");]]></codeblock>
+      <p>It is very important in a production setup to pass in at least two or three nodes of the
+        cluster because if the first one in the list fails the other ones can be tried. After
+        initial contact is made, the bootstrap list provided by the user is thrown away and replaced
+        with a list provided by the server (which contains all nodes of the cluster).</p>
+      <p>As an alternative to programmatic configuration, the SDK also supports configuration via
+        config file and soon will support JSON config files. Here is an example of an App.Config
+        that is equivalent to the configuration above:<codeblock outputclass="language-xml"><![CDATA[<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <configSections>
+    <sectionGroup name="couchbaseClients">
+      <section name="couchbase" type="Couchbase.Configuration.Client.Providers.CouchbaseClientSection, Couchbase.NetClient" />
+    </sectionGroup>
+  </configSections>
+  <couchbaseClients>
+    <couchbase>
+      <servers>
+        <add uri="http://192.168.56.101:8091"></add>
+        <add uri="http://192.168.56.102:8091"></add>
+      </servers>
+      <buckets>
+        <add name="mybucket" password="mybucketpassword"></add>
+      </buckets>
+    </couchbase>
+  </couchbaseClients>
+</configuration>]]></codeblock> To open these buckets you would pass the path to the configuration
+        section: <codeblock outputclass="language-xml"><![CDATA[var cluster = new Cluster("couchbaseClients/couchbase");
+var bucket = cluster.OpenBucket("mybucket");]]>
+
+//or alternatively
+ClusterHelper.Initialize("couchbaseClients/couchbase");
+<![CDATA[var bucket = cluster.OpenBucket("mybucket");]]></codeblock></p>
+      <p>More buckets can be open at the same time if needed:</p>
+      <codeblock outputclass="language-csharp"><![CDATA[var bucket1 = cluster.OpenBucket("bucket1", "password");
+var bucket2 = cluster.OpenBucket("bucket2", "password");]]></codeblock>
+      <p>If more than one bucket is open at a time, the underlying internals of the client makes
+        sure to utilize the resources as best as possible, that is sharing sockets, thread pools and
+        so on.</p>
+      <p>Here are some very important things to keep in mind:</p>
+      <ul>
+        <li>Always create only one instance of a <codeph>Cluster</codeph> and share it across
+          threads (same with buckets) or use the <apiname>ClusterHelper</apiname> to help you do this. The
+          <apiname>ClusterHelper</apiname> is a singleton for a <apiname>Cluster</apiname> instance and a "multi-ton" for bucket
+          instances; the buckets will be cached and reused. </li>
+        <li>The SDK is thread-safe, so no additional synchronization is needed when interacting with
+          the SDK.</li>
+        <li>If different clusters need to be accessed, you can do this with multiple <apiname>Cluster</apiname>
+          instances.</li>
+        <li>The <apiname>Cluster</apiname> instance and the <apiname>ClusterHelper</apiname> class should be initialized when the
+          application starts up and closed via <apiname>Dispose()</apiname> when the application shuts down.</li>
+      </ul>
+    </section>
+    <section><title>Disconnecting from a Bucket</title><p>The most common case is to Dispose the
+        whole <codeph>Cluster</codeph> from the server, which has the same effect as closing all
+        buckets manually and in addition close all underlying resources like threads and sockets.
+        This also means that once <apiname>Dispose()</apiname> has been called, you can't reopen buckets from the same
+          <codeph>Cluster</codeph>
+      instance.</p><codeblock outputclass="language-csharp"><![CDATA[cluster.Dispose();]]></codeblock>After
+      a Dispose() called on a Cluster instance any subsequent attempts to open or use a bucket or
+      cluster will cause a ObjectDisposedException to be thrown. You can also Dispose of a bucket
+        instance:<codeblock outputclass="language-csharp"><![CDATA[bucket.Dispose();]]></codeblock><p>This
+        will release only the resources allocated for this bucket and it is possible to reopen it at
+        a later point.</p><p>If you do not Dispose of the Cluster or bucket instance that you are
+        using in your application, eventually the AppDomain or process will destroy the objects
+        however, any underlying resources (sockets for example) will be closed by the OS whenever it
+        decides to do so. This can lead to other problems so always Dispose of your Cluster and
+        bucket objects before the hosting application shuts down.</p></section>
+    <section id="ssl"><title>Connecting with SSL</title><p>Couchbase Server EE 3.0 and later
+        supports full encryption of client-side traffic. That includes key-value type operations,
+        queries, and configuration communication. Make sure to have a proper Couchbase Server
+        version installed before proceeding with configuring encryption on the client side.</p><p>To
+        configure encryption for the .NET SDK:</p><ol>
+        <li>Copy and import the certificate from the cluster into your certificate store</li>
+        <li>Enable encryption on the client by setting ClientConfiguration.UseSsl to true</li>
+      </ol>Depending upon your version of Windows and whether or not you are using OWIN or IIS, how
+      you import into your certificate store may vary. <p>If you are running on
+          <codeph>localhost</codeph> and just want to enable it for a development machine, just
+        copying and pasting it suffices. Navigate in the admin UI to <menucascade>
+          <uicontrol>Settings</uicontrol>
+          <uicontrol>Cluster</uicontrol>
+        </menucascade> and copy the input box of the SSL certificate into a file on your machine
+        (here named cluster.crt). It looks similar to this:</p><codeblock><![CDATA[-----BEGIN CERTIFICATE-----
+MIICmDCCAYKgAwIBAgIIE4FSjsc3nyIwCwYJKoZIhvcNAQEFMAwxCjAIBgNVBAMT
+ASowHhcNMTMwMTAxMDAwMDAwWhcNNDkxMjMxMjM1OTU5WjAMMQowCAYDVQQDEwEq
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzz2I3Gi1XcOCNRVYwY5R
+................................................................
+mgDnQI8nw2arBRoseLpF6WNw22CawxHVOlMceQaGOW9gqKNBN948EvJJ55Dhl7qG
+BQp8sR0J6BsSc86jItQtK9eQWRg62+/XsgVCmDjrB5owHPz+vZPYhsMWixVhLjPJ
+mkzeUUj/kschgQ0BWT+N+pyKAFFafjwFYtD0e5NwFUUBfsOyQtYV9xu3fw+T2N8S
+itfGtmmlEfaplVGzGPaG0Eyr53g5g2BgQbi5l5Tt2awqhd22WOVbCalABd9t2IoI
+F4+FjEqAEIr1mQepDaNM0gEfVcgd2SzGhC3yhYFBAH//8W4DUot5ciEhoBs=
+-----END CERTIFICATE-----]]></codeblock><p>Paste this into notepad running with administrative
+        privileges and then save it to disk with a file extension of <b>.crt </b>and a file type of
+          <i>"All Files"</i>. Then right click on the file and select <i>"Import Certificate"</i>,
+        then select <i>"Local Machine"</i>, select the "<i>Trusted Root Certificate Authorities"</i>
+        and finally <i>"Finish".</i>  Once you have done this, all traffic between the client and
+        the server will be encrypted.</p></section>
+  </conbody>
+</concept>

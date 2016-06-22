@@ -1,0 +1,600 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept xml:lang="en-us" id="concept2677">
+	<title>Collecting Information and Logging in the Java SDK with Couchbase Server</title>
+	<titlealts><navtitle>Collecting Information</navtitle></titlealts>
+
+	<shortdesc>The Java SDK logs events and also provides an event bus that transmits information about
+		the behavior of your database system, including system and metric events. It has no hard
+		dependency on a specific logger implementation, but you should add one you are comfortable
+		with.</shortdesc>
+	<conbody>
+
+    <section><title>Logging</title>
+
+  <p>The Couchbase Java SDK has no hard dependency on a specific logger implementation. It
+    tries to find a logger on the class path and uses that logger if it is supported by the SDK.
+    If no logger implementation is found, the standard JDK logger is used.</p>
+
+
+    <p>The following loggers are supported (and tried in this order):</p>
+
+    <ol>
+      <li>SLF4J</li>
+      <li>Log4J</li>
+      <li>JDK Logger (java.util.logging)</li>
+    </ol>
+
+
+  <p><b>Configuring SLF4J</b></p>
+
+
+      <p>To enable SLF4J, put it on the class path, as well as one of the support logger
+        implementations (like logback). If you want to use logback and include logback-classic,
+        it will be pulled in automatically:</p>
+
+      <codeblock outputclass="language-xml"><![CDATA[  <dependency>
+    <groupId>ch.qos.logback</groupId>
+    <artifactId>logback-classic</artifactId>
+    <version>1.1.2</version>
+  </dependency>]]></codeblock>
+
+      <p>By default, the log level for logback is set to DEBUG, but with the addition of a
+        logback configuration this can be configured (for example, as a
+          <filepath>logback.xml</filepath> in the resources folder):</p>
+
+      <codeblock outputclass="language-xml"><![CDATA[<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="info">
+        <appender-ref ref="STDOUT" />
+    </root>
+  </configuration>]]></codeblock>
+
+      <p>Consult the SLF4J documentation for advanced configuration.</p>
+
+
+    <p><b>Configuring Log4J</b></p>
+
+      <p>Log4J is also automatically found when put on the classpath:</p>
+
+      <codeblock outputclass="language-xml"><![CDATA[<dependency>
+    <groupId>log4j</groupId>
+    <artifactId>log4j</artifactId>
+    <version>1.2.17</version>
+  </dependency>]]></codeblock>
+
+      <p>If no configuration is applied, the following message appears:</p>
+
+      <pre><![CDATA[log4j:WARN No appenders could be found for logger (com.couchbase.client.core.logging.CouchbaseLoggerFactory).
+  log4j:WARN Please initialize the log4j system properly.
+  log4j:WARN See http://logging.apache.org/log4j/1.2/faq.html#noconfig for more info.]]></pre>
+
+      <p>This <filepath>log4j.xml</filepath> sets it to INFO level:</p>
+
+      <codeblock outputclass="language-xml"><![CDATA[<?xml version="1.0" encoding="UTF-8" ?>
+  <!DOCTYPE log4j:configuration SYSTEM "log4j.dtd">
+  <log4j:configuration xmlns:log4j='http://jakarta.apache.org/log4j/'>
+    <appender name="CA" class="org.apache.log4j.ConsoleAppender">
+        <layout class="org.apache.log4j.PatternLayout">
+            <param name="ConversionPattern" value="%-4r [%t] %-5p %c %x - %m%n" />
+        </layout>
+    </appender>
+    <root>
+        <level value="info" />
+        <appender-ref ref="CA" />
+    </root>
+  </log4j:configuration>]]></codeblock>
+
+      <p>Alternatively, you can provide a <filepath>log4j.properties</filepath> file with similar
+        settings:</p>
+
+      <codeblock><![CDATA[log4j.rootLogger=INFO, CA
+  log4j.appender.CA=org.apache.log4j.ConsoleAppender
+  log4j.appender.CA.layout=org.apache.log4j.PatternLayout
+  log4j.appender.CA.layout.ConversionPattern=%-4r [%t] %-5p %c %x - %m%n]]></codeblock>
+
+      <p>Consult the Log4J documentation for more information and advanced configuration
+        options.</p>
+    </section>
+
+    <section>
+      <title>Configuring the JDK Logger</title>
+
+      <p>If no logging library is found on the class path, the JDK logger (also known as JUL from
+          <codeph>java.util.logging</codeph>) is used as a fallback.</p>
+
+      <p>By default it logs INFO level and above. If you want to set it to DEBUG (or the JUL
+        equivalent: Fine) you can do it like this programmatically before initializing the
+          <codeph>CouchbaseCluster</codeph> object:</p>
+
+      <codeblock outputclass="language-java"><![CDATA[Logger logger = Logger.getLogger("com.couchbase.client");
+  logger.setLevel(Level.FINE);
+  for(Handler h : logger.getParent().getHandlers()) {
+    if(h instanceof ConsoleHandler){
+        h.setLevel(Level.FINE);
+    }
+  }]]></codeblock>
+
+      <p>You should not use JUL in production because SLF4J and Log4J provide better
+        configuration options and performance.</p>
+    </section>
+
+    <section>
+      <title>Manual Overriding</title>
+
+      <p>If different loggers are on the class path and you want to force a different one (for example
+        Log4J instead of SLF4J) you can set the default one directly:</p>
+
+      <codeblock outputclass="language-java"><![CDATA[CouchbaseLoggerFactory.setDefaultFactory(new Log4JLoggerFactory());]]></codeblock>
+
+      <p>There are a few loggers you may have particular interest in with Couchbase.  These are
+				available at the uncommitted interface level:</p>
+      <codeblock><![CDATA[# the following forces logging of BucketManager's N1QL index watcher steps
+log4j.logger.indexWatch=DEBUG
+# the following avoid seeing Node connect/disconnect logs
+log4j.logger.com.couchbase.client.core.node.Node=OFF]]></codeblock>
+    </section>
+
+
+		<section>
+			<title>The Event Bus</title>
+      <p>Log files are neither fun to wade through, nor do they have any kind of real-time aspect. To
+			make them usable, normally their content is piped into systems such as <xref
+				href="http://graphite.wikidot.com" format="html" scope="external">Graphite</xref> or
+				<xref href="https://www.elastic.co/products/logstash" format="html" scope="external"
+				>Logstash</xref>. Since most setups interleave all different kinds of log messages, it
+			makes it very hard to see whats going on, let alone perform post-disaster analysis.</p>
+		<p>To make the situation better and ultimately improve supportability, the Java SDK provides
+			you with the following:</p>
+		<ul id="ul_trq_ygq_ft">
+			<li>An event bus that allows you to receive system and metric events as they are created</li>
+			<li>System and metric events generated by the SDK that allow near real-time insight and
+				consumability</li>
+		</ul>
+		<p>It may not be visible instantly that this provides a huge leap forward in detecting and
+			reacting to different kinds of situations. You can subscribe to the event bus, receive and
+			react to events as they are happening; not when someone parses the logs, sends them into
+			another system where an alarm is triggered and eventually a sysadmin will check whats going
+			on. The time delta between an event happening and reacting to it can be massively
+			decreased.</p>
+
+			<p>The event bus provides the foundational piece of code through which the SDK publishes events
+				and the user receives them. Because <codeph>Observable</codeph> semantics fit really
+				well here, it is exposed as such through the environment.</p>
+			<p>The following code subscribes to the event bus and prints out all events that are
+				published on it:</p>
+			<codeblock outputclass="language-java">// Create the Environment
+CouchbaseEnvironment env = DefaultCouchbaseEnvironment.create();
+
+// Subscribe to the Event Bus and print out all events
+env.eventBus().get().subscribe(System.out::println);
+
+// Connect to the cluster, open the bucket and then disconnect to generate events.
+Cluster cluster = CouchbaseCluster.create(env, "192.168.56.101");
+Bucket bucket = cluster.openBucket("travel-sample");
+cluster.disconnect();</codeblock>
+			<p>Connected to a three-node cluster, this will print the following events (in your IDE
+				probably interleaved with the regular logs):</p>
+			<codeblock>NodeConnectedEvent{host=vnode1/192.168.56.101}
+ConfigUpdatedEvent{bucketNames=[travel-sample],
+   clusterNodes=[vnode1/192.168.56.101, vnode2/192.168.56.102, vnode3/192.168.56.103]}
+BucketOpenedEvent{name='travel-sample'}
+NodeConnectedEvent{host=vnode3/192.168.56.103}
+NodeConnectedEvent{host=vnode2/192.168.56.102}
+ConfigUpdatedEvent{bucketNames=[], clusterNodes=[]}
+BucketClosedEvent{name='travel-sample'}
+NodeDisconnectedEvent{host=vnode3/192.168.56.103}
+NodeDisconnectedEvent{host=vnode2/192.168.56.102}</codeblock>
+			<p>We recommend filtering on the specific events you are interested in, since most of the time
+				only a subset of the published ones will be of use to you. You can use the
+					<codeph>Observable#filter</codeph> method to help with that. Of course you can
+				subscribe as often as you want if you need to move different events to different
+				downstream systems.</p>
+			<codeblock outputclass="language-java">// Only care about system events (no metrics)
+env.eventBus().get()
+    .filter(ev -&gt; ev.type().equals(EventType.SYSTEM))
+    .subscribe(System.out::println);</codeblock>
+		</section>
+
+		<section>
+			<title>Consumers</title>
+			<p>Printing events is not that fancy, so the SDK comes bundled with a few consumers (with
+				the plan to add more in the future). They are sample implementations for common use
+				cases and also provide inspiration to write your own. The only rule to keep in mind is:
+					<b>do not block in your subscriber without moving it over to a different
+					scheduler.</b> This is true for RxJava in general, but if you add a subscriber and
+				then use a blocking API to push the data into a remote system, you can probably hold up
+				the whole thing. So either use non-blocking code all the way down or make sure to move
+				it onto a different scheduler (for example
+					through<codeph>.observeOn(Schedulers.io())</codeph>).</p>
+			<p>The SDK ships with the following consumers:</p>
+			<ul id="ul_qvx_yhq_ft">
+				<li><b>LoggingConsumer</b>: all events will be logged to a file on the configured log
+					level. In addition, if not configured otherwise all events will be turned into JSON
+					so it is both human and machine readable.</li>
+				<li><b>BucketConsumer</b>: all events will be written into a Couchbase Bucket as JSON
+					documents. You can use this to demo the event bus or write to a bucket that collects
+					actual log data.</li>
+			</ul>
+			<p>Using them is easy, just subscribe with the consumer:</p>
+			<codeblock outputclass="language-java">// Log system events
+env.eventBus().get()
+    .filter(ev -&gt; ev.type().equals(EventType.SYSTEM))
+    .subscribe(LoggingConsumer.create());
+
+// Store metric events in a couchbase bucket
+env.eventBus().get()
+    .filter(ev -&gt; ev.type().equals(EventType.METRIC))
+    .subscribe(BucketConsumer.create(metricsBucket));</codeblock>
+			<p>We are planning on more out-of-the-box consumers (mainly based on user feedback and
+				requests), especially one that exposes the data over MXBeans.</p>
+
+		</section>
+		<section>
+			<title>Default metric logging consumer</title>
+			<p>If we wouldn’t enable them by default in some way, the whole thing would entirely miss
+				the point. System events are logged anyways, but metric events would never be
+				visible.</p>
+			<p>In order to mitigate that, a logging consumer which listens on the metric events and
+				prints them to the configured logger every hour is run by default. If you want to tune
+				the intervals, see the next sections on configuration.</p>
+			<p>The logger itself can be tuned (or disabled) on the environment. The following
+				configuration changes the compact JSON format to something more verbose, but decreases
+				the default log level (INFO) to debug:</p>
+			<codeblock outputclass="language-java">CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+    .builder()
+    .defaultMetricsLoggingConsumer(true, CouchbaseLogLevel.DEBUG, LoggingConsumer.OutputFormat.JSON_PRETTY)
+    .build();</codeblock>
+			<p>If you want to disable it completely, set the first argument to false (and just set any
+				logging level you want, it won’t be used:)</p>
+			<codeblock outputclass="language-java">CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+    .builder()
+    .defaultMetricsLoggingConsumer(false, CouchbaseLogLevel.INFO)
+    .build();</codeblock>
+			<p>This default logger is really meant to have something reusable in the application logs.
+				If you are planning to do something more fancy with metric information anyways, you can
+				disable the default one and then attach your custom consumers (or one that comes with
+				the SDK).</p>
+		</section>
+
+		<section>
+			<title>Configurations and defaults</title>
+			<p>By default, system events will be published as they happen and metric events are
+				published every hour (to not flood the logs in production systems).</p>
+			<p>This section describes the configuration options available, the next sections dig into
+				the actual events and the data you can gather from them.</p>
+			<p>If you need a more recent insight into metric events you can tune them through the
+				environment. Currently you can tune the settings for the following metric collectors
+				(which emit the events eventually):</p>
+			<ul id="ul_qyk_n3q_ft">
+				<li>RuntimeMetricsCollector</li>
+				<li>NetworkLatencyMetricsCollector</li>
+			</ul>
+			<p>
+				<b>Configuring the RuntimeMetricsCollector</b>
+			</p>
+			<p>The <codeph>RuntimeMetricsCollector</codeph> collects metrics from the JVM runtime and
+				can be configured on the <codeph>CouchbaseEnvironment</codeph>. By default it will emit
+				an event every hour, but you can tune the emit frequency and its timeout very
+				easily.</p>
+			<p>The following code sets it from once per hour to once per minute:</p>
+			<codeblock outputclass="language-java">CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+    .builder()
+    .runtimeMetricsCollectorConfig(DefaultMetricsCollectorConfig.create(1, TimeUnit.MINUTES))
+    .build();</codeblock>
+			<p>You can also easily disable collection and emission completely:</p>
+			<codeblock>CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+    .builder()
+    .runtimeMetricsCollectorConfig(DefaultMetricsCollectorConfig.disabled())
+    .build();</codeblock>
+			<p>
+				<b>Configuring the NetworkLatencyMetricsCollector</b>
+			</p>
+			<p>The <codeph>NetworkLatencyMetricsCollector</codeph> collects operation timings on a very
+				granular basis, so there is a little more you can configure in addition to the emit
+				interval. If you just want to do that, it is identical to the
+					<codeph>RuntimeMetricsCollector</codeph>:</p>
+			<codeblock outputclass="language-java">CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+    .builder()
+    .networkLatencyMetricsCollectorConfig(DefaultLatencyMetricsCollectorConfig.create(1, TimeUnit.MINUTES))
+    .build();</codeblock>
+			<p>You can also use the <codeph>disabled</codeph> method for easy disabling of the whole
+				collection process. In addition to the emit interval, you can tune parameters such as
+				the target percentiles and the target unit. For this the same builder API is available
+				like on the environment itself. So if you want to use milliseconds instead of
+				microseconds (the default) and you only care about the 99 percentile (instead of 50.0,
+				90.0, 95.0, 99.0 and 99.9 as the default), you can configure it like this:</p>
+			<codeblock outputclass="language-java">CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+    .builder()
+    .networkLatencyMetricsCollectorConfig(DefaultLatencyMetricsCollectorConfig.builder()
+        .targetUnit(TimeUnit.MILLISECONDS)
+        .targetPercentiles(new Double[] { 99.0 })
+        .build())
+    .build();</codeblock>
+			<p>The great thing about this approach is that because the data is aggregated in a
+				histogram, you can pick whatever percentiles and target unit you need for your
+				analysis.</p>
+		</section>
+		<section>
+			<title>System events</title>
+			<p>System events are emitted as they happen inside the SDK. They are intended to provide
+				insight into what the “system” is doing. If you are only interested in system events,
+				you can filter them by their type: <codeph>EventType.SYSTEM</codeph>. Right now, the
+				following events can be emitted, depending on the current state of the client:</p>
+			<table>
+				<tgroup cols="3">
+					<colspec colnum="1" colname="col1" />
+					<colspec colnum="2" colname="col2" />
+					<colspec colnum="3" colname="col3" />
+					<thead>
+						<row>
+							<entry>Event</entry>
+							<entry>Description</entry>
+							<entry>Contains</entry>
+						</row>
+					</thead>
+					<tbody>
+						<row>
+							<entry>
+								<codeph>BucketOpenedEvent</codeph>
+							</entry>
+							<entry>A bucket has been opened.</entry>
+							<entry>The bucket name.</entry>
+						</row>
+						<row>
+							<entry>
+								<codeph>BucketClosedEvent</codeph>
+							</entry>
+							<entry>A bucket has been closed.</entry>
+							<entry>The bucket name.</entry>
+						</row>
+						<row>
+							<entry>
+								<codeph>NodeConnectedEvent</codeph>
+							</entry>
+							<entry>A node has been connected.</entry>
+							<entry>The InetAddr of the node.</entry>
+						</row>
+						<row>
+							<entry>
+								<codeph>NodeDisconnectedEvent</codeph>
+							</entry>
+							<entry>A node has been disconnected.</entry>
+							<entry>The InetAddr of the node.</entry>
+						</row>
+						<row>
+							<entry>
+								<codeph>ConfigUpdatedEvent</codeph>
+							</entry>
+							<entry>A new configuration has been applied on the client.</entry>
+							<entry>All open buckets and all known nodes.</entry>
+						</row>
+					</tbody>
+				</tgroup>
+			</table>
+			<p>Since the bucket events are most of the time triggered by the application itself, they
+				are mainly used for debugging. Especially the<codeph>NodeDisconnectedEvent</codeph> can
+				be helpful to send over to a monitoring system, but keep in mind that even during a
+				planned rebalance out at some point this event will be raised once the node is gone.</p>
+		</section>
+		<section><title>Metric events </title><p>Metric events (in contrast to system events) are emitted
+				at a fixed frequency that can be tuned by the user. Right now these metric events
+				are emitted: </p><ul>
+				<li>RuntimeMetricsEvent</li>
+				<li>NetworkLatencyMetricsEvent</li>
+			</ul>
+			<b>The RuntimeMetricsEvent</b>
+			<p>Run-time metrics are designed to capture the run-time state at the time of emission.
+				The metric contains information about GC, Memory and Threads which it collects
+				through the systems MBeans. It makes use of the internal
+					<codeph>Diagnostics</codeph> class which collects the information in a
+				transparent way and then creates the <codeph>RuntimeMetricsEvent</codeph> for you to
+				consume.</p><p>Note that if the collection is disabled on the environment, there is
+				no run-time overhead whatsoever (since the collection is triggered on emission every
+				interval). </p><p>The following output is from the <codeph>LoggingConsumer</codeph>,
+				which turns the message itself into a JSON object so it is nicely formatted. Of
+				course, you can access all of that through the event object itself.</p>
+			<codeblock outputclass="language-json">{
+  "heap.used" : {
+    "init" : 268435456,
+    "used" : 17541192,
+    "committed" : 257425408,
+    "max" : 3817865216
+  },
+  "gc.ps marksweep.collectionTime" : 0,
+  "gc.ps scavenge.collectionTime" : 23,
+  "gc.ps scavenge.collectionCount" : 3,
+  "thread.count" : 31,
+  "offHeap.used" : {
+    "init" : 2555904,
+    "used" : 29304560,
+    "committed" : 29949952,
+    "max" : -1
+  },
+  "gc.ps marksweep.collectionCount" : 0,
+  "heap.pendingFinalize" : 0,
+  "thread.peakCount" : 31,
+  "event" : {
+    "name" : "RuntimeMetrics",
+    "type" : "METRIC"
+  },
+  "thread.startedCount" : 32
+}
+</codeblock>
+			<p>Gathering this information over a longer period of time gives you insight in system
+				trends even if you don’t have full blown monitoring on every application server.</p>
+			<b>The NetworkLatencyMetricsEvent</b>
+			<p>The NetworkLatencyMetricsEvent is the most involved event of all when it comes to
+				creation. Because latency metrics need to be gathered on every request/response and
+				then aggregated on emission, the SDK uses some excellent libraries under the covers
+					(<xref href="http://hdrhistogram.github.io/HdrHistogram/" format="html"
+					scope="external">HdrHistogram</xref> and the corresponding <xref
+					href="http://latencyutils.github.io/LatencyUtils/" format="html"
+					scope="external">LatencyUtils</xref>) and repackages them so you don’t run into
+				classpath issues.</p>
+			<p>The I/O event loops will track timestamps after encoding and before decoding and then
+				send them into individual histograms located in a central collector. Note that the
+				collected times still include time in the netty event loops, the JVM and the
+				operating system. Real network time can only be collected by external parties
+				through tools like <xref href="http://www.tcpdump.org/" format="html"
+					scope="external">tcpdump</xref>. At emission time, the data is taken, aggregated
+				and the event is published onto the event bus. Note that because the way the
+				underlying histograms work, the data is cleaned on every emission, meaning that if
+				you do 10 second interval emits you exclusively get the data for the last 10 second
+				interval. </p><p>To provide as much insight as possible into what’s going on in the
+				layer below, the data is collected an formatted in a tree-like structure. The format
+				always is:
+				</p><codeblock>Node > Service Type > Request Type > Response > Status</codeblock><p>The
+				components in this format are: </p><ul>
+				<li><b>Node:</b> The host name of the target server in the cluster.</li>
+				<li><b>Service Type:</b> The service on each node. Right now there are
+						<codeph>BINARY</codeph> (key/value), <codeph>VIEW</codeph>,
+						<codeph>QUERY</codeph> (N1QL), <codeph>CONFIG</codeph> (internal 8091
+					communication) and <codeph>DCP</codeph>.</li>
+				<li><b>Request Type:</b> The type of request you are sending, for example
+						<codeph>GetRequest</codeph>, or <codeph>UpsertRequest</codeph>.</li>
+				<li><b>Response Status:</b> The raw response status the server returned, for example
+						<codeph>SUCCESS</codeph>, <codeph>EXISTS</codeph> or many more types. You
+					can find all of them on the
+						<codeph>com.couchbase.client.core.message.ResponseStatus</codeph> enum.
+				</li>
+			</ul><p>Because metrics are collected at a very low level, some mappings might not feel
+				familiar to you, because the java client maps them into proper exceptions and so
+				forth. Also, you’ll see requests in the dump which you didn’t command but that are
+				part of the underlying communication, for example a
+					<codeph>GetBucketConfigurationRequest</codeph> and so forth. </p><p>So taking
+				our new knowledge to the test, here is some output from the metrics, collected over
+				a 30 second interval. What can we gather from it?
+				</p><codeblock outputclass="language-json">{
+  "10.142.111.102": {
+    "BINARY": {
+      "GetRequest": {
+        "NOT_EXISTS": {
+          "metrics": {
+            "percentiles": {
+              "50.0": 124,
+              "90.0": 199,
+              "95.0": 234,
+              "99.0": 489,
+              "99.9": 3784
+            },
+            "min": 69,
+            "max": 175112,
+            "count": 74864,
+            "timeUnit": "MICROSECONDS"
+          }
+        }
+      },
+      "UpsertRequest": {
+        "SUCCESS": {
+          "metrics": {
+            "percentiles": {
+              "50.0": 1269,
+              "90.0": 1835,
+              "95.0": 2670,
+              "99.0": 6160,
+              "99.9": 6389
+            },
+            "min": 561,
+            "max": 6389,
+            "count": 145,
+            "timeUnit": "MICROSECONDS"
+          }
+        }
+      },
+      "GetBucketConfigRequest": {
+        "SUCCESS": {
+          "metrics": {
+            "percentiles": {
+              "50.0": 741,
+              "90.0": 741,
+              "95.0": 741,
+              "99.0": 741,
+              "99.9": 741
+            },
+            "min": 737,
+            "max": 741,
+            "count": 1,
+            "timeUnit": "MICROSECONDS"
+          }
+        }
+      }
+    }
+  },
+  "10.142.111.101": {
+    "BINARY": {
+      "GetRequest": {
+        "NOT_EXISTS": {
+          "metrics": {
+            "percentiles": {
+              "50.0": 123,
+              "90.0": 198,
+              "95.0": 236,
+              "99.0": 6060,
+              "99.9": 40460
+            },
+            "min": 69,
+            "max": 1520430,
+            "count": 73996,
+            "timeUnit": "MICROSECONDS"
+          }
+        }
+      },
+      "GetBucketConfigRequest": {
+        "SUCCESS": {
+          "metrics": {
+            "percentiles": {
+              "50.0": 366,
+              "90.0": 4489,
+              "95.0": 4489,
+              "99.0": 4489,
+              "99.9": 4489
+            },
+            "min": 364,
+            "max": 4489,
+            "count": 2,
+            "timeUnit": "MICROSECONDS"
+          }
+        }
+      }
+    }
+  },
+  "event": {
+    "name": "NetworkLatencyMetrics",
+    "type": "METRIC"
+  }
+}
+</codeblock><p>If
+				you take a look at the numbers, here is what you can infer from these metrics:</p><ol>
+				<li>Our get requests are evenly distributed over the 2 nodes, but they are all not
+					finding the document (<codeph>NOT_EXISTS</codeph>). In the Java API, this means
+					returning null on a <codeph>get</codeph> operation.</li>
+				<li>We have a very high get to mutation ratio. In this interval we had over 148900
+					get requests, but only 145 upsert requests.</li>
+				<li>Get requests on <codeph>10.142.111.101</codeph> have significant outliers (check
+					out the max), while on <codeph>10.142.111.102</codeph> they don’t. At this point
+					we might want to start investigate the server side logs and stats and see what's
+					going on this specific node.</li>
+				<li>The Upsert operations did all go through well and don’t have latency outliers,
+					but they all seem to be against one node and not two.</li>
+			</ol><p>Looking at the sample code that produces the metrics, you can see that items 2
+				and 4 in the previous list are explainable while items 1 and 3 were discovered based
+				on the metrics (and can point to potential issues).
+			</p><codeblock outputclass="language-java">while(true) {
+    for (int i = 0; i &lt; 1024; i++) {
+        metricsBucket.get("key" +i); // this doc has never been created
+
+        // once every loop we create the document, but always with the same id
+        // so it goes to the same node, naturally.
+        if (i == 500) {
+            metricsBucket.upsert(JsonDocument.create("mydoc"+i));
+        }
+    }
+} </codeblock></section>
+	</conbody></concept>

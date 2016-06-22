@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="dotnet-views">
+  <title>MapReduce Views Using the .NET SDK with Couchbase Server</title>
+  <titlealts><navtitle>MapReduce Views</navtitle></titlealts>
+  <shortdesc>You can use MapReduce views to create query-able indexes in Couchbase
+    Server.</shortdesc>
+  <body>
+      <section conref="../shared/views.dita#toplevel/views-intro"/>
+      <section conref="../shared/views.dita#toplevel/example-travel"/>
+      <section conref="../shared/views.dita#toplevel/example-geo-travel"/>
+    <section>
+      <title>Querying Views through the .NET SDK</title>
+      <p>Once you have a view defined, it can be queried from the .NET SDK by using the
+        Query(IViewQueryable query) method on the CouchbaseBucket class. Here is an example:</p>
+      <codeblock outputclass="language-csharp" spectitle="Querying simply MapReduce view">
+        var cluster = new Cluster(new ClientConfiguration());
+        var bucket = cluster.OpenBucket("travel-sample"));
+
+        var query = new ViewQuery().From("landmarks", "by_name").Limit(10);
+        var landmarks = bucket.Query&lt;dynamic>(query);
+        foreach (var landmark in landmarks.Rows)
+        {
+        Console.WriteLine(landmark.Key);
+        }</codeblock>
+
+      <p>The <apiname>Query(IViewQueryable query)</apiname> method takes a
+        <apiname>ViewQuery</apiname>, which is the standard implementation of
+        <apiname>IViewQueryable</apiname>, executes the query and returns back the result of query
+        as a <apiname>IViewResult</apiname>. Some useful methods and properties of the
+        <apiname>ViewQuery</apiname> class include (others can be seen in the reference
+        documentation):<ul id="ul_vjp_xhz_dw">
+          <li><apiname>DesignDoc</apiname>: sets the name of the design document.</li>
+          <li><apiname>View</apiname>: sets the name of the view to query</li>
+          <li><apiname>Asc</apiname>: return the documents in ascending by key order</li>
+          <li><apiname>Desc</apiname>: return the documents in descending by key order</li>
+          <li><apiname>Skip</apiname>: skip this number of records before starting to return the
+            results</li>
+          <li><apiname>Limit</apiname>: limit the number of the returned documents to the specified
+            number</li>
+          <li><apiname>Key</apiname>: return only documents that match the specified key. </li>
+          <li><apiname>Keys</apiname>: return only documents that match one of keys specified within
+            the given array</li>
+        </ul>The <apiname>Query(IViewQueryable query)</apiname> returns an
+        <apiname>IViewResult</apiname> implementation that contains the results of the query plus
+        additional information regarding the status of the query, which is useful for debugging:<ul
+          id="ul_h4g_gkz_dw">
+          <li><apiname>Rows</apiname>: the results of the query if successful as an
+            <apiname>IEnumerable&lt;ViewRow&gt;</apiname>.</li>
+          <li><apiname>TotalRows</apiname>: the total count of all rows.</li>
+          <li><apiname>Values</apiname>: a list containing only the <apiname>Value</apiname> property
+            of each <apiname>ViewRow</apiname> returned by <apiname>Rows</apiname>.</li>
+          <li><apiname>Success</apiname>: true if the request was successful.</li>
+          <li><apiname>Exception</apiname>: if Success is false and an exception has been caught
+            internally, this field will contain the exception.</li>
+          <li><apiname>Error</apiname>: an error message if one occurred.</li>
+        </ul>The ViewRow represents each row returned by the view request and contains properties for
+        the document Id, the Key and the Value if it was emitted. Here is another example of a more
+        advanced query:</p>
+      <codeblock outputclass="language-csharp" spectitle="Querying a MapReduce view">  var cluster = new Cluster(new ClientConfiguration());
+        var bucket = cluster.OpenBucket("travel-sample"));
+
+        var query = new ViewQuery().From("landmarks", "by_name").Limit(10).StartKey("A").EndKey(@"A\u0fff");
+        var landmarks = bucket.Query&lt;dynamic>(query);
+        foreach (var landmark in landmarks.Rows)
+        {
+        Console.WriteLine(landmark.Key);
+        }</codeblock>
+
+      <p>Here's some sample output for the previous query:</p>
+      <codeblock>
+        A R M Chicken
+        A. Cavalli &amp;
+      </codeblock>
+
+    </section>
+
+
+    <section><title>Querying Geospatial Views</title>
+        <p>To query a geospatial view, you will need to construct a
+        <apiname>SpatialViewQuery</apiname> object
+        (<apiname>Couchbase.Views.SpatialViewQuery</apiname>). Spatial queries accept a
+        <parmname>StartRange</parmname> and an <parmname>EndRange</parmname> parameter which allow
+      you to limit the enclosing bounding boxes of the result. The arguments to these parameters are
+        <apiname>List&lt;double></apiname> 's with each element corresponding to a component emitted
+      by the key (the first two components implicitly being the longitude and latitude of the result
+      itself).</p>
+      <p>On output, spatial queries yield instances of <apiname>SpatialViewRow</apiname>
+        classes. A <apiname>SpatialViewRow</apiname> is similar to a <apiname>ViewRow</apiname>,
+        with an added <codeph>Geometry</codeph> property.</p>
+      <codeblock outputclass="language-csharp" spectitle="Advanced querying a spatial view">
+  var cluster = new Cluster(new ClientConfiguration());
+  var bucket = cluster.OpenBucket("travel-sample"));
+
+  var query = new SpatialViewQuery().From("spatial", "by_location")
+                 .Bucket("travel-sample")
+                 .StartRange(new List&lt;double?> { 0, -90})
+                 .EndRange(new List&lt;double?> { 180, 90 })
+                 .Limit(10);
+
+  var result = bucket.Query&lt;dynamic>(query);
+  foreach (var viewRow in result.Rows)
+  {
+      Console.WriteLine(viewRow.Value);
+  }</codeblock>
+      In the example above, we create a <apiname>Cluster</apiname> object and then open a
+        <apiname>CouchbaseBucket</apiname> called "travel-sample" from the
+        <apiname>Cluster</apiname> object. We then construct a <apiname>SpatialViewQuery</apiname>
+      that will target the "by_location" view on the "spatial" design document. We then pass the start
+      and end coordinates in via the <apiname>StartRange</apiname> and <apiname>EndRange</apiname>
+      methods and finally we limit are results to 10 items with the <apiname>Limit</apiname> method.
+      The query is executed by passing it into the
+        <apiname>CouchbaseBucket.Query&lt;T>(IViewQueryable query)</apiname> method which returns an
+        <apiname>IViewResult</apiname> implementation with the results of the query.</section>
+  </body>
+</topic>
