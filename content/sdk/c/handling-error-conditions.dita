@@ -55,6 +55,50 @@
                     used.</note></p>
         </section>
       <section conref="../shared/couchbase-errors.dita#toplevel/begin" conrefend="../shared/couchbase-errors.dita#toplevel/end"/>
+        <section>
+            <title>Inspecting HTTP (N1QL, MapReduce, FTS) Errors</title>
+            <p>Many of the SDK's APIs (<apiname>lcb_n1ql_query</apiname>,
+                    <apiname>lcb_view_query</apiname>, <apiname>lcb_fts_query</apiname>) use HTTP
+                internally. Unlike Key-Value based APIs which use a binary protocol and have a fixed
+                internal format for errors, APIs using JSON-over-HTTP can report multiple errors
+                anywhere during execution. The C SDK itself can only report a single top-level error
+                code (i.e. the <parmname>rc</parmname> within the response structure).</p>
+            <p>In cases where an HTTP API failed with a non-successful (<i>2xx</i>) HTTP reply, the
+                    <parmname>rc</parmname> field will be set to <apiname>LCB_HTTP_ERROR</apiname>
+                and the <apiname>LCB_RESP_F_FINAL</apiname> bit set in the
+                    <parmname>rflags</parmname> field. The <i>actual</i> cause may be determined
+                using one or more of the following mechanisms within the response callback:<ul
+                    id="ul_i5k_nrk_nw">
+                    <li>Inspecting the underlying <apiname>lcb_RESPHTTP</apiname> object for
+                            details.<codeblock outputclass="language-c">if (rv->rc == LCB_HTTP_ERROR &amp;&amp; rv->htresp) {
+    printf("Underlying HTTP failed with code %d\n", rv->htresp->htstatus);
+    printf("Raw payload: %.*s\n", (int)rv->htresp->nbody, rv->htresp->nbody);
+}</codeblock><codeph>rv</codeph>
+                        may be <apiname>lcb_RESPN1QL</apiname> or
+                            <apiname>lcb_RESPVIEWQUERY</apiname> or other response types using a
+                        row-like API. Ensure that you verify the <parmname>hresp</parmname> pointer
+                        is not <codeph>NULL</codeph> before dereferencing. Be aware that the content
+                        of the response body may be empty or only contain partial JSON.</li>
+                    <li>Inspecting the row's <i>metadata</i>. The <i>metadata</i> is exposed via the
+                        normal row fields (e.g. <parmname>row</parmname>, <parmname>nrow</parmname>)
+                        of the response structure, but only when the
+                            <apiname>LCB_RESP_F_FINAL</apiname> bit is set in the
+                            <parmname>rflags</parmname>
+                        field.<codeblock outputclass="language-c">if ((resp->rflags &amp; LCB_RESP_F_FINAL) &amp;&amp; resp->nrow) {
+    printf("Metadata: %.*s\n", (int)resp->nrow, resp->row);
+    json_parse(resp->nrow, resp->row);
+}</codeblock>The
+                            <i>metadata</i> is the raw JSON returned from the server-side API. It
+                        will be emptied out of any row contents (i.e. any actual result set) as they
+                        are dynamically parsed out from the stream. The metadata may contain errors,
+                        warnings, and other metrics which may be useful when debugging. Unlike the
+                        raw HTTP response, the metadata should always be valid JSON.</li>
+                </ul>Note that any error codes other than <apiname>LCB_HTTP_ERROR</apiname> indicate
+                that either the C SDK has handled and converted HTTP or metadata-reported errors, or
+                that an error occurred at the transport or input validation layer. It may still be
+                useful to inspect the raw HTTP response (if any) and/or the metadata as above in
+                such situations.</p>
+        </section>
 
       <section>
           <title>Program Crashes and Pitfalls</title>
