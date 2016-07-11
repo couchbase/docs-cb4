@@ -1,19 +1,242 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
-<topic id="topic_jlt_1nd_yv">
+<topic id="php-fts">
   <title>Full Text Search (FTS) Using the PHP SDK with Couchbase Server</title>
   <titlealts><navtitle>Searching from the SDK</navtitle></titlealts>
-  <shortdesc><!-- TODO short description--></shortdesc>
+  <shortdesc>You can use the Full Text Search service (FTS) to create queryable full-text indexes in Couchbase Server.</shortdesc>
   <body>
-    <note conref="../shared/experimental-pars.dita#experimental/fts"/>
-        <p>The Full-Text Search API is currently being developed for the PHP SDK. You can track its
-            progress on <xref href="https://issues.couchbase.com/browse/PCBC-381" format="html"
-                scope="external">PCBC-381</xref>. The final implementation will have an API along
-            the lines of <xref
-                href="https://github.com/couchbaselabs/sdk-rfcs/blob/master/rfc/0010-cbft.md"
-                format="html" scope="external">SDK RFC 0010</xref>. This page will be updated with
-            more details once an implementation is
-            available.<!-- TODO intro paragraph on the PHP SDK API--></p>
-    <p><!-- TODO rest of the content--></p>
+      <p>
+          Couchbase offers Full-text search support, allowing you to search for documents that contain certain words or
+          phrases. In the PHP SDK you can search full-text indexes by using the
+          <apiname>CouchbaseBucket.query(CouchbaseSearchQuery)</apiname> API.
+      </p>
+      <note conref="../shared/experimental-pars.dita#experimental/fts"/>
+      <p> Querying a FTS index through the PHP client is performed through the
+        <apiname>CouchbaseBucket.query(CouchbaseSearchQuery)</apiname> method, providing a
+        <apiname>CouchbaseSearchQuery</apiname>. Building a <apiname>CouchbaseSearchQuery</apiname>
+      takes two parameters, the index name to query and the actual search query itself. In this way,
+      it is a sort of a statement. Additional search options may be specified by using the
+        <apiname>CouchbaseSearchQuery</apiname> as a builder, chaining setters for each relevant
+      option. </p>
+      <p> Depending on the third argument, this method returns an object of which the
+        <codeph>hits</codeph> property represents array of either <apiname>stdClass</apiname>
+      instances or plain arrays. Each of the entries represent a hit for the query and contains the
+        <codeph>index</codeph>, <codeph>id</codeph> and <codeph>score</codeph> properties
+      respectively, identifying the exact FTS index that returned the hit, the id of the document
+      that matched and a decimal score for the match. It also contains optional sections depending
+      on the request and the availability of all relevant settings in the FTS mapping. Those are in
+      the <codeph>explanation</codeph> (an explanation of the plan followed by the FTS index to
+      execute the query), <codeph>locations</codeph> (a map-like listing of the location of all
+      matching terms inside each relevant field that was queried), <codeph>fragments</codeph> (a
+      map-like listing of occurrences of the search terms in each field, with the context of the
+      terms) and <codeph>fields</codeph> (a map of the complete value of each requested field). Most
+      of these need an index configured to store the data of a searched field. In addition to
+        <codeph>hits</codeph> property, any result also contains a <codeph>status</codeph> for the
+      request, some execution <codeph>metrics</codeph> and <codeph>facets</codeph> if facets have
+      been requested.
+      <codeblock outputclass="language-php">$cluster = new CouchbaseCluster('couchbase://localhost');
+$bucket = $cluster->openBucket("travel-sample");
+$fts = CouchbaseSearchQuery::match("term");
+$result = $bucket->query(new CouchbaseSearchQuery("travel-search", $fts));
+foreach ($result->hits as $search_hit) {
+  var_dump($search_hit);
+}</codeblock>
+    </p>
+
+        <section>
+      <title>Query Types</title> There are many different flavors of search queries, and each can be
+      constructed through static factory methods in the <apiname>CouchbaseSearchQuery</apiname>
+      class. All of these types derive from the <apiname>CouchbaseAbstractSearchQuery</apiname>. It
+      contains query classes corresponding to those listed in <xref
+        href="../full-text-search-overview.dita#full-text-search">the FTS generic
+        documentation</xref>. <p>It is important to distinguish between <i>query options</i> and
+        general <i>search options</i>. Some options affect the search process in general (such as
+        the <parmname>limit</parmname>, indicating how many results to return) while others only
+        affect a specific query (such as <parmname>fuzziness</parmname> for a given query). Because
+        multiple queries can be combined in a single search operation, <i>query specific options</i>
+        can be specified only in the query object itself, while <i>search options</i> are specified
+        at the level of the <apiname>CouchbaseSearchQuery</apiname> class, using builder methods.
+        <codeblock outputclass="language-php">$cluster = new CouchbaseCluster('couchbase://localhost');
+$bucket = $cluster->openBucket("travel-sample");
+$fts = CouchbaseSearchQuery::match("term");
+$query = new CouchbaseSearchQuery("travel-search", $fts);
+//search options:
+//will show value for activity and country fields
+$query->fields(array("activity", "country"))
+       //will have max 3 hits
+       ->limit(3);
+$result = $bucket->query($query);
+foreach ($result->hits as $search_hit) {
+  var_dump($search_hit);
+}</codeblock></p>
+      <p>Here's some sample output for the previous query against the travel-sample dataset:</p>
+      <screen>object(stdClass)#6 (5) {
+  ["index"]=>
+  string(39) "travel-sample_683e328089809988_a4a23588"
+  ["id"]=>
+  string(13) "landmark_4955"
+  ["score"]=>
+  float(0.8133278848105)
+  ["locations"]=>
+  object(stdClass)#7 (1) {
+    ["content"]=>
+    object(stdClass)#8 (1) {
+      ["term"]=>
+      array(1) {
+        [0]=>
+        object(stdClass)#9 (4) {
+          ["pos"]=>
+          int(24)
+          ["start"]=>
+          int(159)
+          ["end"]=>
+          int(163)
+          ["array_positions"]=>
+          NULL
+        }
+      }
+    }
+  }
+  ["fields"]=>
+  object(stdClass)#10 (2) {
+    ["activity"]=>
+    string(5) "drink"
+    ["country"]=>
+    string(14) "United Kingdom"
+  }
+}
+object(stdClass)#11 (5) {
+  ["index"]=>
+  string(39) "travel-sample_683e328089809988_37fdcf3c"
+  ["id"]=>
+  string(14) "landmark_15854"
+  ["score"]=>
+  float(0.74464445323204)
+  ["locations"]=>
+  object(stdClass)#12 (1) {
+    ["content"]=>
+    object(stdClass)#13 (1) {
+      ["term"]=>
+      array(1) {
+        [0]=>
+        object(stdClass)#14 (4) {
+          ["pos"]=>
+          int(21)
+          ["start"]=>
+          int(137)
+          ["end"]=>
+          int(141)
+          ["array_positions"]=>
+          NULL
+        }
+      }
+    }
+  }
+  ["fields"]=>
+  object(stdClass)#15 (2) {
+    ["activity"]=>
+    string(3) "see"
+    ["country"]=>
+    string(14) "United Kingdom"
+  }
+}
+object(stdClass)#16 (5) {
+  ["index"]=>
+  string(39) "travel-sample_683e328089809988_9e13fa43"
+  ["id"]=>
+  string(14) "landmark_16265"
+  ["score"]=>
+  float(0.68760768406444)
+  ["locations"]=>
+  object(stdClass)#17 (1) {
+    ["content"]=>
+    object(stdClass)#18 (1) {
+      ["term"]=>
+      array(1) {
+        [0]=>
+        object(stdClass)#19 (4) {
+          ["pos"]=>
+          int(41)
+          ["start"]=>
+          int(209)
+          ["end"]=>
+          int(213)
+          ["array_positions"]=>
+          NULL
+        }
+      }
+    }
+  }
+  ["fields"]=>
+  object(stdClass)#20 (2) {
+    ["activity"]=>
+    string(3) "see"
+    ["country"]=>
+    string(14) "United Kingdom"
+  }
+}</screen>
+    </section>
+
+        <section>
+            <title>Query Facets</title>
+            <p>Query <xref href="../full-text-search-overview.dita#facets">facets</xref> may also be added to the
+            <i>general search parameters</i> by using the <apiname>addFacet($name, $facet)</apiname> builder method on
+            <apiname>CouchbaseSearchQuery</apiname>. You can create facet queries by instantiating facets through
+            factory methods in the <apiname>CouchbaseSearchFacet</apiname> class.</p>
+
+            <codeblock outputclass="language-php">$cluster = new CouchbaseCluster('couchbase://localhost');
+$bucket = $cluster->openBucket("travel-sample");
+$fts = CouchbaseSearchQuery::match("term");
+$query = new CouchbaseSearchQuery("travel-search", $fts);
+//search options:
+//will show value for activity and country fields
+$query->fields(array("activity", "country"))
+       //will have max 3 hits
+       ->limit(3)
+       //will have a "countries" facet on the top 3 countries in terms of hits
+       ->addFacet("countries", CouchbaseSearchFacet::term("country", 3));
+
+$result = $bucket->query($query);
+var_dump($result->facets);</codeblock>
+
+            <p>Here is the facet part of the result from the query above:</p>
+            <screen>array(1) {
+  ["countries"]=>
+  array(5) {
+    ["field"]=>
+    string(7) "country"
+    ["total"]=>
+    int(42)
+    ["missing"]=>
+    int(0)
+    ["other"]=>
+    int(0)
+    ["terms"]=>
+    array(3) {
+      [0]=>
+      array(2) {
+        ["term"]=>
+        string(6) "united"
+        ["count"]=>
+        int(21)
+      }
+      [1]=>
+      array(2) {
+        ["term"]=>
+        string(7) "kingdom"
+        ["count"]=>
+        int(14)
+      }
+      [2]=>
+      array(2) {
+        ["term"]=>
+        string(6) "states"
+        ["count"]=>
+        int(7)
+      }
+    }
+  }
+}</screen>
+        </section>
   </body>
 </topic>
