@@ -83,6 +83,733 @@
           </dd>
         </dlentry>
       </dl>
+    
+   <section id="configuring-x.509">
+  <title>Configuring X.509</title> 
+  
+    <p>This section explains how to configure X.509 certificates for TLS in Couchbase Server.</p>
+    <note type="note">Choosing a root CA, the CA hierarchy, and obtaining a certificate from that CA
+      chain to set up a Couchbase cluster are not within the scope of this document.</note>
+   
+   <sectiondiv id="x509-bestpractices">
+     <p><b>X.509 Certificate Requirements and Best Practices</b></p>
+      <p>Here are the basic requirements for using your X.509 certificates in Couchbase: </p>
+      <ul>
+        <li>The certificate must be in available in the <codeph>.pem</codeph> format.</li>
+        <li>The certificate must be an RSA key certificate.</li>
+        <li>The current system time must fall between the times set in the certificate's properties
+            <codeph>valid from</codeph> and <codeph>valid to</codeph>. </li>
+        <li>Common name: This can be a certificate with a <codeph>nodename</codeph> (preferable), IP
+          address, URI (<codeph>www.example.com</codeph>), or URI with a subject alternative name
+          (SAN) certificate (<codeph>example.com</codeph> and <codeph>example.net</codeph>).</li>
+        <li>The node certificate must be designated for server authentication set in the optional
+          field of the certificate's property <codeph>enhanced key usage</codeph> as <codeph>Server
+            Authentication</codeph>. </li></ul>
+      
+      <p>Here are a few best practices around X.509 certificates in Couchbase that you should
+        consider using:</p>
+          
+          <ul>
+            <li>To avoid man-in-the-middle attacks do not use wildcards with IP addresses in the
+          certificate common name.</li>
+            <li>We recommended at least RSA key-length of 2048 bits or higher. As computing
+          capabilities increase, longer RSA keys provide increased security.</li>
+          </ul>
+
+      <p>The certificate chain must be valid from the node certificate up to the root certificate,
+        which can be verified using the <xref
+          href="https://www.openssl.org/docs/manmaster/apps/verify.html" format="html"
+          scope="external">OpenSSL validate certificate test</xref>. </p></sectiondiv>
+   <sectiondiv id="validate-server-identity">
+    <p><b>Validating Server Identity</b></p> 
+      <p>The HTTPS specification mandates that HTTPS clients must be capable of verifying the
+        identity of the server. This requirement can potentially affect how you generate your X.509
+        certificates. The HTTPS specification defines a generic mechanism for verifying the server
+        identity, known as the HTTPS URL integrity check, which is the standard mechanism used by
+        Web browsers. </p>
+      <sectiondiv><b>HTTPS URL integrity check</b>
+        <p>The basic idea of the URL integrity check is that the server certificate's identity must
+          match the server hostname. This integrity check has an important impact on how you
+          generate X.509 certificates for HTTPS: the certificate identity (usually the certificate
+          subject DN’s common name) must match the name of the host on which Couchbase Server is
+          deployed. </p><p>The URL integrity check is designed to prevent man-in-the-middle attacks.
+          </p><p>Specify the certificate identity for the URL integrity check in one of the
+          following ways: </p><dl>
+          <dlentry>
+            <dt>Using the <codeph>commonName</codeph></dt>
+            <dd>The usual way to specify the certificate identity (for the purpose of the URL
+              integrity check) is through the Common Name (CN) in the subject DN of the certificate.
+            </dd>
+          </dlentry>
+        </dl><dl>
+          <dlentry>
+            <dt>Using the <codeph>subjectAltName</codeph></dt>
+            <dd>If you deploy a certificate on a multi-homed host, however, you might find it is
+              practical to allow the certificate to be used with any of the multi-homed host names.
+              In this case, it is necessary to define a certificate with multiple, alternative
+              identities, and this is only possible using the <codeph>subjectAltName</codeph>
+              certificate extension. </dd>
+          </dlentry>
+        </dl><p>The HTTPS protocol also supports in host names the wildcard character *. For
+          example, you can define the <codeph>subjectAltName</codeph> as follows:
+          <codeblock>subjectAltName=DNS:*.couchbase.com </codeblock></p><p>This certificate identity
+          matches any three-component host name in the domain <codeph>couchbase.com</codeph>.
+          </p><note type="note">As a best practice, try to avoid using the wildcard character in the
+          domain name. Be sure never to do this accidentally by forgetting to type the dot (.)
+          delimiter in front of the domain name.  For example, if you specified *couchbase.com, your
+          certificate could be used in any domain that ends with the string
+            <codeph>couchbase</codeph>. </note></sectiondiv></sectiondiv>
+    <sectiondiv id="cluster-certificate">
+    <p><b>Couchbase Cluster Certificate</b></p>
+      <p>The Couchbase cluster certificate is the root CA's public key <codeph>ca.pem</codeph>. In
+        the configuration steps shown in the following sections, <codeph>ca.pem</codeph> is the CA
+        public key that should be configured in Couchbase as the cluster certificate.</p>
+      <p>When you load the cluster certificate into Couchbase, it is first checked to make sure it
+        is a valid X.509 certificate. Next, if the per-node certificates are not signed by the
+        cluster certificate, a warning is shown for each node during configuration. As the per-node
+        certificates are updated, such that they are signed by the cluster certificate, the warning
+        for each node goes away.</p></sectiondiv>
+    <sectiondiv id="pernode-certificate">
+     <p><b>Per Node Certificate</b></p>
+      <p>The Couchbase cluster certificate is used to sign per-node Couchbase certificates, each
+        containing the following:</p>
+      <ul>
+        <li>The node private key, which is named <codeph>pkey.key</codeph> as shown in the
+          configuration steps below.</li>
+        <li>The node public key certificate file, which is named <codeph>pkey.pem</codeph> as shown
+          in the configuration steps below.</li>
+        <li>The certificate chain file based on the supported CA hierarchy, This file is named
+            <codeph>chain.pem</codeph> as shown in the configuration steps below.</li>
+      </ul>
+      <p>
+        <table frame="all" rowsep="1" colsep="1" id="table_r1q_1zz_pv">
+          <title>Private and public keys you need to have</title>
+          <tgroup cols="3">
+            <colspec colname="c1" colnum="1" colwidth="1*"/>
+            <colspec colname="c2" colnum="2" colwidth="1.43*"/>
+            <colspec colname="c3" colnum="3" colwidth="3.34*"/>
+            <thead>
+              <row>
+                <entry/>
+                <entry>Key name</entry>
+                <entry>Description</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry morerows="4">Server-side files</entry>
+                <entry><codeph>ca.pem</codeph></entry>
+                <entry>Root CA public key or the cluster certificate.</entry>
+              </row>
+              <row>
+                <entry><codeph>int.pem</codeph></entry>
+                <entry>Intermediate public key. There can be one or more intermediate public keys in
+                  the hierarchy.</entry>
+              </row>
+              <row>
+                <entry><codeph>pkey.key</codeph></entry>
+                <entry>Node private key per node (private key of the node). Each node in the cluster
+                  must have its private key.</entry>
+              </row>
+              <row>
+                <entry><codeph>pkey.pem</codeph></entry>
+                <entry>Node public key (public key of the node). Each node in the cluster must have
+                  its public key.</entry>
+              </row>
+              <row>
+                <entry><codeph>chain.pem</codeph></entry>
+                <entry>Concatenated chain file (chain file). This file contains the node public key
+                  and the intermediate public keys that signed first the node key (pkey.pem) and
+                  then each other. <p>This file does not contain the CA public key. </p></entry>
+              </row>
+              <row>
+                <entry morerows="1">Client-side files</entry>
+                <entry><codeph>ca.pem </codeph></entry>
+                <entry>CA public key, which should be configured on the client</entry>
+              </row>
+              <row>
+                <entry><codeph>chain.pem</codeph></entry>
+                <entry>Concatenated chain file (chain file)</entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+      </p>
+    </sectiondiv>
+     <sectiondiv id="prepare-configuration">
+   <p><b>Prepare for Configuration</b></p>
+      <note type="note">If your CA authority supports automatic generation of certificates, you can
+        skip the X.509 configuration steps.</note>
+      <p>Before you start configuring X.509 certificates for your nodes, assess your needs. </p>
+      <dl>
+        <dlentry>
+          <dt>Where will you put the configured CA, intermediate, and node keys?</dt>
+          <dd>All the keys and certificates are generated in a directory named SSLCA, which can be
+            located anywhere on your machine. </dd>
+          <dd>The generated private node key (<codeph>pkey.key</codeph>) and chain certificate
+              (<codeph>chain.pem</codeph>) must be posted in a specific place that is in the
+            certificate trust path (such as <filepath>/Users/&lt;username&gt;/Library/Application\
+              Support/Couchbase/var/lib/couchbase/inbox/</filepath> on MacOSX). </dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Do you have one or more nodes in the cluster?</dt>
+          <dd>
+            <ul>
+              <li>With one node, you will generate one node directory inside the directory SSLCA
+                that will contain the private node key (<codeph>pkey.key</codeph>) and the
+                certificate chain file (<codeph>chain.pem</codeph>). The node public key
+                  (<codeph>pkey.pem</codeph>) is included in the chain file.</li>
+              <li>With multiple nodes, you need to add an appropriate number of node directories
+                with distinctive names, such as <codeph>node-sales</codeph>,
+                  <codeph>node-hr,</codeph> or whatever your situation requires.</li>
+            </ul>
+          </dd>
+        </dlentry>
+      </dl>
+      <dl>
+        <dlentry>
+          <dt>Do you have one or more intermediate CAs in your trust path?</dt>
+          <dd>With only one CA, create one directory named <codeph>int</codeph>. If you have
+            multiple intermediate CAs, be sure to name them in a way that will allow you to stack
+            them properly in the chain file, such as <codeph>int1</codeph>, <codeph>int2</codeph>,
+            and so on. </dd>
+          <dd>This order will show that the intermediate CA closest to the node (which signed the
+            node certificate) has the higher number, or in the sample below
+              <codeph>int2</codeph>.<p>For example: </p><p><image href="pict/chain-pem.png"
+                id="image_e5g_bcn_sv" align="left" width="500"/>
+            </p></dd>
+        </dlentry>
+      </dl>
+     </sectiondiv></section>
+     
+    <section id="sslconfig">
+      <title>Configure X.509 Certificates using openSSL</title>
+      <p>Here are the steps to help you generate X.509 certificates:</p>
+      <ol>
+        <li>Create a top-level directory called SSLCA in your user folder and three types of
+          sub-directories: <ul>
+            <li>One subdirectory called <codeph>root</codeph></li>
+            <li>One or more <codeph>int</codeph> subdirectories</li>
+            <li>One or more <codeph>node</codeph> subdirectories</li>
+          </ul></li>
+        <li>Generate the root private key file (<codeph>ca.key</codeph>), and CA public key file
+            (<codeph>ca.pem</codeph>).<p>Enter the following command inside the
+              <codeph>root</codeph>
+          subdirectory:</p><codeblock>openssl genrsa -out <b>ca.key</b> 2048</codeblock><codeblock>Generating RSA private key, 2048 bit long modulus
+............................................................................................+++
+....+++ 
+e is 65537 (0x10001)</codeblock><codeblock>openssl req -new -x509  -days 3650 -sha256 -key <b>ca.key</b> -out <b>ca.pem</b> \
+-subj '/C=UA/O=My Company/CN=My Company Root CA' </codeblock></li>
+        <li>Generate the intermediate private key file (<codeph>int.key)</codeph> and the
+          intermediate certificate signing request (<codeph>int.csr</codeph>) to generate the
+          intermediate public key file (<codeph>int.pem</codeph>). <p>Enter the following command
+            inside the <codeph>int</codeph> subdirectory:
+            <codeblock>openssl genrsa -out <b>int.key</b> 2048</codeblock><codeblock>Generating RSA private key, 2048 bit long modulus
+..........................................+++ 
+.....+++ 
+e is 65537 (0x10001 </codeblock><codeblock>openssl req -new -key <b>int.key</b> -out <b>int.csr</b> -subj '/C=UA/O=My Company/CN=My Company Intermediate CA' </codeblock></p></li>
+        <li>Create the extension file (<codeph>v3_ca.ext)</codeph> to add extensions to the
+          certificate and to generate the certificate signing request.<p>In the <codeph>int</codeph>
+            subdirectory enter:</p><codeblock>cat &lt;&lt;EOF &gt;&gt; v3_ca.ext </codeblock><p>Then
+            add the following:
+            <codeblock>subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer:always
+basicConstraints = CA:true
+EOF</codeblock></p><p>Your
+              <codeph>int</codeph> directory now contains three files: <codeph>int.csr</codeph>,  <codeph>int.key</codeph>, and 
+              <codeph>v3_ca.ext</codeph>.
+          </p></li>
+        <li>Generate the intermediate public key file (<codeph>int.pem)</codeph> based on the
+          intermediate certificate signing request (<codeph>int.csr</codeph>), and signed by the
+          root public key (<codeph>ca.pem</codeph>):<p>
+            <ol>
+              <li>In the <codeph>int</codeph> subdirectory
+                  enter:<codeblock>openssl x509 -req -in <b>int.csr</b> -CA ../root/<b>ca.pem</b> -CAkey ../root/<b>ca.key</b> -CAcreateserial \
+-CAserial rootCA.srl -extfile v3_ca.ext -out <b>int.pem</b> -days 365</codeblock><p>The
+                  response will be similar to the
+                following:</p><codeblock>Signature ok        
+subject=/C=UA/O=My Company/CN=My Company Intermediate CA       
+Getting CA Private Key</codeblock></li>
+              <li>Verify that <codeph>openssl</codeph> has correctly signed the intermediate
+                certificate with the root certificate:<p>
+                  <codeblock>openssl verify -CAfile ../root/<b>ca.pem</b> <b>int.pem</b> </codeblock>
+                </p><p>The response will
+                  be:<codeblock>int.pem: OK
+openssl x509 -in int.pem -text</codeblock></p></li>
+            </ol>
+          </p></li>
+        <li>Generate the node private key file (<codeph>pkey.key</codeph>) and the node certificate
+          signing request (<codeph>pkey.csr</codeph>) to generate the node public key file
+            (<codeph>pkey.pem</codeph>). <p>Be sure to enter another node and use the appropriate
+            node name instead of the variable <b>&lt;node-name&gt;</b>, such as “sales” or “HR’.
+            Each time you use another name, another set of files will be generated.</p><ol>
+            <li>Inside the node subdirectory (repeated for each node in the cluster):
+                <codeblock>openssl genrsa -out <b>pkey.key</b> 2048
+openssl req -new -key <b>pkey.key</b> -out <b>pkey.csr</b> -subj '/C=UA/O=My Company/CN=<b>&lt;node-name></b>'
+openssl x509 -req -in <b>pkey.csr</b> -CA ../int/<b>int.pem</b> -CAkey ../int/<b>int.key</b> -CAcreateserial \
+-CAserial intermediateCA.srl -out <b>pkey.pem</b> -days 365  </codeblock><p>For
+                example, for the <codeph>node-sales</codeph>
+                directory:<codeblock>openssl genrsa -out <b>pkey.key</b> 2048
+openssl req -new -key <b>pkey.key</b> -out <b>pkey.csr</b> -subj '/C=UA/O=My Company/CN=<b>sales</b>'
+openssl x509 -req -in <b>pkey.csr</b> -CA ../int/<b>int.pem</b> -CAkey ../int/<b>int.key</b> -CAcreateserial \
+-CAserial intermediateCA.srl -out <b>pkey.pem</b> -days 365 </codeblock></p><p>The
+                response for the <codeph>node-sales</codeph> directory should be as follows:
+                <codeblock>johns-MacBook-Pro-4:node-sales john$ openssl genrsa -out pkey.key 2048
+Generating RSA private key, 2048 bit long modulus
+....................................................................+++
+.............+++
+e is 65537 (0x10001)
+johns-MacBook-Pro-4:<b>node-sales</b> john$ openssl req -new -key pkey.key -out pkey.csr -subj '/C=UA/O=My Company/CN=<b>sales</b>'
+johns-MacBook-Pro-4:<b>node-sales</b> john$ openssl x509 -req -in pkey.csr -CA ../int/int.pem -CAkey ../int/int.key -CAcreateserial \
+> -CAserial intermediateCA.srl -out pkey.pem -days 365
+Signature ok
+subject=/C=UA/O=My Company/CN=<b>sales</b>
+Getting CA Private Key   </codeblock></p></li>
+            <li>Repeat the same step in each node directory you have. Each time another set of node
+              keys will be generated.
+              <codeblock>johns-MacBook-Pro-4:node-hr john$ ls
+intermediateCA.srl	pkey.csr		pkey.key		pkey.pem                 </codeblock></li>
+          </ol></li>
+        <li>Verify the node-intermediate-root chain. <ol>
+            <li>Try to specify the node certificate <codeph>pkey.pem</codeph>:
+                <codeblock>openssl verify -verbose <b>pkey.pem</b>  </codeblock><p>The response
+                should be similar to the
+                following:<codeblock>johns-MacBook-Pro-4:node-sales john$ openssl verify -verbose pkey.pem
+pkey.pem: /C=UA/O=My Company/CN=sales
+error 20 at 0 depth lookup:unable to get local issuer certificate </codeblock></p><p>This
+                means that the certificate at <codeph>depth=0</codeph> (intermediate certificate)
+                cannot be looked up. </p></li>
+            <li>Next, let’s try to specify an intermediate certificate:
+                <codeblock>openssl verify -untrusted ../int/<b>int.pem</b> <b>pkey.pem</b>  </codeblock><p>The
+                response should be similar to the following:
+                <codeblock>pkey.pem: /C=UA/O=My Company/CN=My Company Intermediate CA                   
+error 20 at 1 depth lookup:unable to get local issuer certificate</codeblock></p><p>This
+                means that the certificate at <codeph>depth=1</codeph> (root certificate) cannot be
+                looked up. </p></li>
+            <li>Next, let’s try to specify the root certificate:
+                <codeblock>openssl verify -untrusted ../int/<b>int.pem</b> -CAfile ../root/<b>ca.pem</b> <b>pkey.pem</b></codeblock><p>The
+                response will be: <codeblock>pkey.pem: OK  </codeblock></p><p>This means that
+                certificate validation has passed.</p></li>
+          </ol></li>
+        <li>Generate a certificate chain file.<p>When a client application tries to verify a
+            certificate signed by the intermediate CA, it must also verify the intermediate
+            certificate against the root certificate. To complete the chain of trust, create a
+            certificate chain to present it to the application.</p>In a chain file, the lowest
+          certificate goes first, then the intermediate certificates in proper order.<note
+            type="important">Do not include in your chain file the root CA’s public key certificate
+            and intermediate certificates that are not in the trust path.</note><note type="note"
+            >The root certificate is not included in this chain. </note><p>To create the certificate
+            chain file, concatenate the intermediate and root certificates together, beginning with
+            the lowest one in the chain.<ul>
+              <li>If you have only one intermediate CA in your trust path, use this command:
+                <codeblock>cat <b>pkey.pem</b> ../int/int.pem > <b>chain.pem</b></codeblock></li>
+              <li>If you have more intermediate CAs in your trust path, keep in mind that the order
+                of certificates in an SSL Certificate Chain file is important: <ul>
+                  <li><codeph>pkey.pem</codeph> certificate is signed by intermediate
+                      (<codeph>int3.pem</codeph>) certificate</li>
+                  <li><codeph>int3.pem </codeph>is signed by intermediate
+                    (<codeph>int2.pem</codeph>) </li>
+                  <li><codeph>int2.pem </codeph>is signed by intermediate
+                    (<codeph>int1.pem</codeph>) </li>
+                </ul><p>For multiple intermediate CAs, use this command:
+                </p><codeblock>cat <b>pkey.pem</b> ../int3/int.pem ../int2/int.pem ../int1/int.pem  > <b>chain.pem</b></codeblock></li>
+            </ul></p></li>
+        <li>Copy the node private key (<codeph>pkey.key)</codeph> and the chain file
+            (<codeph>chain.pem</codeph>) manually to the <codeph>inbox</codeph> folder on each node. <p>
+            <ol>
+              <li>Create an <codeph>inbox</codeph> folder in the Couchbase server path:
+                  <codeblock>mkdir /Users/&lt;username&gt;/Library/Application\ Support/Couchbase/var/lib/couchbase/<b>inbox</b>  </codeblock><p>For
+                  example:
+                  <codeblock>mkdir /Users/john/Library/Application\ Support/Couchbase/var/lib/couchbase/<b>inbox</b> </codeblock></p></li>
+              <li>Now go to the directory <filepath>SSLCA/node</filepath> and copy the files
+                  <codeph>chain.pem</codeph> and <codeph>pkey.key</codeph> into the created
+                  <codeph>inbox</codeph> folder:
+                  <codeblock>cp chain.pem /Users/<b>&lt;username&gt;</b>/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/chain.pem
+cp pkey.key /Users/<b>&lt;username&gt;</b>/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/pkey.pem </codeblock><p>For
+                  example:
+                  <codeblock>cp <b>chain.pem</b> /Users/<b>john</b>/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/<b>chain.pem</b>
+cp <b>pkey.key</b> /Users/<b>john</b>/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/<b>pkey.key</b></codeblock></p><p>Check
+                  if the the files <codeph>chain.pem</codeph> and <codeph>pkey.key</codeph> have
+                  been posted to the inbox:</p><p>
+                  <codeblock>johns-MacBook-Pro-4:inbox john$ ls
+chain.pem	pkey.key </codeblock>
+                </p></li>
+            </ol>
+          </p></li>
+        <li>Change permissions so that Couchbase can read <codeph>pkey.key</codeph> and
+            <codeph>chain.pem:</codeph>
+          <p>
+            <codeblock>cd /Users/<b>&lt;username&gt;</b>/Library/Application\ Support/Couchbase/var/lib/couchbase/inbox/
+chmod 777 chain.pem
+chmod 777 pkey.pem </codeblock>
+          </p></li>
+        <li>Set up the cluster certificate and then a node certificate on each of the nodes.</li></ol></section>
+    <section><title>Setting up a Cluster CA Certificate</title>
+          
+          <dl>
+            <dlentry>
+              <dt>Using CLI</dt>
+              <dd>
+                <codeblock>couchbase-cli ssl-manage -c <b>&lt;node-name></b>:8091 -u<b>[admin]</b> -p<b>[password]</b> \
+    --upload-cluster-ca=<b>&lt;path to pem-encoded root certificate></b></codeblock>
+                <p>For example:
+                  <codeblock>couchbase-cli ssl-manage -c <b>MyNode</b>:8091 -u <b>Administrator</b> -p <b>password</b> \
+    --upload-cluster-ca=<b>./root/ca.pem </b> </codeblock></p>
+              </dd>
+            </dlentry>
+          </dl>
+          <dl>
+            <dlentry>
+              <dt>Using REST API</dt>
+              <dd>
+                <codeblock>cd ../root
+    curl -X POST --data-binary "@./ca.pem" \
+    http://<b>Administrator</b>:<b>password</b>@127.0.0.1:8091/controller/uploadClusterCA</codeblock>
+              </dd>
+            </dlentry>
+          </dl>
+       
+  
+    <sectiondiv>
+     <p><b>Setting up a Per Node CA Certificate</b></p>
+      <dl>
+        <dlentry>
+          <dt>Using CLI</dt>
+          <dd>
+            <codeblock>couchbase-cli ssl-manage -c <b>&lt;node-name></b>:8091 -u[admin] -p[password] --set-node-certificate</codeblock>
+          </dd>
+        </dlentry>
+      </dl> <dl>
+        <dlentry>
+          <dt>Using REST API</dt>
+          <dd>
+            <codeblock>curl -X POST http://Administrator:password@<b>&lt;node-name></b>:8091/node/controller/reloadCertificate</codeblock>
+          </dd>
+        </dlentry>
+      </dl>
+     
+      <dl>
+        <dlentry>
+          <dt>See also:</dt>
+          <dd>CLI: <xref href="../cli/cbcli/ssl-manage.dita#cbcli-xdcr-ssl"/></dd>
+          <dd>REST API: <xref href="../rest-api/rest-uploads-ca.dita#reference_jm5_j2x_hv"/></dd>
+        </dlentry>
+      </dl></sectiondiv>
+    </section>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    <section id="rotate-x509">
+      <title>Rotating X.509</title>
+      
+       
+          <p>Certificate rotation is needed when a certificate expires, if you are considering moving from an old CA authority to a new CA authority, 
+            there is a change in the policy of the certificates issued by the CA, 
+            or in the case of a widespread breach of security occurs in the system.</p>
+          <p>You need to have a plan in place to renew the CA well before it expires. 
+            X.509 certificate rotation in Couchbase is an online operation and does not require a node or cluster restart. 
+            You can be reassured that the application will have continued access to Couchbase without getting hit 
+            with a downtime during the rotation operation.</p>
+          
+          
+       
+      <sectiondiv><p><b>How to Rotate an X.509 Certificate in Couchbase</b></p>
+          
+          
+          <ol>
+            <li><b>Generate a new certificate.</b>
+              <p>Before you rotate a certificate, you need to generate a new certificate.
+              </p><p>Typically, your Certificate Authority (CA) will give you a self-service option to
+                re-issue certificates. If this is not the case, you can manually regenerate your new
+                X509 certificate.</p><ol>
+                  <li>Renew the root CA certificate<p>The root certificate authority (CA) is the topmost
+                    CA in a CA hierarchy. Its validity period is typically longer, between 10 and 20
+                    years. </p><note type="note">When you renew the root CA, you have the option of
+                      reusing its existing private key. If you keep the same private key on your root CA,
+                      all certificates can continue to validate successfully against the new root; all
+                      that's required of you is to trust the new root. </note></li>
+                  <li>Generate the root CA for the first time
+                    <codeblock>openssl genrsa -out <b>ca.key</b> 2048
+                      openssl req -new -x509  -days 3650 -sha256 -key <b>ca.key</b> -out <b>ca.pem</b> \
+                      -subj '/C=UA/O=My Company/CN=My Company Root CA'</codeblock></li>
+                  <li>After ten years, the renewal time for the root CA comes up! <ul>
+                    <li>Renew the root CA using the existing <codeph>ca.key</codeph>:
+                      <codeblock>openssl req -new -key <b>ca.key</b> -out <b>newcsr.csr</b> 
+                        openssl x509 -req -days 3650 -sha256 -in <b>newcsr.csr</b> -signkey <b>newca.key</b> -out <b>newca.pem</b></codeblock></li>
+                    <li>Generate a completely new root CA similar to what you did the first time:
+                      <codeblock>openssl genrsa -out <b>newca.key</b> 2048
+                        openssl req -new -x509  -days 3650 -sha256 -key <b>newca.key</b> -out <b>newca.pem</b> \
+                        -subj '/C=UA/O=My Company/CN=My Company Root CA' </codeblock></li>
+                  </ul></li>
+                  <li>Renew the intermediate certificates.<p>For the intermediate CAs, a possible strategy
+                    might be to renew them for a year to six months before they expire and reuse the
+                    existing key. </p><p>By replacing the old chain file with the new chain file (that
+                      contains the updated intermediate certificate), rotation of the intermediate
+                      certificate can be performed:
+                      <codeblock>> cat <b>pkey.pem</b> ../int/<b>newint.pem</b> &lt;possibly other intermediate CAs&gt; > <b>chain.pem</b> </codeblock></p></li>
+                </ol></li>
+            <li><b>Deploy the CA public key and intermediate certificates</b>
+              <p>Before modifying anything on the server-side, deploy the CA public key and intermediate
+                certificates in the certificate stores used by your client browser and the SDK
+                language.</p><p>For example, here are steps to do that for <xref
+                  href="http://www.cyberciti.biz/faq/firefox-adding-trusted-ca/" format="html"
+                  scope="external">Firefox</xref> and <xref
+                    href="http://blogmines.com/blog/how-to-import-a-certificate-in-google-chrome/"
+                    format="html" scope="external">Chrome</xref>.</p></li>
+            <li><b>Rotate certificates on the server</b>
+              
+              
+              <ol>
+                <li>Configure the new root CA certificate (<codeph>newca.pem</codeph> is the new root CA certificate). 
+                  <ul>
+                    <li>Using CLI:
+                      <codeblock>couchbase-cli ssl-manage -c &lt;node-name>:8091 -u Administrator -p password \
+                        --upload-cluster-ca=<b>newca.pem</b>  </codeblock></li>
+                    <li>Using REST:
+                      <codeblock>curl -X POST --data-binary "@newca.pem" \
+                        http://Administrator:password@127.0.0.1:8091/controller/uploadClusterCA</codeblock></li>
+                  </ul>
+                </li>
+                <li>Configure the new intermediate and node certificate. <p>For each node, copy over new
+                  <codeph>chain.pem</codeph> file, and per node private key (new
+                  <codeph>pkey.pem</codeph> file, if the node certificate is rotated) to the
+                  <codeph>inbox</codeph> folder.</p><ul>
+                    <li>Using CLI:
+                      <codeblock>couchbase-cli ssl-manage -c &lt;node-name>:8091 -u Administrator -p password \
+                        --set-node-certificate     </codeblock></li>
+                    <li>Using REST:
+                      <codeblock>curl -X POST http://Administrator:password@[node-name]:8091/node/controller/reloadCertificate </codeblock></li>
+                  </ul></li>
+                
+              </ol>
+            </li>  
+            <li><b>Test the server CA certificate</b>
+              <p>You can also use OpenSSL's <codeph>s_client</codeph> by trying to connect to a server
+                that you know is using a certificate signed by the CA that you just installed:
+                <codeblock>> openssl s_client -connect https://&lt;hostname&gt;:8091 -CApath &lt;root ca public key&gt; </codeblock></p></li>
+            <li><b>Troubleshoot X.509 certificates</b>
+              <p>During the development process these external tools might come in handy for verifying
+                and debugging SSL traffic: <ul>
+                  <li><cmdname>openssl</cmdname>: OpenSSL command line tool</li>
+                  <li>wireshark: Network traffic analyzer</li>
+                  <li>nmap: Sophisticated security scanner </li>
+                </ul></p></li>
+            <li><b>Revert from the X.509 to the self-signed certificate</b>
+              <p>If you configured Couchbase to use X.509 certificates, and you want to go back to the
+                self-signed certificates, you can do this by regenerating the self-signed cluster
+                certificate using CLI or REST.  </p><note type="warning">Moving from CA certificates to
+                  self-signed certificates will cause application downtime because you need to reconfigure
+                  the self-signed cluster certificate on the client machines after self-signed certificate
+                  regeneration.</note><ul>
+                    <li>Using CLI:
+                      <codeblock>couchbase-cli ssl-manage -c &lt;hostname&gt;:8091 -u Administrator -p password \
+                        --regenerate-cert=/tmp/test.pem            </codeblock></li>
+                    <li>Using REST:
+                      <codeblock>curl -X POST  http://Administrator:password@remoteHost:8091/controller/regenerateCertificate</codeblock></li>
+                  </ul>
+            </li>
+            
+          </ol></sectiondiv>
+        </section>
+      
+      
+ 
+    <section id="trbl-x509">
+      <title>Troubleshooting X.509</title>
+      
+   <p>This section lists the error messages connected to the configuration of cluster and node
+        certificates in Couchbase.</p>
+  <sectiondiv>
+    <p><b>Cluster CA Certificates</b></p>
+          
+          
+          <p>Here are some error messages you might encounter when configuring the cluster CA
+          certificate and the suggested corrective actions:</p>
+          <p>
+            <table frame="all" rowsep="1" colsep="1" id="table_fsj_r3d_5v">
+              <title>Error messages when configuring cluster CA certificates</title>
+              <tgroup cols="3">
+                <colspec colname="c1" colnum="1" colwidth="1*"/>
+                <colspec colname="c2" colnum="2" colwidth="1*"/>
+                <colspec colname="c3" colnum="3" colwidth="1*"/>
+                <thead>
+                  <row>
+                    <entry>Couchbase Error Message</entry>
+                    <entry>Description</entry>
+                    <entry>Suggested User Action</entry>
+                  </row>
+                </thead>
+                <tbody>
+                  <row>
+                    <entry><codeph>Certificate should not be empty</codeph></entry>
+                    <entry>This error message can occur if the request body of the certificate is
+                      empty.</entry>
+                    <entry>Open the certificate file, and verify whether it is empty or not. The
+                      certificate file should be readable using openssl or via online SSL tools such as
+                      <xref href="https://www.sslchecker.com/certdecoder" format="html"
+                        scope="external">sslcheker </xref>. </entry>
+                  </row>
+                  <row>
+                    <entry><codeph>Certificate is not valid at this time</codeph></entry>
+                    <entry>This error message can occur if the certificate has expired, or is not yet
+                      valid.</entry>
+                    <entry>Verify whether the certificate validity dates (begins on, and expires on) are
+                      currently valid corresponding to the server clock time.</entry>
+                  </row>
+                  <row>
+                    <entry><codeph>Malformed certificate</codeph></entry>
+                    <entry>This error message can occur due to many reasons - an extra space in the
+                      certificate digest body, incorrect certificate format, and so on. </entry>
+                    <entry>Use a properly configured certificate, and make sure it’s readable using
+                      <codeph>openssl</codeph>. It should look as follows: Certificate begins with
+                      <p><codeph>-----BEGIN CERTIFICATE-----</codeph></p><p>and ends with</p><p><codeph>
+                        -----END CERTIFICATE-----</codeph></p><p>on a new line with no spaces before or after.</p></entry>
+                  </row>
+                  <row>
+                    <entry><codeph>Only one certificate per request is allowed</codeph></entry>
+                    <entry>Appears when the file contains more than one key or certificate.</entry>
+                    <entry>Open the <codeph>.pem</codeph> file, and make sure that it has only a single
+                      certificate digest (such as single <codeph>BEGIN CERTIFICATE,</codeph>
+                      <codeph>END CERTIFICATE</codeph> pragmas).</entry>
+                  </row>
+                  <row>
+                    <entry><codeph>Encrypted certificates are not supported </codeph></entry>
+                    <entry>This error message can occur if you are trying to load a certificate that is
+                      encrypted. Verify by opening the certificate file. If you see something like shown
+                      below, you will know your certificate is encrypted.: <p><codeph>-----BEGIN RSA
+                        PRIVATE KEY-----</codeph></p></entry>
+                    <entry>Couchbase does not support encrypted certificates. Decrypt the certificate
+                      with <codeph>openssl</codeph> before loading the certificate in Couchbase.
+                      <codeblock>openssl rsa -in privateKey.pem -out newPrivateKey.pem </codeblock></entry>
+                  </row>
+                  <row>
+                    <entry><codeph>Invalid certificate type: ~s </codeph></entry>
+                    <entry>Appears when a header other than <codeph>BEGIN CERTIFICATE</codeph> has been
+                      found.</entry>
+                    <entry>Open the certificate file, and verify whether it is a valid certificate. The
+                      certificate file should be readable using <codeph>openssl</codeph> or via online
+                      SSL tools such as <xref href="https://www.sslchecker.com/certdecoder"
+                        format="html" scope="external">sslchecker</xref>.</entry>
+                  </row>
+                </tbody>
+              </tgroup>
+            </table>
+          </p>
+  </sectiondiv>
+      <sectiondiv>
+<p><b>Node Certificates</b></p>
+          
+          <p>Here are some error messages you might encounter when configuring the node certificate
+          and the suggested corrective actions:</p>
+          <p>
+            <table frame="all" rowsep="1" colsep="1" id="table_u3d_bkd_5v">
+              <title>Error messages when configuring node certificates</title>
+              <tgroup cols="3">
+                <colspec colname="c1" colnum="1" colwidth="1*"/>
+                <colspec colname="c2" colnum="2" colwidth="1*"/>
+                <colspec colname="c3" colnum="3" colwidth="1*"/>
+                <thead>
+                  <row>
+                    <entry>Couchbase Error Message</entry>
+                    <entry>Description</entry>
+                    <entry>Suggested User Action</entry>
+                  </row>
+                </thead>
+                <tbody>
+                  <row>
+                    <entry><codeph>Cluster CA needs to be set before setting node
+                      certificate</codeph></entry>
+                    <entry>This error can occur when your cluster is still using the self-generated
+                      certificate, and you are attempting to configure a node certificate.</entry>
+                    <entry>Set up the cluster CA certificate before configuring the per node
+                      certificate.</entry>
+                  </row>
+                  <row>
+                    <entry><codeph>Incorrectly configured certificate chain. &lt;Error></codeph></entry>
+                    <entry>Denotes an invalid certificate in the chain file when configuring Couchbase. </entry>
+                    <entry>Chain file should contain a sequence of PEM (base64) encoded X.509
+                      certificates ordered from leaf to and including the intermediate certificate
+                      authorities.</entry>
+                  </row>
+                  <row>
+                    <entry><codeph>Unable to read private key file &lt;Path>. &lt;Error></codeph>
+                    </entry>
+                    <entry><codeph>&lt;Error></codeph> is one of the file read errors. </entry>
+                    <entry>Make sure that you have copied an unencrypted version of the private key
+                      file to the inbox folder on the Couchbase node.</entry>
+                  </row>
+                  <row>
+                    <entry><codeph>Unable to read certificate chain file &lt;Path>. &lt;Error>
+                    </codeph></entry>
+                    <entry><codeph>&lt;Error></codeph> is one of the file read errors.</entry>
+                    <entry>Make sure that you have copied an unencrypted version of the chain file to
+                      the inbox folder on the Couchbase node.</entry>
+                  </row>
+                  <row>
+                    <entry><codeph>Invalid private key type: &lt;Type></codeph></entry>
+                    <entry>The private key has an unsupported header.</entry>
+                    <entry>Make sure that you use a valid private key file.</entry>
+                  </row>
+                  <row>
+                    <entry><codeph>Provided certificate doesn't match provided private
+                      key</codeph></entry>
+                    <entry>The certificate doesn't recognize the message signed with a private
+                      key.</entry>
+                    <entry>Be sure that you use a complete key pair</entry>
+                  </row>
+                  <row>
+                    <entry><codeph>Encrypted keys are not supported</codeph></entry>
+                    <entry>The private key is encrypted.</entry>
+                    <entry>Couchbase does not support encrypted keys. You should decrypt the private key
+                      with OpenSSL before loading the certificate in Couchbase. </entry>
+                  </row>
+                  <row>
+                    <entry><codeph>Provided private key contains incorrect number of
+                      entries</codeph></entry>
+                    <entry>The private key is a chain of entries.</entry>
+                    <entry>The private key file should contain a single key digest.</entry>
+                  </row>
+                  <row>
+                    <entry><codeph>Malformed or unsupported private key format</codeph></entry>
+                    <entry>The private key cannot be used.</entry>
+                    <entry>Open the key file, and verify whether it is a valid private key. The
+                      certificate file should be readable using <codeph>openssl</codeph>.</entry>
+                  </row>
+                  <row>
+                    <entry><codeph>File does not exist</codeph></entry>
+                    <entry>The file is missing, does not exist.</entry>
+                    <entry>Add the missing file.</entry>
+                  </row>
+                  <row>
+                    <entry><codeph>Missing permission for reading the file, or for searching one of the
+                      parent directories</codeph></entry>
+                    <entry>You don't have the proper permissions to read the file or to search its
+                      parent directories.</entry>
+                    <entry>Change the permissions to allow you to read the file.</entry>
+                  </row>
+                </tbody>
+              </tgroup>
+            </table>
+          </p>
+          
+      </sectiondiv>     
+      
+      
+    </section>
+  
       
   </body>
 </topic>
