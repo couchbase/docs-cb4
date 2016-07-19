@@ -160,5 +160,294 @@
       </dlentry>
     </dl>
     </section>
+   
+    
+    
+    
+    
+    
+    <section>
+      <title>Data Service Nodes</title> 
+     <p>Data Service nodes handle data service operation, such as create/read/update/delete
+       (CRUD) operations.</p> 
+   
+        <p>It is important to keep use cases and application workloads in mind since different
+          application workloads have different resource requirements. For example, if your working set
+          needs to be fully in memory, you might need large RAM size. On the other hand, if your
+          application requires only 5% of data in memory, you will need enough disk space to store all
+          the data and fast enough disks for your read/write operations.</p>
+        <p>You can start sizing the Data Service nodes by asking the following questions: </p>
+        <ol>
+          <li>Is your application primarily (or even exclusively) using individual document access? </li>
+          <li>Do you plan to use Views? </li>
+          <li>Do you plan to use XDCR? Please refer to Couchbase Server 4.0 documentation about different deployment topology. </li>
+          <li>What’s your working set size and what are your data operation throughput or latency
+            requirements? </li>
+        </ol>
+        
+        <p>Answers to the above questions can help you better understand the capacity requirement of
+          your cluster and provide a better estimation for sizing. </p>
+        <p>Inside Couchbase Server, we looked at performance data and customer use cases to provide
+          sizing calculations for each of the areas: CPU, Memory, Disk, and Network.</p>
+        <p>A use case for RAM sizing was used as an example with the following data: </p>
+        <table><title>Input variables for sizing RAM</title>
+          <tgroup cols="2">
+            <colspec colname="col1" colwidth="1*"/>
+            <colspec colname="col2" colwidth="1*"/>
+            <thead>
+              <row>
+                <entry>Input Variable</entry>
+                <entry>value</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry><varname>documents_num</varname></entry>
+                <entry>1,000,000</entry>
+              </row>
+              <row>
+                <entry><varname>ID_size</varname></entry>
+                <entry>100</entry>
+              </row>
+              <row>
+                <entry><varname>value_size</varname></entry>
+                <entry>10,000</entry>
+              </row>
+              <row>
+                <entry><varname>number_of_replicas</varname></entry>
+                <entry>1</entry>
+              </row>
+              <row>
+                <entry><varname>working_set_percentage</varname></entry>
+                <entry>20% </entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+        
+        
+        <table><title>Constants for sizing RAM</title>
+          <tgroup cols="2">
+            <colspec colname="col1" colwidth="1*"/>
+            <colspec colname="col2" colwidth="1*"/>
+            <thead>
+              <row>
+                <entry>Constants</entry>
+                <entry>value</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry>Type of Storage</entry>
+                <entry>SSD</entry>
+              </row>
+              <row>
+                <entry><codeph>overhead_percentage</codeph></entry>
+                <entry>25%</entry>
+              </row>
+              <row>
+                <entry><codeph>metadata_per_document</codeph></entry>
+                <entry>56 for 2.1 and higher, 64 for 2.0.x</entry>
+              </row>
+              <row>
+                <entry><codeph>high_water_mark</codeph></entry>
+                <entry>85% </entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+        <p>Based on the provided data, a rough sizing guideline formula would be:</p>
+        
+        <table><title>Guideline Formula for Sizing a Cluster</title>
+          <tgroup cols="2">
+            <colspec colname="col1" colwidth="1*"/>
+            <colspec colname="col2" colwidth="2*"/>
+            <thead>
+              <row>
+                <entry>Variable</entry>
+                <entry>Calculation</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry><varname>no_of_copies</varname></entry>
+                <entry><codeph>1 + number_of_replicas</codeph></entry>
+              </row>
+              <row>
+                <entry><varname>total_metadata</varname></entry>
+                <entry><codeph>(documents_num) * (metadata_per_document + ID_size) *
+                  (no_of_copies)</codeph></entry>
+              </row>
+              <row>
+                <entry><varname>total_dataset</varname></entry>
+                <entry><codeph>(documents_num) * (value_size) * (no_of_copies)</codeph></entry>
+              </row>
+              <row>
+                <entry><varname>working_set</varname></entry>
+                <entry><codeph>total_dataset * (working_set_percentage)</codeph></entry>
+              </row>
+              <row>
+                <entry>Cluster RAM quota required</entry>
+                <entry><codeph>(total_metadata + working_set) * (1 + headroom) /
+                  (high_water_mark)</codeph></entry>
+              </row>
+              <row>
+                <entry>number of nodes</entry>
+                <entry><codeph>Cluster RAM quota required / per_node_ram_quota</codeph>
+                </entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+        <p>Based on the above formula, these are the suggested sizing guidelines:</p>  
+        
+        
+        <table><title>Suggested Sizing Guideline</title>
+          <tgroup cols="2">
+            <colspec colname="col1" colwidth="1*"/>
+            <colspec colname="col2" colwidth="2*"/>
+            <thead>
+              <row>
+                <entry>Variable</entry>
+                <entry>Calculation</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry><varname>no_of_copies</varname></entry>
+                <entry>= 1 for original and 1 for replica</entry>
+              </row>
+              <row>
+                <entry><varname>total_metadata</varname></entry>
+                <entry>= 1,000,000 * (100 + 56) * (2) = 312,000,000</entry>
+              </row>
+              <row>
+                <entry><varname>total_dataset</varname></entry>
+                <entry>= 1,000,000 * (10,000) * (2) = 20,000,000,000</entry>
+              </row>
+              <row>
+                <entry><varname>working_set</varname></entry>
+                <entry>= 20,000,000,000 * (0.2) = 4,000,000,000</entry>
+              </row>
+              <row>
+                <entry>Cluster RAM quota required</entry>
+                <entry>= (312,000,000 + 4,000,000,000) * (1+0.25)/(0.85) = 6,341,176,470</entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+        
+        <p>This tells you that the RAM requirement for whole cluster is <codeph>7GB</codeph>. 
+          Note that this amount is in addition to the RAM requirements for the operating system and any 
+          other software that runs on the cluster nodes.</p> 
+     
+     
+   </section> 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    <section>
+      <title>Index Service Nodes </title> 
+ <p>A node running the Index Service must be sized properly to create and maintain
+   secondary indexes and to perform index scan for N1QL queries.</p>
+
+        <p> Similarly to the nodes running the data service, there is a set of questions you need to
+          answer to take care of your application needs: </p>
+        <ol>
+          <li>What is the length of the document key?</li>
+          <li>Which fields need to be indexed? </li>
+          <li>Will you be using simple or compound indexes?</li>
+          <li>What is the minimum, maximum, or average value size of the index field?</li>
+          
+          <li>How many indexes do you need? </li>
+          <li>How many documents need to be indexed? </li>
+          <li>How often do you want compaction to run? </li>
+        </ol>
+        <p>Answers to the above questions can help you better understand the capacity requirement of
+          your cluster and provide a better estimation for sizing. At Couchbase, we looked at
+          performance data and customer use cases to provide sizing calculations for each of the areas:
+          CPU, Memory, Disk and Disk I/O.</p>
+        <p>Here is a disk size example:</p>
+        
+        <table frame="all" rowsep="1" colsep="1" id="table_pwg_l2c_3t">
+          <title>Disk Sizes</title>
+          <tgroup cols="2">
+            <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+            <colspec colname="c2" colnum="2" colwidth="1.0*"/>
+            <thead>
+              <row>
+                <entry>Input variable</entry>
+                <entry>Value</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry>docID</entry>
+                <entry>20 bytes</entry>
+              </row>
+              <row>
+                <entry>Number of index fields</entry>
+                <entry>1</entry>
+              </row>
+              <row>
+                <entry>Secondary index</entry>
+                <entry>24 bytes</entry>
+              </row>
+              <row>
+                <entry>Number of documents to be indexed</entry>
+                <entry>20M</entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+        <p>When we calculate disk usage for the above test cases, there are a few factors we need to keep in mind: </p>
+        <ol>
+          <li>Compaction is disabled. This case illustrates the worst-case scenario for disk usage.</li>
+          <li>Couchbase Server uses an append-only storage format. Therefore, actual disk usage will be
+            larger than data size.</li>
+          <li>Fragmentation will affect the disk usage. The larger the fragmentation, the more disk you will need. </li>
+        </ol>
+        <p>Based on our experiment, we noticed that the above index consumes 6GB of disk space. </p>    
+      
+      
+    </section> 
+    <section>
+      <title>Query Service Nodes</title> 
+      <p>A node running the Query Service executes queries for your application
+        needs</p>.
+    
+        <p>Since the Query Service doesn’t need to persist data to disk, there are very minimal resource
+          requirements for disk space and disk I/O. You only need to consider CPU and memory.</p>
+        <p>There are a few questions that will help size the cluster: </p>
+        <ol>
+          <li>What types of queries you need to run? </li>
+          <li>Do you need to run <codeph>stale=ok</codeph> or <codeph>stale=false</codeph> queries?</li>
+          <li>Are the queries simple or complex (requiring JOINs, for example)?</li>
+          <li>What are the throughput and latency requirements for your queries? </li>
+        </ol>
+        <p>Different queries have different resource requirements. A simple query might return results
+          within milliseconds while a complex query may require several seconds.</p>
+        <p>At Couchbase, we looked at performance data and customer use cases to provide sizing
+          calculations. </p>
+        <p>Let’s use CPU/Memory utilization for an example for a Query Service. Assume that you have a
+          user profile store, which stores user’s name, email and address. You would like to query based
+          on user’s email address, and you create a secondary index on email. Now you would like to run
+          a query that looks like this: </p>
+        <codeblock>Select * from bucket where email = “foo@gmail.com” </codeblock>
+        <p>By default, N1QL uses <codeph>stale=ok</codeph> for a consistency model. </p>
+        <p>To achieve max throughput of this query, we noticed that it utilized 24 cores completely to
+          achieve an 80% latency of 5ms against a bucket of 20M documents.</p>  
+      
+      
+    </section> 
+    
+    
+    
   </body>
 </topic>
