@@ -165,9 +165,15 @@ CREATE INDEX productName_index2 ON bucket_name(productName, ProductID)
   <section id="memopt-gsi"><title>Memory-Optimized Global Indexes</title>
    <p>Memory optimized global secondary indexes is an additional storage setting for Couchbase Server clusters. Memory optimized global secondary indexes (also called memory optimized indexes or MOI) can perform index maintenance and index scan faster at in-memory speeds.</p>
    <p><b>Enabling Memory-Optimized Global Indexes</b></p>
-   <p>By default, Couchbase Server uses standard global secondary indexes storage setting with the circular write mode for all indexes. In this release, standard vs memory optimized storage settings apply to all indexes in the cluster and cannot be mixed within a single cluster. At the time of the cluster’s initial setup, storage setting can be switched to memory optimized GSI setting. 
-    <note>Changing the storage setting from standard GSI to memory optimized GSI or visa versa cannot be done online in a single cluster. Changing the storage setting for GSI requires removing all index service nodes in the cluster.</note>
-    <note>Regardless of the GSI storage setting, standard GSI ve memory optimize GSI, it is still possible to create indexes using GSI or view during CREATE INDEX statement with the USING clause.</note>
+   <p>By default, Couchbase Server uses standard global secondary indexes storage setting with the
+    circular write mode for all indexes. In this release, standard vs memory optimized storage
+    settings apply to all indexes in the cluster and cannot be mixed within a single cluster. At the
+    time of the cluster’s initial setup, storage setting can be switched to memory optimized GSI
+    setting. <note>Changing the storage setting from standard GSI to memory optimized GSI or visa
+     versa cannot be done online in a single cluster. Changing the storage setting for GSI requires
+     removing all index service nodes in the cluster.</note><note>Regardless of the GSI storage
+     setting, standard GSI vs memory optimized GSI, it is still possible to create indexes using GSI
+     or view during CREATE INDEX statement with the USING clause.</note>
    </p>
    <p><b>Memory Optimized Global Secondary Index Performance</b></p>
    <p>There are several performance advantages to using memory optimized global secondary indexes: MOIs use skiplist, a memory efficient index structure for a lock-free index maintenance and index scan. Lock-free architecture increase concurrency of index maintenance and index scans. This enhances the index maintenance rate by more than an order of magnitude under high mutation rates. Skiplist based indexes take up less space in memory. Memory optimized indexes can also provide a much more predictable latency with queries as they never reach into disk for index scans. </p>
@@ -194,6 +200,66 @@ CREATE INDEX productName_index2 ON bucket_name(productName, ProductID)
       id="image_yzy_wz1_vv"/>
     </fig></p>
    <p>Aside from the performance characteristics, the mechanics of creating, placing, load balancing, partitioning and HA behavior is identical in both standard and memory optimized global secondary indexes. </p>
+  </section>
+  <section>
+   <title>Handling Out-of-Memory Conditions</title>
+   <p>Memory-optimized global indexes reside in memory. When a node running the index service runs
+    out of configured Index RAM Quota on the node, indexes on the node can no longer process
+    additional changes to the indexes on the node that has run out of memory. The index service logs
+    an error in the Couchbase Server log indicating the condition. You can also observe how much
+    memory is available on each node running the index service using the index statistic Max Index
+    RAM Used % under "Server Resources" stat section of bucket statistics.</p>
+   <p>Memory-optimized indexes on a node that has run out of memory continue to stay in the ONLINE
+    state. However, the round-robin logic routes traffic away from this index node. If an index is
+    in OFFLINE, DEFERRED, or BUILDING state, the index is not transitioned to the ONLINE state. </p>
+   <p>When the node is restarted, the indexes stay in the BUILDING state until the last persisted
+    snapshot is read from disk into memory. The additional catchup is done in ONLINE state. Queries
+    with <codeph>stale=false</codeph> or RYOW semantics fail if the timestamp specified exceeds the
+    last timestamp processed by the specific index on the node. However, queries with
+     <codeph>stale=ok</codeph> continue to execute normally.</p>
+   <p>To recover from an out-of-memory situation, use one or more of the following fixes: <ul
+     id="ul_aps_f5g_sw">
+     <li>Increase the Index RAM Quota sufficiently enough to give indexes the additional memory to
+      process requests.</li>
+     <li>Drop other indexes on the node to free up memory. On nodes with multiple indexes, drop the
+      unimportant indexes to free memory. </li>
+     <li>Drop buckets with indexes. Dropping a bucket automatically drops all the dependent indexes
+      and has the same effect as dropping all indexes on a bucket.</li>
+     <li>Flush buckets with indexes. Flushing a bucket deletes all data in a bucket. Even if there
+      are pending updates that are not processed, flushing a bucket causes all indexes to drop their
+      data. <note type="important">Deleting data selectively from buckets does not help, as
+       mutations are processed in sequence and indexes can not process mutations in an out-of-memory
+       condition.</note></li>
+    </ul></p>
+  </section>
+  <section><title>Changing the Global Secondary Index Storage Mode (Standard vs Memory Optimized)</title>
+   <p>Storage mode for GSI is a cluster level setting. Currently, the storage mode option sets the
+    storage mode for all indexes on the cluster across all buckets. The storage mode option cannot
+    be changed dynamically either. To change from standard GSI to memory optimized GSI or vice
+    versa, you need to remove all the index service nodes in the cluster. Here is a step by step
+    guide to change the storage mode option: <ol>
+     <li>Identify the nodes that are running the index service. You can do this by simply looking at
+      the "Server Nodes" page on the Web Console. The Services column displays the nodes that have
+      the index service enabled.</li>
+     <li>Click <uicontrol>Remove</uicontrol> on each of the nodes that has the index service enabled
+      and push rebalance to remove the nodes from the cluster. <note>If you are running a single
+       node, the only way to change GSI storage mode setting is to uninstall and install the server
+       again. </note> As you remove all the index service nodes, all the indexes in the system are
+      dropped and the N1QL queries will fail. To maintain availability, you can set up a new cluster
+      with the desired storage mode option for GSI and use cross datacenter replication to replicate
+      the data to the new cluster. If you don't have a space cluster, you can also create all the
+      indexes using the View indexer. See the <xref
+       href="../n1ql/n1ql-language-reference/createindex.dita">CREATE INDEX</xref> statement and the
+      USING VIEW clause for details). However, the View indexer for N1QL provides different
+      performance characteristics as it is a local index and not a global index like GSI. For better
+      availability when changing the storage mode from MOI to GSI, we recommended that you use the
+      XDCR approach as opposed to views in production systems.</li>
+     <li>Once all the index service nodes are removed, visit the Settings tab and Cluster settings
+      page and change the Index Storage Mode to the desired new mode. You can also set this option
+      during the addition of the first node that has the index service enabled.</li>
+     <li>Add new nodes and confirm the new global secondary index storage mode. At this point, all
+      new GSIs will use the new storage mode setting from the cluster.</li>
+    </ol></p>
   </section>
  </conbody>
 </concept>
