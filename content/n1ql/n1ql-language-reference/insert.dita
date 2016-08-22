@@ -1,68 +1,1203 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE concept
-  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
-<concept id="topic_11_5" xml:lang="en-US">
-  <title id="title__Toc272567426">INSERT</title>
-  <conbody>
-    <p>Inserts new records into a keyspace. </p>
-    <p>You can create a document by using the INSERT INTO. Performing an insert succeeds only if no
-      document with that name exists. If the document exists, the INSERT fails.</p>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_dqm_qvm_zw">
+  <title>INSERT</title>
+  <shortdesc>Use the INSERT statement to insert one or more new documents into an existing keyspace.
+    Each INSERT statement requires a unique document key and a well formed JSON document as value.
+    In Couchbase, documents in a single bucket must have a unique key.</shortdesc>
+  <body>
+    <p>The INSERT statement can compute and return any expression based on the actual inserted
+      documents. <note type="tip">Use the <xref href="upsert.dita#topic_11_9">UPSERT</xref>
+        statement if you want to overwrite a document with the same key in case it already exists.
+      </note></p>
+    <p>The following statement inserts a single JSON document into the travel-sample bucket with key
+      "k001". The returning clause specifies the function META().id to return the key of the
+      inserted document (metadata), and the wildcard (*) to return the inserted document. <codeblock spectitle="Query">
+INSERT INTO `travel-sample` ( KEY, VALUE ) 
+  VALUES 
+  ( 
+    "k001", 
+    { "id": "01", "type": "airline"} 
+  ) 
+RETURNING META().id as docid, *;
+      </codeblock>
+      <codeblock spectitle="Results">{
+  "requestID": "06c5acc1-69d3-4aad-9c11-b90a9bc895d8",
+  "signature": {
+    "*": "*",
+    "id": "json"
+  },
+  "results": [
+    {
+      "docid": "k001",
+      "travel-sample": {
+        "id": "01",
+        "type": "airline"
+      }
+    }
+  ],
+  "status": "success",
+  "metrics": {
+    "elapsedTime": "5.033416ms",
+    "executionTime": "5.011203ms",
+    "resultCount": 1,
+    "resultSize": 151,
+    "mutationCount": 1
+  }
+}       </codeblock></p>
+    <p>See also: <ul>
+      <li><xref href="#topic_dqm_qvm_zw/insert-examples" format="dita">Examples</xref> for more
+        examples.</li>
+      <li><xref href="#topic_dqm_qvm_zw/insert-syntax" format="dita"/> for the complete syntax along
+          with railroad diagrams.</li>
+      <li><xref href="#topic_dqm_qvm_zw/insert-semantics" format="dita"/> for more information about
+          the parameters of the INSERT statement, and any restrictions or limitations. </li>
+      <li><xref href="#topic_dqm_qvm_zw/insert-explain-plan" format="dita"/> to understand how N1QL
+          executes the INSERT statement.</li>
+    </ul></p>
+<section id="insert-prerequisites"><title>Prerequisites</title>
+  <p>The INSERT statement must include the following: <ul>
+          <li>Name of the keyspace to insert the document.</li>
+          <li>Unique document key.</li>
+          <li>A well-formed JSON document specified as key-value pairs, or the projection of a
+            SELECT statement which generates a well-formed single JSON to insert. See and for
+            details. </li>
+          <li>Optionally, you can specify the values or an expression to be returned after the
+            INSERT statement completes successfully.</li>
+        </ul></p>
+      <p><b>Install the travel-sample Bucket</b></p>
+      <p>Install the sample bucket <codeph>travel-sample</codeph> before proceeding to run the
+        examples in this topic. See <xref
+          href="../../settings/install-sample-buckets.dita#topic_jqr_1rn_vs"/> for information on
+        how to install the sample buckets and <xref
+          href="../../travel-app/travel-app-data-model.dita#concept_hyy_k1z_pr"/> for details about
+        the travel-sample data model.</p>
+      <p><b>Security Requirements</b></p>
+      <p>You should have read-write permission to the bucket, to be able to insert documents into a
+        bucket. Any user who has the bucket credentials or any Couchbase administrator should be
+        able to insert documents into a bucket. This includes the bucket administrator for the
+        specified bucket, the cluster administrator, and the full administrator roles. See <xref
+          href="../../security/concepts-rba.dita#concept_ntl_jph_hr"></xref> for details about
+        access privileges for various administrators.</p>
+      <p>
+        <note type="warning"> You cannot insert documents into a SASL bucket if you have a read-only
+          role for the SASL bucket.</note>
+      </p> 
+</section>  
     
-    <p ><i>insert:</i></p>
-    <codeblock>INSERT INTO keyspace-ref [insert-values | insert-select] [returning-clause] </codeblock>
+    <section id="insert-syntax"><title>Syntax</title>
+      <p><codeph id="insert">insert::= INSERT INTO <xref href="#topic_dqm_qvm_zw/keyspace-ref"
+            format="dita">keyspace-ref</xref> ( <xref href="#topic_dqm_qvm_zw/insert-insert-values"
+            format="dita">insert-values</xref> | <xref href="#topic_dqm_qvm_zw/insert-insert-select"
+            format="dita">insert-select</xref> ) [ <xref
+            href="#topic_dqm_qvm_zw/insert-returning-clause" format="dita">returning-clause</xref>
+          ]</codeph></p><fig id="fig_tdq_p3n_zw">
+        <title>Railroad Diagram: insert</title>
+            <image placement="break" href="images/insert.png"
+          id="image_udq_p3n_zw"/>
+      </fig>
+      
+      <p><codeph id="keyspace-ref">keyspace-ref::= [ <xref href="#topic_dqm_qvm_zw/namespace"
+            format="dita">namespace</xref> : ] <xref href="#topic_dqm_qvm_zw/keyspace" format="dita"
+            >keyspace</xref> [ [ AS ] <xref href="#topic_dqm_qvm_zw/alias" format="dita"
+            >alias</xref> ]</codeph><fig id="fig_vng_ckn_zw">
+          <title>Railroad Diagram: keyspace-ref</title>
+              <image placement="break" href="images/keyspace-ref.png"
+            id="image_wng_ckn_zw"/>
+        </fig></p>
+      
+      <p><codeph id="namespace">namespace::= <xref href="#topic_dqm_qvm_zw/identifier" format="dita"
+            >identifier</xref></codeph><fig id="fig_w21_fkn_zw">
+          <title>Railroad Diagram: namespace</title>
+              <image placement="break" href="images/namespace.png"
+            id="image_x21_fkn_zw"/>
+        </fig></p>
+      
+      <p><codeph id="keyspace">keyspace::= <xref href="#topic_dqm_qvm_zw/identifier" format="dita"
+            >identifier</xref></codeph><fig id="fig_jl2_hkn_zw">
+          <title>Railroad Diagram: keyspace</title>
+              <image placement="break" href="images/keyspace.png"
+            id="image_kl2_hkn_zw"/>
+        </fig></p>
+      
+      <p><codeph id="insert-insert-values">insert-values::= [ "(" [ PRIMARY ] KEY , VALUE ")" ]
+            <xref href="#topic_dqm_qvm_zw/insert-values-clause" format="dita"
+          >values-clause</xref></codeph><fig id="fig_vkv_3kn_zw">
+          <title>Railroad Diagram: insert-values</title>
+          <image placement="break" href="images/insert-values.png" id="image_wkv_3kn_zw"/>
+        </fig></p>
+      
+      <p><codeph id="insert-values-clause">values-clause::= VALUES "(" <xref
+            href="#topic_dqm_qvm_zw/expr" format="dita">expr</xref> , <xref
+            href="#topic_dqm_qvm_zw/expr" format="dita">expr</xref> ")" [, [VALUES] "(" <xref
+            href="#topic_dqm_qvm_zw/expr" format="dita">expr</xref> , <xref
+            href="#topic_dqm_qvm_zw/expr" format="dita">expr</xref> ")" ]* </codeph><fig
+          id="fig_ild_kkn_zw">
+          <title>Railroad Diagram: values-clause</title>
+          <image placement="break" href="images/values-clause.png" id="image_jld_kkn_zw"/>
+        </fig></p>
+      
+      <p><codeph id="insert-insert-select">insert-select::= "(" [ PRIMARY ] KEY <xref
+            href="#topic_dqm_qvm_zw/expr" format="dita">expr</xref> [ , VALUE <xref
+            href="#topic_dqm_qvm_zw/expr" format="dita">expr</xref> ] ")" select</codeph><fig
+          id="fig_gx4_mkn_zw">
+          <title>Railroad Diagram: insert-select</title>
+          <image placement="break" href="images/insert-select.png" id="image_hx4_mkn_zw"/>
+        </fig></p>
+      
+      <p><codeph id="insert-returning-clause">returning-clause::= RETURNING <xref
+            href="#topic_dqm_qvm_zw/insert-result-expr" format="dita">result-expr</xref> [ , <xref
+            href="#topic_dqm_qvm_zw/insert-result-expr" format="dita">result-expr</xref> ]* ] | (
+          RAW | ELEMENT | VALUE ) <xref href="#topic_dqm_qvm_zw/expr" format="dita"
+          >expr</xref></codeph><fig id="fig_dqz_nkn_zw">
+          <title>Railroad Diagram: returning-clause</title>
+            <image placement="break" href="images/returning-clause.png"
+            id="image_eqz_nkn_zw"/>
+        </fig></p>
+      
+      <p><codeph id="insert-result-expr">result-expr::= ( [ <xref href="#topic_dqm_qvm_zw/path"
+            format="dita">path</xref>.]"*" | <xref href="#topic_dqm_qvm_zw/expr" format="dita"
+            >expr</xref> [ [ AS ] <xref href="#topic_dqm_qvm_zw/alias" format="dita">alias</xref> ]
+          )</codeph><fig id="fig_zz4_pkn_zw">
+          <title>Railroad Diagram: result-expr</title>
+          <image placement="break" href="images/result-expr.png" id="image_a1p_pkn_zw"/>
+        </fig></p>
+      
+      <p><codeph id="path">path::= <xref href="#topic_dqm_qvm_zw/identifier" format="dita"
+            >identifier</xref> ( ("[" <xref href="#topic_dqm_qvm_zw/expr" format="dita">expr</xref>
+          "]" )*[.<xref href="#topic_dqm_qvm_zw/path" format="dita">path</xref>] ) | ( [ ("[" <xref
+            href="#topic_dqm_qvm_zw/expr" format="dita">expr</xref> "]" )*].<xref
+            href="#topic_dqm_qvm_zw/path" format="dita">path</xref> )</codeph>
+        <fig id="fig_qzy_qkn_zw">
+          <title>Railroad Diagram: path</title>
+          <image placement="break" href="images/path.png" id="image_rzy_qkn_zw"/>
+        </fig></p>
+      
+      <p><codeph id="alias">alias::= <xref href="#topic_dqm_qvm_zw/identifier" format="dita"
+            >identifier</xref></codeph><fig id="fig_gbd_skn_zw">
+          <title>Railroad Diagram: alias</title>
+              <image placement="break" href="images/alias.png"
+            id="image_hbd_skn_zw"/>
+        </fig></p>
+      
+      <p><codeph id="expr">expr:= ( literal | <xref href="#topic_dqm_qvm_zw/identifier"
+            format="dita">identifier</xref> | nested-expr | case-expr | logical-term |
+          comparison-term | arithmetic-term | concatenation-term | function-call | subquery-expr |
+          collection-expr | construction-expr | "(" <xref href="#topic_dqm_qvm_zw/expr"
+            format="dita">expr</xref>")" )</codeph><fig id="fig_fpq_tkn_zw">
+          <title>Railroad Diagram: expr</title>
+          <image placement="break" href="images/expr.png" id="image_gpq_tkn_zw"/>
+        </fig></p>
+      
+      <p><codeph id="identifier">identifier::= <xref href="#topic_dqm_qvm_zw/unesc-identifier"
+            format="dita">unescaped-identifier</xref> | <xref
+            href="#topic_dqm_qvm_zw/esc-identifier" format="dita"
+          >escaped-identifier</xref></codeph><fig id="fig_ck2_dln_zw">
+          <title>Railroad Diagram: identifier</title>
+            <image placement="break" href="images/identifier.png"
+            id="image_dk2_dln_zw"/>
+        </fig></p>
+      
+      <p><codeph id="unesc-identifier">unescaped-identifier::= [a-zA-Z_] ( [0-9a-zA-Z_$]
+          )*</codeph><fig id="fig_tsr_2ln_zw">
+          <title>Railroad Diagram: unescaped-identifier</title>
+          <image placement="break"
+            href="images/unescaped-identifier.png"
+            id="image_usr_2ln_zw"/>
+        </fig></p>
+      
+      <p><codeph id="esc-identifier">escaped-identifier::= `JSON-string`</codeph><fig
+          id="fig_nld_3ln_zw">
+          <title>Railroad Diagram: escaped-identifier</title>
+          <image placement="break"
+            href="images/escaped-identifier.png"
+            id="image_old_3ln_zw"/>
+        </fig></p>
+      
+    </section> 
     
-    <p><i>keyspace-ref:</i></p>
-<codeblock>[(namespace-name :)]  keyspace [ [AS] alias]</codeblock>
-
-    <p><i>keyspace:</i></p>
-<codeblock>identifier</codeblock>
-
-    <p><i>insert-values:</i></p>
-<codeblock> [ <b>(</b>  [ PRIMARY ] KEY , VALUE <b>)</b> ]  values-clause [, values-clause]* </codeblock>
-
-<p><i>values-clause:</i></p>
-<codeblock>VALUES <b>(</b> expression , expression <b>)</b> </codeblock>
-
-    <p><i>insert-select</i></p>
-    <codeblock><b>(</b> [PRIMARY] KEY expression [ , VALUE expression ] <b>)</b> select </codeblock>
-    
-
-    <p ><i>returning-clause:</i></p>
-
-<codeblock>RETURNING (result-expression [, result-expression]* | [RAW | ELEMENT ] expression)</codeblock>
-    
-    <p><i>result-expression:</i></p>
-    
-   <codeblock>[path . ]  * | expression [ [ AS ] alias ]  </codeblock> 
-    
-    <p><i>path:</i> </p>
-    <codeblock>identifier [ <b>[</b> expression <b>]</b> ] [ . path ]</codeblock>
-    <p><i>keyspace-ref:</i> Specifies the keyspace into which to insert the document. </p>
-    <p>You can add an optional namespace-name to the keyspace-name in this way: </p>
-    <p><ph xtrc="">namespace-name:keyspace-name</ph>. </p>
-    <p >For example, <codeph>main:customer </codeph>indicates the customer keyspace in the main namespace. 
-      If the namespace name is omitted, the default namespace in the current session is used.</p>
-    <p><i>insert-values: </i> Specifies the values to be inserted. </p>
-    <p><i>insert-select</i>Specifies the values to be inserted as a SELECT statement.</p>
-    <p ><i>returning-clause:</i>Returns the data you inserted as specified in the result_expression.  </p>
-   
-  
-    <p><b>Example</b>:</p>
-  
-  <p>This statement inserts the value Odwalla for the key ID into the products document.</p>
-    <codeblock>INSERT INTO product (KEY, VALUE) VALUES ("odwalla-juice1", 
-      { "productId": "odwalla-juice1", "unitPrice": 4.40, "type": "product", "color":"green"}) RETURNING * 
-
-"results": [
+    <section id="insert-semantics"><title>Semantics/Description</title>
+      <p>
+        <dl>
+          <dlentry>
+            <dt>keyspace-ref</dt>
+            <dd> Specifies the keyspace into which the documents are inserted. <dl>
+                <dlentry>
+                  <dt>namespace</dt>
+                  <dd>Namespace of the keyspace. Currently only default namespace is available.</dd>
+                </dlentry>
+                <dlentry>
+                  <dt>keyspace</dt>
+                  <dd>Specifies the keyspace name into which the document(s) are inserted. Ensure
+                    that the keyspace exists before trying to insert a document. For more
+                    information on keyspaces, see <xref href="../n1ql-intro/sysinfo.dita#topic_2_4"
+                    >Keyspaces</xref>.</dd>
+                </dlentry>
+                <dlentry>
+                  <dt>alias</dt>
+                  <dd>Specifies an alias name for the keyspace, which can be used in rest of the
+                    query for brevity, or to differentiate multiple references to the same keyspace.
+                    For more information on aliases, see <xref
+                      href="identifiers.dita#topic_6/identifier-alias"/>.</dd>
+                </dlentry>
+              </dl><p>Here are some examples of keyspace, namespace, and an alias: <ul>
+                  <li>Keyspace - <codeph>`travel-sample`</codeph></li>
+                  <li>Namespace and keyspace - <codeph>default:`travel-sample`</codeph>
+                  </li>
+                  <li>Keyspace with alias - <codeph>default:`travel-sample` AS
+                    <b>t</b></codeph></li>
+                </ul></p></dd>
+          </dlentry>
+          <dlentry>
+            <dt>insert-values</dt>
+            <dd>Specifies one or more documents to be inserted using the keyspace (PRIMARY KEY,
+              VALUE) clause. Each document requires a unique key and the values must be specified as
+              a well-formed JSON document. <p>The document key should be unique within the Couchbase
+                bucket. It can be a string or an expression that produces a string. For example, you
+                can specify a key using the following expression: <codeph>"airline" ||
+                  TOSTRING(1234)</codeph> as shown in the following example:
+                <codeblock>INSERT INTO `travel-sample` ( KEY, VALUE ) 
+                    VALUES ( "airline" || TOSTRING(1234), 
+                    { "callsign": "" } ) 
+                    RETURNING META().id;</codeblock></p><note>The
+                keyword PRIMARY is optional. There is no syntactic difference between PRIMARY KEY
+                and KEY. </note>The KEY cannot be MISSING or NULL, or duplicate of an existing key.
+              If you don’t require the document key to be in a specific format, you can use the
+              function <xref href="metafun.dita#topic_8_8">UUID()</xref> to generate a unique key as
+              shown in the following example:
+                <codeblock>INSERT INTO `travel-sample` ( KEY, VALUE ) 
+            VALUES ( UUID(), 
+                    { "callsign": "" } ) 
+RETURNING META().id;</codeblock><note
+                type="tip">Since the document key is auto-generated, you can find the value of the
+                key by specifying META().id in the returning clause.</note><dl>
+                <dlentry>
+                  <dt>values-clause</dt>
+                  <dd>Specify the values as a well-formed JSON. (See <xref
+                      href="http://json.org/example.html" format="html" scope="external"/> for
+                    examples of a well-formed JSON. ) <p>You can insert NULL or empty or MISSING
+                      values. Take a look at some examples: <codeblock spectitle="Query">INSERT INTO `travel-sample` (KEY, VALUE) 
+    VALUES ( "airline::432", 
+              { "callsign": "", 
+                "country" : "USA", 
+                "type" : "airline"} ) 
+RETURNING META().id as docid;</codeblock><codeblock spectitle="Results">{
+    "requestID": "9100f45b-0489-4b91-8b8a-110d525683e0",
+    "signature": {
+        "id": "json"
+    },
+    "results": [
         {
-            "color": "green",
-            "productId": "odwalla-juice1",
-            "type": "product",
-            "unitPrice": 4.4
+            "docid": "airline::432"
         }
-    ]</codeblock>
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "1.384451ms",
+        "executionTime": "1.36097ms",
+        "resultCount": 1,
+        "resultSize": 44,
+        "mutationCount": 1
+    }
+    }</codeblock>
+                      <codeblock spectitle="Query">INSERT INTO `travel-sample` (KEY, VALUE) 
+    VALUES ( "airline::1432", 
+            { "callsign": NULL, 
+              "country" : "USA", 
+              "type" : "airline"} ) 
+RETURNING *;</codeblock><codeblock spectitle="Results">[
+  {
+    "travel-sample": {
+      "callsign": null,
+      "country": "USA",
+      "type": "airline"
+    }
+  }
+]</codeblock>
+                      <codeblock spectitle="Query">INSERT INTO `travel-sample` (KEY, VALUE) 
+    VALUES ( "airline::142", 
+            { "callsign": MISSING, 
+              "country" : "USA", 
+              "type" : "airline"} ) 
+RETURNING *;</codeblock><codeblock spectitle="Results">[
+  {
+    "travel-sample": {
+      "country": "USA",
+      "type": "airline"
+    }
+  }
+  ]</codeblock></p>
+                    <p>You can also insert a NULL JSON document, such as:
+                      <codeblock>INSERT INTO `travel-sample` (KEY, VALUE) 
+    VALUES ( "1021", 
+              { } ) 
+              RETURNING *;</codeblock></p><p>For
+                      more examples illustrating the variations of the values-clause, see <xref
+                        href="#topic_dqm_qvm_zw/insert-examples" format="dita"/>.</p></dd>
+                </dlentry>
+              </dl></dd>
+          </dlentry>
+          <dlentry>
+            <dt>insert-select</dt>
+            <dd>Use the projection of a SELECT statement which generates a well-formed JSON to
+              insert. <p>If the project of a SELECT statement generates multiple JSON documents,
+                then your INSERT statement must handle the generation of unique keys for each of the
+                documents. </p><p>The following example queries the travel-sample bucket for
+                documents of type "airport" and airportname "Heathrow", and then inserts the
+                projection (2 documents) into the travel-sample bucket using unique keys generated
+                using UUID():
+                <codeblock spectitle="Query">INSERT INTO `travel-sample` (KEY UUID(), VALUE _country) 
+    SELECT _country FROM `travel-sample` _country 
+      WHERE type = "airport" AND airportname = "Heathrow" 
+RETURNING *;</codeblock><codeblock spectitle="Results">{
+  "results": [],
+  "metrics": {
+    "elapsedTime": "24.777636ms",
+    "executionTime": "24.739281ms",
+    "resultCount": 0,
+    "resultSize": 0,
+    "mutationCount": 2
+  }
+}</codeblock>
+                See the example on how to use the INSERT statement to copy the bucket data to
+                another bucket. </p><dl>
+                <dlentry>
+                  <dt>select</dt>
+                  <dd>SELECT statements let you retrieve data from specified keyspaces. For complete
+                    information on SELECT statements, see <xref href="selectintro.dita#topic_11_7"
+                    />.</dd>
+                </dlentry>
+              </dl></dd>
+          </dlentry>
+          <dlentry>
+            <dt>returning-clause</dt>
+            <dd>Specifies the fields that must be returned as part of the results object. Use * to return all the fields in all the documents that were inserted.<dl>
+              <dlentry>
+                <dt>result-expr</dt>
+                <dd>Specifies an expression on the inserted documents, that will returned as output.
+                    Consider the following examples.
+                      <codeblock spectitle="Query">INSERT INTO `travel-sample` (KEY, VALUE) 
+    VALUES ( "airline_24444", 
+            { "callsign": "USA-AIR", 
+              "country" : "USA", 
+              "type" : "airline"}) 
+RETURNING META().id as docid, country;</codeblock><codeblock spectitle="Results">[
+  {
+    "country": "USA",
+    "docid": "airline_24444"
+  }
+]</codeblock><p>The
+                      following example uses the UUID() function to generate the key, and shows the
+                      usage of the RETURNING clause, to retrieve the generated document key and the
+                      last element of the callsign array with an expression.
+                      <codeblock spectitle="Query">INSERT INTO `travel-sample` (KEY, VALUE) 
+    VALUES ( UUID(), 
+            { "callsign": [ "USA-AIR", "America-AIR" ], 
+              "country" : "USA", 
+              "type" : "airline"} ) 
+RETURNING META().id as docid, callsign[ARRAY_LENGTH(callsign)-1];</codeblock><codeblock spectitle="Results">[
+  {
+    "$1": "America-AIR",
+    "docid": "2bdfd7d1-a5ca-475b-827c-3b18af8f4f62"
+  }
+]</codeblock>The
+                      INSERT statement returns the requestID, the signature, results including the
+                      keyspace and JSON document inserted, status of the query, and metrics. <ul
+                        id="ul_wvk_sq5_zw">
+                        <li><systemoutput>requestID</systemoutput>: Request ID of the statement
+                          generated by the server. </li>
+                        <li><systemoutput>signature</systemoutput>: Signature of the fields
+                          specified in the returning clause.</li>
+                        <li><systemoutput>results</systemoutput>: If the query specified the
+                          returning clause, then results contains one or more fields as specified in
+                          the returning clause. If not, returns an empty results array.</li>
+                        <li><systemoutput>errors</systemoutput>: Returns the error codes and
+                          messages if the statement fails with errors. Returned only when the
+                          statement fails with errors. Errors can also include timeouts.</li>
+                        <li><systemoutput>status</systemoutput>: Status of the statement -
+                            "<systemoutput>successful</systemoutput>" or
+                            "<systemoutput>errors</systemoutput>".</li>
+                        <li><systemoutput>metrics</systemoutput>: Provides metrics for the statement
+                          such as <systemoutput>elapsedTime</systemoutput>,
+                            <systemoutput>executionTime</systemoutput>,
+                            <systemoutput>resultCount</systemoutput>,
+                            <systemoutput>resultSize</systemoutput>, and
+                            <systemoutput>mutationCount</systemoutput>. For more information, see
+                            <xref href="#topic_dqm_qvm_zw/insert-metrics" format="dita"/>.</li>
+                      </ul></p></dd>
+              </dlentry>
+              <dlentry>
+                <dt>path</dt>
+                <dd>Paths support nested data. They use the dot notation syntax to identify the
+                    logical location of an attribute within a document. Paths provide a method to
+                    find data in document structures without having to retrieve the entire document
+                    or handle it within an application.  For more information, see <xref
+                      href="../n1ql-intro/queriesandresults.dita#topic_1_2/paths"/>.</dd>
+              </dlentry>
+              <dlentry>
+                <dt>expr</dt>
+                <dd>N1QL expressions can be an identifier, a literal value, operators, function
+                    calls,  or queries. </dd>
+              </dlentry>
+            </dl></dd>
+          </dlentry>
+          <dlentry>
+            <dt>identifier</dt>
+            <dd>An identifier uniquely identifies an object in a query and can be used to refer to a
+              value in the current context of a query. Identifiers are case sensitive and can be
+              used for bucket names, field names within documents, and array indexes. For more
+              information, see <xref href="identifiers.dita#topic_6"/>.</dd>
+          </dlentry>
+        </dl>
+      </p>
+    </section> 
+    <section id="insert-examples"><title>Examples</title>
+      <dl>
+        <dlentry>
+          <dt>Inserting a Single Document</dt>
+            <dd>The simplest use case of an INSERT statement is to insert a single document into the
+            keyspace. The following example inserts a new document with key"1025" and type "airline"
+            into the `travel-sample` bucket.
+            <codeblock spectitle="Query">INSERT INTO `travel-sample` (KEY,VALUE) 
+  VALUES ( "1025", 
+            {     "callsign": "MY-AIR",
+                  "country": "United States",
+                  "iata": "Z1",
+                  "icao": "AQZ",
+                  "id": "1011",
+                  "name": "80-My Air",
+                  "type": "airline" 
+            } ) 
+RETURNING *;</codeblock><codeblock spectitle="Results">{
+    "requestID": "d735943c-4031-49a6-9320-c1c3daeb09a1",
+    "signature": {
+        "*": "*"
+    },
+    "results": [
+        {
+            "travel-sample": {
+                "callsign": "MY-AIR",
+                "country": "United States",
+                "iata": "Z1",
+                "icao": "AQZ",
+                "id": "1011",
+                "name": "80-My Air",
+                "type": "airline"
+            }
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "3.473989ms",
+        "executionTime": "3.194353ms",
+        "resultCount": 1,
+        "resultSize": 300,
+        "mutationCount": 1
+    }
+}</codeblock></dd>
+          </dlentry>
+        <dlentry>
+          <dt>Performing Bulk Inserts</dt>
+          <dd>Use the INSERT statement to batch insert multiple documents using the following
+            syntax:
+              <codeblock>INSERT INTO keyspace (KEY, VALUE) 
+  VALUES ( "1", { "value": "one" } ), 
+  VALUES ( "2", { "value": "two" } ), 
+  …, 
+  VALUES ( "n", { "value": "n" } );</codeblock><p>The
+              following example inserts two documents with keys "airline_4444" and "airline_4445" of
+              type "airline" into the `travel-sample` bucket:
+              <codeblock spectitle="Query">INSERT INTO `travel-sample` (KEY,VALUE) 
+VALUES ( "airline_4444", 
+    { "callsign": "MY-AIR",
+      "country": "United States",
+      "iata": "Z1",
+      "icao": "AQZ",
+      "name": "80-My Air",
+      "id": "4444",
+      "type": "airline"} ),
+VALUES ( "4445", { "callsign": "AIR-X",
+      "country": "United States",
+      "iata": "X1",
+      "icao": "ARX",
+      "name": "10-AirX",
+      "id": "4445",
+      "type": "airline"} ) 
+RETURNING *;</codeblock><codeblock spectitle="Results">{
+    "requestID": "1068fcc9-f133-475c-90e9-6b32eb5b5f10",
+    "signature": {
+        "*": "*"
+    },
+    "results": [
+        {
+            "travel-sample": {
+                "callsign": "MY-AIR",
+                "country": "United States",
+                "iata": "Z1",
+                "icao": "AQZ",
+                "id": "4444",
+                "name": "80-My Air",
+                "type": "airline"
+            }
+        },
+        {
+            "travel-sample": {
+                "callsign": "MY-AIR",
+                "country": "United States",
+                "iata": "Z1",
+                "icao": "AQZ",
+                "id": "4445",
+                "name": "80-My Air",
+                "type": "airline"
+            }
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "3.125132ms",
+        "executionTime": "3.086968ms",
+        "resultCount": 2,
+        "resultSize": 600,
+        "mutationCount": 2
+    }
+}</codeblock></p></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Inserting Values using SELECT</dt>
+          <dd>Instead of providing actual values, you can specify the data to be inserted using the
+            SELECT statement which selects the data from an existing bucket. <p>The following
+              example queries the `travel-sample` bucket for the field "_country" where the
+              airportname is "Heathrow" and type is "airport". It then inserts the result of the
+              select statement (a well-formed JSON document) into the `travel-sample` bucket with a
+              key generated using the UUID()
+            function.</p><codeblock spectitle="Query">INSERT INTO `travel-sample` (key UUID(), value _country) 
+    SELECT _country FROM `travel-sample` _country 
+      WHERE type = "airport" AND airportname = "Heathrow"; </codeblock><codeblock spectitle="Results">{
+  "results": [],
+  "metrics": {
+    "elapsedTime": "10.616228ms",
+    "executionTime": "10.576012ms",
+    "resultCount": 0,
+    "resultSize": 0,
+    "mutationCount": 1
+  }
+}</codeblock></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Inserting Values Using a Combination Key, Generated Using the Project and Functions/Operators</dt>
+          <dd>The following example shows how you can generate a document key as a combination of
+            the projection and some functions like &lt;countryname>::&lt;system-clock>. The SELECT
+            statement retrieves the country name "k1" and concatenates it with a delimiter "::" and
+            the system clock function using the string concat operator "||". <p>The result shows the
+              META().id generated as a result of this concatenation (highlighted below).
+              <codeblock spectitle="Query">INSERT INTO `travel-sample` (KEY k1||"::"||clock_str(), value t) 
+    SELECT DISTINCT t.country AS k1,t 
+      FROM `travel-sample` t 
+      WHERE type = "airport" LIMIT 5 
+RETURNING META().id as docid, *;</codeblock><codeblock spectitle="Results">[
+  {
+    <b>"docid": "United States::2016-08-17T13:43:59.888-07:00"</b>,
+    "travel-sample": {
+      "airportname": "Bend Municipal Airport",
+      "city": "Bend",
+      "country": "United States",
+      "faa": null,
+      "geo": {
+        "alt": 3460,
+        "lat": 44.0945556,
+        "lon": -121.2002222
+      },
+      "icao": "KBDN",
+      "id": 8133,
+      "type": "airport",
+      "tz": "America/Los_Angeles"
+    }
+  },
+  {
+    <b>"docid": "France::2016-08-17T13:43:59.888-07:00"</b>,
+    "travel-sample": {
+      "airportname": "Poulmic",
+      "city": "Lanvedoc",
+      "country": "France",
+      "faa": null,
+      "geo": {
+        "alt": 287,
+        "lat": 48.281703,
+        "lon": -4.445017
+      },
+      "icao": "LFRL",
+      "id": 1413,
+      "type": "airport",
+      "tz": "Europe/Paris"
+    }
+  }
+]</codeblock></p></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Using Insert to Copy Bucket Data to Another Bucket</dt>
+          <dd>Use the INSERT statement to create a copy of bucket_1 under a new name bucket_2 using:
+            <codeblock>INSERT INTO bucket_2(key _k, value _v) 
+    SELECT META().id _k, _v 
+      FROM bucket_1 _v;</codeblock></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Inserting Values Using Subqueries</dt>
+          <dd>Sub-queries can be used with INSERT in the insert-select form of the statement. The
+            ‘select’ part can be any sophisticated query in itself. The following example inserts
+            new type of documents from all hotels in the cities that have landmarks. <ol
+              id="ol_bcb_hd5_zw">
+              <li>The inner most SELECT finds all cities that have landmarks.</li>
+              <li>The outer SELECT finds the hotels that are in the cities selected by the inner
+                query in step (1). It also adds new ‘type’ attribute with value "landmark_hotels" to
+                the projected result. For brevity, we SELECT only 4 documents.</li>
+              <li>Finally, the INSERT statement inserts the result of (2) with UUID() generated
+                keys.</li>
+            </ol><codeblock spectitle="Query">INSERT INTO `travel-sample` (KEY UUID()) 
+    SELECT x.name, x.city, "landmark_hotels" AS type 
+      FROM `travel-sample` x 
+      WHERE x.type = "hotel" and x.city WITHIN 
+        ( SELECT DISTINCT t.city 
+            FROM `travel-sample` t 
+            WHERE t.type = "landmark" ) 
+      LIMIT 4 
+RETURNING *;</codeblock><codeblock spectitle="Results">[
+  {
+    "travel-sample": {
+      "city": "Aberdeenshire",
+      "name": "Castle Hotel",
+      "type": "landmark_hotels"
+    }
+  },
+  {
+    "travel-sample": {
+      "city": "Argyll and Bute",
+      "name": "Loch Fyne Hotel",
+      "type": "landmark_hotels"
+    }
+  },
+  {
+    "travel-sample": {
+      "city": "Argyll and Bute",
+      "name": "Inveraray Youth Hostel",
+      "type": "landmark_hotels"
+    }
+  },
+  {
+    "travel-sample": {
+      "city": "Argyll and Bute",
+      "name": "Argyll Hotel",
+      "type": "landmark_hotels"
+    }
+  }
+]</codeblock></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Inserting Values Using Functions</dt>
+          <dd>The following example uses multiple functions during the INSERT: <ul
+              id="ul_qrt_k25_zw">
+              <li>UUID() function to generate unique key for the document being inserted.</li>
+              <li>The string concatenation operator || to join "airport_" and the UUID.</li>
+              <li>UPPER string function to insert only upper case values of the FAA code.</li>
+            </ul><codeblock spectitle="Query">cbq> \set -$faa_code "blr" ;
+cbq> INSERT INTO `travel-sample` (KEY, VALUE) 
+      VALUES ("airport_" || UUID(), 
+             { "type" : "airport", 
+               "tz" : "India Standard Time", 
+               "country" : "India", 
+               "faa" : UPPER($faa_code)} )  
+RETURNING *; </codeblock><codeblock spectitle="Results">{
+    "requestID": "ab03d366-b079-4c7e-b9e9-935b9797b59a",
+    "signature": {
+        "*": "*"
+    },
+    "results": [
+        {
+            "travel-sample": {
+                "country": "India",
+                "faa": "BLR",
+                "type": "airport",
+                "tz": "India Standard Time"
+            }
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "3.299189ms",
+        "executionTime": "3.260071ms",
+        "resultCount": 1,
+        "resultSize": 201,
+        "mutationCount": 1
+    }
+}</codeblock></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Inserting Values Using Prepared Statements</dt>
+          <dd>The following example prepares an INSERT statement and shows how to execute it by
+            passing parameters with cbq and REST.  <note>The Query Workbench currently cannot pass
+              the parameters, and hence can’t run parametrized queries.</note> The INSERT statement
+            has some of the attribute values preset, and takes the document key, and airport FAA
+            code as parameters. <ol id="ol_dfc_df5_zw">
+              <li>Prepare the INSERT statement.
+                <codeblock spectitle="Query">cbq> PREPARE ins_india FROM 
+      INSERT INTO `travel-sample` (KEY, VALUE) 
+        VALUES ( $key, 
+                { "type" : "airport", 
+                  "tz" : "India Standard Time", 
+                  "country" : "India", 
+                  "faa" : $faa_code} )  
+RETURNING *;</codeblock><codeblock spectitle="Results">{
+    "requestID": "29e9af37-61df-4c3b-a12f-1c145ff66ad3",
+    "signature": "json",
+    "results": [
+        {
+            "encoded_plan": "H4sIAAAJbogA/5ySQW/bPgzFv4rAfw9t4f9hO/rWQzYYG7IiTgsMSZASNtNqk2WNooOkgffZR8VI2nTZpSdJ5E9PfNDbAfmqraleBocecoAMPDakO+vj0vraopbaQIzSMuQ7+O/lACX96lSAFPldPVlXM6nI7BS66eSpZfucqD30LpV7dB2VlQ6ZwTrtoxZns4uftM3Mbg5V23nh7RxyM4cizT2HTLcrxFS70HWZnKaabAMNIFoOLcuAyvOr26YU9DVybaa2UbpfLKDPTme6RUbnyOlIDW4OJxsbyD8cvLzLbEm+LnwkFsXQWUxmhXFN7v+ITXDpujqPASs603K2sQK575wb/vMA1rTCzslfTgpvxaK75fYHVelRpqjcUoibuB+PNiGBkdxK21FQT8Id9Yu3Wp+sf1HSdiIgsF1bR4/p23aHMfLTufOP/VutUpiwgb1EtI8epWNKCtfavFYbILRRp6pPAZnMMbVmxW1jinE5mkx1mX4zDyevPZjLL6Pvmbm/+Xo3uhqW0lwe8zRkxJwNiflnShJxTKI5F0XzKov9lTGT0fRuMi7Gn43a+RMAAP//+P56E48DAAA=",
+            "name": "ins_india",
+            "operator": {
+                "#operator": "Sequence",
+                "~children": [
+                    {
+                        "#operator": "Authorize",
+                        "child": {
+                            "#operator": "Sequence",
+                            "~children": [
+                                {
+                                    "#operator": "ValueScan",
+                                    "values": "[[$key, {\"country\": \"India\", \"faa\": $faa_code, \"type\": \"airport\", \"tz\": \"India Standard Time\"}]]"
+                                },
+                                {
+                                    "#operator": "Parallel",
+                                    "maxParallelism": 1,
+                                    "~child": {
+                                        "#operator": "Sequence",
+                                        "~children": [
+                                            {
+                                                "#operator": "SendInsert",
+                                                "alias": "travel-sample",
+                                                "keyspace": "travel-sample",
+                                                "limit": null,
+                                                "namespace": "default"
+                                            },
+                                            {
+                                                "#operator": "InitialProject",
+                                                "result_terms": [
+                                                    {
+                                                        "expr": "self",
+                                                        "star": true
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "#operator": "FinalProject"
+                                            }
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        "privileges": {
+                            "default:travel-sample": 2
+                        }
+                    },
+                    {
+                        "#operator": "Stream"
+                    }
+                ]
+            },
+            "signature": {
+                "*": "*"
+            },
+            "text": "prepare ins_india from INSERT INTO `travel-sample` (KEY, VALUE) VALUES ($key, {\"type\" : \"airport\", \"tz\" : \"India Standard Time\", \"country\" : \"India\", \"faa\" : $faa_code})  RETURNING *"
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "2.726566ms",
+        "executionTime": "2.682386ms",
+        "resultCount": 1,
+        "resultSize": 3461
+    }
+}</codeblock></li>
+              <li>Execute the prepared statement using cbq. To execute using the REST API, skip to
+                Step 3. <ol id="ol_kj1_4f5_zw">
+                  <li>Open a cbq prompt and set the environment variables $key and $faa_code. These
+                    values will be passed as parameters when executing the prepared statement
+                    ‘ins_india’.
+                    <codeblock>cbq> \set -$key "airport_10001" ;
+cbq> \set -$faa_code "DEL" ;</codeblock></li>
+                  <li>Execute the prepared statement ‘ins_india’.
+                    <codeblock>cbq> execute ins_india;
+{
+    "requestID": "b6c08546-95a4-4619-9b54-d93a6ac42aa6",
+    "signature": null,
+    "results": [
+        {
+            "default": {
+                "country": "India",
+                "faa": "DEL",
+                "type": "airport",
+                "tz": "India Standard Time"
+            }
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "2.128772ms",
+        "executionTime": "2.08428ms",
+        "resultCount": 1,
+        "resultSize": 195,
+        "mutationCount": 1
+    }
+}</codeblock></li>
+                </ol></li>
+              <li>Execute the prepared statement using REST API. To execute using the cbq shell, go
+                to Step 2.<ol id="ol_bn4_wf5_zw">
+                  <li>Insert another airport by passing $key and $faa_code as REST parameters.
+                      <codeblock>$ curl -v http://localhost:8093/query/service -d 'prepared="ins_india"&amp;$key="airport_10002"&amp;$faa_code="BLR"'
+
+> POST /query/service HTTP/1.1
+> User-Agent: curl/7.37.1
+> Host: localhost:8093
+> Accept: */*
+> Content-Length: 57
+> Content-Type: application/x-www-form-urlencoded
+> 
+* upload completely sent off: 57 out of 57 bytes
+&lt; HTTP/1.1 200 OK
+&lt; Content-Length: 542
+&lt; Content-Type: application/json; version=1.5.0
+&lt; Date: Wed, 10 Aug 2016 23:12:55 GMT
+&lt; 
+{
+    "requestID": "adb2f0ec-8d55-490e-a4ce-2b09737c7b23",
+    "signature": {
+        "*": "*"
+    },
+    "results": [
+        {
+            "travel-sample": {
+                "country": "India",
+                "faa": "BLR",
+                "type": "airport",
+                "tz": "India Standard Time"
+            }
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "4.390041ms",
+        "executionTime": "4.350285ms",
+        "resultCount": 1,
+        "resultSize": 201,
+        "mutationCount": 1
+    }
+    }</codeblock><p>Note
+                      that, the REST parameters should not have any spaces around ‘&amp;’ when
+                      passing multiple parameters. For example, the following REST API throws error
+                      because of spaces before $faa_code parameter.
+                      <codeblock>$ curl -v http://localhost:8093/query/service -d 'prepared="ins_india"&amp;$key="airport_10002"<b> &amp; </b>$faa_code="BLR"'
+* Connected to localhost (::1) port 8093 (#0)
+> POST /query/service HTTP/1.1
+> User-Agent: curl/7.37.1
+> Host: localhost:8093
+> Accept: */*
+> Content-Length: 59
+> Content-Type: application/x-www-form-urlencoded
+> 
+* upload completely sent off: 59 out of 59 bytes
+&lt; HTTP/1.1 200 OK
+&lt; Content-Length: 490
+&lt; Content-Type: application/json; version=1.5.0
+&lt; Date: Wed, 10 Aug 2016 23:12:41 GMT
+&lt; 
+{
+    "requestID": "13fa81a2-84a6-4db4-b51f-474be4b86006",
+    "signature": {
+        "*": "*"
+    },
+    "results": [
+    ],
+    "errors": [
+        {
+            "code": 5010,
+            "msg": "Error evaluating VALUES. - cause: No value for named parameter $faa_code."
+        }
+    ],
+    "status": "errors",
+    "metrics": {
+        "elapsedTime": "328.022µs",
+        "executionTime": "288.106µs",
+        "resultCount": 0,
+        "resultSize": 0,
+        "errorCount": 1
+    }
+}
+* Connection #0 to host localhost left intact</codeblock></p></li>
+                </ol></li>
+            </ol></dd>
+        </dlentry>
+      </dl>
+    </section> 
+ 
+    <section id="insert-restrictions"><title>Restrictions</title>
+      <p>When inserting documents into a specified keyspace, keep in mind the following restrictions which would help avoid errors during execution. <ul>
+        <li>The keyspace must exist. The INSERT statement returns an error if the keyspace does not exist.</li>
+        <li>Do not insert a document with a duplicate key. If you are inserting multiple documents, the statement aborts at the first error encountered.</li>
+        <li>Timeouts can affect the completion of an INSERT statement, especially when performing
+            bulk inserts. Ensure that the timeout is set to a reasonable value that allows the bulk
+            insert operation to complete.<p>To set the indexer timeout, use the following command:
+              <codeblock>curl &lt;host&gt;:9102/settings -u &lt;username&gt;:&lt;password&gt; -d  '{"indexer.settings.scan_timeout": &lt;some integer&gt;}' </codeblock>For
+              example,
+              <codeblock>$ curl localhost:9102/settings -u Administrator:password -d  '{"indexer.settings.scan_timeout": 1200}'</codeblock></p><p>Use
+              the following command to retrieve the indexer settings:
+              <codeblock>curl -X GET http://localhost:9102/settings -u Administrator:password</codeblock></p><p>See
+                <xref href="../n1ql-rest-api/extimeout.dita#concept_qm1_2tx_nq"/> for more
+              information on timeouts.</p></li>
+        <li>When inserting multiple documents, no cleanup or rollback is done for the already inserted documents if the INSERT operations hits an error. This means, when you are inserting 10 documents, if the INSERT operation fails when inserting the 6th document, the operator quits and exits. It does not rollback the first five documents that were inserted. Nor does it ignore the failure and continue to insert the remaining documents.</li>
+      </ul></p>
+    </section> 
+    
+    <section id="insert-explain-plan"><title>Explain Plan</title>
+      <p>To understand how the INSERT statement is executed by N1QL, let us take a look at two
+        examples. For detailed explanation about the EXPLAIN plan, see the <xref
+          href="explain.dita#topic_11_4">EXPLAIN</xref> statement.</p>
+      <p><b>Simple INSERT Statement Using KEY VALUE Pairs to Insert Two Documents</b></p>
+      <p>In this example, the query engine first scans the input values shown by the operator
+        "ValueScan" to obtain the input values. Then, it inserts the documents into the specified
+        keyspace (shown by the operator "SendInsert"). <codeblock spectitle="Query">EXPLAIN INSERT INTO `travel-sample` (KEY,VALUE) 
+VALUES ( "1025", 
+          { "callsign": "SKY-AIR",
+            "country": "United States",
+            "id": "1025",
+            "type": "airline"
+          } ),
+VALUES ( "1026", 
+          { "callsign": "F1-AIR",
+            "country": "United States",
+            "id": "1014"
+          } ) 
+RETURNING *;</codeblock>
+        <codeblock spectitle="Results">{
+    "requestID": "30d33a23-9635-439a-8676-7f95812aabcc",
+    "signature": "json",
+    "results": [
+        {
+            "plan": {
+                "#operator": "Sequence",
+                "~children": [
+                    {
+                        "#operator": "ValueScan",
+                        "values": "[[\"1025\", {\"callsign\": \"SKY-AIR\", \"country\": \"United States\", \"id\": \"1025\", \"type\": \"airline\"}], [\"1026\", {\"callsign\": \"F1-AIR\", \"country\": \"United States\", \"id\": \"1014\"}]]"
+                    },
+                    {
+                        "#operator": "Parallel",
+                        "maxParallelism": 2,
+                        "~child": {
+                            "#operator": "Sequence",
+                            "~children": [
+                                {
+                                    "#operator": "SendInsert",
+                                    "alias": "travel-sample",
+                                    "keyspace": "travel-sample",
+                                    "limit": null,
+                                    "namespace": "default"
+                                },
+                                {
+                                    "#operator": "InitialProject",
+                                    "result_terms": [
+                                        {
+                                            "expr": "self",
+                                            "star": true
+                                        }
+                                    ]
+                                },
+                                {
+                                    "#operator": "FinalProject"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            "text": "INSERT INTO `travel-sample` (KEY,VALUE) VALUES ( \"1025\", { \"callsign\": \"SKY-AIR\", \"country\": \"United States\", \"id\": \"1025\", \"type\": \"airline\"} ), VALUES ( \"1026\", { \"callsign\": \"F1-AIR\", \"country\": \"United States\", \"id\": \"1014\"} ) RETURNING *"
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "3.26355ms",
+        "executionTime": "3.237978ms",
+        "resultCount": 1,
+        "resultSize": 2027
+    }
+}</codeblock></p>
+      <p><b><b id="docs-internal-guid-1ebabde2-9f58-93e5-721b-6d6f7dbac0f6">INSERT Statement Using
+            the Projection of a Select Statement to Generate Values</b></b></p>
+      <p>In this example, the Query Engine first executes the SELECT statement and then uses the
+        projection to insert into the travel-sample bucket, performing the operations in the order
+        listed: <ul id="ul_od1_xzt_zw">
+          <li>An IndexScan to find the documents that satisfy type="airport".</li>
+          <li>A subsequent IndexScan for airportname="Heathrow". </li>
+          <li>An IntersectScan to obtain the documents that satisfy both the conditions. </li>
+          <li>Fetches the value for the field "_country".</li>
+          <li>Inserts the value along with the auto-generated key into the travel-sample
+            bucket.</li>
+        </ul><codeblock spectitle="Query">EXPLAIN INSERT INTO `travel-sample` (key UUID(), value _country) 
+    SELECT _country FROM `travel-sample` _country 
+      WHERE type = "airport" AND airportname = "Heathrow";</codeblock><codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "Sequence",
+          "~children": [
+            {
+              "#operator": "IntersectScan",
+              "scans": [
+                {
+                  "#operator": "IndexScan",
+                  "index": "def_type",
+                  "index_id": "aea49ebaf37e4015",
+                  "keyspace": "travel-sample",
+                  "namespace": "default",
+                  "spans": [
+                    {
+                      "Range": {
+                        "High": [
+                          "\"airport\""
+                        ],
+                        "Inclusion": 3,
+                        "Low": [
+                          "\"airport\""
+                        ]
+                      }
+                    }
+                  ],
+                  "using": "gsi"
+                },
+                {
+                  "#operator": "IndexScan",
+                  "index": "def_airportname",
+                  "index_id": "1e6e52dd512a354f",
+                  "keyspace": "travel-sample",
+                  "namespace": "default",
+                  "spans": [
+                    {
+                      "Range": {
+                        "High": [
+                          "\"Heathrow\""
+                        ],
+                        "Inclusion": 3,
+                        "Low": [
+                          "\"Heathrow\""
+                        ]
+                      }
+                    }
+                  ],
+                  "using": "gsi"
+                }
+              ]
+            },
+            {
+              "#operator": "Parallel",
+              "~child": {
+                "#operator": "Sequence",
+                "~children": [
+                  {
+                    "#operator": "Fetch",
+                    "as": "_country",
+                    "keyspace": "travel-sample",
+                    "namespace": "default"
+                  },
+                  {
+                    "#operator": "Filter",
+                    "condition": "(((`_country`.`type`) = \"airport\") and ((`_country`.`airportname`) = \"Heathrow\"))"
+                  },
+                  {
+                    "#operator": "InitialProject",
+                    "result_terms": [
+                      {
+                        "expr": "`_country`"
+                      }
+                    ]
+                  },
+                  {
+                    "#operator": "FinalProject"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "SendInsert",
+                "alias": "travel-sample",
+                "key": "uuid()",
+                "keyspace": "travel-sample",
+                "limit": null,
+                "namespace": "default",
+                "value": "`_country`"
+              },
+              {
+                "#operator": "Discard"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "text": "INSERT INTO `travel-sample` (key UUID(), value _country) SELECT _country from `travel-sample` _country WHERE type = \"airport\" and airportname = \"Heathrow\";"
+  }
+]</codeblock></p>
+    </section> 
+    
+    <section id="insert-best-practices"><title>Best Practices</title>
+      <p>When inserting multiple documents, configure pipeline-batch and max-parallelism query parameters for better performance. See the following section on Performance for details on how to set these parameters. </p>
+    </section>  
+    
+    <section id="insert-performance"><title>Performance</title>
+      <p>When a single INSERT statement is executed, N1QL prepares the statement, scans the values and then inserts the document. When inserting a large number of  documents, you can improve the performance of the INSERT statement by using one of the following techniques: <ul>
+        <li>Batching the documents to perform bulk inserts, which decreases the latency and
+            increases the throughput. The INSERT statement sends documents to the data node in
+            batches, with a default batch size of 16. You can configure this value by passing the
+            pipeline-batch parameter as an argument to the cbq engine, or using the REST API
+            parameter for query service. Note that the maximum batch size is (2^32 -1) and
+            specifying a value higher than the maximum batch size may increase the memory
+            consumption. The following example command sets the pipeline-batch size to 32 instead of
+            the default 16:
+            <codeblock>curl -v -X POST http://127.0.0.1:8093/admin/settings  -d '{ "debug":true, "pipeline-batch": 32 }' -u Administrator:password</codeblock></li>
+        <li>Use max-parallelism when inserting multiple documents.</li>
+        <li>When performing bulk inserts, use prepared statements or multiple values.</li>
+        <li>When new documents are inserted, the indexes are updated. When a large number of documents are inserted, this may affect the performance of the cluster.</li>
+      </ul></p>
+    </section> 
+    
+    <section id="insert-metrics"><title>Metrics</title>
+      <p>The INSERT statement returns the following metrics along with the results and status: <ul>
+        <li><systemoutput>elapsedTime</systemoutput>: Total elapsed time for the statement.</li>
+        <li><systemoutput>executionTime</systemoutput>: Time taken by Couchbase Server to execute the statement. This value is independent of network latency, platform code execution time, and so on.</li>
+        <li><systemoutput>resultCount</systemoutput>: Total number of results returned by the statement. In case of INSERT without a RETURNING clause, the value is 0.</li>
+        <li><systemoutput>resultSize</systemoutput>: Total number of results that satisfy the query. </li>
+        <li><systemoutput>mutationCount</systemoutput>: Specifies the number of documents that were inserted by the INSERT statement.</li>
+      </ul></p>
+    </section> 
+    
+    <section id="insert-monitoring"><title>Monitoring</title>
+      <p>You can use the query monitoring API to gather diagnostic information. For example, if you
+        are performing a bulk insert using a SELECT statement, you can use the query monitoring API
+        to get the number of documents being inserted. Check
+          <apiname>system:active_requests</apiname> catalog for more information on monitoring
+        active queries. The REST API for bucket statistics is available at . CLI tools like
+          <codeph>cbstats</codeph> provide detailed stats about the cluster. The same information
+        can also be obtained using cbq shell or REST API. For more information, see <xref
+          href="../../tools/query-monitoring.dita#topic_wk1_5v3_t5"/></p> <p>You can also take a look at the bucket metrics from the Web Console. To do so, go to the Data Buckets tab and click the bucket that you want to monitor. In the General Bucket Analytics screen, scroll to the Query section to gather information such as requests/sec, selects/sec and so on. </p> 
+      
+    </section> 
+    
+  </body>
   
-  
-  
-  </conbody>
-</concept>
+</topic>
