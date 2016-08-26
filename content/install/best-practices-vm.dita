@@ -2,27 +2,28 @@
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_sg3_1fz_bx">
   <title>Best Practices for Virtualized Platforms</title>
-  <shortdesc>Virtualization platforms such as AWS, VMWare, and Azure are popular ways of achieving
-    hardware scalability to complement Couchbase Server's scalability. In this section, we
-    describe some considerations when running Couchbase Server on a virtualized platform. These
-    considerations are common across any virtualized platform or container infrastructure, and are
-    not specific to Couchbase Server.</shortdesc>
+  <shortdesc>Virtualized platforms such as AWS, VMWare, Azure, and Docker containers are popular
+    ways of achieving hardware scalability to complement Couchbase Server's scalability. In this
+    section, we describe some considerations when running Couchbase Server on a virtualized
+    platform. These considerations are common across any virtualized platform or container
+    infrastructure, and are not specific to Couchbase Server.</shortdesc>
   <body>
     <p><b>Avoid a Single Point of Failure</b></p>
     <p>Couchbase Server's resilience and high-availability are achieved through creating a cluster
       of independent nodes and replicating data between them so that any individual node failure
       doesn't lead to loss of access to your data. In a virtualized environment, if you were to run
-      multiple nodes on the same piece of physical hardware, you are inadvertently re-introducing a
+      multiple nodes on the same host or physical hardware, you are inadvertently re-introducing a
       single point of failure. In environments where you control the VM placement, we recommend that
       each Couchbase Server node runs on a different piece of physical hardware.</p>
-    <p><b>Sizing your Containers</b>
+    <p><b>Sizing your Virtualized Platform</b>
     </p>
     <p>Physical environments tend to provide greater performance, predictability and simplicity over
       virtualized environments. Virtualization carries much greater flexibility but does add an
       additional layer of complexity which can make both sizing correctly and debugging performance
       issues more difficult. We recommend that you have at least 4 cores and, if these are
       virtualized, make sure these are dedicated to the VM rather than shared across multiple VMs.
-      Disk performance is also an important aspect - and there are many different technologies you
+      For more information on the hardware requirements, see <xref href="pre-install.dita"/>. </p>
+    <p>Disk performance is also an important aspect - and there are many different technologies you
       can choose. The general rule of thumb is to make sure that your disk has sufficient throughput
       to handle the CRUD operations as well as any indexing, compaction and backup activities that
       will be required.</p>
@@ -35,10 +36,10 @@
       over-committing when configuring your VMs. We recommend ensuring your Couchbase Server VMs
       have dedicated physical resource and the hardware resource is not over-committed.</p>
     <p><b>AutoFailover Threshold</b></p>
-    <p>Due to the fact the system is running virtualized on top of a hypervisor, there will be a
-      minor CPU performance overhead. In certain circumstances this can mean that our default
-      auto-failover timeout can be a little too sensitive. We recommend increasing the threshold
-      from 30 to 45 or even 60 seconds. depending how CPU-intensive your workload is.</p>
+    <p>Due to the fact the system is running virtualized on top of a hypervisor or Docker engine,
+      there will be a minor CPU performance overhead. In certain circumstances this can mean that
+      our default auto-failover timeout can be a little too sensitive. We recommend increasing the
+      threshold from 30 to 45 or even 60 seconds. depending how CPU-intensive your workload is.</p>
     <p><b>Live Migration</b></p>
     <p>Some virtualization environments allow VMs to be migrated between physical nodes and/or
       between storage backends. When moving the VM there is the potential for small pauses and
@@ -48,7 +49,9 @@
       rebalance mechanism for maintenance. If it is absolutely necessary to perform a migration,
       then disable auto-failover beforehand and be prepared for a performance impact during the
       migration.</p>
-    <!--<p><b>Map Couchbase Node Specific Data to a Local Folder</b></p>
+    <section><title>Best Practices for Containers</title>
+      <p>This section lists the best practices that are applicable only to containers.</p>
+    <p><b>Map Couchbase Node Specific Data to a Local Folder</b></p>
     <p>A Couchbase Server Docker container writes all persistent and node-specific data to the directory <filepath>/opt/couchbase/var</filepath> by default. It is recommended to map this directory to a directory on the host file system using the <codeph>-v</codeph> option to get persistence and performance when using "docker run".</p>
     <p>By mapping the directory <filepath>/opt/couchbase/var</filepath> to a directory outside the container with the <codeph>-v</codeph> option, you can delete the container and recreate it later without losing your data from Couchbase Server. You can even update to a container running a later release/version of Couchbase Server without losing your data.</p>
     <p>In a standard Docker environment using a union file system, leaving <filepath>/opt/couchbase/var</filepath> inside the container results in some amount of performance degradation.</p>
@@ -56,6 +59,16 @@
       step. Assuming you are mounting the <filepath>~/couchbase</filepath> directory on the host
       file system, you need to run the following command once before running your first container
       on that host:
-      <codeblock>mkdir ~/couchbase &amp;&amp; chcon -Rt svirt_sandbox_file_t ~/couchbase</codeblock></note>-->
+      <codeblock>mkdir ~/couchbase &amp;&amp; chcon -Rt svirt_sandbox_file_t ~/couchbase</codeblock></note>
+      <p><b>Increase ULIMIT in Production Deployments</b></p>
+      <p>Couchbase Server normally expects the following changes to <parmname>ulimits</parmname>:</p>
+      <codeblock>ulimit -n 40960        # nofile: max number of open files
+ulimit -c unlimited    # core: max core file size
+ulimit -l unlimited    # memlock: maximum locked-in-memory address space</codeblock>
+      <p>These <parmname>ulimit</parmname> settings are necessary when running under heavy load. If you are just doing light testing and development, you can omit these settings, and everything will still work. To set the ulimits in your container, you need to run Couchbase Docker containers with the following additional <codeph>--ulimit</codeph> flags: </p><codeblock>docker run -d --ulimit nofile=40960:40960 
+--ulimit core=100000000:100000000 --ulimit memlock=100000000:100000000 
+--name db -p 8091-8094:8091-8094 -p 11210:11210 couchbase</codeblock>
+      <p>Since unlimited is not supported as a value, it sets the <codeph>core</codeph> and <codeph>memlock</codeph> values to 100 GB. If your system has more than 100 GB RAM, increase this value to match the available RAM on the system.</p><note>The <codeph>--ulimit</codeph> flags only work on Docker 1.6 or later.</note>
+    </section>
   </body>
 </topic>
