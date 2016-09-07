@@ -3,9 +3,121 @@
 <topic id="topic_u34_54d_yv">
     <title>Collecting Information and Logging in the PHP SDK with Couchbase Server</title>
     <titlealts><navtitle>Collecting Information</navtitle></titlealts>
-  <body>
-      <p>The PHP SDK allows logging via the <apiname>LCB_LOGLEVEL</apiname> environment variable.
-      The logging itself is done by the underlying C SDK.</p>
-      <section conref="../c/collecting-information-and-logging.dita#toplevel/begin" conrefend="../c/collecting-information-and-logging.dita#toplevel/end"/>
-  </body>
+    <shortdesc> The PHP SDK logs its own and libcouchbase events using the default logger
+        implementation in PHP. </shortdesc>
+
+    <body>
+        <section>
+            <title>Logging</title>
+            <p> The Couchbase PHP SDK has no hard dependency on a specific logger implementation. By
+                default it uses built-in means to report events. The only thing you may change is
+                the log level, which is controlled by <codeph>couchbase.log_level</codeph> in
+                    <codeph>php.ini</codeph>. The default log level is <codeph>WARN</codeph>. </p>
+            <p>
+                The following log levels are supported (in order increasing amount of information):
+            </p>
+            <ol>
+                <li>FATAL</li>
+                <li>ERROR</li>
+                <li>WARN</li>
+                <li>INFO</li>
+                <li>DEBUG</li>
+                <li>TRACE</li>
+            </ol>
+            <p>The PHP SDK is configured to send logs to standard output (when <xref
+                    href="http://php.net/error_log" format="html" scope="external">error_log</xref>
+                is set to NULL). You can set it to <codeph>syslog</codeph> to redirect all logs
+                (including libcouchbase and PHP SDK) to the syslog device. For example, the script
+                below and <codeph>php.ini</codeph> snippet: </p>
+            <codeblock outputclass="language-php">$cluster = new CouchbaseCluster('couchbase://localhost');
+$bucket = $cluster->openBucket('default');
+$bucket->get('foo');</codeblock>
+            <codeblock outputclass="language-ini">error_log = syslog
+
+extension = couchbase.so
+couchbase.log_level = DEBUG</codeblock>
+            <p>
+                Could be observed like this (assuming Linux with systemd):
+            </p>
+            <screen><![CDATA[$ sudo journalctl -t php
+Sep 07 01:24:21 mars.local php[17655]: [cb,INFO] (pcbc/bucket L:182) New lcb_t instance has been initialized. I=0x5646d40a3dc0
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (confmon L:89 I:0) Preparing providers (this may be called multiple times)
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (confmon L:99 I:0) Provider FILE is DISABLED
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (confmon L:96 I:0) Provider CCCP is ENABLED
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (confmon L:96 I:0) Provider HTTP is ENABLED
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (confmon L:99 I:0) Provider MCRAW is DISABLED
+Sep 07 01:24:21 mars.local php[17655]: [cb,INFO] (cccp L:118 I:0) Requesting connection to node localhost:11210 for CCCP configuration
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (lcbio_mgr L:416 I:0) <localhost:11210> (HE=0x5646d40a9eb0) Creating new connection because none are available in the pool
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (lcbio_mgr L:321 I:0) <localhost:11210> (HE=0x5646d40a9eb0) Starting connection on I=0x5646d40aa420
+Sep 07 01:24:21 mars.local php[17655]: [cb,INFO] (connection L:450 I:0) <localhost:11210> (SOCK=0x5646d40aa4f0) Starting. Timeout=2000000us
+Sep 07 01:24:21 mars.local php[17655]: [cb,INFO] (connection L:116 I:0) <localhost:11210> (SOCK=0x5646d40aa4f0) Connected
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (connection L:123 I:0) <localhost:11210> (SOCK=0x5646d40aa4f0) Successfuly set TCP_NODELAY
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (lcbio_mgr L:271 I:0) <localhost:11210> (HE=0x5646d40a9eb0) Received result for I=0x5646d40aa420,C=0x5646d40aa4f0; E=0x0
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (lcbio_mgr L:223 I:0) <localhost:11210> (HE=0x5646d40a9eb0) Assigning R=0x5646d40a9e60 SOCKET=0x5646d40aa4f0
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (ioctx L:101 I:0) <localhost:11210> (CTX=0x5646d40abb10,unknown) Pairing with SOCK=0x5646d40aa4f0
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (negotiation L:368 I:0) <localhost:11210> (SASLREQ=0x5646d40aa3e0) Found feature 0x3 (TCP NODELAY)
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (ioctx L:151 I:0) <localhost:11210> (CTX=0x5646d40abb10,sasl) Destroying. PND=0,ENT=1,SORC=1
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (ioctx L:101 I:0) <localhost:11210> (CTX=0x5646d40abd50,unknown) Pairing with SOCK=0x5646d40aa4f0
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (ioctx L:151 I:0) <localhost:11210> (CTX=0x5646d40abd50,bc_cccp) Destroying. PND=0,ENT=1,SORC=1
+Sep 07 01:24:21 mars.local php[17655]: [cb,INFO] (lcbio_mgr L:491 I:0) <localhost:11210> (HE=0x5646d40a9eb0) Placing socket back into the pool. I=0x5646d40aa420,C=0x5646d40aa4f0
+Sep 07 01:24:21 mars.local php[17655]: [cb,INFO] (confmon L:174 I:0) Setting new configuration. Received via CCCP
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (bootstrap L:55 I:0) Instance configured!
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (confmon L:89 I:0) Preparing providers (this may be called multiple times)
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (confmon L:99 I:0) Provider FILE is DISABLED
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (confmon L:96 I:0) Provider CCCP is ENABLED
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (confmon L:99 I:0) Provider HTTP is DISABLED
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (confmon L:99 I:0) Provider MCRAW is DISABLED
+Sep 07 01:24:21 mars.local php[17655]: [cb,INFO] (pcbc/bucket L:243) lcb_t instance has been connected. I=0x5646d40a3dc0
+Sep 07 01:24:21 mars.local php[17655]: [cb,INFO] (lcbio_mgr L:407 I:0) <localhost:11210> (HE=0x5646d40a9eb0) Found ready connection in pool. Reusing socket and not creating new connection
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (lcbio_mgr L:223 I:0) <localhost:11210> (HE=0x5646d40a9eb0) Assigning R=0x5646d40ab290 SOCKET=0x5646d40aa4f0
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (ioctx L:101 I:0) <localhost:11210> (CTX=0x5646d40abc50,unknown) Pairing with SOCK=0x5646d40aa4f0
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (server L:552 I:0) <localhost:11210> (SRV=0x5646d40b8820,IX=0) Setting initial timeout=2499ms
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (server L:747 I:0) <localhost:11210> (SRV=0x5646d40b8820,IX=0) Finalizing ctx 0x5646d40abc50
+Sep 07 01:24:21 mars.local php[17655]: [cb,DEBG] (ioctx L:151 I:0) <localhost:11210> (CTX=0x5646d40abc50,memcached) Destroying. PND=0,ENT=0,SORC=1]]></screen>
+            <p>In this example, the part before the first column belongs to
+                    <codeph>journald/syslog</codeph> formatter. And everything else is described in
+                the table below: </p>
+            <table id="table_php_logger_output_format">
+                <tgroup cols="2">
+                    <colspec colnum="1" colname="c1" colwidth="1*" rowsep="1" colsep="1"/>
+                    <colspec colnum="2" colname="c2" colwidth="4.26*" rowsep="1" colsep="0"/>
+                    <thead>
+                        <row>
+                            <entry>Format</entry>
+                            <entry>Description</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry><codeph>[cb,<i>LEVEL</i>]</codeph></entry>
+                            <entry>A string representing the severity of the level</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>(<i>subsystem</i> - L:<i>line</i> I:<i>n</i>)</codeph></entry>
+                            <entry>
+                                <p>
+                                    The <i>subsystem</i> that produced this message, followed by the source code line at
+                                    which this message was created. The subsystem will typically, but not always,
+                                    resemble the source code file. It is a small string describing what the current line
+                                    is doing.
+                                </p>
+                                <p>
+                                    The identifier <i>n</i> of the <codeph>lcb_t</codeph> object associated with the
+                                    current message. This allows you to determine the origin of the message in the case
+                                    where the application contains multiple such <codeph>lcb_t</codeph> objects. The
+                                    number is incremented for each call to <apiname>lcb_create()</apiname>
+                                </p>
+                            </entry>
+                        </row>
+                        <row>
+                            <entry><codeph>&lt;<i>host:port</i>></codeph></entry>
+                            <entry>The host and port, if any, associated with the message. This is
+                            supplied for messages that relate to the state of a particular
+                            connection.</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+        </section>
+    </body>
 </topic>
