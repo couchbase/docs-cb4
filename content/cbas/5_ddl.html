@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta name="description"
+        content="A high-level introduction to the Coucbhase Server product."/>
+  <meta name="keywords" content=""/>
+  <meta name="product" content="server"/>
+  <meta name="version" content="0.5"/>
+
+  <title>DDL</title>
+  <meta name="description" content="">
+
+  <style>
+    .section-nav {
+      display: none !important;
+    }
+  </style>
+</head>
+
+
+  <body>
+
+    <header class="site-header">
+
+</header>
+
+  <section class="body">
+    <div class="page-content">
+      <ul></ul>
+      <div class="wrapper">
+        <h2 id="a-idstatementsstatementsa"><a id="Statements">Statements</a></h2>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>Statement       ::= ( SingleStatement ( ";" )? )* &lt;EOF&gt;
+SingleStatement ::= CreateStatement
+                  | DropStatement
+                  | ConnectStatement
+                  | DisconnectStatement
+                  | Query ";"
+</code></pre>
+</div>
+
+<p>In addition to queries, the CBAS implementation of SQL++ supports statements for data definition and to connect CBAS to Couchbase buckets.</p>
+
+<h2 id="a-idcreatinganddroppingcreating-and-droppinga"><a id="Creating_and_dropping">Creating and Dropping</a></h2>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>CreateStatement     ::= "CREATE" ( BucketSpecification
+                                 | DatasetSpecification )
+
+QualifiedName       ::= Identifier ( "." Identifier )?
+DoubleQualifiedName ::= Identifier "." Identifier ( "." Identifier )?
+</code></pre>
+</div>
+
+<p>The CREATE statement is used to create (CBAS) buckets and shadow datasets.</p>
+
+<h3 id="a-idbucketsbucketsa"><a id="Buckets">Buckets</a></h3>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>BucketSpecification ::= "BUCKET" QualifiedName ( "WITH" RecordValue )?
+
+RecordValue    ::= "{" ( Pair ( "," Pair )* )? "}"
+Pair           ::= StringLiteral ":" ParameterValue
+ArrayValue     ::= "[" ( ParameterValue ( "," ParameterValue )* )? "]"
+ParameterValue ::= RecordValue
+                 | ArrayValue
+                 | Literal
+</code></pre>
+</div>
+
+<p>A (CBAS) bucket is a proxy for a bucket on a cluster of Data Service Nodes.
+It represents this bucket in all other DDL operations.
+The <code class="highlighter-rouge">CREATE BUCKET</code> statement creates such a (CBAS) bucket.
+Parameters for the bucket can be provided though a parameter record.
+Currently 2 parameters are supported:</p>
+
+<ul>
+  <li><code class="highlighter-rouge">name</code> a string for the name of the bucket used on the Data Service Nodes and</li>
+  <li><code class="highlighter-rouge">nodes</code> an array or IP addresses or node names for the Data Service Nodes.</li>
+</ul>
+
+<p>Both parameters are optional - the default <code class="highlighter-rouge">name</code> is the name of the bucket and the default value for <code class="highlighter-rouge">nodes</code> is <code class="highlighter-rouge">[ "localhost" ]</code>.</p>
+
+<h5 id="example">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>CREATE BUCKET beerbucket WITH {
+  "name": "beer-sample",
+  "nodes": ["localhost"]
+};
+</code></pre>
+</div>
+
+<p>This example creates a new (CBAS) bucket <code class="highlighter-rouge">beerbucket</code> that represents the bucket <code class="highlighter-rouge">beer-sample</code> on the Data Service Node running on <code class="highlighter-rouge">localhost</code>.</p>
+
+<h3 id="a-idshadowdatasetsshadow-datasetsa"><a id="Shadow_datasets">Shadow Datasets</a></h3>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>DatasetSpecification ::= "SHADOW" "DATASET" ( QualifiedName )?
+                         "ON" Identifier ( "WHERE" Expression )?
+</code></pre>
+</div>
+
+<p>Shadow datasets contain a shadow of the data of a bucket.
+They are connected to a bucket and are updated as the bucket gets updated.
+A Shadow dataset can contain the full content of the dataset or a filtered subset.
+Multiple shadow datasets can shadow the same bucket.
+A shadow dataset is created <code class="highlighter-rouge">ON</code> a previously created <code class="highlighter-rouge">BUCKET</code> with an optional filter expression.
+The name of the dataset is optional and defaults to the name of the bucket.</p>
+
+<h5 id="examples">Examples</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>CREATE SHADOW DATASET beers ON beerbucket WHERE type = "beer";
+CREATE SHADOW DATASET breweries ON beerbucket WHERE type = "brewery";
+</code></pre>
+</div>
+
+<p>This example creates 2 shadow datasets <code class="highlighter-rouge">beers</code> and <code class="highlighter-rouge">breweries</code> on the previously created <code class="highlighter-rouge">beerbucket</code> and filters the content for each dataset by the value of the <code class="highlighter-rouge">type</code> field of the record.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>DropStatement ::= "DROP" ( "BUCKET" QualifiedName IfExists
+                         | "DATASET" QualifiedName IfExists )
+IfExists      ::= ( "IF" "EXISTS" )?
+</code></pre>
+</div>
+
+<p>The DROP statement in SQL++ is the inverse of the CREATE statement.
+It can be used to drop buckets and shadow datasets.</p>
+
+<p>The following examples illustrate some uses of the DROP statement.</p>
+
+<h5 id="example-1">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>DROP DATASET beers;
+DROP DATASET breweries;
+</code></pre>
+</div>
+
+<p>removes the dataset and all contained data.</p>
+
+<h5 id="example-2">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>DROP BUCKET beerbucket;
+</code></pre>
+</div>
+
+<p>removes the buckets.</p>
+
+<h2 id="a-idconnectinganddisconnectingconnecting-and-disconnectinga"><a id="Connecting_and_disconnecting">Connecting and Disconnecting</a></h2>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>ConnectStatement ::= "CONNECT" "BUCKET" QualifiedName ( "WITH" RecordValue )? ( "IF" "NOT" "CONNECTED" )?
+</code></pre>
+</div>
+
+<p>The CONNECT statement connects a bucket to CBAS and starts shadowing all datasets that are created on the bucket.
+Parameters for the connection can be provided though a parameter record.
+Currently 2 parameters are supported:</p>
+
+<ul>
+  <li><code class="highlighter-rouge">password </code> a password for the bucket used on the Data Service Nodes and</li>
+  <li><code class="highlighter-rouge">timeout </code> a connection timeout in ms when connecting to the Data Service Nodes.</li>
+</ul>
+
+<p>Both parameters are optional - the default <code class="highlighter-rouge">password</code> is the empty string and the default <code class="highlighter-rouge">timeout</code> is the connect timeout used by the Couchbase Java Client.</p>
+
+<h5 id="example-3">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>CONNECT BUCKET beerbucket WITH { "password": "!@#", "timeout": 2500 };
+</code></pre>
+</div>
+
+<p>This example connects all shadow datasets that were previously created on bucket <code class="highlighter-rouge">beerbucket</code> to the Data Service Nodes using <code class="highlighter-rouge">!@#</code> as the <code class="highlighter-rouge">password</code> and a <code class="highlighter-rouge">timeout</code> of 2500 ms.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>DisconnectStatement ::= "DISCONNECT" "BUCKET" QualifiedName  ( "IF" "CONNECTED" )?
+</code></pre>
+</div>
+
+<p>The DISCONNECT statement is the inverse of the CONNECT statement.
+It stops shadowing all datasets that were created on a BUCKET and disconnects the bucket.</p>
+
+<h5 id="example-4">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>DISCONNECT BUCKET beerbucket IF CONNECTED;
+</code></pre>
+</div>
+
+<p>This example stops shadowing all datasets that were created on the bucket <code class="highlighter-rouge">beerbucket</code> and disconnects the bucket if the bucket is connected.</p>
+
+<!--
+###Extension: Typed datasets
+
+Or in the future case of a typed dataset - right now the type defaults to
+XxxType - the syntax would be: CREATE SHADOW DATASET beers(BeerType) ON
+beerbucket WHERE type = "beer";
+
+
+https://docs.oracle.com/database/121/SQLRF/statements_7002.htm#SQLRF01402
+http://www.ibm.com/support/knowledgecenter/SSEPEK_11.0.0/sqlref/src/tpc/db2z_sql_createtable.html
+https://msdn.microsoft.com/en-us/library/ms174979.aspx
+http://infocenter.sybase.com/help/index.jsp?topic=/com.sybase.infocenter.dc36272.1550/html/commands/X80969.htm
+-->
+
+
+      </div>
+    </div>
+  <script>
+     /**
+     * HACK: To keep the markdown tables styles after ingestion we need to wrap the ouput in <div class="table"></div>
+     */
+    var tables = document.getElementsByTagName("table");
+    var j = tables.length - 1;
+    while (j >= 0) {
+      var parent = tables.item(j).parentNode;
+      var table = tables.item(j);
+      var wrapper = document.createElement('div');
+      wrapper.className = 'table';
+      parent.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+      j--;
+    }
+  </script>
+  </section>
+    <footer class="site-footer">
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading"></h2>
+      <div class="footer-col footer-col-3">
+        <p></p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+
+
+  </body>
+
+</html>
