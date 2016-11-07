@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta name="description"
+        content="A high-level introduction to the Coucbhase Server product."/>
+  <meta name="keywords" content=""/>
+  <meta name="product" content="server"/>
+  <meta name="version" content="0.5"/>
+
+  <title>SQL++ Differences from N1QL and SQL</title>
+  <meta name="description" content="">
+
+  <style>
+    .section-nav {
+      display: none !important;
+    }
+  </style>
+</head>
+
+
+  <body>
+
+    <header class="site-header">
+
+</header>
+
+  <section class="body">
+    <div class="page-content">
+      <ul></ul>
+      <div class="wrapper">
+        <p>SQL++ offers the following capabilities not found in N1QL:</p>
+
+<ul>
+  <li>JOIN:  SQL++ supports the ANSI join syntax and allows joins on any condition expressions over datasets, arrays, or subqueries;</li>
+  <li>GROUP BY: In SQL++, in addition to a set of aggregate functions as in standard SQL, the groups created by the
+<code class="highlighter-rouge">GROUP BY</code> clause are directly usable in nested queries and/or to obtain nested results;</li>
+  <li>Subquery: Any valid SQL++ query can be a valid subquery.</li>
+</ul>
+
+<p>SQL++ generalizes N1QL’s syntax constructs such as <code class="highlighter-rouge">USE KEYS</code>, <code class="highlighter-rouge">ON KEYS</code>, <code class="highlighter-rouge">ON KEY</code>, <code class="highlighter-rouge">NEST</code>,
+<code class="highlighter-rouge">LEFT OUTER NEST</code> and <code class="highlighter-rouge">ARRAY</code> and hence relaxes the index or primary key
+restrictions for acceptable queries.</p>
+
+<blockquote>
+  <p><strong>Note:</strong> The INSERT/UPSERT/DELETE statements are not supported in Couchbase Analytics.
+Data mutations must be performed using the Couchbase Server SDK or N1QL; those mutations are then automatically synchronized into the Couchbase Analytics service via DCP.</p>
+</blockquote>
+
+<p>For N1QL users, the following matrix is a quick N1QL compatibility cheat sheet for SQL++:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Feature</th>
+      <th>N1QL</th>
+      <th>SQL++ Equivalent</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>USE KEYS</td>
+      <td><code class="highlighter-rouge">SELECT fname, email FROM tutorial USE KEYS ["dave", "ian"];</code></td>
+      <td><code class="highlighter-rouge">SELECT fname, email FROM tutorial WHERE meta().id IN ["dave", "ian"];</code></td>
+    </tr>
+    <tr>
+      <td>ON KEYS</td>
+      <td><code class="highlighter-rouge">SELECT * FROM user u JOIN orders o ON KEYS ARRAY s.order_id FOR s IN u.order_history END;</code></td>
+      <td><code class="highlighter-rouge">SELECT * FROM user u, u.order_history s JOIN orders o ON s.order_id = meta(o).id;</code></td>
+    </tr>
+    <tr>
+      <td>ON KEY</td>
+      <td><code class="highlighter-rouge">SELECT * FROM user u JOIN orders o ON KEY o.user_id FOR u;</code></td>
+      <td><code class="highlighter-rouge">SELECT * FROM user u JOIN orders o ON meta(u).id = o.user_id;</code></td>
+    </tr>
+    <tr>
+      <td>NEST</td>
+      <td><code class="highlighter-rouge">SELECT * FROM user u NEST orders orders ON KEYS ARRAY s.order_id FOR s IN u.order_history END;</code></td>
+      <td><code class="highlighter-rouge">SELECT u, orders FROM users u LET orders=(SELECT VALUE o FROM u.order_history s, orders o WHERE meta(o).id = s.order_id) WHERE EXISTS orders;</code></td>
+    </tr>
+    <tr>
+      <td>LEFT OUTER NEST</td>
+      <td><code class="highlighter-rouge">SELECT * FROM user u LEFT OUTER NEST orders orders ON KEYS ARRAY s.order_id FOR s IN u.order_history END;</code></td>
+      <td><code class="highlighter-rouge">SELECT u, (SELECT VALUE o FROM u.order_history s, orders o WHERE meta(o).id = s.order_id) orders FROM users u;</code></td>
+    </tr>
+    <tr>
+      <td>IS VALUED</td>
+      <td><code class="highlighter-rouge">foo is VALUED</code></td>
+      <td><code class="highlighter-rouge">foo IS NOT UNKNOWN</code></td>
+    </tr>
+    <tr>
+      <td>ARRAY</td>
+      <td><code class="highlighter-rouge">ARRAY i FOR i IN [1, 2] END</code></td>
+      <td><code class="highlighter-rouge">(SELECT VALUE i FROM [1, 2] AS i)</code></td>
+    </tr>
+    <tr>
+      <td>ARRAY FIRST</td>
+      <td><code class="highlighter-rouge">ARRAY FIRST arr</code></td>
+      <td><code class="highlighter-rouge">arr[0]</code></td>
+    </tr>
+    <tr>
+      <td>INSERT/UPSERT/DELETE</td>
+      <td>Supported</td>
+      <td>Unsupported</td>
+    </tr>
+    <tr>
+      <td>CREATE INDEX</td>
+      <td>Supported</td>
+      <td>Unsupported</td>
+    </tr>
+    <tr>
+      <td><a href="http://developer.couchbase.com/documentation/server/current/n1ql/n1ql-intro/sysinfo.html">Querying System Info</a></td>
+      <td><code class="highlighter-rouge">SELECT * FROM Metadata.`Dataverse`;</code></td>
+      <td><code class="highlighter-rouge">SELECT * FROM system:namespaces;</code></td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td><code class="highlighter-rouge">SELECT * FROM Metadata.`Dataset`;</code></td>
+      <td><code class="highlighter-rouge">SELECT * FROM system:keyspaces;</code></td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td><code class="highlighter-rouge">SELECT * FROM Metadata.`Index`;</code></td>
+      <td><code class="highlighter-rouge">SELECT * FROM system:indexes;</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="differences-from-sql">Differences from SQL</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Operator</th>
+      <th>SQL</th>
+      <th>SQL++ / N1QL Equivalent</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>IN</td>
+      <td><code class="highlighter-rouge">SELECT * FROM default_shadow WHERE  id IN (“1”, “2”);</code></td>
+      <td><code class="highlighter-rouge">SELECT * FROM default_shadow WHERE  id IN [“1”, “2”];</code></td>
+    </tr>
+    <tr>
+      <td>DISTINCT Aggregate</td>
+      <td><code class="highlighter-rouge">SELECT job_title, (SELECT value ds.NAME FROM default_shadow ds GROUP  BY ds.NAME) AS names FROM default_shadow GROUP BY job_title;</code></td>
+      <td><code class="highlighter-rouge">SELECT job_title, Array_agg(DISTINCT NAME) AS names FROM default_shadow GROUP  BY job_title;</code></td>
+    </tr>
+  </tbody>
+</table>
+
+      </div>
+    </div>
+  <script>
+     /**
+     * HACK: To keep the markdown tables styles after ingestion we need to wrap the ouput in <div class="table"></div>
+     */
+    var tables = document.getElementsByTagName("table");
+    var j = tables.length - 1;
+    while (j >= 0) {
+      var parent = tables.item(j).parentNode;
+      var table = tables.item(j);
+      var wrapper = document.createElement('div');
+      wrapper.className = 'table';
+      parent.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+      j--;
+    }
+  </script>
+  </section>
+    <footer class="site-footer">
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading"></h2>
+      <div class="footer-col footer-col-3">
+        <p></p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+
+
+  </body>
+
+</html>
