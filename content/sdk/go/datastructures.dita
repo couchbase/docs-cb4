@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_h44_vct_5x">
+    <title>Data Structures (Developer Preview)</title>
+    <shortdesc>You can use complex data structures such as dictionaries and lists in Couchbase.
+        These data structures may be manipulated with basic operations without retrieving and
+        storing the entire document.</shortdesc>
+    <body><note type="important">The Data Structures API presented here is available as an <xref
+        href="compatibility-versions-features.dita#net-feature-matrix">uncommitted API
+                enhancement</xref> in the current
+            release of the SDK as a preview of coming functionality. A future release will bring
+            this to general availability and fully support. We would love to receive your feedback
+            via the <xref href="http://forums.couchbase.com" format="html" scope="external"
+                >Couchbase Forums</xref>.</note>
+        <p>Data structures in Couchbase are similar in concept to data structures in Go:<ul
+                id="ul_txf_32t_5x">
+                <li><b>Map</b> is like a Go <codeph>map</codeph>, and is a key-value structure,
+                    where a value is accessed by using a key string.</li>
+                <li><b>List</b> is like a Go <codeph>slice</codeph> and is a sequential data
+                    structure. Values can be placed in the beginning or end of a list, and can be
+                    accessed using numeric indexes.</li>
+                <li><b>Set</b> is a wrapper over a <i>list</i> which provides the ability to handle
+                    unique values.</li>
+            </ul></p>
+        <p>These data structures are stored as JSON documents in Couchbase, and can therefore be
+            accessed using N1QL, Full Text Search, and normal key-value operations. Data structures
+            can also be manipulated using the traditional sub-document and full-document KV
+            APIs.</p>
+        <p>Using the data structures API may help your application in two ways:<ul
+                id="ul_kd3_tcb_vx">
+                <li><b>Simplicity</b>: Data structures provide high level operations by which you
+                    can deal with documents as if they were container data structures. Adding an
+                    item to a dictionary is expressed as <codeph>MapAdd</codeph>, rather than
+                    retrieving the entire document, modifying it locally, and then saving it back to
+                    the server.</li>
+                <li><b>Efficiency</b>: Data structure operations do not transfer the entire document
+                    across the network. Only the relevant data is exchanged between client and
+                    server, allowing for less network overhead and lower latency.</li>
+            </ul></p>
+        <section><title>Creating a Data Structure</title>Data structures can be created implicitly
+            by specifying true for the createMap option of the operation. For example, to add an
+            item to a map, specify the <i>document ID</i> of the map itself (i.e. the ID which
+            uniquely identifies the map in the server), the key <i>within</i> the map, and the value
+            to store under the
+            key:<codeblock>bucket.MapAdd("map_id", "name", "Mark Nunberg", true)</codeblock>Likewise,
+            to create a list, specify the document ID and the value to
+            add:<codeblock>bucket.ListPush("list_id", "hello", true)</codeblock>Note that the
+                <codeph>createList</codeph> parameter <i>will not</i> overwrite an existing document
+            with the same name if it already exists. It is therefore always safe to use, unless your
+            application creates data structures independently.<p>Data structures can be explicitly
+                created and reset using full-document methods, and initialize it with its JSON
+                equivalent. To create a new empty list or set, use <codeph>bucket.Upsert("list_id",
+                    []string{})</codeph>. To create an empty map, use
+                    <codeph>bucket.Upsert("map_id", make(map[string]string))</codeph>.</p></section>
+        <section><title>Accessing Data Structures</title>Data structures can be accessed using their
+            appropriate
+                methods.<codeblock>var value string
+cas, err := bucket.ListGet('list_id', 0, &amp;value)
+fmt.Printf("%s", value)
+// Prints 'hello'</codeblock><codeblock>var value string
+cas, err := bucket.MapGet("map_id", "name", &amp;value)
+fmt.Printf("%s", value)
+// Prints 'Mark Nunberg'</codeblock><p>Here
+                is a list of common operations:<table frame="all" rowsep="1" colsep="1"
+                    id="table_c5w_jg5_5x">
+                    <title>Data Structure Operations</title>
+                    <tgroup cols="2">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="3.76*"/>
+                        <thead>
+                            <row>
+                                <entry/>
+                                <entry/>
+                            </row>
+                        </thead>
+                        <tbody>
+                            <row>
+                                <entry><apiname>MapRemove</apiname></entry>
+                                <entry>Remove a key from a
+                                    map.<codeblock>cas, err := bucket.MapRemove("map_id", "some_key")</codeblock></entry>
+                            </row>
+                            <row>
+                                <entry><apiname>MapGet</apiname></entry>
+                                <entry>Get an item from a
+                                    map.<codeblock>var value interface{}
+cas, err := bucket.MapGet("map_id", "some_key", &amp;value)</codeblock></entry>
+                            </row>
+                            <row>
+                                <entry><apiname>ListPush</apiname></entry>
+                                <entry>Add an item to the <i>end</i> of a
+                                    list.<codeblock>cas, err := bucket.ListPush("list_id", "some_value", false)</codeblock></entry>
+                            </row>
+                            <row>
+                                <entry><apiname>ListShift</apiname></entry>
+                                <entry>Add an item to the <i>beginning</i> of a
+                                    list.<codeblock>cas, err := bucket.ListShift("list_id", "some_value", false)</codeblock></entry>
+                            </row>
+                            <row>
+                                <entry><apiname>ListGet</apiname></entry>
+                                <entry>Get an item from a list by its
+                                    index.<codeblock>var value interface{}
+cas, err := bucket.ListGet("list_id", 1, &amp;value)</codeblock></entry>
+                            </row>
+                            <row>
+                                <entry><apiname>SetAdd</apiname></entry>
+                                <entry>Add an item to a set, if the item does not yet exist in the
+                                    set.<codeblock>cas, err := bucket.SetAdd("list_id", "some_value", false)</codeblock>Note
+                                    that a <i>set</i> is just a list. You can retrieve the entire
+                                    set by simply using a full-document <apiname>get</apiname>
+                                        operation:<codeblock>var value []string
+cas, err := bucket.Get("list_id", &amp;value)</codeblock><note>Currently,
+                                        using the Go SDK you can only store values which are
+                                        implicitly comparable in Go, this include strings, numbers
+                                        and booleans.</note></entry>
+                            </row>
+                            <row>
+                                <entry><apiname>SetRemove</apiname></entry>
+                                <entry>Remove an item from a set, if it exists. An exception is not
+                                    thrown if the item does not exist. You can determine if an item
+                                    existed or not by the return value. If the item did not exist
+                                    beforehand, <codeph>None</codeph> is
+                                    returned.<codeblock>cas, err := bucket.SetRemove("list_id", "some_value")</codeblock></entry>
+                            </row>
+                            <row>
+                                <entry><apiname>MapSize</apiname>, <apiname>ListSize</apiname>,
+                                        <apiname>SetSize</apiname></entry>
+                                <entry>These methods get the length of the data structure. For maps,
+                                    this is the number of key-value pairs inside the map. For lists,
+                                    and sets, this is the number of elements in the
+                                    structure.<codeblock>size, cas, err := bucket.ListSize("list_id")</codeblock></entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table></p><p>Note that there are only <b>two</b> basic types: map and list. Types
+                such as <i>set</i> are merely derivatives of <i>list</i>.</p></section>
+        <section><title>Data Structures and Key-Value APIs</title>Data structures can be accessed
+            using key-value APIs as well. In fact, the data structure API is actually a client-side
+            wrapper <i>around</i> the key-value and sub-document API. Most of the data structure
+            APIs wrap the sub-document API directly. Therefore, for example, the
+                <apiname>MapSet</apiname> can be implemented as
+            follows:<codeblock>func (b *Bucket) MapSet(key, path string, value interface{}, createMap bool) (Cas, error) {
+	frag, err := b.MutateIn(key, 0, 0).Upsert(path, value, false).Execute()
+	return frag.Cas, err
+}</codeblock>Some
+            data structure operations are compound operations. This means that they do not
+            correspond to a single server-side operation. For example, <apiname>SetRemove</apiname>
+            does not exist on the server. In order to implement <apiname>SetRemove</apiname>, it
+            would require an implementation like
+            so:<codeblock>func (b *Bucket) SetRemove(key string, value interface{}) (Cas, error) {
+	var setContents []interface{}
+	cas, err := b.Get(key, &amp;setContents)
+	if err != nil {
+		return 0, err
+	}
+
+	foundItem := false
+	var newSetContents []interface{}
+	for _, item := range setContents {
+		if item == value {
+			foundItem = true
+		} else {
+			newSetContents = append(newSetContents, value)
+		}
+	}
+
+	if !foundItem {
+		return 0, ErrRangeError
+	}
+
+	return b.Replace(key, newSetContents, cas, 0)
+}</codeblock>In
+            the example above, the entire document is fetched and the index of the value is
+            retrieved. If the value exists, the index of the value is removed at the server
+                side.<note>Because the data structure API is just a wrapper around the various
+                key-value APIs, you are free to switch between them in your application
+            code.</note></section>
+    </body>
+</topic>
