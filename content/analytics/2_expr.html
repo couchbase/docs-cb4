@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta name="description"
+        content="A high-level introduction to the Coucbhase Server product."/>
+  <meta name="keywords" content=""/>
+  <meta name="product" content="server"/>
+  <meta name="version" content="0.5"/>
+
+  <title>Expressions</title>
+  <meta name="description" content="">
+
+  <style>
+    .section-nav {
+      display: none !important;
+    }
+  </style>
+</head>
+
+
+  <body>
+
+    <header class="site-header">
+
+</header>
+
+  <section class="body">
+    <div class="page-content">
+      <ul></ul>
+      <div class="wrapper">
+        <!--
+ ! Licensed to the Apache Software Foundation (ASF) under one
+ ! or more contributor license agreements.  See the NOTICE file
+ ! distributed with this work for additional information
+ ! regarding copyright ownership.  The ASF licenses this file
+ ! to you under the Apache License, Version 2.0 (the
+ ! "License"); you may not use this file except in compliance
+ ! with the License.  You may obtain a copy of the License at
+ !
+ !   http://www.apache.org/licenses/LICENSE-2.0
+ !
+ ! Unless required by applicable law or agreed to in writing,
+ ! software distributed under the License is distributed on an
+ ! "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ ! KIND, either express or implied.  See the License for the
+ ! specific language governing permissions and limitations
+ ! under the License.
+ !-->
+<p>SQL++ is a highly composable expression language. Each SQL++ expression returns zero or more data model instances.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>Expression ::= OperatorExpression | CaseExpression | QuantifiedExpression
+</code></pre>
+</div>
+
+<p>There are three major types of expressions in SQL++. At the topmost level, a SQL++ expression can be an OperatorExpression (similar to a mathematical expression), a ConditionalExpression (to choose between alternative values), or a QuantifiedExpression (which yields a boolean value). Each type is explained below for the full SQL++ grammar.</p>
+
+<h2 id="a-idprimaryexpressionsprimary-expressionsa"><a id="Primary_expressions">Primary Expressions</a></h2>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>PrimaryExpr ::= Literal
+              | VariableReference
+              | ParenthesizedExpression
+              | FunctionCallExpression
+              | Constructor
+</code></pre>
+</div>
+
+<p>The most basic building block for any SQL++ expression is PrimaryExpression. This can be a simple literal (constant)
+value, a reference to a query variable that is in scope, a parenthesized expression, a function call, or a newly
+constructed instance of the data model, such as a newly constructed record, array, or multiset of data model instances.</p>
+
+<h3 id="a-idliteralsliteralsa"><a id="Literals">Literals</a></h3>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>Literal        ::= StringLiteral
+                   | IntegerLiteral
+                   | FloatLiteral
+                   | DoubleLiteral
+                   | &lt;NULL&gt;
+                   | &lt;MISSING&gt;
+                   | &lt;TRUE&gt;
+                   | &lt;FALSE&gt;
+StringLiteral  ::= "\'" (&lt;ESCAPE_APOS&gt; | ~["\'"])* "\'"
+                   | "\"" (&lt;ESCAPE_QUOT&gt; | ~["\'"])* "\""
+&lt;ESCAPE_APOS&gt;  ::= "\\\'"
+&lt;ESCAPE_QUOT&gt;  ::= "\\\""
+IntegerLiteral ::= &lt;DIGITS&gt;
+&lt;DIGITS&gt;       ::= ["0" - "9"]+
+FloatLiteral   ::= &lt;DIGITS&gt; ( "f" | "F" )
+                 | &lt;DIGITS&gt; ( "." &lt;DIGITS&gt; ( "f" | "F" ) )?
+                 | "." &lt;DIGITS&gt; ( "f" | "F" )
+DoubleLiteral  ::= &lt;DIGITS&gt;
+                 | &lt;DIGITS&gt; ( "." &lt;DIGITS&gt; )?
+                 | "." &lt;DIGITS&gt;
+</code></pre>
+</div>
+
+<p>Literals (constants) in SQL++ can be strings, integers, floating point values, double values, boolean constants, or special constant values like <code class="highlighter-rouge">NULL</code> and <code class="highlighter-rouge">MISSING</code>. The <code class="highlighter-rouge">NULL</code> value is like a <code class="highlighter-rouge">NULL</code> in SQL; it is used to represent an unknown field value. The special value <code class="highlighter-rouge">MISSING</code> is only meaningful in the context of SQL++ field accesses; it occurs when the accessed field simply does not exist at all in a record being accessed.</p>
+
+<p>Some simple examples of SQL++ literals are shown below:</p>
+
+<h5 id="examples">Examples</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>'a string'
+"test string"
+42
+</code></pre>
+</div>
+
+<p>Different from standard SQL, double quotes are used in the same manner as single quotes and may be used for string literals in SQL++.</p>
+
+<h3 id="a-idvariablereferencesvariable-referencesa"><a id="Variable_references">Variable References</a></h3>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>VariableReference     ::= &lt;IDENTIFIER&gt;|&lt;DelimitedIdentifier&gt;
+&lt;IDENTIFIER&gt;          ::= &lt;LETTER&gt; (&lt;LETTER&gt; | &lt;DIGIT&gt; | "_" | "$")*
+&lt;LETTER&gt;              ::= ["A" - "Z", "a" - "z"]
+DelimitedIdentifier   ::= "\`" (&lt;ESCAPE_APOS&gt; | ~["\'"])* "\`"
+</code></pre>
+</div>
+
+<p>A variable in SQL++ can be bound to any legal data model value. A variable reference refers to the value which an in-scope variable is bound to. For example, a variable binding may originate from one of the <code class="highlighter-rouge">FROM</code>, <code class="highlighter-rouge">WITH</code>, or <code class="highlighter-rouge">LET</code> clauses of a <code class="highlighter-rouge">SELECT</code> statement or from an input parameter in the context of a function body. Backticks, as in `id`, are used for delimited identifiers. Delimiting is needed when a variable’s desired name clashes with a SQL++ keyword or includes characters that are not allowed in regular identifiers.</p>
+
+<h5 id="examples-1">Examples</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>tweet
+id
+`SELECT`
+`my-function`
+</code></pre>
+</div>
+
+<h3 id="a-idparenthesizedexpressionsparenthesized-expressionsa"><a id="Parenthesized_expressions">Parenthesized Expressions</a></h3>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>ParenthesizedExpression ::= "(" Expression ")" | Subquery
+</code></pre>
+</div>
+
+<p>An expression can be parenthesized to control the precedence order or otherwise clarify a query. In SQL++, for composability, a subquery is also a parenthesized expression.</p>
+
+<p>The following expression evaluates to the value 2.</p>
+
+<h5 id="example">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>( 1 + 1 )
+</code></pre>
+</div>
+
+<h3 id="a-idfunctioncallexpressionsfunction-call-expressionsa"><a id="Function_call_expressions">Function Call Expressions</a></h3>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>FunctionCallExpression ::= FunctionName "(" ( Expression ( "," Expression )* )? ")"
+</code></pre>
+</div>
+
+<p>Functions are included in SQL++, like most languages, as a way to package useful functionality or to componentize complicated or reusable SQL++ computations. A function call is a legal SQL++ query expression that represents the value resulting from the evaluation of its body expression with the given parameter bindings; the parameter value bindings can themselves be any SQL++ expressions.</p>
+
+<p>The following example is a (built-in) function call expression whose value is 8.</p>
+
+<h5 id="example-1">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>length('a string')
+</code></pre>
+</div>
+
+<h3 id="a-idconstructorsconstructorsa"><a id="Constructors">Constructors</a></h3>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>CollectionConstructor    ::= ArrayConstructor | MultisetConstructor
+ArrayConstructor         ::= "[" ( Expression ( "," Expression )* )? "]"
+MultisetConstructor      ::= " ( Expression ( "
+RecordConstructor        ::= "{" ( FieldBinding ( "," FieldBinding )* )? "}"
+FieldBinding             ::= Expression ":" Expression
+</code></pre>
+</div>
+
+<p>A major feature of SQL++ is its ability to construct new data model instances. This is accomplished using its constructors
+for each of the model’s complex object structures, namely arrays, multisets, and records.
+Arrays are like JSON arrays, while multisets have bag semantics.
+Records are built from fields that are field-name/field-value pairs, again like JSON.</p>
+
+<p>The following examples illustrate how to construct a new array with 3 items, a new record with 2 fields,
+and a new multiset with 4 items, respectively. Array elements or multiset elements can be homogeneous (as shown in
+the first example),
+which is the common case, or they may be heterogeneous (as shown in the third example). The data values and field name values
+used to construct arrays, multisets, and records in constructors are all simply SQL++ expressions. Thus, the collection elements,
+field names, and field values used in constructors can be simple literals or they can come from query variable references
+or even arbitrarily complex SQL++ expressions (subqueries).</p>
+
+<h5 id="examples-2">Examples</h5>
+<div class="highlighter-rouge"><pre class="highlight"><code>    [ 'a', 'b', 'c' ]
+
+    {
+      'project name': 'Hyracks',
+      'project members': [ 'vinayakb', 'dtabass', 'chenli', 'tsotras', 'tillw' ]
+    }
+
+    \{\{ 42, "forty-two!", \{ "rank": "Captain", "name": "America" \}, 3.14159 \}\}
+</code></pre>
+</div>
+
+<h3 id="a-idpathexpressionspath-expressionsa"><a id="Path_expressions">Path Expressions</a></h3>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>PathExpression  ::= PrimaryExpression ( Field | Index )*
+Field           ::= "." Identifier
+Index           ::= "[" ( Expression | "?" ) "]"
+</code></pre>
+</div>
+
+<p>Components of complex types in the data model are accessed via path expressions. Path access can be applied to the result
+of a SQL++ expression that yields an instance of  a complex type, for example, a record or array instance. For records,
+path access is based on field names. For arrays, path access is based on (zero-based) array-style indexing.
+SQL++ also supports an “I’m feeling lucky” style index accessor, [?], for selecting an arbitrary element from an array.
+ Attempts to access non-existent fields or out-of-bound array elements produce the special value <code class="highlighter-rouge">MISSING</code>.</p>
+
+<p>The following examples illustrate field access for a record, index-based element access for an array, and also a
+composition thereof.</p>
+
+<h5 id="examples-3">Examples</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>({"name": "MyABCs", "array": [ "a", "b", "c"]}).array
+
+(["a", "b", "c"])[2]
+
+({"name": "MyABCs", "array": [ "a", "b", "c"]}).array[2]
+</code></pre>
+</div>
+
+<h2 id="a-idoperatorexpressionsoperator-expressionsa"><a id="Operator_expressions">Operator Expressions</a></h2>
+
+<p>Operators perform a specific operation on the input values or expressions. The syntax of an operator expression is as shown below:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>OperatorExpression ::= PathExpression
+                       | Operator OperatorExpression
+                       | OperatorExpression Operator (OperatorExpression)?
+                       | OperatorExpression &lt;BETWEEN&gt; OperatorExpression &lt;AND&gt; OperatorExpression
+</code></pre>
+</div>
+
+<p>SQL++ provides a full set of operators that you can use within its statements. The categories of operators are given below:</p>
+
+<ul>
+  <li><a href="#Arithmetic_operators">Arithmetic Operators</a> - to perform basic mathematical operations</li>
+  <li><a href="#Collection_operators">Collection Operators</a> - to evaluate expressions on collections or objects</li>
+  <li><a href="#Comparison_operators">Comparison Operators</a> - to compare two expressions</li>
+  <li><a href="#Logical_operators">Logical Operators</a> - to combine operators using Boolean logic</li>
+</ul>
+
+<p>The following table summarizes the precedence order (from higher to lower) of the major unary and binary operators:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Operator</th>
+      <th>Operation</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>EXISTS, NOT EXISTS</td>
+      <td>Collection emptiness testing</td>
+    </tr>
+    <tr>
+      <td>^</td>
+      <td>Exponentiation</td>
+    </tr>
+    <tr>
+      <td>*, /</td>
+      <td>Multiplication, Division</td>
+    </tr>
+    <tr>
+      <td>+, -</td>
+      <td>Addition, Subtraction</td>
+    </tr>
+    <tr>
+      <td>||</td>
+      <td>String concatenation</td>
+    </tr>
+    <tr>
+      <td>IS NULL, IS NOT NULL, IS MISSING, IS NOT MISSING, <br />IS UNKNOWN, IS NOT UNKNOWN</td>
+      <td>Unknown value comparison</td>
+    </tr>
+    <tr>
+      <td>BETWEEN, NOT BETWEEN</td>
+      <td>Range comparison (inclusive on both sides)</td>
+    </tr>
+    <tr>
+      <td>=, !=, &lt;, &gt;, &lt;=, &gt;=, LIKE, NOT LIKE, IN, NOT IN</td>
+      <td>Comparison</td>
+    </tr>
+    <tr>
+      <td>NOT</td>
+      <td>Logical negation</td>
+    </tr>
+    <tr>
+      <td>AND</td>
+      <td>Conjunction</td>
+    </tr>
+    <tr>
+      <td>OR</td>
+      <td>Disjunction</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="a-idarithmeticoperatorsarithmetic-operatorsa"><a id="Arithmetic_operators">Arithmetic Operators</a></h3>
+<p>Arithmetic operators are used to exponentiate, add, subtract, multiply, and divide numeric values, or concatenate string values.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Operator</th>
+      <th>Purpose</th>
+      <th>Example</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>+, -</td>
+      <td>As unary operators, they denote a <br />positive or negative expression</td>
+      <td><code class="highlighter-rouge">SELECT value -1;</code></td>
+    </tr>
+    <tr>
+      <td>+, -</td>
+      <td>As binary operators, they add or subtract</td>
+      <td><code class="highlighter-rouge">SELECT value 1 + 2;</code></td>
+    </tr>
+    <tr>
+      <td>*, /</td>
+      <td>Multiply, divide</td>
+      <td><code class="highlighter-rouge">SELECT value 4 / 2.0;</code></td>
+    </tr>
+    <tr>
+      <td>^</td>
+      <td>Exponentiation</td>
+      <td><code class="highlighter-rouge">SELECT value 2^3;</code></td>
+    </tr>
+    <tr>
+      <td>||</td>
+      <td>String concatenation</td>
+      <td><code class="highlighter-rouge">SELECT value "ab"&amp;#124;&amp;#124;"c"&amp;#124;&amp;#124;"d";</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="a-idcollectionoperatorscollection-operatorsa"><a id="Collection_operators">Collection Operators</a></h3>
+<p>Collection operators are used for membership tests (IN, NOT IN) or empty collection tests (EXISTS, NOT EXISTS).</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Operator</th>
+      <th>Purpose</th>
+      <th>Example</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>IN</td>
+      <td>Membership test</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.user.lang IN ["en", "de"];</code></td>
+    </tr>
+    <tr>
+      <td>NOT IN</td>
+      <td>Non-membership test</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.user.lang NOT IN ["en"];</code></td>
+    </tr>
+    <tr>
+      <td>EXISTS</td>
+      <td>Check whether a collection is not empty</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE EXISTS cm.referredTopics;</code></td>
+    </tr>
+    <tr>
+      <td>NOT EXISTS</td>
+      <td>Check whether a collection is empty</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE NOT EXISTS cm.referredTopics;</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="a-idcomparisonoperatorscomparison-operatorsa"><a id="Comparison_operators">Comparison Operators</a></h3>
+<p>Comparison operators are used to compare values. The comparison operators fall into one of two sub-categories: missing value comparisons and regular value comparisons. SQL++ (and JSON) has two ways of representing missing information in a record - the presence of the field with a NULL for its value (as in SQL), and the absence of the field (which JSON permits). In the following example, the first of the following records represents Jack, whose friend is Jill. In the other examples, Jake is friendless a la SQL, with a friend field that is NULL, while Joe is friendless in a more natural (for JSON) way, that is, without a friend field.</p>
+
+<h5 id="examples-4">Examples</h5>
+<p><code class="highlighter-rouge"><span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Jack"</span><span class="p">,</span><span class="w"> </span><span class="nt">"friend"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Jill"</span><span class="p">}</span></code></p>
+
+<p><code class="highlighter-rouge"><span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Jake"</span><span class="p">,</span><span class="w"> </span><span class="nt">"friend"</span><span class="p">:</span><span class="w"> </span><span class="err">NULL</span><span class="p">}</span></code></p>
+
+<p><code class="highlighter-rouge"><span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Joe"</span><span class="p">}</span></code></p>
+
+<p>The following table enumerates all SQL++ comparison operators.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Operator</th>
+      <th>Purpose</th>
+      <th>Example</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>IS NULL</td>
+      <td>Test if a value is NULL</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.user.name IS NULL;</code></td>
+    </tr>
+    <tr>
+      <td>IS NOT NULL</td>
+      <td>Test if a value is not NULL</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.user.name IS NOT NULL;</code></td>
+    </tr>
+    <tr>
+      <td>IS MISSING</td>
+      <td>Test if a value is MISSING</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.user.name IS MISSING;</code></td>
+    </tr>
+    <tr>
+      <td>IS NOT MISSING</td>
+      <td>Test if a value is not MISSING</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.user.name IS NOT MISSING;</code></td>
+    </tr>
+    <tr>
+      <td>IS UNKNOWN</td>
+      <td>Test if a value is NULL or MISSING</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.user.name IS UNKNOWN;</code></td>
+    </tr>
+    <tr>
+      <td>IS NOT UNKNOWN</td>
+      <td>Test if a value is neither NULL nor MISSING</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.user.name IS NOT UNKNOWN;</code></td>
+    </tr>
+    <tr>
+      <td>BETWEEN</td>
+      <td>Test if a value is between a start value and <br />a end value. The comparison is inclusive <br />to both start and end values.</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.chirpId BETWEEN 10 AND 20;</code></td>
+    </tr>
+    <tr>
+      <td>=</td>
+      <td>Equality test</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.chirpId=10;</code></td>
+    </tr>
+    <tr>
+      <td>!=</td>
+      <td>Inequality test</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.chirpId!=10;</code></td>
+    </tr>
+    <tr>
+      <td>&lt;</td>
+      <td>Less than</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.chirpId&lt;10;</code></td>
+    </tr>
+    <tr>
+      <td>&gt;</td>
+      <td>Greater than</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.chirpId&gt;10;</code></td>
+    </tr>
+    <tr>
+      <td>&lt;=</td>
+      <td>Less than or equal to</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.chirpId&lt;=10;</code></td>
+    </tr>
+    <tr>
+      <td>&gt;=</td>
+      <td>Greater than or equal to</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.chirpId&gt;=10;</code></td>
+    </tr>
+    <tr>
+      <td>LIKE</td>
+      <td>Test if the left side matches a<br /> pattern defined on the right<br /> side; in the pattern,  “%” matches  <br />any string while “_” matches <br /> any character.</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.user.name LIKE "%Giesen%";</code></td>
+    </tr>
+    <tr>
+      <td>NOT LIKE</td>
+      <td>Test if the left side does not <br />match a pattern defined on the right<br /> side; in the pattern,  “%” matches <br />any string while “_” matches <br /> any character.</td>
+      <td><code class="highlighter-rouge">SELECT * FROM ChirpMessages cm &lt;br/&gt;WHERE cm.user.name NOT LIKE "%Giesen%";</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The following table summarizes how the missing value comparison operators work.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Operator</th>
+      <th>Non-NULL/Non-MISSING value</th>
+      <th>NULL</th>
+      <th>MISSING</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>IS NULL</td>
+      <td>FALSE</td>
+      <td>TRUE</td>
+      <td>MISSING</td>
+    </tr>
+    <tr>
+      <td>IS NOT NULL</td>
+      <td>TRUE</td>
+      <td>FALSE</td>
+      <td>MISSING</td>
+    </tr>
+    <tr>
+      <td>IS MISSING</td>
+      <td>FALSE</td>
+      <td>FALSE</td>
+      <td>TRUE</td>
+    </tr>
+    <tr>
+      <td>IS NOT MISSING</td>
+      <td>TRUE</td>
+      <td>TRUE</td>
+      <td>FALSE</td>
+    </tr>
+    <tr>
+      <td>IS UNKNOWN</td>
+      <td>FALSE</td>
+      <td>TRUE</td>
+      <td>TRUE</td>
+    </tr>
+    <tr>
+      <td>IS NOT UNKNOWN</td>
+      <td>TRUE</td>
+      <td>FALSE</td>
+      <td>FALSE</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="a-idlogicaloperatorslogical-operatorsa"><a id="Logical_operators">Logical Operators</a></h3>
+<p>Logical operators perform logical <code class="highlighter-rouge">NOT</code>, <code class="highlighter-rouge">AND</code>, and <code class="highlighter-rouge">OR</code> operations over Boolean values (<code class="highlighter-rouge">TRUE</code> and <code class="highlighter-rouge">FALSE</code>) plus <code class="highlighter-rouge">NULL</code> and <code class="highlighter-rouge">MISSING</code>.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Operator</th>
+      <th>Purpose</th>
+      <th>Example</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>NOT</td>
+      <td>Returns true if the following condition is false, otherwise returns false</td>
+      <td><code class="highlighter-rouge">SELECT VALUE NOT TRUE;</code></td>
+    </tr>
+    <tr>
+      <td>AND</td>
+      <td>Returns true if both branches are true, otherwise returns false</td>
+      <td><code class="highlighter-rouge">SELECT VALUE TRUE AND FALSE;</code></td>
+    </tr>
+    <tr>
+      <td>OR</td>
+      <td>Returns true if one branch is true, otherwise returns false</td>
+      <td><code class="highlighter-rouge">SELECT VALUE FALSE OR FALSE;</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The following table is the truth table for <code class="highlighter-rouge">AND</code> and <code class="highlighter-rouge">OR</code>.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>A</th>
+      <th>B</th>
+      <th>A AND B</th>
+      <th>A OR B</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>TRUE</td>
+      <td>TRUE</td>
+      <td>TRUE</td>
+      <td>TRUE</td>
+    </tr>
+    <tr>
+      <td>TRUE</td>
+      <td>FALSE</td>
+      <td>FALSE</td>
+      <td>TRUE</td>
+    </tr>
+    <tr>
+      <td>TRUE</td>
+      <td>NULL</td>
+      <td>NULL</td>
+      <td>TRUE</td>
+    </tr>
+    <tr>
+      <td>TRUE</td>
+      <td>MISSING</td>
+      <td>MISSING</td>
+      <td>TRUE</td>
+    </tr>
+    <tr>
+      <td>FALSE</td>
+      <td>FALSE</td>
+      <td>FALSE</td>
+      <td>FALSE</td>
+    </tr>
+    <tr>
+      <td>FALSE</td>
+      <td>NULL</td>
+      <td>FALSE</td>
+      <td>NULL</td>
+    </tr>
+    <tr>
+      <td>FALSE</td>
+      <td>MISSING</td>
+      <td>FALSE</td>
+      <td>MISSING</td>
+    </tr>
+    <tr>
+      <td>NULL</td>
+      <td>NULL</td>
+      <td>NULL</td>
+      <td>NULL</td>
+    </tr>
+    <tr>
+      <td>NULL</td>
+      <td>MISSING</td>
+      <td>MISSING</td>
+      <td>NULL</td>
+    </tr>
+    <tr>
+      <td>MISSING</td>
+      <td>MISSING</td>
+      <td>MISSING</td>
+      <td>MISSING</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The following table demonstrates the results of <code class="highlighter-rouge">NOT</code> on all possible inputs.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>A</th>
+      <th>NOT A</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>TRUE</td>
+      <td>FALSE</td>
+    </tr>
+    <tr>
+      <td>FALSE</td>
+      <td>TRUE</td>
+    </tr>
+    <tr>
+      <td>NULL</td>
+      <td>NULL</td>
+    </tr>
+    <tr>
+      <td>MISSING</td>
+      <td>MISSING</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="a-idcaseexpressionscase-expressionsa"><a id="Case_expressions">Case Expressions</a></h2>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>CaseExpression ::= SimpleCaseExpression | SearchedCaseExpression
+SimpleCaseExpression ::= &lt;CASE&gt; Expression ( &lt;WHEN&gt; Expression &lt;THEN&gt; Expression )+ ( &lt;ELSE&gt; Expression )? &lt;END&gt;
+SearchedCaseExpression ::= &lt;CASE&gt; ( &lt;WHEN&gt; Expression &lt;THEN&gt; Expression )+ ( &lt;ELSE&gt; Expression )? &lt;END&gt;
+</code></pre>
+</div>
+
+<p>In a simple <code class="highlighter-rouge">CASE</code> expression, the query evaluator searches for the first <code class="highlighter-rouge">WHEN</code> … <code class="highlighter-rouge">THEN</code> pair in which the <code class="highlighter-rouge">WHEN</code> expression is equal to the expression following <code class="highlighter-rouge">CASE</code> and returns the expression following <code class="highlighter-rouge">THEN</code>. If none of the <code class="highlighter-rouge">WHEN</code> … <code class="highlighter-rouge">THEN</code> pairs meet this condition, and an <code class="highlighter-rouge">ELSE</code> branch exists, it returns the <code class="highlighter-rouge">ELSE</code> expression. Otherwise, <code class="highlighter-rouge">NULL</code> is returned.</p>
+
+<p>In a searched CASE expression, the query evaluator searches from left to right until it finds a <code class="highlighter-rouge">WHEN</code> expression that is evaluated to <code class="highlighter-rouge">TRUE</code>, and then returns its corresponding <code class="highlighter-rouge">THEN</code> expression. If no condition is found to be <code class="highlighter-rouge">TRUE</code>, and an <code class="highlighter-rouge">ELSE</code> branch exists, it returns the <code class="highlighter-rouge">ELSE</code> expression. Otherwise, it returns <code class="highlighter-rouge">NULL</code>.</p>
+
+<p>The following example illustrates the form of a case expression.</p>
+<h5 id="example-2">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>CASE (2 &lt; 3) WHEN true THEN "yes" ELSE "no" END
+</code></pre>
+</div>
+
+<h2 id="a-idquantifiedexpressionsquantified-expressionsa"><a id="Quantified_expressions">Quantified Expressions</a></h2>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>QuantifiedExpression ::= ( (&lt;ANY&gt;|&lt;SOME&gt;) | &lt;EVERY&gt; ) Variable &lt;IN&gt; Expression ( "," Variable "in" Expression )*
+                         &lt;SATISFIES&gt; Expression (&lt;END&gt;)?
+</code></pre>
+</div>
+
+<p>Quantified expressions are used for expressing existential or universal predicates involving the elements of a collection.</p>
+
+<p>The following pair of examples illustrate the use of a quantified expression to test that every (or some) element in the set [1, 2, 3] of integers is less than three. The first example yields <code class="highlighter-rouge">FALSE</code> and second example yields <code class="highlighter-rouge">TRUE</code>.</p>
+
+<p>Note that if the set is instead the empty set, the first expression yields <code class="highlighter-rouge">TRUE</code> (<em>every</em> value in an empty set satisfies the condition) while the second expression yields <code class="highlighter-rouge">FALSE</code> (since there isn’t <em>some</em> value, as there are no values in the set, that satisfies the condition).</p>
+
+<h5 id="examples-5">Examples</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>EVERY x IN [ 1, 2, 3 ] SATISFIES x &lt; 3
+SOME x IN [ 1, 2, 3 ] SATISFIES x &lt; 3
+</code></pre>
+</div>
+
+      </div>
+    </div>
+  <script>
+     /**
+     * HACK: To keep the markdown tables styles after ingestion we need to wrap the ouput in <div class="table"></div>
+     */
+    var tables = document.getElementsByTagName("table");
+    var j = tables.length - 1;
+    while (j >= 0) {
+      var parent = tables.item(j).parentNode;
+      var table = tables.item(j);
+      var wrapper = document.createElement('div');
+      wrapper.className = 'table';
+      parent.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+      j--;
+    }
+  </script>
+  </section>
+    <footer class="site-footer">
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading"></h2>
+      <div class="footer-col footer-col-3">
+        <p></p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+
+
+  </body>
+
+</html>
