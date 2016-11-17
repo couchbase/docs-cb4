@@ -1,0 +1,1877 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta name="description"
+        content="A high-level introduction to the Coucbhase Server product."/>
+  <meta name="keywords" content=""/>
+  <meta name="product" content="server"/>
+  <meta name="version" content="0.5"/>
+
+  <title>Queries</title>
+  <meta name="description" content="">
+
+  <style>
+    .section-nav {
+      display: none !important;
+    }
+  </style>
+</head>
+
+
+  <body>
+
+    <header class="site-header">
+
+</header>
+
+  <section class="body">
+    <div class="page-content">
+      <ul></ul>
+      <div class="wrapper">
+        <!--
+ ! Licensed to the Apache Software Foundation (ASF) under one
+ ! or more contributor license agreements.  See the NOTICE file
+ ! distributed with this work for additional information
+ ! regarding copyright ownership.  The ASF licenses this file
+ ! to you under the Apache License, Version 2.0 (the
+ ! "License"); you may not use this file except in compliance
+ ! with the License.  You may obtain a copy of the License at
+ !
+ !   http://www.apache.org/licenses/LICENSE-2.0
+ !
+ ! Unless required by applicable law or agreed to in writing,
+ ! software distributed under the License is distributed on an
+ ! "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ ! KIND, either express or implied.  See the License for the
+ ! specific language governing permissions and limitations
+ ! under the License.
+ !-->
+
+<p>A SQL++ query can be any legal SQL++ expression or <code class="highlighter-rouge">SELECT</code> statement. A SQL++ query always ends with a semicolon.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>Query ::= (Expression | SelectStatement) ";"
+</code></pre>
+</div>
+
+<h2 id="a-idselectstatementsselect-statementsa"><a id="SELECT_statements">SELECT Statements</a></h2>
+
+<p>The following syntax shows the (rich) grammar for the <code class="highlighter-rouge">SELECT</code> statement in SQL++:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SelectStatement    ::= ( WithClause )?
+                       SelectSetOperation (OrderbyClause )? ( LimitClause )?
+SelectSetOperation ::= SelectBlock (&lt;UNION&gt; &lt;ALL&gt; ( SelectBlock | Subquery ) )*
+Subquery           ::= "(" SelectStatement ")"
+
+SelectBlock        ::= SelectClause
+                       ( FromClause ( WithClause )?)?
+                       ( WhereClause )?
+                       ( GroupbyClause ( LetClause )? ( HavingClause )? )?
+                       |
+                       FromClause ( WithClause )?
+                       ( WhereClause )?
+                       ( GroupbyClause ( WithClause )? ( HavingClause )? )?
+                       SelectClause
+
+SelectClause       ::= &lt;SELECT&gt; ( &lt;ALL&gt; | &lt;DISTINCT&gt; )? ( SelectRegular | SelectValue )
+SelectRegular      ::= Projection ( "," Projection )*
+SelectValue      ::= ( &lt;VALUE&gt; | &lt;ELEMENT&gt; | &lt;RAW&gt; ) Expression
+Projection         ::= ( Expression ( &lt;AS&gt; )? Identifier | "*" )
+
+FromClause         ::= &lt;FROM&gt; FromTerm ( "," FromTerm )*
+FromTerm           ::= Expression (( &lt;AS&gt; )? Variable)? ( &lt;AT&gt; Variable )?
+                       ( ( JoinType )? ( JoinClause | UnnestClause ) )*
+
+JoinClause         ::= &lt;JOIN&gt; Expression (( &lt;AS&gt; )? Variable)? (&lt;AT&gt; Variable)? &lt;ON&gt; Expression
+UnnestClause       ::= ( &lt;UNNEST&gt; | &lt;CORRELATE&gt; | &lt;FLATTEN&gt; ) Expression
+                       ( &lt;AS&gt; )? Variable ( &lt;AT&gt; Variable )?
+JoinType           ::= ( &lt;INNER&gt; | &lt;LEFT&gt; ( &lt;OUTER&gt; )? )
+
+WithClause         ::= &lt;WITH&gt; WithElement ( "," WithElement )*
+LetClause          ::= (&lt;LET&gt; | &lt;LETTING&gt;) LetElement ( "," LetElement )*
+LetElement         ::= Variable "=" Expression
+WithElement        ::= Variable &lt;AS&gt; Expression
+
+WhereClause        ::= &lt;WHERE&gt; Expression
+
+GroupbyClause      ::= &lt;GROUP&gt; &lt;BY&gt; ( Expression ( (&lt;AS&gt;)? Variable )? ( "," Expression ( (&lt;AS&gt;)? Variable )? )*
+                       ( &lt;GROUP&gt; &lt;AS&gt; Variable
+                         ("(" Variable &lt;AS&gt; VariableReference ("," Variable &lt;AS&gt; VariableReference )* ")")?
+                       )?
+HavingClause       ::= &lt;HAVING&gt; Expression
+
+OrderbyClause      ::= &lt;ORDER&gt; &lt;BY&gt; Expression ( &lt;ASC&gt; | &lt;DESC&gt; )? ( "," Expression ( &lt;ASC&gt; | &lt;DESC&gt; )? )*
+LimitClause        ::= &lt;LIMIT&gt; Expression ( &lt;OFFSET&gt; Expression )?
+</code></pre>
+</div>
+
+<p>In this section, use two stored collections of records (datasets), <code class="highlighter-rouge">GleambookUsers</code> and <code class="highlighter-rouge">GleambookMessages</code>, in a series of running examples to explain <code class="highlighter-rouge">SELECT</code> queries.
+The contents of the example collections are as follows:</p>
+
+<p><code class="highlighter-rouge">GleambookUsers</code> collection:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>{
+  "id":1,
+  "alias":"Margarita","name":"MargaritaStoddard","nickname":"Mags",
+  "userSince":datetime("2012-08-20T10:10:00"),
+  "friendIds":{{2,3,6,10}},
+  "employment":[
+    {"organizationName":"Codetechno","start-date":date("2006-08-06")},
+    {"organizationName":"geomedia","start-date":date("2010-06-17"),"end-date":date("2010-01-26")}],
+  "gender":"F"
+}
+{
+  "id":2,
+  "alias":"Isbel","name":"IsbelDull","nickname":"Izzy",
+  "userSince":datetime("2011-01-22T10:10:00"),
+  "friendIds":{{1,4}},
+  "employment":[{"organizationName":"Hexviafind","startDate":date("2010-04-27")}]
+}
+{
+  "id":3,
+  "alias":"Emory","name":"EmoryUnk",
+  "userSince":datetime("2012-07-10T10:10:00"),
+  "friendIds":{{1,5,8,9}},
+  "employment":[{"organizationName":"geomedia","startDate":date("2010-06-17"),"endDate":date("2010-01-26")}]
+}
+</code></pre>
+</div>
+
+<p><code class="highlighter-rouge">GleambookMessages</code> collection:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>{
+  "messageId":2,
+  "authorId":1,
+  "inResponseTo":4,
+  "senderLocation":point("41.66,80.87"),
+  "message":" dislike iphone its touch-screen is horrible"
+}
+{
+  "messageId":3,
+  "authorId":2,
+  "inResponseTo":4,
+  "senderLocation":point("48.09,81.01"),
+  "message":" like samsung the plan is amazing"
+}
+{
+  "messageId":4,
+  "authorId":1,
+  "inResponseTo":2,
+  "senderLocation":point("37.73,97.04"),
+  "message":" can't stand at&t the network is horrible:("
+}
+{
+  "messageId":6,
+  "authorId":2,
+  "inResponseTo":1,
+  "senderLocation":point("31.5,75.56"),
+  "message":" like t-mobile its platform is mind-blowing"
+}
+{
+  "messageId":8,
+  "authorId":1,
+  "inResponseTo":11,
+  "senderLocation":point("40.33,80.87"),
+  "message":" like verizon the 3G is awesome:)"
+}
+{
+  "messageId":10,
+  "authorId":1,
+  "inResponseTo":12,
+  "senderLocation":point("42.5,70.01"),
+  "message":" can't stand motorola the touch-screen is terrible"
+}
+{
+  "messageId":11,
+  "authorId":1,
+  "inResponseTo":1,
+  "senderLocation":point("38.97,77.49"),
+  "message":" can't stand at&t its plan is terrible"
+}
+</code></pre>
+</div>
+
+<h2 id="a-idselectclausesselect-clausesa"><a id="Select_clauses">SELECT Clauses</a></h2>
+<p>The SQL++ <code class="highlighter-rouge">SELECT</code> clause always returns a collection value as its result (even if the result is empty or a singleton).</p>
+
+<h3 id="a-idselectelementselect-value-clausea"><a id="Select_element">SELECT VALUE Clause</a></h3>
+<p>The <code class="highlighter-rouge">SELECT VALUE</code> clause in SQL++ returns a collection that contains the results of evaluating the <code class="highlighter-rouge">VALUE</code> expression, with one evaluation being performed per “binding tuple” (that is per <code class="highlighter-rouge">FROM</code> clause item) satisfying the statement’s selection criteria.
+For historical reasons, SQL++ also allows the keywords <code class="highlighter-rouge">ELEMENT</code> or <code class="highlighter-rouge">RAW</code> to be used in place of <code class="highlighter-rouge">VALUE</code> (not recommended).
+The following example shows a query that selects one user from the GleambookUsers collection.</p>
+
+<h5 id="example">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT VALUE user
+FROM GleambookUsers user
+WHERE user.id = 1;
+</code></pre>
+</div>
+
+<p>Returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[{
+	"userSince": "2012-08-20T10:10:00.000Z",
+	"friendIds": [
+		2,
+		3,
+		6,
+		10
+	],
+	"gender": "F",
+	"name": "MargaritaStoddard",
+	"nickname": "Mags",
+	"alias": "Margarita",
+	"id": 1,
+	"employment": [
+		{
+			"organizationName": "Codetechno",
+			"start-date": "2006-08-06"
+		},
+		{
+			"end-date": "2010-01-26",
+			"organizationName": "geomedia",
+			"start-date": "2010-06-17"
+		}
+	]
+} ]
+</code></pre>
+</div>
+
+<h3 id="a-idsqlselectsql-style-selecta"><a id="SQL_select">SQL-style SELECT</a></h3>
+<p>In SQL++, the traditional SQL-style <code class="highlighter-rouge">SELECT</code> syntax is also supported.
+This syntax can also be reformulated in a <code class="highlighter-rouge">SELECT VALUE</code> based manner in SQL++.
+(For example, <code class="highlighter-rouge">SELECT expA AS fldA, expB AS fldB</code> is syntactic sugar for <code class="highlighter-rouge">SELECT VALUE { 'fldA': expA, 'fldB': expB }</code>)</p>
+
+<h5 id="example-1">Example</h5>
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT user.alias user_alias, user.name user_name
+FROM GleambookUsers user
+WHERE user.id = 1;
+</code></pre>
+</div>
+
+<p>Returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"user_name": "MargaritaStoddard",
+	"user_alias": "Margarita"
+} ]
+</code></pre>
+</div>
+
+<h3 id="a-idselectstarselect-a"><a id="Select_star">SELECT *</a></h3>
+<p>In SQL++, <code class="highlighter-rouge">SELECT *</code> returns a record with a nested field for each input tuple.
+Each field has as its field name, the name of a binding variable generated by either the <code class="highlighter-rouge">FROM</code> clause or <code class="highlighter-rouge">GROUP BY</code> clause in the current enclosing <code class="highlighter-rouge">SELECT</code> statement, and its field is the value of that binding variable.</p>
+
+<h5 id="example-2">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT *
+FROM GleambookUsers user;
+</code></pre>
+</div>
+
+<p>Since <code class="highlighter-rouge">user</code> is the only binding variable generated in the <code class="highlighter-rouge">FROM</code> clause, this query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"user": {
+		"userSince": "2012-08-20T10:10:00.000Z",
+		"friendIds": [
+			2,
+			3,
+			6,
+			10
+		],
+		"gender": "F",
+		"name": "MargaritaStoddard",
+		"nickname": "Mags",
+		"alias": "Margarita",
+		"id": 1,
+		"employment": [
+			{
+				"organizationName": "Codetechno",
+				"start-date": "2006-08-06"
+			},
+			{
+				"end-date": "2010-01-26",
+				"organizationName": "geomedia",
+				"start-date": "2010-06-17"
+			}
+		]
+	}
+}, {
+	"user": {
+		"userSince": "2011-01-22T10:10:00.000Z",
+		"friendIds": [
+			1,
+			4
+		],
+		"name": "IsbelDull",
+		"nickname": "Izzy",
+		"alias": "Isbel",
+		"id": 2,
+		"employment": [
+			{
+				"organizationName": "Hexviafind",
+				"startDate": "2010-04-27"
+			}
+		]
+	}
+}, {
+	"user": {
+		"userSince": "2012-07-10T10:10:00.000Z",
+		"friendIds": [
+			1,
+			5,
+			8,
+			9
+		],
+		"name": "EmoryUnk",
+		"alias": "Emory",
+		"id": 3,
+		"employment": [
+			{
+				"organizationName": "geomedia",
+				"endDate": "2010-01-26",
+				"startDate": "2010-06-17"
+			}
+		]
+	}
+} ]
+</code></pre>
+</div>
+
+<h3 id="a-idselectdistinctselect-distincta"><a id="Select_distinct">SELECT DISTINCT</a></h3>
+<p>In SQL++ use a <code class="highlighter-rouge">DISTINCT</code> keyword to eliminate duplicate items in results. The following examples show the usage:</p>
+
+<h5 id="example-3">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT DISTINCT * FROM [1, 2, 2, 3] AS foo;
+</code></pre>
+</div>
+
+<p>This query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"foo": 1
+}, {
+	"foo": 2
+}, {
+	"foo": 3
+} ]
+</code></pre>
+</div>
+
+<h5 id="example-4">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT DISTINCT VALUE foo FROM [1, 2, 2, 3] AS foo;
+</code></pre>
+</div>
+
+<p>This version of the query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ 1
+, 2
+, 3
+ ]
+</code></pre>
+</div>
+
+<h3 id="a-idunnamedprojectionsunnamed-projectionsa"><a id="Unnamed_projections">Unnamed Projections</a></h3>
+<p>Similar to standard SQL, SQL++ supports unnamed projections (known as unnamed <code class="highlighter-rouge">SELECT</code> clause items), for which names are generated.
+The name generation has three cases:</p>
+
+<ul>
+  <li>If a projection expression is a variable reference expression, its generated name is the name of the variable.</li>
+  <li>If a projection expression is a field access expression, its generated name is the last identifier in the expression.</li>
+  <li>For all other cases, the query processor generates a unique name.</li>
+</ul>
+
+<h5 id="example-5">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT substr(user.name, 10), user.alias
+FROM GleambookUsers user
+WHERE user.id = 1;
+</code></pre>
+</div>
+
+<p>This query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"alias": "Margarita",
+	"$1": "Stoddard"
+} ]
+</code></pre>
+</div>
+
+<p>In the result, <code class="highlighter-rouge">$1</code> is the generated name for <code class="highlighter-rouge">substr(user.name, 1)</code>, and <code class="highlighter-rouge">alias</code> is the generated name for <code class="highlighter-rouge">user.alias</code>.</p>
+
+<h3 id="a-idabbreviatoryfieldaccessexpressionsabbreviated-field-access-expressionsa"><a id="Abbreviatory_field_access_expressions">Abbreviated Field Access Expressions</a></h3>
+<p>As in standard SQL, SQL++ field access expressions can be abbreviated (not recommended) when there is no ambiguity. In the next example, the variable <code class="highlighter-rouge">user</code> is the only possible variable reference for fields <code class="highlighter-rouge">id</code>, <code class="highlighter-rouge">name</code>, and <code class="highlighter-rouge">alias</code> and therefore can be omitted in the query.</p>
+
+<h5 id="example-6">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT substr(name, 10) AS lname, alias
+FROM GleambookUsers user
+WHERE id = 1;
+</code></pre>
+</div>
+
+<p>Returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"lname": "Stoddard",
+	"alias": "Margarita"
+} ]
+</code></pre>
+</div>
+
+<h2 id="a-idunnestclausesunnest-clausesa"><a id="Unnest_clauses">UNNEST Clauses</a></h2>
+<p>For each of its input tuples, the <code class="highlighter-rouge">UNNEST</code> clause flattens a collection-valued expression into individual items, producing multiple tuples, each of which is one of the expression’s original input tuples augmented with a flattened item from its collection.</p>
+
+<h3 id="a-idinnerunnestsinner-unnesta"><a id="Inner_unnests">Inner UNNEST</a></h3>
+<p>The following example is a query that retrieves the names of the organizations that a selected user has worked for. It uses the <code class="highlighter-rouge">UNNEST</code> clause to unnest the nested collection <code class="highlighter-rouge">employment</code> in the user’s record.</p>
+
+<h5 id="example-7">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT u.id AS userId, e.organizationName AS orgName
+FROM GleambookUsers u
+UNNEST u.employment e
+WHERE u.id = 1;
+</code></pre>
+</div>
+
+<p>This query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"orgName": "Codetechno",
+	"userId": 1
+}, {
+	"orgName": "geomedia",
+	"userId": 1
+} ]
+</code></pre>
+</div>
+
+<p>Note that <code class="highlighter-rouge">UNNEST</code> has SQL’s inner join semantics - that is, if a user has no employment history, no tuple corresponding to that user will be emitted in the result.</p>
+
+<h3 id="a-idleftouterunnestsleft-outer-unnesta"><a id="Left_outer_unnests">Left Outer UNNEST</a></h3>
+<p>As an alternative, the <code class="highlighter-rouge">LEFT OUTER UNNEST</code> clause offers SQL’s left outer join semantics. For example, no collection-valued field named <code class="highlighter-rouge">hobbies</code> exists in the record for the user whose id is 1, but the following query’s result still includes user 1.</p>
+
+<h5 id="example-8">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT u.id AS userId, h.hobbyName AS hobby
+FROM GleambookUsers u
+LEFT OUTER UNNEST u.hobbies h
+WHERE u.id = 1;
+</code></pre>
+</div>
+
+<p>Returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"userId": 1
+} ]
+</code></pre>
+</div>
+
+<p>Note that if <code class="highlighter-rouge">u.hobbies</code> is an empty collection or leads to a <code class="highlighter-rouge">MISSING</code> (as above) or <code class="highlighter-rouge">NULL</code> value for a given input tuple, there is no corresponding binding value for variable <code class="highlighter-rouge">h</code> for an input tuple. A <code class="highlighter-rouge">MISSING</code> value will be generated for <code class="highlighter-rouge">h</code> so that the input tuple can still be propagated.</p>
+
+<h3 id="a-idexpressingjoinsusingunnestsexpressing-joins-using-unnesta"><a id="Expressing_joins_using_unnests">Expressing JOINs Using UNNEST</a></h3>
+<p>The SQL++ <code class="highlighter-rouge">UNNEST</code> clause is similar to SQL’s <code class="highlighter-rouge">JOIN</code> clause except that it allows its right argument to be correlated to its left argument, as in the examples above — that is, think “correlated cross-product”.
+The next example shows this via a query that joins two data sets, GleambookUsers and GleambookMessages, returning user/message pairs. The results contain one record per pair, with result records containing the user’s name and an entire message. The query can be thought of as saying “for each Gleambook user, unnest the <code class="highlighter-rouge">GleambookMessages</code> collection and filter the output with the condition <code class="highlighter-rouge">message.authorId = user.id</code>”.</p>
+
+<h5 id="example-9">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT u.name AS uname, m.message AS message
+FROM GleambookUsers u
+UNNEST GleambookMessages m
+WHERE m.authorId = u.id;
+</code></pre>
+</div>
+
+<p>This returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"uname": "MargaritaStoddard",
+	"message": " can't stand at&amp;t its plan is terrible"
+}, {
+	"uname": "MargaritaStoddard",
+	"message": " dislike iphone its touch-screen is horrible"
+}, {
+	"uname": "MargaritaStoddard",
+	"message": " can't stand at&amp;t the network is horrible:("
+}, {
+	"uname": "MargaritaStoddard",
+	"message": " like verizon the 3G is awesome:)"
+}, {
+	"uname": "MargaritaStoddard",
+	"message": " can't stand motorola the touch-screen is terrible"
+}, {
+	"uname": "IsbelDull",
+	"message": " like t-mobile its platform is mind-blowing"
+}, {
+	"uname": "IsbelDull",
+	"message": " like samsung the plan is amazing"
+} ]
+</code></pre>
+</div>
+
+<p>Similarly, the above query can also be expressed as the <code class="highlighter-rouge">UNNEST</code>ing of a correlated SQL++ subquery:</p>
+
+<h5 id="example-10">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT u.name AS uname, m.message AS message
+FROM GleambookUsers u
+UNNEST (
+    SELECT VALUE msg
+    FROM GleambookMessages msg
+    WHERE msg.authorId = u.id
+) AS m;
+</code></pre>
+</div>
+
+<h2 id="a-idfromclausesfrom-clausesa"><a id="From_clauses">FROM clauses</a></h2>
+<p>A <code class="highlighter-rouge">FROM</code> clause is used for enumerating (that is, conceptually iterating over) the contents of collections, as in SQL.</p>
+
+<h3 id="a-idbindingexpressionsbinding-expressionsa"><a id="Binding_expressions">Binding Expressions</a></h3>
+<p>In SQL++, in addition to stored collections, a <code class="highlighter-rouge">FROM</code> clause can iterate over any intermediate collection returned by a valid SQL++ expression.</p>
+
+<h5 id="example-11">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT VALUE foo
+FROM [1, 2, 2, 3] AS foo
+WHERE foo &gt; 2;
+</code></pre>
+</div>
+
+<p>Returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[
+  3
+]
+</code></pre>
+</div>
+
+<h3 id="a-idmultiplefromtermsmultiple-from-termsa"><a id="Multiple_from_terms">Multiple FROM Terms</a></h3>
+<p>SQL++ permits correlations among <code class="highlighter-rouge">FROM</code> terms. Specifically, a <code class="highlighter-rouge">FROM</code> binding expression can refer to variables defined to its left in the given <code class="highlighter-rouge">FROM</code> clause. Thus, the first unnesting example above can also be expressed as follows:</p>
+
+<h5 id="example-12">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT u.id AS userId, e.organizationName AS orgName
+FROM GleambookUsers u, u.employment e
+WHERE u.id = 1;
+</code></pre>
+</div>
+
+<h3 id="a-idexpressingjoinsusingfromtermsexpressing-joins-using-from-termsa"><a id="Expressing_joins_using_from_terms">Expressing joins using FROM terms</a></h3>
+<p>Similarly, the join intentions of the other <code class="highlighter-rouge">UNNEST</code>-based join examples above can be expressed as:</p>
+
+<h5 id="example-13">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT u.name AS uname, m.message AS message
+FROM GleambookUsers u, GleambookMessages m
+WHERE m.authorId = u.id;
+</code></pre>
+</div>
+
+<h5 id="example-14">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT u.name AS uname, m.message AS message
+FROM GleambookUsers u,
+  (
+    SELECT VALUE msg
+    FROM GleambookMessages msg
+    WHERE msg.authorId = u.id
+  ) AS m;
+</code></pre>
+</div>
+
+<p>Note that the first alternative is one of the SQL-92 approaches to expressing a join.</p>
+
+<h3 id="a-idimplicitbindingvariablesimplicit-binding-variablesa"><a id="Implicit_binding_variables">Implicit Binding Variables</a></h3>
+
+<p>Similar to standard SQL, SQL++ supports implicit <code class="highlighter-rouge">FROM</code> binding variables (that is aliases), for which a binding variable is generated. SQL++ variable generation falls into three cases:</p>
+
+<ul>
+  <li>If the binding expression is a variable reference expression, the generated variable’s name is the name of the referenced variable itself.</li>
+  <li>If the binding expression is a field access expression, the generated variable’s name is the last identifier in the expression.</li>
+  <li>For all other cases, a compilation error is shown.</li>
+</ul>
+
+<p>The next two examples show queries that do not provide binding variables in their <code class="highlighter-rouge">FROM</code> clauses.</p>
+
+<h5 id="example-15">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT GleambookUsers.name, GleambookMessages.message
+FROM GleambookUsers, GleambookMessages
+WHERE GleambookMessages.authorId = GleambookUsers.id;
+</code></pre>
+</div>
+
+<p>Returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"name": "MargaritaStoddard",
+	"message": " like verizon the 3G is awesome:)"
+}, {
+	"name": "MargaritaStoddard",
+	"message": " can't stand motorola the touch-screen is terrible"
+}, {
+	"name": "MargaritaStoddard",
+	"message": " can't stand at&amp;t its plan is terrible"
+}, {
+	"name": "MargaritaStoddard",
+	"message": " dislike iphone its touch-screen is horrible"
+}, {
+	"name": "MargaritaStoddard",
+	"message": " can't stand at&amp;t the network is horrible:("
+}, {
+	"name": "IsbelDull",
+	"message": " like samsung the plan is amazing"
+}, {
+	"name": "IsbelDull",
+	"message": " like t-mobile its platform is mind-blowing"
+} ]
+</code></pre>
+</div>
+
+<h5 id="example-16">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT GleambookUsers.name, GleambookMessages.message
+FROM GleambookUsers,
+  (
+    SELECT VALUE GleambookMessages
+    FROM GleambookMessages
+    WHERE GleambookMessages.authorId = GleambookUsers.id
+  );
+</code></pre>
+</div>
+
+<p>Returns:</p>
+<div class="highlighter-rouge"><pre class="highlight"><code>Error: "Syntax error: Need an alias for the enclosed expression:
+	(select element GleambookMessages
+	 from GleambookMessages as GleambookMessages
+	 where (GleambookMessages.authorId = GleambookUsers.id)
+	  )","query_from_user": "use TinySocial;
+
+	SELECT GleambookUsers.name, GleambookMessages.message
+	FROM GleambookUsers,
+	          (
+	                  SELECT VALUE GleambookMessages
+	                  FROM GleambookMessages
+	                  WHERE GleambookMessages.authorId = GleambookUsers.id
+	          );"
+</code></pre>
+</div>
+
+<h2 id="a-idjoinclausesjoin-clausesa"><a id="Join_clauses">JOIN Clauses</a></h2>
+<p>The join clause in SQL++ supports both inner joins and left outer joins from standard SQL.</p>
+
+<h3 id="a-idinnerjoinsinner-joinsa"><a id="Inner_joins">Inner joins</a></h3>
+<p>Using a <code class="highlighter-rouge">JOIN</code> clause, the inner join intent from the preceding examples can also be expressed as follows:</p>
+
+<h5 id="example-17">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT u.name AS uname, m.message AS message
+FROM GleambookUsers u JOIN GleambookMessages m ON m.authorId = u.id;
+</code></pre>
+</div>
+
+<h3 id="a-idleftouterjoinsleft-outer-joinsa"><a id="Left_outer_joins">Left outer joins</a></h3>
+<p>SQL++ supports SQL’s notion of left outer join. The following query is an example:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT u.name AS uname, m.message AS message
+FROM GleambookUsers u LEFT OUTER JOIN GleambookMessages m ON m.authorId = u.id;
+</code></pre>
+</div>
+
+<p>Returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"uname": "MargaritaStoddard",
+	"message": " like verizon the 3G is awesome:)"
+}, {
+	"uname": "MargaritaStoddard",
+	"message": " can't stand motorola the touch-screen is terrible"
+}, {
+	"uname": "MargaritaStoddard",
+	"message": " can't stand at&amp;t its plan is terrible"
+}, {
+	"uname": "MargaritaStoddard",
+	"message": " dislike iphone its touch-screen is horrible"
+}, {
+	"uname": "MargaritaStoddard",
+	"message": " can't stand at&amp;t the network is horrible:("
+}, {
+	"uname": "IsbelDull",
+	"message": " like samsung the plan is amazing"
+}, {
+	"uname": "IsbelDull",
+	"message": " like t-mobile its platform is mind-blowing"
+}, {
+	"uname": "EmoryUnk"
+} ]
+</code></pre>
+</div>
+
+<p>For non-matching left-side tuples, SQL++ produces <code class="highlighter-rouge">MISSING</code> values for the right-side binding variables; that is why the last record in the above result doesn’t have a <code class="highlighter-rouge">message</code> field. Note that this is slightly different from standard SQL, which instead fills in <code class="highlighter-rouge">NULL</code> values for the right-side fields. The reason for this difference is that, for non-matches in its join results, SQL++ views fields from the right-side as being “not there” (also as <code class="highlighter-rouge">MISSING</code>) instead of as being “there but unknown” (that is, <code class="highlighter-rouge">NULL</code>).</p>
+
+<p>The left-outer join query can also be expressed using <code class="highlighter-rouge">LEFT OUTER UNNEST</code>:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT u.name AS uname, m.message AS message
+FROM GleambookUsers u
+LEFT OUTER UNNEST (
+    SELECT VALUE message
+    FROM GleambookMessages message
+    WHERE message.authorId = u.id
+  ) m;
+</code></pre>
+</div>
+
+<p>In general, in SQL++, SQL-style join queries can also be expressed by <code class="highlighter-rouge">UNNEST</code> clauses and left outer join queries can be expressed by <code class="highlighter-rouge">LEFT OUTER UNNESTs</code>.</p>
+
+<h2 id="a-idgroupbyclausesgroup-by-clausesa"><a id="Group_By_clauses">GROUP BY Clauses</a></h2>
+<p>The SQL++ <code class="highlighter-rouge">GROUP BY</code> clause generalizes standard SQL’s grouping and aggregation semantics, but it also retains backward compatibility with the standard (relational) SQL <code class="highlighter-rouge">GROUP BY</code> and aggregation features.</p>
+
+<h3 id="a-idgroupvariablesgroup-variablesa"><a id="Group_variables">Group Variables</a></h3>
+<p>In a <code class="highlighter-rouge">GROUP BY</code> clause, in addition to the binding variable(s) defined for the grouping key(s), SQL++ allows a user to define a <em>group variable</em> by using the clause’s <code class="highlighter-rouge">GROUP AS</code> extension to denote the resulting group.
+After grouping, then, the query’s in-scope variables include the grouping key’s binding variables as well as this group variable which will be bound to one collection value for each group. This per-group collection value will be a set of nested records in which each field of the record is the result of a renamed variable defined in parentheses following the group variable’s name. The <code class="highlighter-rouge">GROUP AS</code> syntax is as follows:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>&lt;GROUP&gt; &lt;AS&gt; Variable ("(" Variable &lt;AS&gt; VariableReference ("," Variable &lt;AS&gt; VariableReference )* ")")?
+</code></pre>
+</div>
+
+<h5 id="example-18">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT *
+FROM GleambookMessages message
+GROUP BY message.authorId AS uid GROUP AS msgs(message AS msg);
+</code></pre>
+</div>
+
+<p>This query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"msgs": [
+		{
+			"msg": {
+				"senderLocation": [
+					38.97,
+					77.49
+				],
+				"inResponseTo": 1,
+				"messageId": 11,
+				"authorId": 1,
+				"message": " can't stand at&amp;t its plan is terrible"
+			}
+		},
+		{
+			"msg": {
+				"senderLocation": [
+					41.66,
+					80.87
+				],
+				"inResponseTo": 4,
+				"messageId": 2,
+				"authorId": 1,
+				"message": " dislike iphone its touch-screen is horrible"
+			}
+		},
+		{
+			"msg": {
+				"senderLocation": [
+					37.73,
+					97.04
+				],
+				"inResponseTo": 2,
+				"messageId": 4,
+				"authorId": 1,
+				"message": " can't stand at&amp;t the network is horrible:("
+			}
+		},
+		{
+			"msg": {
+				"senderLocation": [
+					40.33,
+					80.87
+				],
+				"inResponseTo": 11,
+				"messageId": 8,
+				"authorId": 1,
+				"message": " like verizon the 3G is awesome:)"
+			}
+		},
+		{
+			"msg": {
+				"senderLocation": [
+					42.5,
+					70.01
+				],
+				"inResponseTo": 12,
+				"messageId": 10,
+				"authorId": 1,
+				"message": " can't stand motorola the touch-screen is terrible"
+			}
+		}
+	],
+	"uid": 1
+}, {
+	"msgs": [
+		{
+			"msg": {
+				"senderLocation": [
+					31.5,
+					75.56
+				],
+				"inResponseTo": 1,
+				"messageId": 6,
+				"authorId": 2,
+				"message": " like t-mobile its platform is mind-blowing"
+			}
+		},
+		{
+			"msg": {
+				"senderLocation": [
+					48.09,
+					81.01
+				],
+				"inResponseTo": 4,
+				"messageId": 3,
+				"authorId": 2,
+				"message": " like samsung the plan is amazing"
+			}
+		}
+	],
+	"uid": 2
+} ]
+</code></pre>
+</div>
+
+<p>As you can see from the above query result, each group in the example query’s output has an associated group
+variable value called <code class="highlighter-rouge">msgs</code> that appears in the <code class="highlighter-rouge">SELECT *</code>’s result.
+This variable contains a collection of records associated with the group; each of the group’s <code class="highlighter-rouge">message</code> values
+appears in the <code class="highlighter-rouge">msg</code> field of the records in the <code class="highlighter-rouge">msgs</code> collection.</p>
+
+<p>The group variable in SQL++ makes more complex, composable, nested subqueries over a group possible, which is
+important given the more complex data model of SQL++ (relative to SQL).
+As a simple example of this, as you really just want the messages associated with each user, you may wish to avoid
+the “extra wrapping” of each message as the <code class="highlighter-rouge">msg</code> field of a record.
+(That wrapping is useful in more complex cases, but is essentially just in the way here.)
+You can use a subquery in the <code class="highlighter-rouge">SELECT</code> clause to tunnel through the extra nesting and produce the desired result.</p>
+
+<h5 id="example-19">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT uid, (SELECT VALUE m.msg FROM msgs m) AS msgs
+FROM GleambookMessages message
+GROUP BY message.authorId AS uid GROUP AS msgs(message AS msg);
+</code></pre>
+</div>
+
+<p>This variant of the example query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>   [ {
+   	"msgs": [
+   		{
+   			"senderLocation": [
+   				38.97,
+   				77.49
+   			],
+   			"inResponseTo": 1,
+   			"messageId": 11,
+   			"authorId": 1,
+   			"message": " can't stand at&amp;t its plan is terrible"
+   		},
+   		{
+   			"senderLocation": [
+   				41.66,
+   				80.87
+   			],
+   			"inResponseTo": 4,
+   			"messageId": 2,
+   			"authorId": 1,
+   			"message": " dislike iphone its touch-screen is horrible"
+   		},
+   		{
+   			"senderLocation": [
+   				37.73,
+   				97.04
+   			],
+   			"inResponseTo": 2,
+   			"messageId": 4,
+   			"authorId": 1,
+   			"message": " can't stand at&amp;t the network is horrible:("
+   		},
+   		{
+   			"senderLocation": [
+   				40.33,
+   				80.87
+   			],
+   			"inResponseTo": 11,
+   			"messageId": 8,
+   			"authorId": 1,
+   			"message": " like verizon the 3G is awesome:)"
+   		},
+   		{
+   			"senderLocation": [
+   				42.5,
+   				70.01
+   			],
+   			"inResponseTo": 12,
+   			"messageId": 10,
+   			"authorId": 1,
+   			"message": " can't stand motorola the touch-screen is terrible"
+   		}
+   	],
+   	"uid": 1
+   }, {
+   	"msgs": [
+   		{
+   			"senderLocation": [
+   				31.5,
+   				75.56
+   			],
+   			"inResponseTo": 1,
+   			"messageId": 6,
+   			"authorId": 2,
+   			"message": " like t-mobile its platform is mind-blowing"
+   		},
+   		{
+   			"senderLocation": [
+   				48.09,
+   				81.01
+   			],
+   			"inResponseTo": 4,
+   			"messageId": 3,
+   			"authorId": 2,
+   			"message": " like samsung the plan is amazing"
+   		}
+   	],
+   	"uid": 2
+   } ]
+</code></pre>
+</div>
+
+<p>Since this is a fairly common case, a third variant with output identical to the second variant is also possible:</p>
+
+<h5 id="example-20">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT uid, msg AS msgs
+FROM GleambookMessages message
+GROUP BY message.authorId AS uid GROUP AS msgs(message AS msg);
+</code></pre>
+</div>
+
+<p>This variant of the query exploits a bit of SQL-style “syntactic sugar” that SQL++ offers to shorten some user queries.
+In particular, in the <code class="highlighter-rouge">SELECT</code> list, the reference to the <code class="highlighter-rouge">GROUP</code> variable field <code class="highlighter-rouge">msg</code> – because it references a field of the group variable – is allowed but is “pluralized”. As a result, the <code class="highlighter-rouge">msg</code> reference in the <code class="highlighter-rouge">SELECT</code> list is
+implicitly rewritten into the second variant’s <code class="highlighter-rouge">SELECT VALUE</code> subquery.</p>
+
+<p>The next example shows a more interesting case involving the use of a subquery in the <code class="highlighter-rouge">SELECT</code> list.
+Here the subquery further processes the groups.</p>
+
+<h5 id="example-21">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT uid,
+       (SELECT VALUE m.msg
+        FROM msgs m
+        WHERE m.msg.message LIKE '% like%'
+        ORDER BY m.msg.messageId
+        LIMIT 2) AS msgs
+FROM GleambookMessages message
+GROUP BY message.authorId AS uid GROUP AS msgs(message AS msg);
+</code></pre>
+</div>
+
+<p>This example query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"msgs": [
+		{
+			"senderLocation": [
+				40.33,
+				80.87
+			],
+			"inResponseTo": 11,
+			"messageId": 8,
+			"authorId": 1,
+			"message": " like verizon the 3G is awesome:)"
+		}
+	],
+	"uid": 1
+}, {
+	"msgs": [
+		{
+			"senderLocation": [
+				48.09,
+				81.01
+			],
+			"inResponseTo": 4,
+			"messageId": 3,
+			"authorId": 2,
+			"message": " like samsung the plan is amazing"
+		},
+		{
+			"senderLocation": [
+				31.5,
+				75.56
+			],
+			"inResponseTo": 1,
+			"messageId": 6,
+			"authorId": 2,
+			"message": " like t-mobile its platform is mind-blowing"
+		}
+	],
+	"uid": 2
+} ]
+</code></pre>
+</div>
+
+<h3 id="a-idimplicitgroupkeyvariablesimplicit-grouping-key-variablesa"><a id="Implicit_group_key_variables">Implicit Grouping Key Variables</a></h3>
+<p>In the SQL++ syntax, providing named binding variables for <code class="highlighter-rouge">GROUP BY</code> key expressions is optional.
+If a grouping key is missing a user-provided binding variable, the underlying compiler will generate one.
+Automatic grouping key variable naming falls into three cases in SQL++, much like the treatment of unnamed projections:</p>
+
+<ul>
+  <li>If the grouping key expression is a variable reference expression, the generated variable gets the same name as the referred variable;</li>
+  <li>If the grouping key expression is a field access expression, the generated variable gets the same name as the last identifier in the expression;</li>
+  <li>For all other cases, the compiler generates a unique variable (but the user query is unable to refer to this generated variable).</li>
+</ul>
+
+<p>The next example illustrates a query that doesn’t provide binding variables for its grouping key expressions.</p>
+
+<h5 id="example-22">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT authorId,
+       (SELECT VALUE m.msg
+        FROM msgs m
+        WHERE m.msg.message LIKE '% like%'
+        ORDER BY m.msg.messageId
+        LIMIT 2) AS msgs
+FROM GleambookMessages message
+GROUP BY message.authorId GROUP AS msgs(message AS msg);
+</code></pre>
+</div>
+
+<p>This query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>    [ {
+	"msgs": [
+		{
+			"senderLocation": [
+				40.33,
+				80.87
+			],
+			"inResponseTo": 11,
+			"messageId": 8,
+			"authorId": 1,
+			"message": " like verizon the 3G is awesome:)"
+		}
+	],
+	"authorId": 1
+}, {
+	"msgs": [
+		{
+			"senderLocation": [
+				48.09,
+				81.01
+			],
+			"inResponseTo": 4,
+			"messageId": 3,
+			"authorId": 2,
+			"message": " like samsung the plan is amazing"
+		},
+		{
+			"senderLocation": [
+				31.5,
+				75.56
+			],
+			"inResponseTo": 1,
+			"messageId": 6,
+			"authorId": 2,
+			"message": " like t-mobile its platform is mind-blowing"
+		}
+	],
+	"authorId": 2
+} ]
+</code></pre>
+</div>
+
+<p>Based on the three variable generation rules, the generated variable for the grouping key expression <code class="highlighter-rouge">message.authorId</code>
+is <code class="highlighter-rouge">authorId</code> (this is how it is referred to in the example’s <code class="highlighter-rouge">SELECT</code> clause).</p>
+
+<h3 id="a-idimplicitgroupvariablesimplicit-group-variablesa"><a id="Implicit_group_variables">Implicit Group Variables</a></h3>
+<p>The group variable itself is also optional in SQL++’s <code class="highlighter-rouge">GROUP BY</code> syntax.
+If a user’s query does not declare the name and structure of the group variable using <code class="highlighter-rouge">GROUP AS</code>,
+the query compiler will generate a unique group variable whose fields include all of the
+binding variables defined in the <code class="highlighter-rouge">FROM</code> clause of the current enclosing <code class="highlighter-rouge">SELECT</code> statement.
+(In this case the user’s query will not be able to refer to the generated group variable.)</p>
+
+<h5 id="example-23">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT uid,
+       (SELECT m.message
+        FROM message m
+        WHERE m.message LIKE '% like%'
+        ORDER BY m.messageId
+        LIMIT 2) AS msgs
+FROM GleambookMessages message
+GROUP BY message.authorId AS uid;
+</code></pre>
+</div>
+
+<p>This query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"msgs": [
+		{
+			"message": " like verizon the 3G is awesome:)"
+		}
+	],
+	"uid": 1
+}, {
+	"msgs": [
+		{
+			"message": " like samsung the plan is amazing"
+		},
+		{
+			"message": " like t-mobile its platform is mind-blowing"
+		}
+	],
+	"uid": 2
+} ]
+</code></pre>
+</div>
+
+<p>Note that in the query above, in principle, <code class="highlighter-rouge">message</code> is not an in-scope variable in the <code class="highlighter-rouge">SELECT</code> clause.
+However, the query above is a syntactically-sugared simplification of the following query and it is thus
+legal, executable, and returns the same result:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT uid,
+       (SELECT m.message
+        FROM (SELECT VALUE grp.message FROM `$1` AS grp) AS m
+        WHERE m.message LIKE '% like%'
+        ORDER BY m.messageId
+        LIMIT 2) AS msgs
+FROM GleambookMessages message
+GROUP BY message.authorId AS uid GROUP AS `$1` (message AS message);
+</code></pre>
+</div>
+
+<h3 id="a-idaggregationfunctionsaggregation-functionsa"><a id="Aggregation_functions">Aggregation Functions</a></h3>
+<p>In the traditional SQL, which doesn’t support nested data, grouping always also involves the use of aggregation
+compute properties of the groups (for example, the average number of messages per user rather than the actual set
+of messages per user).
+Each aggregation function in SQL++ takes a collection (for example, the group of messages) as its input and produces
+a scalar value as its output.
+These aggregation functions, being truly functional in nature (unlike in SQL), can be used anywhere in a
+query where an expression is allowed.
+The following table catalogs the SQL++ built-in aggregation functions and also indicates how each one handles
+<code class="highlighter-rouge">NULL</code>/<code class="highlighter-rouge">MISSING</code> values in the input collection or a completely empty input collection:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Function</th>
+      <th>NULL</th>
+      <th>MISSING</th>
+      <th>Empty Collection</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>COLL_COUNT</td>
+      <td>counted</td>
+      <td>counted</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>COLL_SUM</td>
+      <td>returns NULL</td>
+      <td>returns NULL</td>
+      <td>returns NULL</td>
+    </tr>
+    <tr>
+      <td>COLL_MAX</td>
+      <td>returns NULL</td>
+      <td>returns NULL</td>
+      <td>returns NULL</td>
+    </tr>
+    <tr>
+      <td>COLL_MIN</td>
+      <td>returns NULL</td>
+      <td>returns NULL</td>
+      <td>returns NULL</td>
+    </tr>
+    <tr>
+      <td>COLL_AVG</td>
+      <td>returns NULL</td>
+      <td>returns NULL</td>
+      <td>returns NULL</td>
+    </tr>
+    <tr>
+      <td>ARRAY_COUNT</td>
+      <td>not counted</td>
+      <td>not counted</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>ARRAY_SUM</td>
+      <td>ignores NULL</td>
+      <td>ignores NULL</td>
+      <td>returns NULL</td>
+    </tr>
+    <tr>
+      <td>ARRAY_MAX</td>
+      <td>ignores NULL</td>
+      <td>ignores NULL</td>
+      <td>returns NULL</td>
+    </tr>
+    <tr>
+      <td>ARRAY_MIN</td>
+      <td>ignores NULL</td>
+      <td>ignores NULL</td>
+      <td>returns NULL</td>
+    </tr>
+    <tr>
+      <td>ARRAY_AVG</td>
+      <td>ignores NULL</td>
+      <td>ignores NULL</td>
+      <td>returns NULL</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Note that SQL++ has twice as many functions listed above as there are aggregate functions in SQL-92.
+Since SQL++ offers two versions of each: one version handles <code class="highlighter-rouge">UNKNOWN</code> values in a semantically
+strict fashion, where unknown values in the input result in unknown values in the output, and the other version
+handles them in the ad hoc “just ignore the unknown values” fashion that the SQL standard chose to adopt.</p>
+
+<h5 id="example-24">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>ARRAY_AVG(
+    (
+      SELECT VALUE len(friendIds) FROM GleambookUsers
+    )
+);
+</code></pre>
+</div>
+
+<p>This example returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>3.3333333333333335
+</code></pre>
+</div>
+
+<h5 id="example-25">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT uid AS uid, ARRAY_COUNT(grp) AS msgCnt
+FROM GleambookMessages message
+GROUP BY message.authorId AS uid GROUP AS grp(message AS msg);
+</code></pre>
+</div>
+
+<p>This query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"uid": 1,
+	"msgCnt": 5
+}, {
+	"uid": 2,
+	"msgCnt": 2
+} ]
+</code></pre>
+</div>
+
+<p>Notice how the query forms groups where each group involves a message author and their messages.
+(SQL cannot do this because the grouped intermediate result is non-1NF in nature.)
+The query then uses the collection aggregate function ARRAY_COUNT to get the cardinality of each
+group of messages.</p>
+
+<h3 id="a-idsql-92aggregationfunctionssql-92-aggregation-functionsa"><a id="SQL-92_aggregation_functions">SQL-92 Aggregation Functions</a></h3>
+<p>For compatibility with the traditional SQL aggregation functions, SQL++ also offers SQL-92’s
+aggregation function symbols (<code class="highlighter-rouge">COUNT</code>, <code class="highlighter-rouge">SUM</code>, <code class="highlighter-rouge">MAX</code>, <code class="highlighter-rouge">MIN</code>, and <code class="highlighter-rouge">AVG</code>) as supported syntactic sugar.
+The SQL++ compiler rewrites queries that utilize these function symbols into SQL++ queries that only
+use the SQL++ collection aggregate functions. The following example uses the SQL-92 syntax approach
+to compute a result that is identical to that of the more explicit SQL++ example above:</p>
+
+<h5 id="example-26">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT uid, COUNT(msg) AS msgCnt
+FROM GleambookMessages msg
+GROUP BY msg.authorId AS uid;
+</code></pre>
+</div>
+
+<p>It is important to realize that <code class="highlighter-rouge">COUNT</code> is actually <strong>not</strong> a SQL++ built-in aggregation function.
+Rather, the <code class="highlighter-rouge">COUNT</code> query above is using a special “sugared” function symbol that the SQL++ compiler
+rewrites as follows:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT uid AS uid, ARRAY_COUNT( (SELECT g.msg FROM `$1` as g) ) AS msgCnt
+FROM GleambookMessages msg
+GROUP BY msg.authorId AS uid GROUP AS `$1`(msg AS msg);
+</code></pre>
+</div>
+
+<p>The same sort of rewritings apply to the function symbols <code class="highlighter-rouge">SUM</code>, <code class="highlighter-rouge">MAX</code>, <code class="highlighter-rouge">MIN</code>, and <code class="highlighter-rouge">AVG</code>.
+In contrast to the SQL++ collection aggregate functions, these special SQL-92 function symbols
+can only be used in the same way they are in standard SQL (that is, with the same restrictions).</p>
+
+<h3 id="a-idsql-92compliantgbysql-92-compliant-group-by-aggregationsa"><a id="SQL-92_compliant_gby">SQL-92 Compliant GROUP BY Aggregations</a></h3>
+<p>SQL++ provides full support for SQL-92 <code class="highlighter-rouge">GROUP BY</code> aggregation queries.
+The following query is such an example:</p>
+
+<h5 id="example-27">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT msg.authorId, COUNT(msg)
+FROM GleambookMessages msg
+GROUP BY msg.authorId;
+</code></pre>
+</div>
+
+<p>This query outputs:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"authorId": 1,
+	"$1": 5
+}, {
+	"authorId": 2,
+	"$1": 2
+} ]
+</code></pre>
+</div>
+
+<p>In principle, a <code class="highlighter-rouge">msg</code> reference in the query’s <code class="highlighter-rouge">SELECT</code> clause is “sugarized” as a collection
+(as described in <a href="#Implicit_group_variables">Implicit Group Variables</a>).
+However, since the SELECT expression <code class="highlighter-rouge">msg.authorId</code> is syntactically identical to a GROUP BY key expression,
+it is internally replaced by the generated group key variable.
+The following is the equivalent rewritten query that is generated by the compiler for the query above:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT authorId AS authorId, ARRAY_COUNT( (SELECT g.msg FROM `$1` AS g) )
+FROM GleambookMessages msg
+GROUP BY msg.authorId AS authorId GROUP AS `$1`(msg AS msg);
+</code></pre>
+</div>
+
+<h3 id="a-idcolumnaliasescolumn-aliasesa"><a id="Column_aliases">Column Aliases</a></h3>
+<p>SQL++ also allows column aliases to use as <code class="highlighter-rouge">GROUP BY</code> keys or <code class="highlighter-rouge">ORDER BY</code> keys.</p>
+
+<h5 id="example-28">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT msg.authorId AS aid, COUNT(msg)
+FROM GleambookMessages msg
+GROUP BY aid;
+</code></pre>
+</div>
+
+<p>This query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"$1": 5,
+	"aid": 1
+}, {
+	"$1": 2,
+	"aid": 2
+} ]
+</code></pre>
+</div>
+
+<h2 id="a-idwherehavingclauseswhere-clauses-and-having-clausesa"><a id="Where_having_clauses">WHERE Clauses and HAVING Clauses</a></h2>
+<p>Use both <code class="highlighter-rouge">WHERE</code> clauses and <code class="highlighter-rouge">HAVING</code> clauses to filter input data based on a condition expression.
+Only tuples for which the condition expression evaluates to <code class="highlighter-rouge">TRUE</code> are propagated.
+Note that if the condition expression evaluates to <code class="highlighter-rouge">NULL</code> or <code class="highlighter-rouge">MISSING</code> the input tuple is discarded.</p>
+
+<h2 id="a-idorderbyclausesorder-by-clausesa"><a id="Order_By_clauses">ORDER BY Clauses</a></h2>
+<p>The <code class="highlighter-rouge">ORDER BY</code> clause is used to globally sort data in either ascending order (<code class="highlighter-rouge">ASC</code>) or descending order (<code class="highlighter-rouge">DESC</code>).
+During ordering, <code class="highlighter-rouge">MISSING</code> and <code class="highlighter-rouge">NULL</code> are treated as being smaller than any other value if they are encountered
+in the ordering key(s). <code class="highlighter-rouge">MISSING</code> is treated as smaller than <code class="highlighter-rouge">NULL</code> if both occur in the data being sorted.
+The following example returns all <code class="highlighter-rouge">GleambookUsers</code> ordered by their friend numbers.</p>
+
+<h5 id="example-29">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>  SELECT VALUE user
+  FROM GleambookUsers AS user
+  ORDER BY len(user.friendIds) DESC;
+</code></pre>
+</div>
+
+<p>This query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>  [ {
+  	"userSince": "2012-08-20T10:10:00.000Z",
+  	"friendIds": [
+  		2,
+  		3,
+  		6,
+  		10
+  	],
+  	"gender": "F",
+  	"name": "MargaritaStoddard",
+  	"nickname": "Mags",
+  	"alias": "Margarita",
+  	"id": 1,
+  	"employment": [
+  		{
+  			"organizationName": "Codetechno",
+  			"start-date": "2006-08-06"
+  		},
+  		{
+  			"end-date": "2010-01-26",
+  			"organizationName": "geomedia",
+  			"start-date": "2010-06-17"
+  		}
+  	]
+  }, {
+  	"userSince": "2012-07-10T10:10:00.000Z",
+  	"friendIds": [
+  		1,
+  		5,
+  		8,
+  		9
+  	],
+  	"name": "EmoryUnk",
+  	"alias": "Emory",
+  	"id": 3,
+  	"employment": [
+  		{
+  			"organizationName": "geomedia",
+  			"endDate": "2010-01-26",
+  			"startDate": "2010-06-17"
+  		}
+  	]
+  }, {
+  	"userSince": "2011-01-22T10:10:00.000Z",
+  	"friendIds": [
+  		1,
+  		4
+  	],
+  	"name": "IsbelDull",
+  	"nickname": "Izzy",
+  	"alias": "Isbel",
+  	"id": 2,
+  	"employment": [
+  		{
+  			"organizationName": "Hexviafind",
+  			"startDate": "2010-04-27"
+  		}
+  	]
+  } ]
+</code></pre>
+</div>
+
+<h2 id="a-idlimitclauseslimit-clausesa"><a id="Limit_clauses">LIMIT Clauses</a></h2>
+<p>Use the <code class="highlighter-rouge">LIMIT</code> clause to limit the result set to a specified constant size, as shown in the following example.</p>
+
+<h5 id="example-30">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>  SELECT VALUE user
+  FROM GleambookUsers AS user
+  ORDER BY len(user.friendIds) DESC
+  LIMIT 1;
+</code></pre>
+</div>
+
+<p>This query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>  [ {
+  	"userSince": "2012-08-20T10:10:00.000Z",
+  	"friendIds": [
+  		2,
+  		3,
+  		6,
+  		10
+  	],
+  	"gender": "F",
+  	"name": "MargaritaStoddard",
+  	"nickname": "Mags",
+  	"alias": "Margarita",
+  	"id": 1,
+  	"employment": [
+  		{
+  			"organizationName": "Codetechno",
+  			"start-date": "2006-08-06"
+  		},
+  		{
+  			"end-date": "2010-01-26",
+  			"organizationName": "geomedia",
+  			"start-date": "2010-06-17"
+  		}
+  	]
+  } ]
+</code></pre>
+</div>
+
+<h2 id="a-idwithclauseswith-clausesa"><a id="With_clauses">WITH Clauses</a></h2>
+<p>As in the standard SQL, <code class="highlighter-rouge">WITH</code> clauses are available to improve the modularity of a query, as shown in the following example:</p>
+
+<h5 id="example-31">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>WITH avgFriendCount AS (
+  SELECT VALUE AVG(LEN(user.friendIds))
+  FROM GleambookUsers AS user
+)[0]
+SELECT VALUE user
+FROM GleambookUsers user
+WHERE LEN(user.friendIds) &gt; avgFriendCount;
+</code></pre>
+</div>
+
+<p>This query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"userSince": "2012-08-20T10:10:00.000Z",
+	"friendIds": [
+		2,
+		3,
+		6,
+		10
+	],
+	"gender": "F",
+	"name": "MargaritaStoddard",
+	"nickname": "Mags",
+	"alias": "Margarita",
+	"id": 1,
+	"employment": [
+		{
+			"organizationName": "Codetechno",
+			"start-date": "2006-08-06"
+		},
+		{
+			"end-date": "2010-01-26",
+			"organizationName": "geomedia",
+			"start-date": "2010-06-17"
+		}
+	]
+}, {
+	"userSince": "2012-07-10T10:10:00.000Z",
+	"friendIds": [
+		1,
+		5,
+		8,
+		9
+	],
+	"name": "EmoryUnk",
+	"alias": "Emory",
+	"id": 3,
+	"employment": [
+		{
+			"organizationName": "geomedia",
+			"endDate": "2010-01-26",
+			"startDate": "2010-06-17"
+		}
+	]
+} ]
+</code></pre>
+</div>
+
+<p>The query is equivalent to the following, more complex, inlined form of the query:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT *
+FROM GleambookUsers user
+WHERE LEN(user.friendIds) &gt;
+    ( SELECT VALUE AVG(LEN(user.friendIds))
+      FROM GleambookUsers AS user
+    ) [0];
+</code></pre>
+</div>
+
+<p>The WITH clause can be particularly useful when a value needs to be used several times in a query.</p>
+
+<p>Before proceeding further, notice that both  the WITH query and its equivalent inlined variant
+include the syntax “[0]” - this is due to a noteworthy difference between SQL++ and SQL-92.
+In SQL-92, whenever a scalar value is expected and it is being produced by a query expression,
+the SQL-92 query processor will evaluate the expression, check that there is only one row and column
+in the result at runtime, and then coerce the one-row/one-column tabular result into a scalar value.
+SQL++, being designed to deal with nested data and schema-less data, does not (and should not) do this.
+Collection-valued data is perfectly legal in most SQL++ contexts, and its data is schema-less,
+so a query processor rarely knows exactly what to expect where and such automatic conversion is often
+not desirable. Thus, in the queries above, the use of “[0]” extracts the first (that is 0th) element of
+an array-valued query expression’s result; this is needed above, even though the result is an array of one
+element, to extract the only element in the singleton array and obtain the desired scalar for the comparison.</p>
+
+<h2 id="a-idletclauseslet-clausesa"><a id="Let_clauses">LET Clauses</a></h2>
+<p>Similar to <code class="highlighter-rouge">WITH</code> clauses, the <code class="highlighter-rouge">LET</code> clauses are useful when a (complex) expression is used several times within a query, allowing it to be written once to make the query more concise, as shown in the following example query.</p>
+
+<h5 id="example-32">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT u.name AS uname, messages AS messages
+FROM GleambookUsers u
+LET messages = (SELECT VALUE m
+                FROM GleambookMessages m
+                WHERE m.authorId = u.id)
+WHERE EXISTS messages;
+</code></pre>
+</div>
+
+<p>This query lists <code class="highlighter-rouge">GleambookUsers</code> that have posted <code class="highlighter-rouge">GleambookMessages</code> and shows all authored messages for each listed user. It returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"uname": "MargaritaStoddard",
+	"messages": [
+		{
+			"senderLocation": [
+				38.97,
+				77.49
+			],
+			"inResponseTo": 1,
+			"messageId": 11,
+			"authorId": 1,
+			"message": " can't stand at&amp;t its plan is terrible"
+		},
+		{
+			"senderLocation": [
+				41.66,
+				80.87
+			],
+			"inResponseTo": 4,
+			"messageId": 2,
+			"authorId": 1,
+			"message": " dislike iphone its touch-screen is horrible"
+		},
+		{
+			"senderLocation": [
+				37.73,
+				97.04
+			],
+			"inResponseTo": 2,
+			"messageId": 4,
+			"authorId": 1,
+			"message": " can't stand at&amp;t the network is horrible:("
+		},
+		{
+			"senderLocation": [
+				40.33,
+				80.87
+			],
+			"inResponseTo": 11,
+			"messageId": 8,
+			"authorId": 1,
+			"message": " like verizon the 3G is awesome:)"
+		},
+		{
+			"senderLocation": [
+				42.5,
+				70.01
+			],
+			"inResponseTo": 12,
+			"messageId": 10,
+			"authorId": 1,
+			"message": " can't stand motorola the touch-screen is terrible"
+		}
+	]
+}, {
+	"uname": "IsbelDull",
+	"messages": [
+		{
+			"senderLocation": [
+				31.5,
+				75.56
+			],
+			"inResponseTo": 1,
+			"messageId": 6,
+			"authorId": 2,
+			"message": " like t-mobile its platform is mind-blowing"
+		},
+		{
+			"senderLocation": [
+				48.09,
+				81.01
+			],
+			"inResponseTo": 4,
+			"messageId": 3,
+			"authorId": 2,
+			"message": " like samsung the plan is amazing"
+		}
+	]
+} ]
+</code></pre>
+</div>
+
+<p>This query is equivalent to the following query that does not use the <code class="highlighter-rouge">LET</code> clause:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT u.name AS uname, ( SELECT VALUE m
+                          FROM GleambookMessages m
+                          WHERE m.authorId = u.id
+                        ) AS messages
+FROM GleambookUsers u
+WHERE EXISTS ( SELECT VALUE m
+               FROM GleambookMessages m
+               WHERE m.authorId = u.id
+             );
+</code></pre>
+</div>
+
+<h2 id="a-idunionallunion-alla"><a id="Union_all">UNION ALL</a></h2>
+<p>The UNION ALL can be used to combine two input streams into one. As in SQL, there is no ordering guarantee on the contents of the output stream. However, unlike SQL, SQL++ does not constrain what the data looks like on the input streams; in particular, it allows heterogeneous on the input and output streams. The following odd but legal query is an example:</p>
+
+<h5 id="example-33">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT u.name AS uname
+FROM GleambookUsers u
+WHERE u.id = 2
+  UNION ALL
+SELECT VALUE m.message
+FROM GleambookMessages m
+WHERE authorId=2;
+</code></pre>
+</div>
+
+<p>This query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[
+  " like t-mobile its platform is mind-blowing"
+  , {
+	"uname": "IsbelDull"
+}, " like samsung the plan is amazing"
+ ]
+</code></pre>
+</div>
+
+<h2 id="a-idsubqueriessubqueriesa"><a id="Subqueries">Subqueries</a></h2>
+<p>In SQL++, an arbitrary subquery appears anywhere that an expression can appear.
+Unlike SQL-92, as was just alluded to, the subqueries in a SELECT list or a boolean predicate need
+not return singleton, single-column relations.
+Instead, they may return arbitrary collections.
+For example, the following query is a variant of the prior group-by query examples;
+it retrieves an array of up to two “dislike” messages per user.</p>
+
+<h5 id="example-34">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT uid,
+       (SELECT VALUE m.msg
+        FROM msgs m
+        WHERE m.msg.message LIKE '%dislike%'
+        ORDER BY m.msg.messageId
+        LIMIT 2) AS msgs
+FROM GleambookMessages message
+GROUP BY message.authorId AS uid GROUP AS msgs(message AS msg);
+</code></pre>
+</div>
+
+<p>For our sample data set, this query returns:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>[ {
+	"msgs": [
+		{
+			"senderLocation": [
+				41.66,
+				80.87
+			],
+			"inResponseTo": 4,
+			"messageId": 2,
+			"authorId": 1,
+			"message": " dislike iphone its touch-screen is horrible"
+		}
+	],
+	"uid": 1
+}, {
+	"msgs": [
+
+	],
+	"uid": 2
+} ]
+</code></pre>
+</div>
+
+<p><strong>Note:</strong> A subquery, like a top-level <code class="highlighter-rouge">SELECT</code> statement, always returns a collection,regardless of where
+within a query the subquery occurs, and again the result is never automatically cast into a scalar.</p>
+
+<h2 id="a-idvssql-92sql-vs-sql-92a"><a id="Vs_SQL-92">SQL++ vs. SQL-92</a></h2>
+<p>The following matrix is a quick SQL-92 compatibility cheat sheet for SQL++.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Feature</th>
+      <th>SQL++</th>
+      <th>SQL-92</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>SELECT *</td>
+      <td>Returns nested records</td>
+      <td>Returns flattened concatenated records</td>
+    </tr>
+    <tr>
+      <td>Subquery</td>
+      <td>Returns a collection</td>
+      <td>The returned collection is cast into a scalar value if the subquery appears in a SELECT list or on one side of a comparison or as input to a function</td>
+    </tr>
+    <tr>
+      <td>LEFT OUTER JOIN</td>
+      <td>Fills in <code class="highlighter-rouge">MISSING</code>(s) for non-matches</td>
+      <td>Fills in <code class="highlighter-rouge">NULL</code>(s) for non-matches</td>
+    </tr>
+    <tr>
+      <td>UNION ALL</td>
+      <td>Allows heterogeneous inputs and output</td>
+      <td>Input streams must be UNION-compatible and output field names are drawn from the first input stream</td>
+    </tr>
+    <tr>
+      <td>IN constant_expr</td>
+      <td>The constant expression has to be an array or multiset, that is, [..,..,…]</td>
+      <td>The constant collection can be represented as comma-separated items in a paren pair</td>
+    </tr>
+    <tr>
+      <td>String literal</td>
+      <td>Double quotes or single quotes</td>
+      <td>Single quotes only</td>
+    </tr>
+    <tr>
+      <td>Delimited identifiers</td>
+      <td>Backticks</td>
+      <td>Double quotes</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>For items beyond this cheat sheet, SQL++ is compliant with SQL-92.
+Moreover, SQL++ offers the following additional features beyond SQL-92 (hence the “++” in its name):</p>
+
+<ul>
+  <li>Fully composable and functional: A subquery can iterate over any intermediate collection and can appear anywhere in a query.</li>
+  <li>Schema-free: The query language does not assume the existence of a static schema for any data that it processes.</li>
+  <li>Correlated FROM terms: A right-side FROM term expression can refer to variables defined by FROM terms on its left.</li>
+  <li>Powerful GROUP BY: In addition to a set of aggregate functions as in standard SQL, the groups created by the <code class="highlighter-rouge">GROUP BY</code> clause are directly usable in nested queries and/or to obtain nested results.</li>
+  <li>Generalized SELECT clause: A SELECT clause can return any type of collection, while in SQL-92, a <code class="highlighter-rouge">SELECT</code> clause has to return a (homogeneous) collection of records.</li>
+</ul>
+
+      </div>
+    </div>
+  <script>
+     /**
+     * HACK: To keep the markdown tables styles after ingestion we need to wrap the ouput in <div class="table"></div>
+     */
+    var tables = document.getElementsByTagName("table");
+    var j = tables.length - 1;
+    while (j >= 0) {
+      var parent = tables.item(j).parentNode;
+      var table = tables.item(j);
+      var wrapper = document.createElement('div');
+      wrapper.className = 'table';
+      parent.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+      j--;
+    }
+  </script>
+  </section>
+    <footer class="site-footer">
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading"></h2>
+      <div class="footer-col footer-col-3">
+        <p></p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+
+
+  </body>
+
+</html>
