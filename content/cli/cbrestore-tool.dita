@@ -23,49 +23,60 @@
      
       
     </section>
-    <section><title>Description</title>
-    
-    <p>Items that had been written to file on disk are restored to RAM.</p>
-      <p>The <codeph>cbbackup</codeph>, <codeph>cbrestore</codeph>, and <codeph>cbtransfer</codeph>
-        tools do not communicate with external IP addresses for server nodes outside of a cluster.
-        Backup, restore, or transfer operations are performed on data from a node within a Couchbase
-        cluster. They only communicate with nodes from a node list obtained within a cluster. If you
-        install Couchbase Server with a default IP address, you cannot use an external host name to
-        access it.</p>
+    <section><title>Description</title><p>Items that had been written to file on disk are restored
+        to RAM. </p><p>The <codeph>cbbackup</codeph>, <codeph>cbrestore</codeph>, and
+          <codeph>cbtransfer</codeph> tools do not communicate with external IP addresses for server
+        nodes outside of a cluster. Backup, restore, or transfer operations are performed on data
+        from a node within a Couchbase cluster. They only communicate with nodes from a node list
+        obtained within a cluster. If you install Couchbase Server with a default IP address, you
+        cannot use an external host name to access it.</p>
+      <b>Restoring Global Secondary Indexes</b>
       <p>If the backup being restored contains global secondary index definitions (stored in
           <codeph>index.json</codeph>), then these are also restored as part of the cbrestore
         process. Unlike both data and map-reduce views, global secondary indexes are not
         automatically distributed across a cluster. As a result, many users manually distribute
         their indexes across separate index nodes to ensure high availability (see <xref
-          href="../n1ql/n1ql-language-reference/createindex.dita"> CREATE INDEX</xref>).</p>
-      <p>Due to the topology-agnostic nature of <codeph>cbbackup</codeph>,these index definitions
-        are stored without the explicit node names, which are passed in as part of the
-          <codeph>CREATE INDEX</codeph> command. <codeph>Cbbackup</codeph> does however store the
-        indexer-id for each index, a value used to internally identify a specific index node. In
-        order to restore indexes to a cluster, <codeph>cbrestore</codeph> sends each index
-        definition, along with this identifier, to the index service which will appropriately
-        distribute these indexes across all index nodes. When you restore indexes to the same
-        cluster (and same topology) that the backup was taken from, the indexing service is able to
-        locate the appropriate index nodes so that the indexes are on the same nodes as before.
-        Often the topology of a cluster at the time of backup is not the same as the topology when
-        restoring. In this case the indexing service may be unable to find the specific node
-        associated with an index which it is restoring. The behaviour when the specific index node
-        cannot be found is for the index service to distribute the index definition to another index
-        node, chosen at random. This random distribution can cause indexes with the same definitions
-        to be placed on the same node rather than separate nodes. You should always check that the
-        indexes have been correctly distributed after running a restore, you may need to manually
-        redistribute some indexes if necessary.</p>
-      <p>Once the index definitions have been restored by cbrestore they must be built manually (see
-          <xref href="../n1ql/n1ql-language-reference/build-index.dita"> BUILD INDEX</xref>). as the
-        index service only creates them (without building them). This is to prevent resource
-        contention caused by simultaneous data restoration and building of indexes during the
-        cbrestore process. Additionally this gives the Couchbase administrator a chance to examine
-        and redistribute the indexes before they are built.</p>
-      <p>You can check whether or not an index is in a ‘created’, ‘built’ or ‘building’ state by
-        viewing the ‘Index’ tab in the web console.</p>
-    <p>The tool is in the following locations:</p>
-    <table>
-      <tgroup cols="2">
+          href="../n1ql/n1ql-language-reference/createindex.dita"> CREATE INDEX</xref>).</p><p>Due
+        to the topology-agnostic nature of <codeph>cbbackup</codeph>,these index definitions are
+        stored without the explicit node names, which are passed in as part of the <codeph>CREATE
+          INDEX</codeph> command. <codeph>Cbbackup</codeph> does however store the indexer-id for
+        each index, a value used to internally identify a specific index node. In order to restore
+        indexes to a cluster, <codeph>cbrestore</codeph> sends each index definition, along with
+        this identifier, to the index service which will appropriately distribute these indexes
+        across all index nodes. When you restore indexes to the same cluster (and same topology)
+        that the backup was taken from, the indexing service is able to locate the appropriate index
+        nodes so that the indexes are on the same nodes as before. Often the topology of a cluster
+        at the time of backup is not the same as the topology when restoring. In this case the
+        indexing service may be unable to find the specific node associated with an index which it
+        is restoring. The behaviour when the specific index node cannot be found is for the index
+        service to distribute the index definition to another index node, chosen at random. This
+        random distribution can cause indexes with the same definitions to be placed on the same
+        node rather than separate nodes. You should always check that the indexes have been
+        correctly distributed after running a restore, you may need to manually redistribute some
+        indexes if necessary. </p><p>Once the index definitions have been restored by cbrestore they
+        must be built manually (see <xref href="../n1ql/n1ql-language-reference/build-index.dita">
+          BUILD INDEX</xref>) as the index service only creates them (without building them). This
+        is to prevent resource contention caused by simultaneous data restoration and building of
+        indexes during the cbrestore process. Additionally this gives the Couchbase administrator a
+        chance to examine and redistribute the indexes before they are built.</p><p>You can check
+        whether or not an index is in a ‘created’, ‘built’ or ‘building’ state by viewing the
+        ‘Index’ tab in the web console.</p>
+      <b>Conflict Resolution</b>
+      <p>By default, when restoring from a backup using cbrestore, Couchbase Server will perform
+        conflict resolution on all documents to be restored. The conflict resolution behaviour is
+        the same as cross datacenter replication (XDCR), which is detailed in <xref
+          href="../architecture/high-availability-replication-architecture.dita">XDCR
+          architecture</xref>. This is so that documents which have been updated after the backup
+        are not incorrectly overwritten by the restore process.</p><p>As a result, after running the
+        restore process, some documents may not match the content of the backup file. In certain
+        cases where a document has been recently deleted on the cluster, the document may not be
+        restored at all due to this conflict resolution.</p><p>To restore the contents of a backup
+        while overwriting current documents with the same key, pass the extra parameter
+          <codeph>conflict_resolve=1</codeph> as part of the cbrestore command. To ensure that only
+        the documents contained in the backup exist in the bucket after performing the restore,
+        flush the bucket prior to performing the restore</p>
+      <b>Tool Location</b><p>The tool is in the following locations:</p><table>
+        <tgroup cols="2">
           <colspec colname="col1" colwidth="1*"/>
           <colspec colname="col2" colwidth="7.33*"/>
           <thead>
@@ -89,10 +100,8 @@
             </row>
           </tbody>
         </tgroup>
-    </table>
-      <note type="important">Be sure to create the destination bucket before restoring the data.</note>
-      
-    </section>
+      </table><note type="important">Be sure to create the destination bucket before restoring the
+        data.</note></section>
     
     <section><title>Options</title>
       
@@ -308,37 +317,32 @@
       </table>
     </section>
    <section><title>Examples</title>
-     <p>The following are syntax examples:</p>
+     <p>The following are basic syntax examples:</p>
      
-     <codeblock>cbrestore /backups/backup-42 http://HOST:8091 \
---bucket-source=default --from-date=2014-01-20 --to-date=2014-03-31
-cbrestore /backups/backup-42 couchbase://HOST:8091 \
---bucket-source=default
-cbrestore /backups/backup-42 memcached://HOST:11211 \
---bucket-source=sessions --bucket-destination=sessions2			</codeblock>
+     <codeblock>cbrestore ~/backup http://192.0.2.0:8091 -b travel-sample
+cbrestore ~/backup couchbase://192.0.2.0:8091 -b travel-sample
+cbrestore ~/backup memcached://192.0.2.0:11211 -b travel-sample		</codeblock>
      
-  <p><b>Example for restoring design documents</b></p> 
-     <p>The following example restores design documents from the backup file, ~/backup/a_bucket, 
-       to the destination bucket, my_bucket, in a cluster. </p>
-     <codeblock>cbrestore ~/backup http://10.3.1.10:8091 -x \
-design_doc_only=1 -b a_bucket -B my_bucket</codeblock>
+  <p><b>Example for restoring only design documents</b></p> 
+     <p>The following example restores design documents from the backup file,
+        ~/backup/travel-sample, to the destination bucket, travel-sample, in a cluster. </p>
+     <codeblock>cbrestore ~/backup http://192.0.2.0:8091 -x design_doc_only=1 \ 
+    -b travel-sample -B travel-sample</codeblock>
      <p>If multiple source buckets were backed up, this command must be performed multiple times.
        In the following example, a cluster with two data buckets is backed up and has the following backup
        files: <ul>
-         <li><codeph>~/backup/bucket_one/design.json</codeph></li>
-         <li><codeph>~/backup/bucket_two/design.jsonT</codeph></li>
+         <li><codeph>~/backup/travel-sample/design.json</codeph></li>
+         <li><codeph>~/backup/beer-sample/design.jsonT</codeph></li>
        </ul></p>
      
      <p>The following command restores the design documents in both backup files to a bucket
        in a cluster named <codeph>my_bucket</codeph>.</p>
      
-     <codeblock>cbrestore ~/backup http://10.3.1.10:8091 -x design_doc_only=1 \
--b bucket_one -B my_bucket
+     <codeblock>cbrestore -b travel-sample -B travel-sample -x design_doc_only=1 \
+    ~/backup http://192.0.2.0:8091    
 
-cbrestore ~/backup http://10.3.1.10:8091 -x design_doc_only=1 \
--b bucket_two -B my_bucket</codeblock>
-     
-     <p>Response</p>
+cbrestore -b beer-sample -B beer-sample -x design_doc_only=1 \
+    ~/backup http://192.0.2.0:8091</codeblock>
      <p>The following example response shows a successful restore.</p>
      <codeblock>transfer design doc only. bucket msgs will be skipped.
 done     </codeblock>
@@ -346,14 +350,22 @@ done     </codeblock>
   <p><b>Example for restoring data incrementally</b></p>   
      
      <p>The following example requests a restoration of data backed up between August 1, 2014, and
-       August 3, 2014. The &#x2011;b option specifies the name of the bucket to restore
-       from the backup file, and the &#x2011;B option specifies the name of the destination
-       bucket in the cluster.</p>
+        August 3, 2014. The <codeph>-b</codeph> option specifies the name of the bucket to restore from the
+        backup file, and the <codeph>-B</codeph> option specifies the name of the destination bucket in the
+        cluster.</p>
      
-     <codeblock>cbrestore -b source-bucket -B destination-bucket \
---from-date=2014-08-01 --to-date=2014-08-03 /backups/backup-1 \
-http://example.com:8091</codeblock> 
+     <codeblock>cbrestore -b travel-sample -B travel-sample \
+    --from-date=2014-08-01 --to-date=2014-08-03 ~/backup \
+    http://192.0.2.0:8091</codeblock> 
      
+     <p><b>Example for restoring data while ignoring conflict resolution</b></p>   
+     
+     <p>The following example requests a restoration of data while ignoring the built-in conflict
+        resolution. This causes all documents in the backup file to be restored regardless of
+        whether the documents in the target cluster would win conflict resolution.</p>
+     
+     <codeblock>cbrestore -b travel-sample -B travel-sample -x conflict_resolve=0 \
+    ~/backup http://192.0.2.0:8091</codeblock> 
      
    </section> 
      
