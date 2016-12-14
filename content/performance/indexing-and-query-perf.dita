@@ -1,0 +1,336 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_ygz_jhp_4x">
+  <title>Indexing JSON Documents and Query Performance</title>
+  <body>
+    <p>Creating the right index - with the right keys, in the right order, and using the right
+      expressions, is critical to query performance in any database system. This is true for
+      Couchbase as well. This topic provides an overview of the indexing options for JSON in
+      Couchbase, which in turn would help query for data efficiently and improve query
+      performance.</p>
+    <p>There are two types of indexes available:<ul>
+      <li>Standard global secondary index</li>
+      <li>Memory-optimized global secondary index</li>
+    </ul></p>
+    <p>The standard global secondary index stores uses the ForestDB storage engine to store the B-Tree index and keeps the optimal working set of data in the buffer. This means, the total size of the index can be much bigger than the amount of memory available in each index node.</p>
+    <p>A memory-optimized index uses a lock-free skiplist to maintain the index and keeps all the index data in memory. A memory-optimized index has better latency for index scans and processes the mutations of the data much faster.</p>
+    <p>Both standard and memory-optimized indexes implement multi-version concurrency control (MVCC)
+      to provide consistent index scan results and high throughput. </p>
+    <p>During cluster installation, you can choose the type of index you'd like to use in the
+      cluster.</p>
+    <p>The examples in this topic use the travel-sample dataset which is shipped with Couchbase
+      Server. Ensure that you've installed the travel-sample bucket. For instructions on how to
+      install the sample bucket, see <xref
+        href="../settings/install-sample-buckets.dita#topic_jqr_1rn_vs"/>.</p>
+    <p>Couchbase Server is a distributed database that supports flexible data model using JSON. Each
+      document in a bucket has a user-generated unique document key and this uniqueness is enforced
+      when inserting data into the bucket. Take a look at the following sample document:
+      <codeblock>SELECT meta().id, travel 
+FROM `travel-sample` travel 
+WHERE type = 'airline' 
+LIMIT 1;
+
+[
+    {
+        <b>"id": "airline_10"</b>,
+        "travel": {
+            "callsign": "MILE-AIR",
+            "country": "United States",
+            "iata": "Q5",
+            "icao": "MLA",
+            "id": 10,
+            "name": "40-Mile Air",
+            "type": "airline"
+            }
+        }
+    ]</codeblock></p>
+    <section id="primary-index"><title>Primary Index</title>
+      <p>The primary index is simply an index on the document key on the entire bucket.
+        <codeblock>CREATE PRIMARY INDEX ON `travel-sample`;</codeblock></p>
+      <p>The Couchbase data layer enforces the uniqueness constraint on the document key. The
+        primary index, like every other index, is maintained asynchronously. Use the primary index
+        for full bucket scans (primary scans) when the query does not have any filters (predicates)
+        or when no other index or access path can be used.</p>
+        <codeblock spectitle="Metadata for Primary Index">SELECT * FROM system:indexes WHERE name = '#primary';
+[
+"indexes": {
+    "datastore_id": "http://127.0.0.1:8091",
+    "id": "f6e3c75d6f396e7d",
+    "index_key": [],
+    "is_primary": true,
+    "keyspace_id": "travel-sample",
+    "name": "#primary",
+    "namespace_id": "default",
+    "state": "online",
+    "using": "gsi"
+    }
+    ]</codeblock><p>The metadata provides additional information about the index like where does the index reside
+          (<systemoutput>datastore_id</systemoutput>), its state
+        (<systemoutput>state</systemoutput>), and the indexing method used
+          (<systemoutput>using</systemoutput>).</p>
+    </section>
+    <section id="named-primary-index"><title>Named Primary Index</title>
+      <p>You can name the primary index,  as seen in the following
+        example.<codeblock>CREATE PRIMARY INDEX `def_primary` ON `travel-sample`;</codeblock></p>
+      <p>The rest of the features of the primary index are the same, except that this index is
+        named. The advantage of naming a primary index is that you can have multiple primary indexes
+        in the system. Duplicate indexes help with high availability as well as query load
+        distribution between the indexes. This is true for both primary indexes and secondary
+        indexes.</p>
+      <codeblock>SELECT meta().id AS documentkey, `travel-sample` airline 
+FROM `travel-sample` 
+WHERE type = 'airline' 
+LIMIT 1;
+[
+  {
+    "airline": {
+      "callsign": "MILE-AIR",
+      "country": "United States",
+      "iata": "Q5",
+      "icao": "MLA",
+      "id": 10,
+      "name": "40-Mile Air",
+      "type": "airline"
+    },
+    "documentkey": "airline_10"
+  }
+]</codeblock>
+    </section>
+    <section id="secondary-index"><title>Secondary Index</title><p>The secondary index is an index on any key-value or document-key. This index can use any key
+        within the document and the key can be of any type: scalar, object, or array. The query has
+        to use the same type of object for the query engine to use the index.</p>
+      <codeblock spectitle="Example: Key is a Simple Scalar Value">CREATE INDEX travel_name ON `travel-sample`(name);
+
+# Name is a simple scalar value such as:
+# { "name": "Air France" }</codeblock>
+      <codeblock spectitle="Example: Key is an Object Embedded Within the Document">CREATE INDEX travel_geo on `travel-sample`(geo);
+
+# get is an object embedded within the document such as:
+# "geo": {
+#    "alt": 12,
+#    "lat": 50.962097,
+#    "lon": 1.954764
+#    }</codeblock>
+      <codeblock spectitle="Example: Keys from Nested Objects">CREATE INDEX travel_geo on `travel-sample`(geo.alt);
+
+CREATE INDEX travel_geo on `travel-sample`(geo.lat);</codeblock>
+      <codeblock spectitle="Example: Keys is an Array of Objects"># Schedule is an array of objects with flight details. This command indexes the
+# complete array and is useful only if you're looking for the entire array.
+CREATE INDEX travel_schedule ON `travel-sample`(schedule);
+Example:
+"schedule": [
+        {
+            "day": 0,
+            "flight": "AF198",
+            "utc": "10:13:00"
+            },
+        {
+            "day": 0,
+            "flight": "AF547",
+            "utc": "19:14:00"
+            },
+        {
+            "day": 0,
+            "flight": "AF943",
+            "utc": "01:31:00"
+            },
+        {
+            "day": 1,
+            "flight": "AF356",
+            "utc": "12:40:00"
+            },
+        {
+            "day": 1,
+            "flight": "AF480",
+            "utc": "08:58:00"
+            },
+        {
+            "day": 1,
+            "flight": "AF250",
+            "utc": "12:59:00"
+            }
+    ]</codeblock>
+    </section>
+    <section id="composite-secondary-index"><title>Composite Secondary Index</title>
+      <p>It's common to have queries with multiple filters (predicates). In such cases, you want to
+        use indexes with multiple keys so the indexes can return only the qualified document keys.
+        Additionally, if a query is referencing only the keys in the index, the query engine can
+        simply answer the query from the index scan result without having to fetch from the data
+        nodes. This is commonly used for performance optimization.
+        <codeblock>CREATE INDEX travel_info ON `travel-sample`(name,type,id,icoo,iata);</codeblock></p>
+      <p>Each of the keys can be a simple scalar field, object, or an array. For the index filtering
+        to be exploited, the filters have to use respective object type in the query filter.</p>
+      <p>The keys to the secondary indexes can include document keys (<codeph>meta().id</codeph>)
+        explicitly if you need to filter on the document keys in the index.</p>
+    </section>
+    <section id="functional-index"><title>Functional Index</title>
+      <p>It's common to have names in the database with a mix of upper and lower cases. When you
+        need to search, say for the name "John," you want to search for all possibilities of "John,"
+        "john," and so on. In order to do so, you create an index using an expression or a function
+        as the key.  For
+        example:<codeblock>CREATE INDEX travel_cxname ON `travel-sample`(LOWER(name));</codeblock></p>
+      <p>If you provide the search string in lowercase, the index helps query engine efficiently
+        search for already lowercased values in the index.
+        <codeblock>EXPLAIN SELECT * FROM `travel-sample` WHERE LOWER(name) = "john";
+{
+    "#operator": "IndexScan",
+    "index": "travel_cxname",
+    "index_id": "2f39d3b7aac6bbfe",
+    "keyspace": "travel-sample",
+    "namespace": "default",
+    "spans": [
+    {
+        "Range": {
+            "High": [
+            "\"john\""
+            ],
+            "Inclusion": 3,
+            "Low": [
+            "\"john\""
+            ]
+        }
+    }
+    ],</codeblock></p>
+      <p>You can also use complex expressions in the functional index. For example:
+        <codeblock>CREATE INDEX travel_cx1 ON `travel-sample`(LOWER(name), length*width, round(salary));</codeblock></p>
+    </section>
+    <section id="array-index"><title>Array Index</title>
+      <p>JSON is hierarchical. At the top level, it can have scalar fields, objects, or arrays. Each
+        object can nest other objects and arrays; each array can have other objects and arrays, and
+        the nesting can continue. Consider the following example array.
+        <codeblock>schedule: 
+[  
+    {  
+        "day" : 0, 
+        "special_flights" : 
+        [ 
+        {  
+            "flight" : "AI111", "utc" : ”1:11:11"
+            }, 
+        {  
+            "flight" : "AI222", "utc" : ”2:22:22" 
+            }   
+            ]  
+        },
+    {
+        "day": 1,
+        "flight": "AF552",
+        "utc": "14:41:00”
+        }
+    ]</codeblock>With
+        a rich structure as seen in the array schedule, here's how you index a particular array or a
+        field within the sub-object.
+        <codeblock>CREATE INDEX travel_sched ON `travel-sample`
+ (ALL DISTINCT ARRAY v.day FOR v IN schedule END);</codeblock></p>
+      <p>This index key is an expression on the array to clearly reference only the elements that
+        need to be indexed.<ul id="ul_okh_f5k_px">
+          <li><codeph>schedule</codeph> - the array we’re dereferencing into.</li>
+          <li><codeph>v</codeph> - the variable implicitly declared to reference each element/object
+            within the array: schedule</li>
+          <li><codeph>v.day</codeph> - the element within each object of the array schedule.</li>
+        </ul></p>
+      <p>The following query uses the array index created
+        above.<codeblock>EXPLAIN SELECT * FROM `travel-sample` 
+WHERE ANY v IN SCHEDULE SATISFIES v.day = 2 END;
+
+{
+    "#operator": "DistinctScan",
+    "scan": {
+        "#operator": "IndexScan",
+        "index": "travel_sched",
+        "index_id": "db7018bff5f10f17",
+        "keyspace": "travel-sample",
+        "namespace": "default",
+        "spans": [
+        {
+            "Range": {
+                "High": [
+                "2"
+                ],
+                "Inclusion": 3,
+                "Low": [
+                "2"
+                ]
+                }
+            }
+        ],
+        "using": "gsi"
+    }</codeblock></p>
+      <p>Because the key is a generalized expression, it provides the flexibility to apply
+        additional logic and processing on the data before indexing. For example, you can create
+        functional indexing on elements of each array. As you're referencing individual fields of
+        the object or element within the array, the index creation, size, and search are
+        efficient.</p>
+      <p>The index <codeph>travel_sched</codeph> stores only the distinct values within an array. To
+        store all elements of an array in an index, do not use the DISTINCT modifier to the
+        expression.
+        <codeblock>CREATE INDEX travel_sched ON `travel-sample`
+    (ALL ARRAY v.day FOR v IN schedule END);</codeblock></p>
+    </section>
+    <section id="partial-index"><title>Partial Index</title>
+      <p>Unlike relational systems where each type of row is in a distinct table, Couchbase buckets
+        can have documents of various types. You can include a type field in your document to
+        differentiate distinct types.
+        <codeblock>{
+    "airline": {
+        "callsign": "MILE-AIR",
+        "country": "United States",
+        "iata": "Q5",
+        "icao": "MLA",
+        "id": 10,
+        "name": "40-Mile Air",
+        "type": "airline"
+        },
+    "documentkey": "airline_10"
+    }</codeblock></p>
+      <p>Also, since Couchbase data model is JSON and JSON schema is flexible, an index may not
+        contain entries to documents with absent index keys. </p>
+      <p>When you want to create an index of airline documents, you can simply add the type field
+        for the WHERE clause of the index.
+        <codeblock>CREATE INDEX travel_info ON `travel-sample`(name, id, icoo, iata)
+WHERE type='airline';</codeblock></p>
+      <p>This creates an index only on documents that have <codeph>type='airline'</codeph>. The
+        queries must include the filter <codeph>type='airline'</codeph> in addition to other filters
+        for this index to qualify.</p>
+      <p>You can use complex predicates in the WHERE clause of the index. Here are some examples
+        where you can use partial indexes: <ul id="ul_ex4_ydl_px">
+          <li>Partitioning a large index into multiple indexes using the mod function.</li>
+          <li>Partitioning a large index into multiple indexes and placing each index into distinct
+            indexer nodes.</li>
+          <li>Partitioning the index based on a list of values. For example, you can have an index
+            for each state.</li>
+          <li>Simulating index range partitioning via a range filter in the WHERE clause. Note that
+            N1QL queries use one partitioned index per query block. Use UNION ALL to have a query
+            exploit multiple partitioned indexes in a single query.</li>
+        </ul></p>
+    </section>
+    <section id="duplicate-index"><title>Duplicate Index</title>
+      <p>Duplicate index isn't really a special type of index, but a feature of Couchbase indexing.
+        You can create duplicate indexes with distinct names.
+        <codeblock>CREATE INDEX i1 ON `travel-sample`(LOWER(name),id, icoo) 
+WHERE type = 'airline';
+
+CREATE INDEX i2 ON `travel-sample`(LOWER(name),id, icoo) 
+WHERE type = 'airline';
+
+CREATE INDEX i3 ON `travel-sample`(LOWER(name),id, icoo) 
+WHERE type = 'airline';</codeblock></p>
+      <p>All three indexes have identical keys and an identical WHERE clause; the only difference is
+        the name of these indexes. You can choose their physical location using the WITH clause of
+        the CREATE INDEX statement. </p>
+      <p>During query optimization, the query engine chooses one of the index names as seen in the
+        explain plan. During query execution, these indexes are used in a round-robin fashion to
+        distribute the load. Thus providing scale-out, multi-dimensional scaling, performance, and
+        high availability.</p>
+    </section>
+    <section id="covering-index">
+      <title>Covering Index</title>
+      <p>Index selection for a query solely depends on the filters in the WHERE clause of your
+        query. After the index selection is made, the query engine analyzes the query to see if it
+        can be answered using only the data in the index. If it does, the query engine skips
+        retrieving the whole document from the data nodes. This is a performance optimization to
+        keep in mind when designing your indexes. For more information about covering indexes, see
+          <xref href="../indexes/covering-indexes.dita#concept_yv4_c2z_wt">here</xref>.</p>
+    </section>
+  </body>
+</topic>
