@@ -223,22 +223,66 @@
             <codeblock>select country from `beer-sample` where state = 'CA'
     UNION ALL
     select country from `beer-sample` where state = 'Texas';</codeblock></p>
-        <p><b>Sub-queries</b><codeblock>Select *
-   from (
-   SELECT country from `beer-sample` WHERE state = 'CA'
+        <p><b>Sub-queries</b><codeblock>SELECT *
+   FROM (
+   SELECT country FROM `beer-sample` WHERE state = 'CA'
    UNION ALL
-   select country from `beer-sample` WHERE state = 'Texas'
-   ) as newtab;
+   SELECT country FROM `beer-sample` WHERE state = 'Texas'
+   ) AS newtab;
   </codeblock></p>
         <p><b>SELECT in INSERT
             statements</b><codeblock>INSERT into `travel-sample`(KEY k, value state) 
    SELECT country as k, state from `beer-sample` b WHERE state = 'CA';</codeblock></p>
-        <p><b>Arrays in WHERE clauses</b>
-        </p>
+        <p><b>Arrays in WHERE clauses</b></p>
         <p>First, create a new index, <userinput>idxarray</userinput>.
             <codeblock>CREATE INDEX idxarray on `beer-sample`(a, b);</codeblock> Then, run the
             following query:
             <codeblock>SELECT b from `beer-sample` WHERE a = [1, 2, 3, 4];</codeblock></p>
+        <p><b>Collection Operators: FIRST, ARRAY, ANY, EVERY, and ANY AND EVERY</b></p>
+        <p>Since the <codeph>default</codeph> bucket is empty by default, let's first insert the
+            following documents into the default bucket:
+            <codeblock>INSERT into default values ("account-customerXYZ-123456789",
+{ "accountNumber": 123456789, 
+  "docId": "account-customerXYZ-123456789", 
+  "code": "001", 
+  "transDate":"2016-07-02" } );
+
+INSERT into default values("codes-version-9", 
+{ "version": 9, 
+  "docId": "codes-version-9", 
+  "codes": [
+    { "code": "001", 
+      "type": "P", 
+      "title": "SYSTEM W MCC", 
+      "weight": 26.2466 
+    },
+    { "code": "166", 
+      "type": "P", 
+      "title": "SYSTEM W/O MCC", 
+      "weight": 14.6448 }
+  ] 
+});</codeblock></p>
+        <p>Create an index, <codeph>idx_account_customer_xyz_transDate</codeph>:
+            <codeblock>CREATE INDEX idx_account_customer_xyz_transDate 
+    ON default(SUBSTR(transDate,0,10),code) 
+    WHERE code != "" AND meta().id LIKE "account-customerXYZ%";</codeblock></p>
+     <p>Then, run the following query:
+            <codeblock>SELECT SUBSTR(account.transDate,0,10) AS transDate, AVG(codes.weight) AS avgWeight
+FROM default account
+JOIN default codesDoc ON KEYS "codes-version-9"
+LET codes = FIRST c FOR c IN codesDoc.codes WHEN c.code = account.code END
+WHERE account.code != "" AND meta(account).id LIKE "account-customerXYZ-%"
+AND SUBSTR(account.transDate,0,10) >= "2016-07-01" AND SUBSTR(account.transDate,0,10) &lt; "2016-07-03"
+GROUP BY SUBSTR(account.transDate,0,10);
+
+[
+  {
+    "avgWeight": 26.2466,
+    "transDate": "2016-07-02"
+  }
+]</codeblock></p>
+        <p>The EXPLAIN statement for the above query shows that the index covers the query. </p>
+     
         <p><b><xref href="../n1ql/n1ql-language-reference/prepare.dita">Prepared
                 statements</xref></b> also benefit from using covering indexes. </p>
     </conbody>
