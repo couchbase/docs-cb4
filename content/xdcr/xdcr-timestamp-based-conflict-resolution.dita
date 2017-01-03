@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_a5q_zch_vx">
+  <title>Timestamp-based Conflict Resolution</title>
+  <body>
+    <p>One aspect of database replication that is unique to cross datacenter replication (XDCR) is
+      the need to prepare for and manage conflicts between the two databases. Conflict resolution is
+      not an issue for an active off-site backup or standby cluster since updates travel in only one
+      direction. However, replication of data with XDCR is asynchronous and does not preclude
+      updates from occurring in different parts of the cluster, which means conflicts can happen
+      unless there is external coordination over how data is updated. </p>
+    <p>In Couchbase Server 4.6 Developer Preview version, we are introducing another strategy for
+      conflict resolution, <i>Timestamp-based Resolution</i>, where conflicts are resolved by
+      comparing the timestamps of conflicting documents. This conflict resolution mode is also known
+      as <i>Last Write Wins</i> (LWW) and is best characterized as “the most recent update wins”. </p>
+    <p>The current strategy for XDCR conflict resolution uses the revision ID as the first field to
+      resolve conflicts between two writes across clusters. Revision IDs keep track of the number of
+      mutations to a key, thus the current XDCR conflict resolution can be best characterized as
+      “the most updates wins”.</p>
+    <section><title>Use Cases</title>
+      <p>XDCR is used by many customers as an availability solution. Failing over to a secondary cluster following cluster wide or partial failures is critical for customers to be able to provide availability on their database tier.</p>
+      <p>Consider the following scenario where the primary goal for customer is write availability
+        and the customer environment consists of three clusters across three data centers. These
+        three data centers are connected using private networks with low latencies and high
+        bandwidth. <image placement="break"
+          href="picts/xdcr-timestamp-conflict-resolution-usecase.png" width="570"
+          id="image_lpm_hch_wx"/></p>
+      <p>Two of the three data centers have application servers (Cluster A, Cluster B) and traffic is spread between these two clusters.  The cluster in the third data center (Cluster C) is accessible by the application servers in the first two data centers, but its primary purpose is for disaster recovery. </p>
+      <p>The XDCR topology selected for this deployment is a bi-directional chain.  Each pair of clusters handle 50% of the traffic and most documents are mutated in either of those locations, and then replicated to the two other data centers. The XDCR protocol will then negotiate between the subsequent clusters around the chain, only sending the changes needed to the next cluster.</p>
+      <p>In normal operation, application traffic is directed to one of the two data centers.  The documents in use are exclusive to the user session interacting with the application.  As a result, in the most common case XDCR traffic between the data centers is logically not conflicting and XDCR is primarily replicating data for possible recovery in the alternate data center. </p>
+      <p>The primary goal of the above setup is to ensure that in case of cluster wide or partial
+        failures to a primary cluster, the application will switch to the secondary cluster for
+        write availability. </p>
+      <p>And when the primary cluster is repaired and is back online, you want to ensure that data on the primary cluster gets updated with most recent data from secondary cluster i.e. preserve the last writes between the primary and secondary clusters.</p>
+    </section>
+    <section><title>Understanding Timestamp-based Conflict Resolution</title>
+      <p>Couchbase Server 4.6.0 will support both strategies for conflict resolution - the old strategy based on revision ID and the newly introduced timestamp-based conflict resolution. The default conflict resolution strategy is still revision ID. To use the timestamp-based conflict resolution you must enable Timestamp Conflict Resolution setting on per bucket basis. See more about this in later sections. </p>
+      <p>In the new conflict resolution mode, the timestamp is used as a criterion to order the
+        mutations. Couchbase uses a combination of logical and physical clocks as timestamp and the
+        way to keep consistent ordering. </p>
+      <p><b>Time Synchronization</b></p>
+      <p>For timestamp-based conflict resolution to work properly Couchbase Server requires an
+        external entity to synchronize the clocks among the clusters such as NTP (Network Time
+        Protocol) or other methods. See <xref
+          href="../install/synchronize-clocks-using-ntp.dita#topic_jbb_ccp_vx"/> for more
+        information.</p>
+      <p><b>Resolving Conflicts Using Timestamp-based Resolution</b></p>
+      <p>Couchbase automatically performs conflict resolution on source cluster for larger document
+        size [Optimistic Replication Threshold] and most often on destination cluster.</p>
+      <p>The algorithm used in both source side and destination side conflict resolution is the
+        same: <ol id="ul_x5c_pzg_wx">
+          <li>Compare the timestamp value. </li>
+          <li> If timestamps are the same, then use the revision ID as tiebreaker. </li>
+          <li>If revision IDs are the same, then use document flags and expiration (TTL) value as
+            tiebreaker.</li>
+        </ol></p>
+      <p>By default XDCR fetches metadata for every document which are over Optimistic Replication
+        Threshold (default 256 bytes) from destination cluster before it replicates the document.
+        XDCR also fetches metadata on the source cluster and looks at the timestamp for a document.
+        It compares source timestamps with destination timestamp to pick the ‘winner’. If XDCR
+        determines a document from a source cluster will win conflict resolution, it puts the
+        document into the replication queue. If the document will lose conflict resolution because
+        it has a lower timestamp value, XDCR will not put it into the replication queue. </p>
+      <p>In case of smaller size document which are below Optimistic Replication Threshold (default
+        256 bytes) XDCR skips fetching metadata from destination cluster and instead optimistically
+        replicates documents to destination cluster. </p>
+      <p>Once the document reaches the destination, this cluster will request metadata once again to
+        confirm the document on the destination has not changed since the initial check. If the
+        document from the source cluster is still the ‘winner’ it will be persisted onto disk at the
+        destination. The destination cluster will discard the document version with the lowest
+        timestamp value.</p>
+      <p>The key point is that the higher HLC timestamp value is the main factor that determines
+        whether XDCR keeps a document version or not. This means that the document that has the most
+        recent mutation is the one that wins conflict resolution. If both documents have the same
+        HLC timestamp value, XDCR selects a winner based on other document metadata such as revision
+        ID, Document flags and Expiration (TTL) value. </p>
+    </section>
+    <section><title>Enabling Timestamp-based Resolution</title>
+      <p>Timestamp setting will be available only on the bucket creation page. Default conflict resolution setting is “sequence number”. Once this setting is enabled you cannot disable the setting for the bucket. </p>
+      <p>In Couchbase Server 4.6.0 Developer Preview you can enable this setting through the Web console and REST API.</p>
+      <p><b>Using the Web Console</b></p>
+      <p>Open the Couchbase Web Console and go to the Data Buckets tab to access the bucket creation
+        wizard through the <uicontrol>Create New Data Bucket</uicontrol> button. On the Bucket
+        Settings screen, select the Conflict Resolution method to <userinput>Timestamp</userinput>.
+          <image placement="break" href="picts/enabling-timestamp-conflict-resolution.png"
+          width="570" id="image_cb4_fch_wx"/></p>
+      <p><b>Using the REST API</b></p>
+      <p>Use the option <codeph>-d conflict_resolution_type=lww</codeph> to specify the
+        timestamp-based conflict resolution method.
+        <codeblock spectitle="Source Cluster">curl -X POST -u Administrator:password http://&lt;ip_address&gt;:8091/pools/default/buckets -d name=newBucketSource -d conflict_resolution_type=lww -d authType=none -d ramQuotaMB=4096</codeblock><codeblock spectitle="Destination Cluster">curl -X POST -u Administrator:password http://&lt;ip_address&gt;:8091/pools/default/buckets -d name=newBucketDestination -d conflict_resolution_type=lww -d authType=none -d ramQuotaMB=4096 </codeblock></p>
+    </section>
+  </body>
+</topic>
