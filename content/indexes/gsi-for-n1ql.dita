@@ -146,8 +146,21 @@ CREATE INDEX productName_index2 ON bucket_name(productName, ProductID)
    <p><b>Standard Global Secondary Index Performance</b></p>
    <p>Different from the memory optimized storage setting for GSI, the performance of standard GSIs depend heavily on the IO subsystem performance. Standard GSIs come with 2 write modes: <ul>
     <li>Append-only Write Mode: Append only write mode is similar to the writes to storage in the data service. In append-only write mode, all changes are written to the end of the index file (or appended to the index file). Append only writes invalidate existing pages within the index file and require frequent full compaction.</li>
-    <li>Circular Write Mode: Circular write mode uses a combination of writes to the orphaned pages of the index file and appending writes to the index file. Circular write mode optimizes the IO throughput (IOPS and MB/sec) required to maintain the index on storage by reusing existing blocks of the file.
-    </li> </ul>By default, Couchbase Server uses the circular write mode for standards GSIs. Append only write mode is provided for backward compatibility with previous versions.</p>
+    <li>Circular Write Mode:  Circular write mode optimizes the IO throughput (IOPS and MB/sec)
+      required to maintain the index on storage by reusing stale blocks in the file. Stale blocks
+      are areas of the file that contain data which is no longer relevant to the index, as a more
+      recent version of the same data has been written in another block. Compaction needs to run
+      less frequently under circular write mode as the storage engine avoids appending new data to
+      the end of the file. <p>In circular write mode, data is appended to the end of the file until
+       the relative index fragmentation (<codeph>stale data size</codeph> / <codeph>total file
+        size</codeph>) exceeds 65%. Block reuse is then triggered which means that new data is
+       written into stale blocks where possible, rather than appended to the end of the
+       file.</p><p>In addition to reusing stale blocks, full compaction is run once a day on each of
+       the days specified as part of the circular mode time interval setting. This full compaction
+        <b>does not</b> make use of the fragmentation percent setting unlike append-only write mode.
+       Between full compaction runs, the index fragmentation displayed in the UI will not decrease
+       and will likely display 65% most of the time, this particular metric is not relevant for
+       indexes using circular write mode.</p></li> </ul>By default, Couchbase Server uses the circular write mode for standards GSIs. Append only write mode is provided for backward compatibility with previous versions.</p>
    <p>When placing indexes, it is important to note the disk IO "bandwidth" remaining on the node
     as well as CPU, RAM and other resources. You can monitor the resource usage for the index
     nodes through Web Console and pick the nodes that can house your next index. <fig
@@ -184,7 +197,12 @@ CREATE INDEX productName_index2 ON bucket_name(productName, ProductID)
     <li>Remaining Index RAM: Reports the free index RAM quota for the cluster as a total and on each node both realtime and with a history over minutes, hours, days weeks and more. </li></ul></p>
    <p>If a node is approaching high percent usage of Index RAM Quota, it is time to take action. <ul>
     <li>You can either increase the RAM quota for the index service on the node to give indexes more RAM. </li>
-    <li>You can also place some of the indexes on the node in other nodes with more RAM available.</li></ul></p>
+    <li>You can also place some of the indexes on the node in other nodes with more RAM
+     available.</li></ul></p><p>Optionally, you can also perform the following steps if a node is approaching high percent usage
+    of Index RAM Quota:<ul id="ul_gvj_1zf_2y">
+     <li>Drop few indexes from the index node which is in the Paused state.</li>
+     <li>Flush the bucket on which indexes of the Paused node are created.</li>
+    </ul></p>
    <p>It is also important to understand other resource utilization beyond RAM. You can monitor
     the resource usage for the index nodes through Web Console and pick the nodes that can house
     your next index. <fig id="fig_ccd_b1b_vv">
