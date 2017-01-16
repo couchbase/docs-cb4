@@ -111,6 +111,8 @@
       <p>This function tokenizes the given input string based on specified delimiters, and other
         options. It recursively enumerates all tokens in a JSON value and returns an array of values
         (JSON atomic values) as the result.</p>
+      <p>The important thing to note is that first expression passed into token can be anything:
+        constant literal, simple JSON value, JSON key name or the whole document itself. </p>
       <p>The following table lists the rules for each JSON type: <table frame="all" rowsep="1"
           colsep="1" id="table_gy4_jhg_gy">
           <tgroup cols="2">
@@ -159,14 +161,16 @@
             </tbody>
           </tgroup>
         </table></p>
-      <p>You can specify the following options: <ul id="ul_hy4_jhg_gy">
-          <li><b>names</b>: Optional. By default, this is set to true and
-              <codeph>TOKENS(expr)</codeph> will include field names. You can choose to not include
-            field names by setting this option to false, such as <codeph>TOKENS(expr,
+      <p>Options can take the following options, and each invocation of TOKENS() can choose one or
+        more of the options, passed in as JSON.  <ul id="ul_hy4_jhg_gy">
+          <li><b>{"name": true}</b>: Optional. Valid values are true or false. By default, this is
+            set to true and <codeph>TOKENS(expr)</codeph> will include field names. You can choose
+            to not include field names by setting this option to false, such as <codeph>TOKENS(expr,
               FALSE)</codeph>.</li>
-          <li><b>case</b>: Optional. specify the case sensitivity as <userinput>lower </userinput>or
-              <userinput>upper</userinput>.
-            <codeblock spectitle="Examples">SELECT  TOKENS( expr,
+          <li><b>{"case":"lower"}</b>: Optional. Valid values are <userinput>lower </userinput>or
+              <userinput>upper</userinput>. Default is neither — return the case in the data. Use
+            this option to specify the case
+            sensitivity.<codeblock spectitle="Examples">SELECT  TOKENS( expr,
 { "names" : true, "case" : "lower" }
 );
 
@@ -179,10 +183,9 @@ SELECT TOKENS( expr,
 )
 
 SELECT TOKENS( expr );</codeblock></li>
-          <li><b>specials</b>:Optional. Use this option to preserve strings with specials
+          <li><b>{"specials": true}</b>:Optional. Use this option to preserve strings with specials
             characters, such as email addresses, URLs, and hyphenated phone numbers. The default
-            value is false.</li>
-        </ul></p>
+            value is false. 
       <codeblock spectitle="Examples">SELECT TOKENS( ['jim@abc.com, kim@abc.com, http://abc.com/, 408-555-1212'],
 { 'specials': false });
 [
@@ -219,7 +222,77 @@ SELECT TOKENS(['jim@abc.com, kim@abc.com, http://abc.com/, 408-555-1212'],
       "com"
     ]
   }
+]
+
+</codeblock>
+          </li>
+        </ul></p>
+      <p><b>Examples</b></p>
+      <p>In the following example, TOKENS() converts all of the URL data into UPPER case and also
+        adds the full URL to the delimited words.</p>
+      <codeblock>SELECT TOKENS(url) AS defaulttoken, 
+       TOKENS(url, {"specials":true, "case":"UPPER"}) AS specialtoken
+FROM `travel-sample` h WHERE h.type = 'hotel' 
+LIMIT 1;
+[
+  {
+    "defaulttoken": [
+      "uk",
+      "www",
+      "http",
+      "yha",
+      "org"
+    ],
+    "specialtoken": [
+      "ORG",
+      "WWW",
+      "HTTP://WWW.YHA.ORG.UK",
+      "YHA",
+      "UK",
+      "HTTP"
+    ]
+  }
 ]</codeblock>
+      <p>You can also use {"case":"lower"} or {"case":"upper"} to have case insensitive search.
+        Index creation and querying can use this and other parameters in combination. These
+        parameters should be passed within the query predicates as well. The parameters and values
+        have to match exactly for N1QL to pick up and use the index correctly. The following example
+        shows how you can create an index and use it your application.</p>
+      <codeblock spectitle="Create Index">CREATE INDEX idx_url_upper_special on `travel-sample`(
+  DISTINCT ARRAY v for v in 
+       tokens(url, {"specials":true, "case":"UPPER"}) 
+  END ) where type = 'hotel' ;</codeblock>
+      <codeblock spectitle="Query">SELECT name, address, url
+FROM `travel-sample` h
+WHERE ANY  v in tokens(url, {"specials":true, "case":"UPPER"})
+     SATISFIES v = "HTTP://WWW.YHA.ORG.UK" 
+    END  
+AND h.type = 'hotel' ;
+
+{
+    "requestID": "6f748683-6529-476a-bdad-82cd8e529380",
+    "clientContextID": "ce5e77fc-0c27-424c-a49d-4160884f1b37",
+    "signature": {
+        "address": "json",
+        "name": "json",
+        "url": "json"
+    },
+    "results": [
+        {
+            "address": "Capstone Road, ME7 3JE",
+            "name": "Medway Youth Hostel",
+            "url": "http://www.yha.org.uk"
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "11.872615ms",
+        "executionTime": "11.843406ms",
+        "resultCount": 1,
+        "resultSize": 146
+    }
+}</codeblock>
+      
     </section>
     <section id="fn-str-trim"><title>TRIM(expression [, characters ])</title>
       <p>Returns string with all leading and trailing chars removed. White space by default.</p>
