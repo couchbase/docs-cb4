@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_php_datastructures">
+    <title>Data Structures (Developer Preview)</title>
+    <shortdesc>
+        You can use complex data structures such as dictionaries and lists in Couchbase.  These data structures may be
+        manipulated with basic operations without retrieving and storing the entire document.
+    </shortdesc>
+    <body>
+        <note type="important">
+            The Data structures API presented here is available as an <xref
+            href="compatibility-versions-features.dita#interface-stability-section">uncommitted API enhancement</xref>
+            in the current release of the SDK as a preview of coming functionality. A future release will bring this to
+            general availability and fully support. We would love to receive your feedback via the <xref
+            href="http://forums.couchbase.com" format="html" scope="external" >Couchbase Forums</xref>.
+        </note>
+        <p>
+            Data structures in Couchbase are similar in concept to data structures in the Java Collections Framework:
+            <ul>
+                <li>
+                    <b>Map</b> is like PHP <codeph>array</codeph>, where a value is accessed by using a key string.
+                </li>
+                <li>
+                    <b>List</b> is like a PHP <codeph>array</codeph> and is a sequential data structure. Values can be
+                    placed in the beginning or end of a list, and can be accessed using numeric indexes.
+                </li>
+                <li>
+                    <b>Queue</b> is a wrapper over a <i>list</i> which offers FIFO (first-in-first-out) semantics,
+                    allowing it to be used as a lightweight job queue.
+                </li>
+                <li>
+                    <b>Set</b> is a wrapper over a <i>list</i> which provides the ability to handle unique values.
+                </li>
+            </ul>
+        </p>
+        <p>
+            These data structures as implemented in other SDKs are stored as JSON documents in Couchbase, and can
+            therefore be accessed using N1QL, Full Text Search, and normal key-value operations. Data structures can
+            also be manipulated using the traditional sub-document and full-document KV APIs.
+        </p>
+        <p>
+            Using the data structures API may help your application in two ways:
+            <ul>
+                <li>
+                    <b>Simplicity</b>: Data structures provide high level operations by which you can deal with
+                    documents as if they were container data structures. Adding an item to a dictionary is expressed as
+                    <codeph>mapAdd</codeph>, rather than retrieving the entire document, modifying it locally, and then
+                    saving it back to the server.
+                </li>
+                <li>
+                    <b>Efficiency</b>: Data structure operations do not transfer the entire document across the
+                    network. Only the relevant data is exchanged between client and server, allowing for less network
+                    overhead and lower latency.
+                </li>
+            </ul>
+        </p>
+        <section>
+            <title>Creating a Data Structure</title>
+
+            <p>
+                Data structures are created implicitly if they do not exist. For example, to add an item to a map,
+                specify the <i>document ID</i> of the map itself (i.e. the ID which uniquely identifies the map in the
+                server), the key <i>within</i> the map, and the value to store under the key:
+                <codeblock outputclass="language-php">$bucket->mapAdd("map_id", "name", "Mark Nunberg");</codeblock>
+
+                Likewise, to create a list, specify the document ID and the value to add:
+                <codeblock outputclass="language-php">$bucket->listPush("list_id", "hello");</codeblock>
+
+                Note that if the document already exists it will not be overwritten, more elements will be pushed to the
+                list.  It is therefore always safe to use, unless your application creates data structures
+                independently.
+            </p>
+            <p>
+                Data structures can be explicitly created and reset using full-document methods, and initialize it with
+                its JSON equivalent. To create a new empty list, set, or queue, use
+                <codeblock outputclass="language-php">$bucket->insert("list_id", []);</codeblock>
+
+                To create an empty map, use
+                <codeblock outputclass="language-php">$bucket->insert("map_id", new stdclass());</codeblock>
+
+                Note, that to create proper empty JSON object we use <codeph>new stdclass()</codeph>, it is not
+                necessary if your <i>empty</i> object have some fields, (e.g. <codeph>["type" => "person"]</codeph>).
+            </p>
+        </section>
+
+
+        <section>
+            <title>Accessing Data Structures</title>
+
+            Data structures can be accessed using the appropriate methods. Most data access methods will return a <apiname>CouchbaseMetaDoc</apiname> object
+            with actual returned value in <varname>value</varname> property.
+
+            <codeblock outputclass="language-php"><![CDATA[$bucket->listGet("list_id")->value;    // "hello"
+$bucket->mapGet("map_id")->value;      // "mark nunberg"]]></codeblock>
+            The same subdocument exceptions are forwarded on the datastructures API like if map key or
+            list index is not found within the document.
+            <p>
+                Here is a list of common operations:
+                <table frame="all" rowsep="1" colsep="1">
+                    <title>Data Structure Operations</title>
+                    <tgroup cols="2">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="3.76*"/>
+                        <thead>
+                            <row>
+                                <entry>Operation</entry>
+                                <entry>Description</entry>
+                            </row>
+                        </thead>
+                        <tbody>
+                            <row>
+                                <entry><apiname>mapAdd</apiname></entry>
+                                <entry>
+                                    Add a key to the map.
+                                    <codeblock outputclass="language-php">$bucket->mapAdd("map_id", "some_key", "value")</codeblock>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry><apiname>mapRemove</apiname></entry>
+                                <entry>
+                                    Remove a key from a map.
+                                    <codeblock outputclass="language-php">$bucket->mapRemove("map_id", "some_key")</codeblock>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry><apiname>mapGet</apiname></entry>
+                                <entry>
+                                    Get an item from a map.
+                                    <codeblock outputclass="language-php">$bucket->mapGet("map_id", "some_key")->value</codeblock>
+                                    If the key is not found, an exception with code <apiname>COUCHBASE_SUBDOC_PATH_ENOENT</apiname> is raised.</entry>
+                            </row>
+                            <row>
+                                <entry><apiname>listPush</apiname></entry>
+                                <entry>
+                                    Add an item to the <i>end</i> of a list.
+                                    <codeblock outputclass="language-php">$bucket->listPush("list_id", 1234)</codeblock>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry><apiname>listShift</apiname></entry>
+                                <entry>
+                                    Add an item to the <i>beginning</i> of a list.
+                                    <codeblock outputclass="language-php">$bucket->listShift("list_id", "hello world")</codeblock>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry><apiname>listRemove</apiname></entry>
+                                <entry>
+                                    Remove a value from a list.
+                                    <codeblock outputclass="language-php">$bucket->listRemove("list_id", 2)</codeblock>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry><apiname>listSet</apiname></entry>
+                                <entry>
+                                    Set an element at a specific index in the list.
+                                    <codeblock outputclass="language-php">$bucket->listSet("list_id", 0, "first value")</codeblock>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry><apiname>listGet</apiname></entry>
+                                <entry>
+                                    Get an item from a list by its index.
+                                    <codeblock outputclass="language-php">$bucket->listGet("list_id", 0)->value</codeblock>
+                                    If the index is out of range, an exception with code
+                                    <apiname>COUCHBASE_SUBDOC_PATH_ENOENT</apiname> will be thrown.
+                                    Note that you can get the <i>last</i> array element by
+                                    specifying <codeph>-1</codeph> as the index.</entry>
+                            </row>
+                            <row>
+                                <entry><apiname>setAdd</apiname></entry>
+                                <entry>
+                                    Add an item to a set, if the item does not yet exist in the set.
+                                    <codeblock outputclass="language-php">$bucket->setAdd("set_id", "some_value")</codeblock>
+                                    Note that a <i>set</i> is just a list. You can retrieve the entire set by simply using a full-document
+                                    <apiname>get</apiname> operation:
+                                    <codeblock outputclass="language-php">$set = $bucket->get("set_id")->value</codeblock>
+                                    <note>Currently, you can only store primitive values in sets, such as strings, ints,
+                                    and booleans.</note>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry><apiname>setExists</apiname></entry>
+                                <entry>
+                                    Check if a value exists in the set.
+                                    <codeblock outputclass="language-php">$bucket->setExists("set_id", "value")</codeblock>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry><apiname>setRemove</apiname></entry>
+                                <entry>
+                                    Remove an item from a set, if it exists. An exception is not thrown if the item does
+                                    not exist. You can determine if an item existed or not by the return value. If the
+                                    item did not exist beforehand, <codeph>NULL</codeph> is returned.
+                                    <codeblock outputclass="language-php">$bucket->setRemove("set_id", "some_value")</codeblock>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry><apiname>queueAdd</apiname></entry>
+                                <entry>
+                                    Add an item to the beginning of the queue.
+                                    <codeblock outputclass="language-php">$bucket->queueAdd("a_queue", "job123")</codeblock>
+                                    Note that a queue is just a list. You can retrieve items from the middle of the
+                                    queue by using <apiname>listGet</apiname>.
+                                </entry>
+                            </row>
+                            <row>
+                                <entry><apiname>queueRemove</apiname></entry>
+                                <entry>
+                                    Remove an item from the end queue and return it.
+                                    <codeblock outputclass="language-php">item = $bucket->queueRemove("a_queue") //=> "job123"</codeblock>
+                                    If the queue is empty, then <apiname>NULL</apiname> is returned.
+                                </entry>
+                            </row>
+                            <row>
+                                <entry>
+                                    <apiname>mapSize</apiname>,
+                                    <apiname>listSize</apiname>,
+                                    <apiname>setSize</apiname>,
+                                    <apiname>queueSize</apiname>
+                                </entry>
+                                <entry>
+                                    These methods get the length of the data structure. For maps, this is the number of
+                                    key-value pairs inside the map. For lists, queues, and sets, this is the number of
+                                    elements in the structure.
+                                    <codeblock outputclass="language-php">$len = $bucket->listSize("a_list") //=> 42</codeblock>
+                                </entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table>
+            </p>
+            <p>
+                Note that there are only <b>two</b> basic types: map and list. Types such as <i>queue</i> and <i>set</i>
+                are merely derivatives of <i>list</i>.
+            </p>
+        </section>
+        <section>
+            <title>Data Structures and Key-Value APIs</title>
+
+            Data structures can be accessed using key-value APIs as well. In fact, the data structure API is actually a
+            client-side wrapper <i>around</i> the key-value and sub-document API. Most of the data structure APIs wrap
+            the sub-document API directly. Therefore, for example, the <apiname>mapSet</apiname> can be implemented as
+            follows:
+
+            <codeblock outputclass="language-php">function mapSet($bucket, $docid, $key, $value) {
+            return $bucket->mutateIn($docid)
+                          ->upsert($key, $value)->execute();
+}</codeblock>
+
+            Some data structure operations are compound operations. This means that they do not correspond to a single
+            server-side operation. For example, <apiname>setRemove</apiname> does not exist on the server. In order to
+            implement <apiname>setRemove</apiname>, it would require an implementation like so:
+
+            <codeblock outputclass="language-php">function setRemove($bucket, $docid, $value) {
+    $rv = $bucket->get($docid);
+    $doc = $rv->value;
+    $index = array_search($value, $doc);
+    return $bucket->mutateIn($docid, $rv->cas)
+                  ->remove("[$index]")->execute();
+}</codeblock>
+
+            In the example above, the entire document is fetched and the index of the value is retrieved. If the value
+            exists, the index of the value is removed at the server side.<note>Because the data structure API is just a
+            wrapper around the various key-value APIs, you are free to switch between them in your
+            code.</note>
+        </section>
+    </body>
+</topic>
