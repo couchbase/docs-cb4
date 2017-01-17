@@ -442,19 +442,21 @@ var bucket = cluster.OpenBucket("travel-sample");</codeblock></p>
           <tbody>
             <row>
               <entry dir="ltr"><codeph>MaxSize</codeph></entry>
-              <entry dir="ltr">The maximum number of TCP connection to use</entry>
+              <entry dir="ltr">The maximum number of TCP connection to use<p><b>Note</b>: not used
+                  with Multiplexing IO Service</p></entry>
               <entry dir="ltr">2</entry>
             </row>
             <row>
               <entry dir="ltr"><codeph>MinSize</codeph></entry>
-              <entry dir="ltr">The minimum or starting number of TCP connections to use</entry>
+              <entry dir="ltr">The minimum or starting number of TCP connections to
+                    use<p><b>Note</b>: not used with Multiplexing IO Service</p></entry>
               <entry dir="ltr">1</entry>
             </row>
             <row>
               <entry dir="ltr"><codeph>WaitTimeout</codeph></entry>
               <entry dir="ltr">The amount of time to wait for a TCP connection before timing out
                 after the <codeph>MaxSize</codeph> has been reached and all connections are being
-                used</entry>
+                    used<p><b>Note</b>: not used with Multiplexing IO Service</p></entry>
               <entry dir="ltr">2500 ms</entry>
             </row>
             <row>
@@ -533,6 +535,76 @@ var bucket = cluster.OpenBucket("travel-sample");</codeblock></p>
           </tbody>
         </tgroup>
       </table>
+    </section>
+    <section id="section_afq_gyx_py">
+      <title>IOService</title>
+      <p>The IO Service is used to manage the TCP connections used by the SDK for Memcached (K/V)
+        operations. There are two IO Services available; Multiplexing (MUX) and Pooled. You can
+        configure the IOService either through the configuration file (app.config, web.config or
+        json settings file) or programmatically using the SDK's ClientConfiguration when
+        initializing the Cluster.</p>
+      <p><b>Multiplexing IO Service</b></p>
+      <p>Multiplexing is when a single TCP connection is used by multiple threads to send and
+        receive requests simultaneously. The benefit's are improved throughput with less strain on
+        the OS resources and importantly, a reduction on the number of TCP connections between the
+        client and the server. The Multiplexing IO Service is the default IO Service is no custom
+        configuration is provided.</p>
+      <p><b>Pooled IO Service</b></p>
+      <p>Pooled is when the SDK maintains a pool of TCP sockets and each thread uses a single socket
+        at one time for Memcached K/V operations (Get, Insert, Remove, etc.). The connection pool
+        limit is capped by the MinSize and MaxSize configuration settings; if MaxSize has been
+        reached, the SDK would wait for a connection to become available or it would return an
+        OperationTimeout response.</p>
+      <p><b>Configuring the IO Service</b></p>
+      <p>To configure the IO Service in your configuration file you would set the connectionPool
+        element and ioService elements. An example of setting the configuration file to use
+        PooledIOService would look like
+        this:<codeblock outputclass="language-xml">&lt;?xml version="1.0" encoding="UTF-8"?>
+&lt;configuration>
+   &lt;configSections>
+      &lt;sectionGroup name="couchbaseClients">
+         &lt;section name="couchbase" type="Couchbase.Configuration.Client.Providers.CouchbaseClientSection, Couchbase.NetClient" />
+      &lt;/sectionGroup>
+   &lt;/configSections>
+   &lt;couchbaseClients>
+      &lt;couchbase enableConfigHeartBeat="false">
+         &lt;servers>
+            &lt;add uri="http://127.0.0.1:8091" />
+         &lt;/servers>
+         &lt;connectionPool name="custom" type="Couchbase.IO.ConnectionPool`1[Couchbase.IO.Connection], Couchbase.NetClient" />
+         &lt;ioService name="multiplexio" type="Couchbase.IO.Services.PooledIOService, Couchbase.NetClient" />
+      &lt;/couchbase>
+   &lt;/couchbaseClients>
+&lt;/configuration></codeblock></p>
+    </section>
+    <section id="section_bfq_gyx_py">
+      <p>To configure the IO Service programmatically you would use the ClientConfiguration and
+        setting the ConnectionPoolCreator and IOServiceCreator properties. An example that
+        configures the Multiplexing IO Service would look like
+        this:<codeblock outputclass="language-csharp">var config = new ClientConfiguration
+{
+    Servers = newList&lt;Uri>
+    {
+        new Uri(ConfigurationManager.AppSettings["bootstrapUrl"])
+    }
+};
+config.ConnectionPoolCreator = ConnectionPoolFactory.GetFactory&lt;ConnectionPool&lt;MultiplexingConnection>>();
+config.IOServiceCreator = IOServiceFactory.GetFactory&lt;MultiplexingIOService>();
+ClusterHelper.Initialize(config);</codeblock></p>
+      <p><b>Caveats</b></p>
+      <p>A couple of caveats are in order:</p>
+      <ul id="ul_lgh_32d_py">
+        <li>SSL is not yet supported for MUX (<xref
+            href="https://issues.couchbase.com/browse/NCBC-1056" format="html" scope="external">JIRA
+            ticket</xref>)</li>
+        <li>Since MUX uses a single connection per node for Memcached (K/V) operations, some of the
+          connection pool settings no longer apply, these are:<ul id="ul_lzf_4xx_py">
+            <li>MinSize</li>
+            <li>MaxSize</li>
+            <li>WaitTimeout</li>
+          </ul></li>
+        <li>MUX has no effect on Views, N1QL or Full Text Search queries</li>
+      </ul>
     </section>
   </body>
 </topic>
