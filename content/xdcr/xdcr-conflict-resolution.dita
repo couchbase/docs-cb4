@@ -1,45 +1,315 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_zfs_h5q_pq">
-  <title>XDCR conflict resolution</title>
-  <shortdesc>Conflict resolution makes XDCR an ideal solution for high availability use cases. </shortdesc>
+  <title>XDCR Conflict Resolution</title>
   <body>
-    <p>Failing over to a secondary cluster under cluster-wide or partial failures is critical for
-      providing a full availability on the database tier. Therefore, XDCR is often used as an
-      availability solution since the RevID-based model (a model based on a revision ID) behaves
-      ideally under failover conditions. </p>
-<p>In addition to the RevID type of conflict resolution, Couchbase Server implements Timestamp. </p>
-      <dl>
-        <dlentry>
-          <dt>Revision ID</dt>
-          <dd>The default resolution type is Revision ID-based. Enable Revision ID at the Couchbase
-          bucket level during the initial setup and then change it if needed at a later time.</dd>
-        </dlentry>
-      </dl>
-
-    
+    <section><title>Understanding Conflict Resolution</title>
+      <p>When the same dataset is being mutated on both ends of an XDCR replication (source and remote destination), then there is a high probability that conflicts could occur. XDCR automatically performs conflict resolution for different document versions on source and destination clusters. </p>
+      <p>Couchbase Server 4.6 supports both strategies - revision ID based conflict resolution
+        (default) and timestamp-based conflict resolution.</p>
+      <p>By default, XDCR fetches metadata for every document which are over the Optimistic
+        Replication Threshold (default 256 bytes) from destination cluster before it replicates the
+        document. XDCR also fetches metadata on the source cluster and looks at the timestamp for a
+        document. Depending on the conflict resolution method selected, it either compares source
+        timestamps with destination timestamp, or the source revision ID with the destination
+        revision ID, to pick the ‘winner’. If XDCR determines a document from a source cluster will
+        win conflict resolution, it puts the document into the replication queue. If the document
+        loses conflict resolution, XDCR will not put it into the replication queue. </p>
+      <p>In case of documents with smaller size which are below Optimistic Replication Threshold
+        (default 256 bytes), XDCR skips fetching metadata from destination cluster and instead
+        optimistically replicates documents to destination cluster. </p>
+      <p>Once the document reaches the destination, this cluster will request metadata once again to
+        confirm the document on the destination has not changed since the initial check. If the
+        document from the source cluster is still the ‘winner’ it will be persisted on to disk at
+        the destination. The destination cluster will discard the document version which ‘loses’
+        conflict resolution.</p>
+    </section>
+    <section id="revision-id-based-conflict-resololution"><title>Revision-based Conflict Resolution</title>
+    <p>The algorithm is designed to consistently select the same document on either a source or
+      destination cluster. For each stored document, XDCR perform checks of metadata to resolve
+      conflicts. It checks the following:</p>
+    <ul id="ul_v25_trv_py">
+      <li>
+        <p>Revision ID, a numerical sequence that is incremented on each mutation</p>
+      </li>
+      <li>
+        <p>CAS value</p>
+      </li>
+      <li>
+        <p>Document flags</p>
+      </li>
+      <li>
+        <p>Expiration (TTL) value</p>
+      </li>
+    </ul>
+    <p>XDCR conflict resolution uses revision ID as the first field to resolve conflicts between two
+      writes across clusters. Revision IDs are maintained per key and are incremented with every
+      update to the key. Revision IDs keep track of number of mutations to a key, thus XDCR conflict
+      resolution can be best characterized as "the most updates wins".</p>
+    <p>In case of conflict resolution between an incoming mutation from another cluster and a local
+      mutation in the current cluster, if the incoming mutation does not have a higher revision
+      number than the local mutation, it will be discarded and will not be stored. In case of
+      bidirectional replication, the mutation with the highest score takes precedence on both
+      clusters.</p>
+    <p>Conflict resolution is automatic and does not require any manual correction or selection of
+      documents.</p>
+    <p><b>How are Conflicts Resolved Using Revision ID Based Strategy</b></p>
+    <p>For documents whose size exceeds the optimistic replication threshold setting, XDCR fetches
+      metadata before it replicates the document to the destination cluster. XDCR fetches metadata
+      on the source cluster and looks at the number of revisions for a document. It compares this
+      number with the number of revisions on the destination cluster and the document with more
+      revisions is considered the ‘winner.’</p>
+    <p>If XDCR determines a document from a source cluster will win conflict resolution, it puts the
+      document into the replication queue. If the document will lose conflict resolution because it
+      has a lower number of mutations, XDCR will not put it into the replication queue. Once the
+      replicated document reaches the destination, conflict resolution will be performed again by
+      the remote cluster to ensure that the correct document 'wins'. This is to ensure that the
+      correct version of the document 'wins' even if the document on the remote cluster has changed
+      since the initial replication from the source cluster. If the document from the source cluster
+      is still the ‘winner’ it will be persisted onto disk at the destination. The destination
+      cluster will discard the document version with the lower number of mutations.</p>
+    <p>The key point is that the number of document mutations is the main factor that determines
+      whether XDCR keeps a document version or not. This means that the document that has the most
+      recent mutation may not be necessarily the one that wins conflict resolution. If both
+      documents have the same number of mutations, XDCR selects a winner based on other document
+      metadata. Precisely determining which document is the most recently changed is often difficult
+      in a distributed system. The revision id based conflict resolution algorithm Couchbase Server
+      uses does ensure that each cluster can independently reach a consistent decision on which
+      document wins.</p>
+    </section>
+    <section id="timestamp-based-conflict-resolution"><title>Timestamp-based Conflict Resolution</title>
+      <p>In the new conflict resolution mode, the timestamp is used as the main criterion to order the mutations. Couchbase uses a hybrid logical clock (HLC) to store the timestamp and as the way to keep consistent ordering. </p>
+      <p>To use the timestamp-based conflict resolution you must enable the Timestamp Conflict
+        Resolution setting on a per bucket basis. For more information, see Admin guide.</p>
+      <p id="hybrid-logical-clock"><b>Hybrid Logical Clock</b></p>
+      <p>The hybrid logical clock (HLC) is a combination of the physical clock and a logical clock. </p>
+      <p>The CAS of a document is now a hybrid logical clock timestamp stored as a 64-bit value,
+        with the top 48 bits for the physical clock and the lower 16 bits for the logical portion.
+        Each mutation has its own hybrid logical clock timestamp. <note>Couchbase has adopted <xref
+            href="https://www.cse.buffalo.edu/tech-reports/2014-04.pdf" format="pdf"
+            scope="external">HLC</xref> to use as a timestamp. Therefore, HLC is not incremented
+          during message passing or replication.</note></p>
+      <p>Here are some important properties of hybrid logical clock: <ul id="ul_bjf_xtv_py">
+        <li>Hybrid logical clock is monotonic. Its logical counter starts to increment when either the
+            physical clock value is smaller or equal to the current maximum seen time, which ensures
+            that it does not suffer from the potential leap-back of a physical clock. </li>
+        <li>Hybrid logical clock captures happen-before relation just like the logical clock.</li>
+        <li>Hybrid logical clock is close to physical time.</li>
+        </ul></p>  
+      <p id="time-synchronization"><b>Time Synchronization</b></p>
+      <p>Couchbase Server requires an external entity to synchronize the clocks among the clusters
+        such as NTP (Network Time Protocol) or other methods. </p>
+      <p>Time synchronization is needed because: <ul id="ul_vsz_25v_py">
+        <li>Hybrid logical clock can capture happen-before relation, and hence can always guarantee
+            the correct ordering for updates with casual relationships.</li>
+          <li>For concurrent or independent updates, the accuracy of picking the “last write” is
+            affected by the time skew between the two clusters involved. In order to improve
+            accuracy, the time skew between the two clusters needs to be kept in check through time
+            synchronization mechanisms like NTP.</li>
+        </ul></p>
+      <p>It is important that you synchronize your clocks on each server node properly to use
+        timestamp based conflict resolution effectively. Failing to do so can result in document
+        mutations incorrectly winning conflicts and many related issues. <note type="important"
+          >Timestamp based conflict resolution is not supported without synchronized
+        clocks.</note></p>
+      <p>For more information on using NTP to synchronize clocks, see <xref
+          href="../install/synchronize-clocks-using-ntp.dita#topic_jbb_ccp_vx"/>.</p>
+      <p><b>How are Conflicts Resolved Using Timestamp Based Strategy</b></p>
+      <p>Couchbase performs conflict resolution on the destination cluster, and in the case of large
+        documents [Optimistic Replication Threshold], it performs conflict resolution on the source
+        cluster. It uses the same algorithm for both source side or destination side conflict
+        resolution:
+        <codeblock>if (incomingDocument.CAS > localDocument.CAS)
+  incomingDocument succeeds
+else if (incomingDocument.CAS == localDocument.CAS)
+  // Check the RevSeqno
+  if (incomingDocument.RevSeqno > localDocument.RevSeqno)
+    incomingDocument succeeds
+  else if (incomingDocument.RevSeqno == localDocument.RevSeqno)
+    // Check the expiry time
+    if (incomingDocument.Expiry > localDocument.Expiry)
+      incomingDocument succeeds
+    else if (incomingDocument.Expiry == localDocument.Expiry)
+      // Finally check flags
+      if (incomingDocument.Flags &lt; localDocument.Flags)
+        incomingDocument succeeds
+command fails</codeblock></p>
+      <p>The key point is that the higher timestamp value is the main factor that determines whether
+        XDCR keeps a document version or not. This means that the document that has the most recent
+        mutation is the one that wins conflict resolution. If both documents have the same
+        timestamp, XDCR selects a winner based on other document metadata such as revision ID,
+        document flags and expiration (TTL) value. </p>
+      <p>The following are the necessary and sufficient conditions to avoid data loss during cluster
+        failover and failback: <ul id="ul_zzk_gvv_py">
+          <li>m2 clock is faster than m1</li>
+          <li>Let's say max time skew between 2 data centers is X. Then before failing the traffic
+            to m2, wait for X. Simply put, if m2 clock is slower than m1 by X, then wait for X
+            before failing over.</li>
+        </ul></p>
+      <p>Consider the following example:</p> <ol id="ol_tvm_qvv_py">
+          <li>The data center A receives mutations (m1) from App1 and App2.</li>
+          <li>Data center A has an outage before the latest mutations can be replicated to
+            datacenter B.</li>
+          <li>App1 and App2 then failover to data center 2 and the user sees that there is data loss
+            since the latest mutations(m1) were not replicated.</li>
+          <li>The user then submits another set of mutations(m2), which are available in data center
+            B.</li>
+          <li>Once the outage on data center A is fixed, the applications switch back to data center
+            A. At this point, the user expects to see his latest mutations (m2) and not experience
+            another data loss.</li>
+        </ol>
+      <p>The HLC for a document is replicated across nodes within the same cluster (via DCP) and
+        across clusters (via XDCR). Therefore causality relationship is maintained with replication.
+        For example: <ol id="ol_zzc_bwv_py">
+          <li>Mutation A1 is replicated to target B. Mutation A1's HLC is now in target B.</li>
+          <li>Now there is mutation A2. By comparing the HLC of both A1 and A2, it can tell A1
+            "happens before" A2 -- since hybrid logical clock is monotonic.</li>
+        </ol></p>
+      <p>For concurrent mutations the order is determined by the physical time component (system
+        clock, which should be synchronized via NTP or other method).</p>
+      <p><b id="docs-internal-guid-04e0596d-a602-c5bd-01c5-6074f9d40e50">What Happens When Your
+          Physical Clocks Are No Longer in Sync</b></p>
+      <p>If your physical clocks are drifting ahead and the drift is larger than the threshold of 5
+        seconds (5000 milliseconds), then an alert is raised on the destination cluster with the
+        following message: “<systemoutput>[<varname>&lt;DATE></varname>] - Remote or replica
+          mutation received for bucket "<varname>&lt;BUCKET></varname>" on node
+            "<varname>&lt;IP></varname>" with timestamp more than 5000 milliseconds ahead of local
+          clock. Please ensure that NTP is set up correctly on all nodes across the replication
+          topology and clocks are synchronized.</systemoutput>” <image placement="break"
+          href="picts/xdcr-timestamp-conflict-resolution-alert.png" width="450"
+          id="image_adp_swv_py"/>If you see this alert, ensure that NTP is setup correctly on all
+        nodes across the replication topology and that the clocks are synchronized.</p>
+      <p>When the clocks are out of sync, you may also see the average drift mutation graph report
+        an increased drift. </p>
+      <p>You can change the default drift mutation threshold at run time by setting the following
+        parameters to an integer value. These values can be adjusted per node using
+          <cmdname>cbepctl</cmdname>. <ul id="ul_pf1_1xv_py">
+          <li><parmname>hlc_drift_ahead_threshold_us</parmname>, specified in microseconds</li>
+          <li><parmname>hlc_drift_behind_threshold_us</parmname>, specified in microseconds</li>
+        </ul></p>
+      <p>The following example changes <codeph>bucket1</codeph>'s behind threshold to 6.5 seconds:
+        <codeblock>$> cbeptcl host:port -b bucket1 set vbucket_param hlc_drift_behind_threshold_us 6500000</codeblock></p>
+      <p>When a future CAS value is received and used to update the node’s HLC, it is an operation
+        that cannot be undone. Thus a node with a very bad configuration may “poison” peers, and
+        even if that bad node is fixed, the poisoning cannot be undone by normal traffic.</p>
+      <p>You can undo this “poisoning” by waiting for time to pass or by changing the node’s real
+        clock. Neither of these options would be desirable if the future clock was a very high
+        value, for example "3017 10-Jan 14:14". </p>
+      <p>In such cases, updating the <cmdname>epctl</cmdname> can undo the damage to some extent.
+        <codeblock>cbepctl [localhost]:11210 -b [bucket_name] -p [bucket-password]
+set_vbucket_param max_cas new_max_cas_value vbucket-id</codeblock></p>
+      <p>For example to change the <codeph>max_cas</codeph> of vBucket 7 to “Wed, 05 Oct 2016
+        13:00:00 GMT” the user must obtain the epoch as microseconds. Wed, 05 Oct 2016 13:00:00 GMT
+        is 1475672493 seconds since epoch, or 1475672493000000 µs since epoch.
+        <codeblock>cbepctl node1:11210 -b beer -p passw0rd
+set_vbucket_param max_cas 1475672493000000 7</codeblock></p>
+      
+    </section>
+    <p id="xdcr-conflict-resolution-use-cases"><b>XDCR Use Cases Supported by Timestamp-based Conflict Resolution</b></p>
+    <p>XDCR is used by many customers as a high-availability solution. Failing over to a secondary
+      cluster following cluster wide or partial failures is critical for customers requiring high
+      availability on their database tier. Conflicts created during temporary failures will need to
+      be reconciled when the failures are resolved.</p>
     <dl>
       <dlentry>
-        <dt>Timestamp</dt>
-        <dd>When the system detects  identical
-          revision IDs or identical timestamps while resolving conflicts, it allows the larger value
-          to win after comparing them. </dd>
-        <dd>The order for comparing values in the system is as follows: <ol>
-            <li>CAS (Create and Set) Value</li>
-            <li>Document flag</li>
-            <li>Expiration TTL (Time to Live) value</li>
-          </ol>
-        </dd>
+        <dt>Unidirectional Replication Use Case - Disaster Recovery</dt>
+        <dd>Disaster can strike anytime - often with very little or no warning. Using XDCR, data can
+          be replicated to geo-located data centers, ensuring availability of data 24x365 even if an
+          entire data center goes down. <image placement="break"
+            href="picts/xdcr-unidirectional-usecase.png" width="570" id="image_ffw_jyv_py"/></dd>
+      </dlentry>
+      <dlentry>
+        <dt>Bidirectional Replication Use Case - Datacenter Locality</dt>
+        <dd>Interactive web applications demand low latency response times to deliver a responsive
+          application experience. The best way to reduce latency is to bring relevant data closer to
+          the user. XDCR can be used to synchronize data between geo-located data centers. Consider
+          the following scenario where the primary goal is to write to the data center located
+          closer to the user. The two data centers are connected using private networks with low
+          latencies and high bandwidth. <p>During normal operation, the application traffic would go
+            to both data centers. However, the documents in use are exclusive to the user session
+            interacting with the application. As a result, in the most common case, simultaneous
+            updates to the same document in both clusters don't occur, hence conflicts are not
+            generated. XDCR is primarily replicating data for possible recovery to the alternate
+            data center. <image placement="break"
+              href="picts/xdcr-timestamp-conflict-resolution-data-locality.png" width="570"
+              id="image_aly_yyv_py"/></p></dd>
       </dlentry>
     </dl>
+    <p id="cross-cluster-failover-failback"><b>Cross-cluster Failover and Failback</b></p>
+    <p><note type="important">This release supports the use of timestamp based conflict resolution
+        for high availability across clusters only during failover and failback scenarios.</note>For
+      both the use cases described above, using timestamp based conflict resolution ensures that
+      conflicts are resolved by comparing timestamps of conflicting documents. This enables
+      applications to continue showing the last change/version no matter when conflicts are resolved
+      in the background. <image placement="break"
+        href="picts/xdcr-timestamp-conflict-resolution-cluster-failover.png" width="570"
+        id="image_s3r_gzv_py"/></p>
+    <p>Consider the example in the diagram above: <ol id="ol_a25_3zv_py">
+        <li>The data center A receives mutations (m1) from App1 and App2.</li>
+        <li>Data center A has an outage before the latest mutations can be replicated to datacenter
+          B.</li>
+        <li>App1 and App2 then failover to data center 2 and the user sees that there is data loss
+          since the latest mutations(m1) were not replicated.<note>For failover, it is recommended
+            that a wait period is introduced before traffic is routed to the backup cluster. This is
+            to ensure that residual mutations will lose in conflict resolution. The wait period
+            should be longer than the replication latency and time skew.</note></li>
+        <li>The user then submits another set of mutations (m2), which are available in data center
+          B.</li>
+        <li>Once the outage on data center A is fixed, before the applications switch back to data
+          center A.<note>Applications should not write new mutations to data center A, until after
+            mutations in data center B are replicated over to data center A. Also, it is recommended
+            that the wait period should be longer than the replication latency and time
+          skew.</note></li>
+        <li>At this point, the user expects to see his latest mutations (m2) and not experience
+          another data loss.</li>
+      </ol></p>
+    <p>Using timestamp based conflict resolution ensures that the user sees the last edits (m2) when
+      the outage is fixed.</p>
+    <p><b>Recommendations for Timestamp-based Conflict Resolution</b></p>
+    <p>Note the following recommendations when using timestamp based conflict resolution: <ul
+        id="ul_djt_vzv_py">
+        <li>Clock synchronization<ul id="ul_wwy_11w_py">
+            <li>Use NTP (or GPS or atomic clocks) to synchronize wall clock between all individual
+              cluster nodes and clusters in the XDCR topology. If you are unable to synchronize all
+              clocks across clusters, you must at least know the dispersion from the reference clock
+              for each cluster so that you can add an appropriate delay to your application. See
+                <xref href="#topic_zfs_h5q_pq/cross-cluster-failover-failback" format="dita"
+                >cross-cluster failover and failback</xref> for details. </li>
+            <li>Monitor time skew between clusters. By default, when a drift of 5seconds is
+              detected, an alert is raised.</li>
+          </ul></li>
+        <li>In cross-cluster failover and failback use cases, use delay to synthesize ordering for
+          consistency. That is, the failover timeout must be greater than the max of replication
+          latency or the time skew between clusters.</li>
+      </ul></p>
+    <p><b>Troubleshooting</b></p>
+    <p>The following checks on your deployment will help ensure that your timestamp-based conflict
+      resolution works as expected: <ul id="ul_mct_m1w_py">
+        <li>Ensure your deployment is a supported use case for timestamp based conflict resolution.
+          See <xref href="#topic_zfs_h5q_pq/xdcr-conflict-resolution-use-cases" format="dita">XDCR Supported Use Cases for Timestamp-based Conflict Resolution</xref> for details.</li>
+        <li>Ensure that NTP is configured correctly on every node in both clusters and also before
+          adding a node to the cluster. </li>
+        <li>Ensure that NTP time  synchronization is working as expected. </li>
+        <li>Ensure that NTP is still configured correctly if a node is removed and re-added to a
+          cluster, or if a node is restarted. </li>
+        <li>Ensure that there are no network issues between the NTP Server and NTP clients on
+          Couchbase server nodes. </li>
+        <li>Ensure that you monitor the time drift on the clusters using the stats. </li>
+        <li>Ensure that an appropriate wait time (delay) is introduced in an application in case of
+          cluster failover and failback. </li>
+      </ul></p>
     
-    
-     
-    
-    
-    
-    
-    
-  
   </body>
+  <related-links>
+    
+    <linklist>
+      <desc>For information on how to set the conflict resolution type for a bucket, see</desc>
+      <link href="../clustersetup/create-bucket.dita"></link>
+    </linklist>
+    <linklist>
+      <desc>For information on monitoring various aspects of timestamp-based conflict resolution, see</desc>
+    <link href="xdcr-monitor-timestamp-conflict-resolution.dita"></link>
+    </linklist>
+  </related-links>
 </topic>
+
