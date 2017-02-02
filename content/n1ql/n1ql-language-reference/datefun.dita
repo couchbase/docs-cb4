@@ -1,427 +1,1402 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE concept
   PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
-<concept id="topic_8_6" xml:lang="en-US">
-	<title id="title__Toc272567324">Date Functions</title>
-	<shortdesc>N1QL date functions return the system clock value or manipulate the date string. </shortdesc>
+<concept id="datefun" xml:lang="en-US">
+	<title>Date Functions</title>
+	<shortdesc>N1QL date functions return the system clock value or manipulate the datetime values,
+        which are represented as a string or an integer. These functions are very useful for
+        manipulating dates in datasets with various date formats and timezones. </shortdesc>
 	<conbody>
-	    <section id="date-timezone"><title>Timezone</title>
-	        <p>It is important for applications to store and retrieve timestamps in specific timezones,
-                and manipulate or convert timestamps between different timezones. Many date
-                functions take timezone as an argument. </p>
-            <p>The following three timezone values are important to these functions: <ul
-                    id="ul_jnw_t5z_py">
-                    <li><b>Local/System timezone</b>: By default, the timezone local to the server
-                        is used. </li>
-                    <li><b>UTC</b>: The Coordinated Universal Time is the primary time standard by
-                        which the world regulates clocks and time. It is within about 1 second of
-                        mean solar time at 0° longitude; it does not observe daylight saving time
-                            (<xref
-                            href="https://en.wikipedia.org/wiki/Coordinated_Universal_Time#cite_note-FOOTNOTEGuinot2011S181-1"
-                            format="html" scope="external"/>). Find more details at <xref
-                            href="https://en.wikipedia.org/wiki/Coordinated_Universal_Time"
-                            format="html" scope="external"/>.</li>
-                    <li><b>Any standard defined timezone</b>: Date functions can take any of the
-                        following valid timezones defined at <xref
-                            href="https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
-                            format="html" scope="external"/>. </li>
+        <section id="date-timezone"><title>Timezones</title>Datetime values are always tied to a
+            specific timezone, either explicitly in the date value, or implicitly in the
+            application. The date functions in N1QL therefore support multiple different timezones.<dl>
+                <dlentry>
+                    <dt><b>UTC</b></dt>
+                    <dd>UTC, The Coordinated Universal Time is the primary time standard by which
+                        the world regulates clocks and time. It is defined as the time at 0°
+                        longitude and is consistent, as it does not take into account daylight
+                        savings time. You can read further about UTC at 
+                        <xref href="https://www.timeanddate.com/time/aboututc.html" format="html" scope="external"></xref>. <p>All N1QL
+                            functions which accept a timezone as an argument also accept
+                                <codeph>UTC</codeph>.</p></dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>IANA Timezones</b></dt>
+                    <dd>Many applications operate across multiple different time zones and
+                        may not necessarily use <codeph>UTC</codeph>. Therefore, it is important for
+                        the database to be able to handle and manipulate dates in these time zones
+                        in a consistent manner. Many date functions take the time zone as an
+                        additional argument. <note>Timezones are case sensitive,
+                                <codeph>Europe/London</codeph> is not the same as
+                                <codeph>europe/london</codeph>.</note><p> It is important to note
+                            that many time zones change their UTC offset based on daylight savings
+                            time, as a result the UTC offset of times may change based on the time
+                            of year. N1QL take this into account when converting dates. </p>Below
+                        are a few examples of commonly used timezones and their offsets: <table
+                            frame="all" rowsep="1" colsep="1" id="table_sfk_mqq_5y">
+                            <title>Common Timezones</title>
+                            <tgroup cols="3">
+                                <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+                                <colspec colname="c2" colnum="2" colwidth="1.0*"/>
+                                <colspec colname="c3" colnum="3" colwidth="1.0*"/>
+                                <thead>
+                                    <row>
+                                        <entry>Timezone</entry>
+                                        <entry>UTC Offset (without daylight savings time)</entry>
+                                        <entry>UTC Offset (during daylight savings time)</entry>
+                                    </row>
+                                </thead>
+                                <tbody>
+                                    <row>
+                                        <entry>America/New_York</entry>
+                                        <entry>-05:00</entry>
+                                        <entry>-04:00</entry>
+                                    </row>
+                                    <row>
+                                        <entry>America/Tijuana</entry>
+                                        <entry>-08:00</entry>
+                                        <entry>-07:00</entry>
+                                    </row>
+                                    <row>
+                                        <entry>Europe/Paris</entry>
+                                        <entry>+01:00</entry>
+                                        <entry>+02:00</entry>
+                                    </row>
+                                    <row>
+                                        <entry>Europe/London</entry>
+                                        <entry>+00:00</entry>
+                                        <entry>+01:00</entry>
+                                    </row>
+                                    <row>
+                                        <entry>Asia/Tel_Aviv</entry>
+                                        <entry>+02:00</entry>
+                                        <entry>+03:00</entry>
+                                    </row>
+                                    <row>
+                                        <entry>Asia/Kolkata</entry>
+                                        <entry>+05:30</entry>
+                                        <entry>+05:30</entry>
+                                    </row>
+                                </tbody>
+                            </tgroup>
+                        </table></dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Local System Timezone</b></dt>
+                    <dd>Many functions default to using the local timezone of the system, which will be one of the IANA timezones.</dd>
+                </dlentry>
+            </dl></section>
+        <section id="date-formats">
+            <title>Date Formats</title>
+            <p>N1QL date functions accept dates in either Epoch/UNIX timestamp format or string date
+                format. N1QL is then able to represent the passed date as a standardized date object
+                internally. In general, functions whose name contains the word <codeph>STR</codeph> are designed to
+                use string formats while <codeph>MILLIS</codeph> functions are designed to use Epoch/UNIX timestamps.<dl>
+                    <dlentry id="unix-time">
+                        <dt><b>Epoch/UNIX Timestamps</b></dt>
+                        <dd>Epoch/UNIX time is the number of seconds (or milliseconds) that have
+                            elapsed since <codeph>1970-01-01T00:00:00.000Z</codeph> (Thursday, 1
+                            January 1970 at midnight), not including leap seconds. This can be
+                            useful for numeric and timezone agnostic representations of dates. While
+                            Epoch/UNIX time can be represented in either seconds or milliseconds,
+                                <b>all N1QL date functions specifically treat Epoch/UNIX timestamps
+                                as milliseconds</b>. For example, the date
+                                <codeph>2017-01-31T10:02:07Z</codeph> would equate to an Epoch/UNIX
+                            timestamp of 1485856927000.</dd>
+                    </dlentry>
+                    <dlentry id="date-string">
+                        <dt><b>Date String Formats</b></dt>
+                        <dd>In many cases, dates are not stored as Epoch/UNIX timestamp but instead
+                            as more human-readable formats, such as
+                                <codeph>2006-01-02T15:04:05.567+08:00</codeph>. Therefore, N1QL also
+                            provides convenience methods to allow you to manipulate and convert
+                            dates in string format. <p>The supported string formats are composed of
+                                the following components:</p><table frame="all" rowsep="1"
+                                colsep="1" id="table_vwg_psq_5y">
+                                <title>Date String Components</title>
+                                <tgroup cols="3">
+                                    <colspec colname="c1" colnum="1" colwidth="2.0*"/>
+                                    <colspec colname="c2" colnum="2" colwidth="1.0*"/>
+                                    <colspec colname="c3" colnum="3" colwidth="2.0*"/>
+                                    <thead>
+                                        <row>
+                                            <entry>Component</entry>
+                                            <entry>Code</entry>
+                                            <entry>Example</entry>
+                                        </row>
+                                    </thead>
+                                    <tbody>
+                                        <row>
+                                            <entry>Year</entry>
+                                            <entry>YYYY</entry>
+                                            <entry>2006</entry>
+                                        </row>
+                                        <row>
+                                            <entry>Month (of the year)</entry>
+                                            <entry>MM</entry>
+                                            <entry>01</entry>
+                                        </row>
+                                        <row>
+                                            <entry>Day (of the month)</entry>
+                                            <entry>DD</entry>
+                                            <entry>02</entry>
+                                        </row>
+                                        <row>
+                                            <entry>Hour (of the day)</entry>
+                                            <entry>hh</entry>
+                                            <entry>15</entry>
+                                        </row>
+                                        <row>
+                                            <entry>Minute (of the hour)</entry>
+                                            <entry>mm</entry>
+                                            <entry>04</entry>
+                                        </row>
+                                        <row>
+                                            <entry>Second (of the minute)</entry>
+                                            <entry>ss</entry>
+                                            <entry>05</entry>
+                                        </row>
+                                        <row>
+                                            <entry>Millisecond (of the second)</entry>
+                                            <entry>s</entry>
+                                            <entry>567</entry>
+                                        </row>
+                                        <row>
+                                            <entry>Time Zone (as UTC offset)</entry>
+                                            <entry>TZD</entry>
+                                            <entry>-08:00<note>A UTC offset of 0 (+00:00) can just
+                                                  be specified as <codeph>Z</codeph></note></entry>
+                                        </row>
+                                    </tbody>
+                                </tgroup>
+                            </table><p>The following table shows all of the accepted string date
+                                formats for N1QL date functions, using the date components specified
+                                above. In cases where the timezone is not specified, the local
+                                system time is assumed:<table frame="all" rowsep="1" colsep="1"
+                                    id="table_z31_3tq_5y">
+                                    <title>Date String Examples</title>
+                                    <tgroup cols="2">
+                                        <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+                                        <colspec colname="c2" colnum="2" colwidth="1.0*"/>
+                                        <thead>
+                                            <row>
+                                                <entry>Format</entry>
+                                                <entry>Example</entry>
+                                            </row>
+                                        </thead>
+                                        <tbody>
+                                            <row>
+                                                <entry>YYYY-MM-DDThh:mm:ss.sTZD (ISO8601 / RFC3339
+                                                  format)</entry>
+                                                <entry>2006-01-02T15:04:05.999+00:00 or
+                                                  2006-01-02T15:04:05.999Z</entry>
+                                            </row>
+                                            <row>
+                                                <entry>YYYY-MM-DDThh:mm:ssTZD</entry>
+                                                <entry>2006-01-02T15:04:05+00:00 or
+                                                  2006-01-02T15:04:05Z</entry>
+                                            </row>
+                                            <row>
+                                                <entry>YYYY-MM-DDThh:mm:ss.s</entry>
+                                                <entry>2006-01-02T15:04:05.999</entry>
+                                            </row>
+                                            <row>
+                                                <entry>YYYY-MM-DDThh:mm:ss</entry>
+                                                <entry>2006-01-02T15:04:05</entry>
+                                            </row>
+                                            <row>
+                                                <entry>YYYY-MM-DD hh:mm:ss.sTZD</entry>
+                                                <entry>2006-01-02 15:04:05.999+00:00 or 2006-01-02
+                                                  15:04:05.999Z</entry>
+                                            </row>
+                                            <row>
+                                                <entry>YYYY-MM-DD hh:mm:ssTZD</entry>
+                                                <entry>2006-01-02 15:04:05+00:00 or 2006-01-02
+                                                  15:04:05Z</entry>
+                                            </row>
+                                            <row>
+                                                <entry>YYYY-MM-DD hh:mm:ss.s</entry>
+                                                <entry>2006-01-02 15:04:05.999</entry>
+                                            </row>
+                                            <row>
+                                                <entry>YYYY-MM-DD hh:mm:ss</entry>
+                                                <entry>2006-01-02 15:04:05</entry>
+                                            </row>
+                                            <row>
+                                                <entry>YYYY-MM-DD</entry>
+                                                <entry>2006-01-02</entry>
+                                            </row>
+                                            <row>
+                                                <entry>hh:mm:ss.sTZD</entry>
+                                                <entry>15:04:05.999+00:00 or 15:04:05.999Z</entry>
+                                            </row>
+                                            <row>
+                                                <entry>hh:mm:ssTZD</entry>
+                                                <entry>15:04:05+00:00 or 15:04:05Z</entry>
+                                            </row>
+                                            <row>
+                                                <entry>hh:mm:ss.s</entry>
+                                                <entry>15:04:05.999</entry>
+                                            </row>
+                                            <row>
+                                                <entry>hh:mm:ss</entry>
+                                                <entry>15:04:05</entry>
+                                            </row>
+                                        </tbody>
+                                    </tgroup>
+                                </table></p><note>Currently N1QL only accepts numeric format strings
+                                with valid values for each component. For example, you should pass
+                                in <codeph>2006-01-02</codeph> as the date format rather than
+                                    <codeph>YYYY-MM-DD</codeph>, this has the same effect as passing
+                                in any other valid date in the same format (such as
+                                    <codeph>2017-01-31</codeph>). <p>If the date string does not
+                                    explicitly declare the value of a component, then a value of 0
+                                    is assumed. For example <codeph>2016-02-07</codeph> is
+                                    equivalent to <codeph>2016-02-07T00:00:00</codeph>. This is with
+                                    the exception of the time zone which if unspecified in the date
+                                    string will default to the local system time zone.
+                            </p></note></dd>
+                    </dlentry>
+                </dl></p>
+        </section>
+        <section id="manipulating-components">
+            <title>Manipulating Timestamp Components</title>
+            <p>Timestamps are composed of multiple different components such as day, year, month
+                etc. It is important for applications to be able to manipulate particular components
+                of a timestamp. Functions such as <xref href="#datefun/fn-date-add-str">DATE_ADD_STR()</xref> accept a <codeph>part</codeph>
+                argument, which is the component to adjust. Below is a list of accepted parts, these
+                are expressed as strings and are not case-sensitive: <ul id="ul_egx_j5q_5y">
+                    <li dir="ltr">
+                        <p><codeph>millennium</codeph></p>
+                    </li>
+                    <li dir="ltr">
+                        <p><codeph>century</codeph></p>
+                    </li>
+                    <li dir="ltr">
+                        <p><codeph>decade</codeph></p>
+                    </li>
+                    <li dir="ltr">
+                        <p><codeph>year</codeph></p>
+                    </li>
+                    <li dir="ltr">
+                        <p><codeph>quarter</codeph></p>
+                    </li>
+                    <li dir="ltr">
+                        <p><codeph>month</codeph></p>
+                    </li>
+                    <li dir="ltr">
+                        <p><codeph>week</codeph></p>
+                    </li>
+                    <li dir="ltr">
+                        <p><codeph>day</codeph></p>
+                    </li>
+                    <li dir="ltr">
+                        <p><codeph>hour</codeph></p>
+                    </li>
+                    <li dir="ltr">
+                        <p><codeph>minute</codeph></p>
+                    </li>
+                    <li dir="ltr">
+                        <p><codeph>second</codeph></p>
+                    </li>
+                    <li dir="ltr">
+                        <p dir="ltr"><codeph>millisecond</codeph></p>
+                    </li>
                 </ul></p>
-	    </section>
-	    <section id="date-time-formats-parts"><title>Formats and Parts</title><p>When manipulating date
-                or time using timestamps, it is important for applications to extract the specific
-                component of the timestamps, such as day, year, month, hours, minutes, or seconds,
-                and any supported combination of these components in the supported date/time
-                formats. The following are the supported data/time formats that can be passed to the
-                date functions: <ul id="ul_ymf_gyz_py">
-                    <li>"2006-01-02T15:04:05.999Z07:00": Default format. (ISO8601 / RFC3339)</li>
-                    <li>"2006-01-02T15:04:05Z07:00" (ISO8601 / RFC3339)</li>
-                    <li>"2006-01-02T15:04:05.999"</li>
-                    <li>"2006-01-02T15:04:05"</li>
-                    <li>"2006-01-02 15:04:05.999Z07:00"</li>
-                    <li>"2006-01-02 15:04:05Z07:00"</li>
-                    <li>"2006-01-02 15:04:05.999"</li>
-                    <li>"2006-01-02 15:04:05"</li>
-                    <li>"2006-01-02"</li>
-                    <li>"15:04:05.999Z07:00"</li>
-                    <li>"15:04:05Z07:00"</li>
-                    <li>"15:04:05.999"</li>
-                    <li>"15:04:05"</li>
-                </ul></p><p>The following are the supported date/time <i>parts</i> that can be
-                passed to the date functions. <ul>
-                    <li>"millennium"</li>
-                    <li>"century"</li>
-                    <li>"decade"</li>
-                    <li>"year"</li>
-                    <li>"quarter"</li>
-                    <li>"month"</li>
-                    <li>"week"</li>
-                    <li>"day"</li>
-                    <li>"hour"</li>
-                    <li>"minute"</li>
-                    <li>"second"</li>
-                    <li>"millisecond"</li>
-                </ul></p>The following are the supported date part strings that can be passed to the
-            date functions: <ul id="ul_xfb_xyz_py">
-                <li>"millennium"</li>
-                <li>"century"</li>
-                <li>"decade": Floor(year / 10)</li>
-                <li>"year"</li>
-                <li>"quarter": Valid values: 1 to 4.</li>
-                <li>"month": Valid values: 1 to 12.</li>
-                <li>"day": Valid values: 1 to 31.</li>
-                <li>"hour": Valid values: 0 to 23.</li>
-                <li>"minute": Valid values: 0 to 59.</li>
-                <li>"second": Valid values: 0 to 59.</li>
-                <li>"millisecond": Valid values: 0 to 999.</li>
-                <li>"week": Valid values: 1 to 53; ceil(day_of_year / 7.0)</li>
-                <li>"day_of_year", "doy": Valid values: 1 to 366.</li>
-                <li>"day_of_week", "dow": Valid values: 0 to 6.</li>
-                <li>"iso_week": Valid values: 1 to 53. Use with "iso_year".</li>
-                <li>"iso_year": Use with "iso_week".</li>
-                <li>"iso_dow":> Valid values: 1 to 7.</li>
-                <li>"timezone": Offset from UTC in seconds.</li>
-                <li>"timezone_hour": Hour component of timezone offset.</li>
-                <li>"timezone_minute": Minute component of timezone offset. Valid values: 0 to 59.
-                </li>
-            </ul></section>
-	    <section id="fn-date-clock-local"><title>CLOCK_LOCAL()</title>
-	        <p>Returns the local time.</p>
-	        <codeblock spectitle="Example">SELECT CLOCK_LOCAL();
-[
-        {
-            "$1": "2016-09-26T11:04:51.156-07:00"
-        }
-    ]</codeblock>
-	    </section>
-	    <section id="fn-date-clock-utc"><title>CLOCK_UTC()</title>
-	        <p>Returns the universal time.</p>
-	        <codeblock spectitle="Example">SELECT CLOCK_UTC();
-[
-        {
-            "$1": "2016-09-26T18:04:54.916Z"
-        }
-    ]</codeblock>
-	    </section>
-	    <section id="fn-date-clock-tz"><title>CLOCK_TZ()</title>
-	        <p>Returns the time in the specified timezone.</p>
-	        <codeblock spectitle="Examples">SELECT CLOCK_TZ('UTC');
-[
-        {
-            "$1": "2016-09-26T18:05:14.266Z"
-        }
-    ]
+        </section>
+        <section id="extracting-components">
+            <title>Extracting Timestamp Components</title>
+            <p>It is important for applications to be able to extract the specific component of the
+                timestamps, such as day, year, month, hours, minutes, or seconds, so that these can
+                be used in N1QL queries. The following are the supported date parts that can be
+                passed to the date extraction functions. These date parts are expressed as strings
+                and are case-insensitive, so <codeph>year</codeph> is regarded the same as
+                    <codeph>YeAr</codeph>. For all examples, the datetime being used is
+                    <codeph>2006-01-02T15:04:05.999Z</codeph></p>
+            <table frame="all" rowsep="1" colsep="1" id="table_nvb_t5q_5y">
+                <title>Timestamp Components</title>
+                <tgroup cols="5">
+                    <colspec colname="c1" colnum="1" colwidth="2.0*"/>
+                    <colspec colname="c2" colnum="2" colwidth="6.0*"/>
+                    <colspec colname="newCol3" colnum="3" colwidth="1*"/>
+                    <colspec colname="newCol4" colnum="4" colwidth="1*"/>
+                    <colspec colname="newCol5" colnum="5" colwidth="1*"/>
+                    <thead>
+                        <row>
+                            <entry>Component</entry>
+                            <entry>Description</entry>
+                            <entry>Lower Bound</entry>
+                            <entry>Upper Bound</entry>
+                            <entry>Example</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry>millennium</entry>
+                            <entry>The millennium (1000 year period), which begins at 0BCE.</entry>
+                            <entry>-</entry>
+                            <entry>-</entry>
+                            <entry>3</entry>
+                        </row>
+                        <row>
+                            <entry>century</entry>
+                            <entry>The century (100 year period), which begins at 0BCE.</entry>
+                            <entry>-</entry>
+                            <entry>-</entry>
+                            <entry>21</entry>
+                        </row>
+                        <row>
+                            <entry>decade</entry>
+                            <entry>The decade (10 year period). This is calculated as <codeph>floor(year / 10)</codeph>.</entry>
+                            <entry>-</entry>
+                            <entry>-</entry>
+                            <entry>200</entry>
+                        </row>
+                        <row>
+                            <entry>year</entry>
+                            <entry>The Gregorian year, which begins at 0BCE</entry>
+                            <entry>-</entry>
+                            <entry>-</entry>
+                            <entry>2006</entry>
+                        </row>
+                        <row>
+                            <entry>iso_year</entry>
+                            <entry>The ISO-8601 week number of the year. Each ISO-8601 year begins with the Monday of the week 
+                                containing the 4th of January, so in early January and late December the ISO year may differ from the Gregorian year.
+                                Should be used in conjunction with <codeph>iso_week</codeph> to get consistent results.</entry>
+                            <entry>-</entry>
+                            <entry>-</entry>
+                            <entry>2006</entry>
+                        </row>
+                        <row>
+                            <entry>quarter</entry>
+                            <entry>The number of the quarter (3 month period) of the year. January-March (inclusive) is 1 while 
+                                October-December (inclusive) is 4.</entry>
+                            <entry>1</entry>
+                            <entry>4</entry>
+                            <entry>1</entry>
+                        </row>
+                        <row>
+                            <entry>month</entry>
+                            <entry>The number of the month of the year. January is 1 and December is 12.</entry>
+                            <entry>1</entry>
+                            <entry>12</entry>
+                            <entry>1</entry>
+                        </row>
+                        <row>
+                            <entry>week</entry>
+                            <entry>The number of the week of the year. This is the ceiling value of the day of the year divided by 7.</entry>
+                            <entry>1</entry>
+                            <entry>53</entry>
+                            <entry>1</entry>
+                        </row>
+                        <row>
+                            <entry>iso_week</entry>
+                            <entry>The number of the week of the year, based on the ISO definition.
+                                ISO weeks start on Mondays and the first week of a year contains
+                                January 4 of that year. In other words, the first Thursday of a year
+                                will always be in week 1 of that year. This results in some
+                                different results between week and iso_week based on the input date.
+                                    <p>For example the <codeph>iso_week</codeph> of
+                                        <codeph>2006-01-08T15:04:05.999Z</codeph> is 1, while the
+                                        <codeph>week</codeph> is 2. Should be used in conjunction
+                                    with <codeph>iso_year</codeph> to get consistent
+                                results.</p></entry>
+                            <entry>1</entry>
+                            <entry>53</entry>
+                            <entry>1</entry>
+                        </row>
+                        <row>
+                            <entry>day</entry>
+                            <entry>The day of the month.</entry>
+                            <entry>1</entry>
+                            <entry>31</entry>
+                            <entry>2</entry>
+                        </row>
+                        <row>
+                            <entry>day_of_year or doy</entry>
+                            <entry>The day of the year.</entry>
+                            <entry>1</entry>
+                            <entry>366</entry>
+                            <entry>2</entry>
+                        </row>
+                        <row>
+                            <entry>day_of_week or dow</entry>
+                            <entry>The day of the week.</entry>
+                            <entry>0</entry>
+                            <entry>6</entry>
+                            <entry>1</entry>
+                        </row>
+                        <row>
+                            <entry>hour</entry>
+                            <entry>The hour of the day.</entry>
+                            <entry>0</entry>
+                            <entry>23</entry>
+                            <entry>5</entry>
+                        </row>
+                        <row>
+                            <entry>minute</entry>
+                            <entry>The minute of the hour.</entry>
+                            <entry>0</entry>
+                            <entry>59</entry>
+                            <entry>4</entry>
+                        </row>
+                        <row>
+                            <entry>second</entry>
+                            <entry>The second of the minute.</entry>
+                            <entry>0</entry>
+                            <entry>59</entry>
+                            <entry>5</entry>
+                        </row>
+                        <row>
+                            <entry>millisecond</entry>
+                            <entry>The millisecond of the second.</entry>
+                            <entry>0</entry>
+                            <entry>999</entry>
+                            <entry>999</entry>
+                        </row>
+                        <row>
+                            <entry>timezone</entry>
+                            <entry>The offset from UTC in seconds.</entry>
+                            <entry>-43200</entry>
+                            <entry>43200</entry>
+                            <entry>0</entry>
+                        </row>
+                        <row>
+                            <entry>timezone_hour</entry>
+                            <entry>The hour component of the offset from UTC.</entry>
+                            <entry>-12</entry>
+                            <entry>12</entry>
+                            <entry>0</entry>
+                        </row>
+                        <row>
+                            <entry>timezone_minute</entry>
+                            <entry>The minute component of the offset from UTC.</entry>
+                            <entry>-59</entry>
+                            <entry>59</entry>
+                            <entry>0</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+        </section>
+        <section id="section_trq_pwq_5y">
+            <title>Date Functions</title>
+            <p>Below is a list of all date functions that N1QL provides.</p>
+            <note type="important">Many date functions use the local system clock value and timezone of the query node to generate results. 
+                Therefore, if all nodes running the query service do not have their time appropriately synchronized then you 
+                may experience inconsistent behaviour. It is recommended that all Couchbase Server nodes have their 
+                <xref href="../../install/synchronize-clocks-using-ntp.dita">time synchronized via NTP</xref>.</note>
+                <note>If any arguments to any of the following functions are
+                    <codeph>MISSING</codeph> then no result is returned. Similarly if any of the
+                arguments are <codeph>null</codeph> then <codeph>null</codeph> is returned.</note>
+        </section>
+        <section id="fn-date-clock-local">
+            <title>CLOCK_LOCAL([fmt])</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>The system time (at function evaluation time) of the machine that the query
+                        service is running on, in the specified string format.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd><dl>
+                        <dlentry>
+                            <dt><b>fmt</b></dt>
+                            <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a <xref
+                                        href="#datefun/date-formats">supported date format</xref>.
+                                            <p><b>Optional argument</b>, if no format or an
+                                        incorrect format is specified then this defaults to
+                                        ISO-8601.</p></dd>
+                        </dlentry>
+                    </dl></dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single date string in the format specified.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Limitations</b></dt>
+                    <dd><codeph>CLOCK_LOCAL()</codeph> cannot be used as part of an index
+                        definition, this includes the indexed fields and the <codeph>WHERE</codeph>
+                        clause of the index.</dd>
+                    <dd>If this function is called multiple times within the same query then the
+                        values returned may differ, particularly if the query takes a long time to
+                        run. To avoid inconsistencies between multiple calls to
+                            <codeph>CLOCK_LOCAL()</codeph> within a single query, use
+                        <xref href="#datefun/fn-date-now-local">NOW_LOCAL()</xref> instead. </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd><codeblock outputclass="language-json">SELECT CLOCK_LOCAL() as ISO_8601, CLOCK_LOCAL('invalid date') as invalid_date, 
+    CLOCK_LOCAL('2016-01-01') as short_date;
 
-SELECT CLOCK_TZ('US/Eastern');
-[
-        {
-            "$1": "2016-09-26T14:05:21.648-04:00"
-        }
-    ]
-
-SELECT CLOCK_TZ('US/Pacific');
-[
-        {
-            "$1": "2016-09-26T11:05:32.719-07:00"
-        }
-    ]</codeblock>
-	    </section>
-		<section id="fn-date-clock-millis"><title>CLOCK_MILLIS()</title>
-		<p>Returns system clock at function evaluation time, as UNIX milliseconds.
-				Varies during a query.</p>
-		    <codeblock outputclass="language-json">SELECT CLOCK_MILLIS();
 {
-    "requestID": "57bb6334-34fa-4286-beb8-c796af7e48bc",
-    "clientContextID": "97d261aa-3824-4f77-bf15-ff40cff48473",
-    "signature": {
-        "$1": "number"
-    },
+    "results": [
+        {
+            "ISO_8601": "2017-01-31T03:49:30.612-08:00",
+            "invalid_date": "2017-01-31T03:49:30.612-08:00",
+            "short_date": "2017-01-31"
+        }
+    ]
+}</codeblock></dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-clock-millis">
+            <title>CLOCK_MILLIS()</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>The system time as an Epoch/UNIX timestamp</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>This function accepts no arguments.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single float value (with 3 decimal places).</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Limitations</b></dt>
+                    <dd><codeph>CLOCK_MILLIS()</codeph> cannot be used as part of an index
+                        definition, this includes the indexed fields and the <codeph>WHERE</codeph>
+                        clause of the index.</dd>
+                    <dd>If this function is called multiple times within the same query then the
+                        values returned may differ, particularly if the query takes a long time to
+                        run. To avoid inconsistencies between multiple calls to
+                            <codeph>CLOCK_MILLIS()</codeph> within a single query, use
+                        <xref href="#datefun/fn-date-now-millis">NOW_MILLIS()</xref> instead. </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT CLOCK_MILLIS();
+                            
+{
     "results": [
         {
             "$1": 1483543192439.568
         }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "561.512µs",
-        "executionTime": "520.329µs",
-        "resultCount": 1,
-        "resultSize": 47
-    }
+    ]
 }</codeblock>
-		</section>
-		<section id="fn-date-clock-str"><title>CLOCK_STR([fmt])</title>
-			<p>Returns system clock at function evaluation time, as a string in a supported format. Varies
-                during a query. See <xref href="#topic_8_6/date-time-formats-parts" format="dita"
-                />for the list of supported date/time formats. </p>
-		    <codeblock outputclass="language-json">SELECT CLOCK_STR("1222-11-12 11:11:11");
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-clock-str">
+            <title>CLOCK_STR([fmt])</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>The system time (at function evaluation time) of the machine that the query
+                        service is running on, in the specified string format.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd><dl>
+                        <dlentry>
+                            <dt><b>fmt</b></dt>
+                            <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                which evaluates to a string, representing a <xref href="#datefun/date-formats">supported date
+                                    format</xref>. </dd>
+                                <dd><b>Optional argument</b>, if no format or an incorrect format is
+                                    specified then this defaults to ISO-8601.</dd>
+                        </dlentry>
+                    </dl></dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single date string in the format specified.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Limitations</b></dt>
+                    <dd><codeph>CLOCK_STR()</codeph> cannot be used as part of an index definition,
+                        this includes the indexed fields and the <codeph>WHERE</codeph> clause of
+                        the index.</dd>
+                    <dd>If this function is called multiple times within the same query then the
+                        values returned may differ, particularly if the query takes a long time to
+                        run. To avoid inconsistencies between multiple calls to
+                            <codeph>CLOCK_STR()</codeph> within a single query, use
+                        <xref href="#datefun/fn-date-now-str">NOW_STR()</xref> instead. </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd><codeblock outputclass="language-json">SELECT CLOCK_STR() as ISO_8601, 
+    CLOCK_STR('invalid date') as invalid_date,
+    CLOCK_STR('2016-01-01') as short_date;
+    
 {
-    "requestID": "26a06d24-fe1c-4e7b-91a3-9c393aa75b01",
-    "clientContextID": "04e89fdd-624a-4de6-839d-982f828491b2",
-    "signature": {
-        "$1": "string"
-    },
     "results": [
         {
-            "$1": "2017-01-04 07:21:37.482"
+            "ISO_8601": "2017-01-31T03:53:52.348-08:00",
+            "invalid_date": "2017-01-31T03:53:52.348-08:00",
+            "short_date": "2017-01-31"
         }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "1.903321ms",
-        "executionTime": "1.774177ms",
-        "resultCount": 1,
-        "resultSize": 55
-    }
-}</codeblock>	
-		</section>
-		<section id="fn-date-add-millis"><title>DATE_ADD_MILLIS(expression, n, part)</title>
-			<p>Performs date arithmetic, and returns result of computation. <i>n</i> and <i>part</i> are used
-                to define an interval or duration, which is then added (or subtracted) to the UNIX
-                time stamp, returning the result. See <xref
-                    href="#topic_8_6/date-time-formats-parts" format="dita"/>for the list of
-                supported date/time parts.</p>
-			
-		    <codeblock outputclass="language-json">SELECT DATE_ADD_MILLIS(1463284740000, 3, 'day');
+    ]
+}</codeblock></dd>
+                </dlentry>
+            </dl>
+        </section>
+	    <section id="fn-date-clock-tz">
+	        <title>CLOCK_TZ(tz [, fmt])</title>
+	        <dl>
+	            <dlentry>
+	                <dt><b>Description</b></dt>
+	                <dd>The current time (at function evaluation time) in the timezone given by the
+                        timezone argument passed to the function. This time is the local system time
+                        converted to the specified timezone.</dd>
+	            </dlentry>
+	            <dlentry>
+	                <dt><b>Arguments</b></dt>
+	                <dd><dl>
+	                    <dlentry>
+	                        <dt><b>tz</b></dt>
+	                        <dd>A string, or any valid <xref href="index.dita">expression</xref> which
+	                            evaluates to a string, representing the <xref href="#datefun/date-timezone">timezone</xref> to convert the local time to. </dd>
+                                <dd>If this argument is not a valid timezone then
+                                        <codeph>null</codeph> is returned as the result.</dd>
+	                    </dlentry>
+	                    <dlentry>
+	                        <dt><b>fmt</b></dt>
+	                        <dd>A string, or any valid <xref href="index.dita">expression</xref> which
+                                    evaluates to a string, representing a <xref
+                                        href="#datefun/date-formats">supported date format</xref>
+                                    </dd>
+                                <dd><b>Optional argument</b>, if no format or an incorrect format is
+                                    specified then this defaults to ISO-8601.</dd>
+	                    </dlentry>
+	                </dl></dd>
+	            </dlentry>
+	            <dlentry>
+	                <dt><b>Return Value</b></dt>
+	                <dd>A single date string in the format specified.</dd>
+	            </dlentry>
+	            <dlentry>
+	                <dt><b>Limitations</b></dt>
+	                <dd>As this function converts the local time, it may not accurately represent the
+                        true time in that timezone. </dd>
+                    <dd><codeph>CLOCK_TZ()</codeph> cannot be used as part of an index definition,
+                        this includes the indexed fields and the <codeph>WHERE</codeph> clause of
+                        the index.</dd>
+                    <dd>If this function is called multiple times within the same query then the
+                        values returned may differ, particularly if the query takes a long time to
+                        run. To avoid inconsistencies between multiple calls to
+                            <codeph>CLOCK_TZ()</codeph> within a single query, use
+                        <xref href="#datefun/fn-date-now-tz">NOW_TZ()</xref> instead. </dd>
+	            </dlentry>
+	            <dlentry>
+	                <dt><b>Examples</b></dt>
+	                <dd><codeblock outputclass="language-json">SELECT CLOCK_TZ('UTC') as UTC_ISO_8601, CLOCK_TZ('UTC', '2016-01-01') as UTC_short_date, 
+    CLOCK_TZ('invalid timezone') as invalid_timezone, CLOCK_TZ('US/Eastern') as us_east, 
+    CLOCK_TZ('US/Pacific') as us_west;
+	                    
 {
-    "requestID": "93d3c21e-7d3f-451e-aefb-0aeb318258f3",
-    "clientContextID": "dd480319-7eda-4a63-a4ff-765955f553d8",
-    "signature": {
-        "$1": "number"
-    },
     "results": [
         {
-            "$1": 1463543940000
+            "UTC_ISO_8601": "2017-01-31T12:31:44.133Z",
+            "UTC_short_date": "2017-01-31",
+            "invalid_timezone": null,
+            "us_east": "2017-01-31T07:31:44.133-05:00",
+            "us_west": "2017-01-31T04:31:44.133-08:00"
         }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "455.682µs",
-        "executionTime": "424.356µs",
-        "resultCount": 1,
-        "resultSize": 43
-    }
-}</codeblock>
-		</section>
-		<section id="fn-date-add-str"><title>DATE_ADD_STR(expression, n, part)</title>
-			<p>Performs date arithmetic. <i>n</i> and <i>part</i> are used to define an
-				interval or duration, which is then added (or subtracted) to the date string
-				in a supported format, returning the result.</p>
-		    <codeblock outputclass="language-json">SELECT DATE_ADD_STR('2016-05-15 00:00:23',3, 'day');
-{
-    "requestID": "60623af4-620c-4ae2-b60b-fda43d918529",
-    "clientContextID": "886919a6-d7a0-45c0-bb5b-1ab8acaf582b",
-    "signature": {
-        "$1": "string"
-    },
-    "results": [
-        {
-            "$1": "2016-05-18 00:00:23"
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "515.859µs",
-        "executionTime": "480.785µs",
-        "resultCount": 1,
-        "resultSize": 51
-    }
-}</codeblock>
-		</section>
-		<section id="fn-date-diff-millis"><title>DATE_DIFF_MILLIS(expression1, expression2, part)</title>
-			<p>Performs date arithmetic. Returns the elapsed time between two UNIX time stamps as an integer
-                whose unit is <i>part</i>. See <xref href="#topic_8_6/date-time-formats-parts"
-                    format="dita"/>for the list of supported date/time parts.</p>
-		    <codeblock outputclass="language-json">SELECT DATE_DIFF_MILLIS(1463284740000, 1463543940000, 'day');
-{
-    "requestID": "7b802554-df76-4c0d-aa9f-b6848f318996",
-    "clientContextID": "fe8be24b-4eb1-409f-bbb5-d163883050cc",
-    "signature": {
-        "$1": "number"
-    },
-    "results": [
-        {
-            "$1": -3
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "2.463013ms",
-        "executionTime": "2.341618ms",
-        "resultCount": 1,
-        "resultSize": 32
-    }
-}</codeblock>
-		</section>
-		<section id="fn-date-diff-str"><title>DATE_DIFF_STR(expression1, expression2, part)</title>
-			<p>Performs date arithmetic. Returns the elapsed time between two date strings in a supported
-                format, as an integer whose unit is <i>part</i>. See <xref
-                    href="#topic_8_6/date-time-formats-parts" format="dita"/>for the list of
-                supported date/time parts.</p>
-		    <codeblock outputclass="language-json">SELECT DATE_DIFF_STR('2016-05-18 00:00:23','2016-05-15 00:00:23','day');
-{
-    "requestID": "db0996c2-5890-4a55-9a39-7a7adbd6ef31",
-    "clientContextID": "adfc7a9c-b42e-4b5e-aa1f-fdefd7d030d1",
-    "signature": {
-        "$1": "number"
-    },
-    "results": [
-        {
-            "$1": 3
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "2.092908ms",
-        "executionTime": "2.005783ms",
-        "resultCount": 1,
-        "resultSize": 31
-    }
-}</codeblock>
-		</section>
-		<section id="fn-date-"><title>DATE_FORMAT_STR(expresssion, fmt)</title>
-			<p>Converts dates to a different format.</p>
-		    <codeblock spectitle="Example" outputclass="language-json">SELECT DATE_FORMAT_STR('2016-05-15T00:00:23+02:00','1222-11-11 11:11:11');
-{
-    "requestID": "c8d98cae-cf38-4588-9a82-3b54ec3b3d53",
-    "clientContextID": "22b31c2d-fb15-454d-904c-43feaf491c33",
-    "signature": {
-        "$1": "string"
-    },
-    "results": [
-        {
-            "$1": "2016-05-15 00:00:23"
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "523.735µs",
-        "executionTime": "490.758µs",
-        "resultCount": 1,
-        "resultSize": 51
-    }
-}</codeblock>
-			
-		</section>
-		<section id="fn-date-part-millis"><title>DATE_PART_MILLIS(expression, part [,timezone])</title>
-			<p>Converts the millis date into a date string in timezone, and then returns the corresponding
-                date as an integer. The date expression is a number representing UNIX milliseconds,
-                part is one of the following date part strings, and timezone is the timezone for the
-                corresponding output. See <xref href="#topic_8_6/date-time-formats-parts"
-                    format="dita"/>for the list of supported date/time part strings.</p>
-		    <codeblock spectitle="Example" outputclass="language-json">
-SELECT DATE_PART_MILLIS(1463284740000,'day', 'UTC') ;
-{
-    "requestID": "6da88780-ea0c-453d-87a6-55dba94ffc44",
-    "signature": {
-        "$1": "number"
-    },
-    "results": [
-        {
-            "$1": 15
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "1.547388ms",
-        "executionTime": "1.526741ms",
-        "resultCount": 1,
-        "resultSize": 32
-    }
-}
+    ]
+}</codeblock></dd>
+	            </dlentry>
+	        </dl>
+	    </section>
+        <section id="fn-date-clock-utc">
+            <title>CLOCK_UTC([fmt])</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>The current time in UTC. This time is the local system time converted to UTC. This function is provided for convenience and is the same as <codeph>CLOCK_TZ('UTC')</codeph>.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd><dl>
+                        <dlentry>
+                            <dt><b>fmt</b></dt>
+                            <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a <xref
+                                        href="#datefun/date-formats">supported date format</xref>. </dd>
+                                <dd><b>Optional argument</b>, if no format or an incorrect format is
+                                    specified then this defaults to ISO-8601.</dd>
+                        </dlentry>
+                    </dl></dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single date string in the format specified.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Limitations</b></dt>
+                    <dd>As this function converts the local time, it may not accurately represent
+                        the true time in UTC.</dd>
+                    <dd><codeph>CLOCK_UTC()</codeph> cannot be used as part of an index definition,
+                        this includes the indexed fields and the <codeph>WHERE</codeph> clause of
+                        the index.</dd>
+                    <dd>If this function is called multiple times within the same query then the
+                        values returned may differ, particularly if the query takes a long time to
+                        run. To avoid inconsistencies between multiple calls to
+                            <codeph>CLOCK_UTC()</codeph> within a single query, use
+                        <xref href="#datefun/fn-date-now-utc">NOW_UTC()</xref> instead. </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd><codeblock outputclass="language-json">SELECT CLOCK_UTC() as ISO_8601, CLOCK_UTC('2016-01-01') as short_date;
 
-SELECT DATE_PART_MILLIS(1463284740000,'day','Europe/London') ;
 {
-    "requestID": "91ae724e-322d-494e-906a-bdaa693aaad4",
-    "signature": {
-        "$1": "number"
-    },
     "results": [
         {
-            "$1": 15
+            "ISO_8601": "2017-01-31T14:13:03.147Z",
+            "short_date": "2017-01-31"
         }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "1.822507ms",
-        "executionTime": "1.802773ms",
-        "resultCount": 1,
-        "resultSize": 32
-    }
-}							</codeblock>
-		</section>
-		<section id="fn-date-part-str"><title>DATE_PART_STR(expression, part)</title>
-			<p>Returns date part as an integer. The date expression is a string in a supported format, and
-                part is one of the supported date part strings. See <xref
-                    href="#topic_8_6/date-time-formats-parts" format="dita"/>for the list of
-                supported date/time part strings.</p>
-		    <codeblock outputclass="language-json">SELECT DATE_PART_STR('2016-05-18 00:00:23','day');
+    ]
+}</codeblock></dd>
+                </dlentry>
+            </dl></section>
+        
+        <section id="fn-date-add-millis">
+            <title>DATE_ADD_MILLIS(date1, n, part)</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Performs date arithmetic on a particular component of an Epoch/UNIX
+                        timestamp value. This calculation is specified by the arguments
+                            <codeph>n</codeph> and <codeph>part</codeph>. </dd>
+                    <dd>For example a value of 3 for <codeph>n</codeph> and a value of
+                            <codeph>day</codeph> for <codeph>part</codeph> would add 3 days to the
+                        date specified by <codeph>date1</codeph>. </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd><dl>
+                        <dlentry>
+                            <dt><b>date1</b></dt>
+                            <dd>An integer, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to an integer, representing an Epoch/UNIX
+                                    timestamp in milliseconds. </dd>
+                                <dd>If this argument is not an integer then <codeph>null</codeph> is
+                                    returned.</dd>
+                        </dlentry>
+                        <dlentry>
+                            <dt><b>n</b></dt>
+                            <dd>The value to increment the date component by. This value must be an
+                                    integer, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to an integer, and may be negative to perform
+                                    date subtraction. </dd>
+                                <dd>If a non-integer is passed to the function then
+                                        <codeph>null</codeph> is returned.</dd>
+                        </dlentry>
+                        <dlentry>
+                            <dt><b>part</b></dt>
+                            <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the <xref
+                                        href="#datefun/manipulating-components">component</xref> of
+                                    the date to increment.</dd>
+                                <dd>If an invalid part is passed to the function then
+                                        <codeph>null</codeph> is returned.</dd>
+                        </dlentry>
+                    </dl></dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single integer, representing the result of the calculation as an
+                        Epoch/UNIX timestamp in milliseconds.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd><codeblock outputclass="language-json">SELECT DATE_ADD_MILLIS(1463284740000, 3, 'day') as add_3_days, 
+    DATE_ADD_MILLIS(1463284740000, 3, 'year') as add_3_years,
+    DATE_ADD_MILLIS(1463284740000, -3, 'day') as sub_3_days, 
+    DATE_ADD_MILLIS(1463284740000, -3, 'year') as sub_3_years;
+                        
 {
-    "requestID": "56cdd05e-7f00-420b-8142-e5ef54f82f38",
-    "clientContextID": "e2824e53-e387-4758-a015-50b6ea87ddf9",
-    "signature": {
-        "$1": "number"
-    },
     "results": [
         {
-            "$1": 18
+            "add_3_days": 1463543940000,
+            "add_3_years": 1557892740000,
+            "sub_3_days": 1463025540000,
+            "sub_3_years": 1368590340000
         }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "2.288921ms",
-        "executionTime": "2.185653ms",
-        "resultCount": 1,
-        "resultSize": 32
-    }
-}</codeblock>	
-		</section>
-		<section id="fn-date-range-millis"><title>DATE_RANGE_MILLIS(expression1, expression2, part
-			[,n])</title>
-			<p>Returns an array of dates from the start date specified by <codeph>expression1</codeph>
-				until the end date specified by <codeph>expression2</codeph>, in
-				milliseconds, incrementing the <codeph>part</codeph> specified by
-				<codeph>n</codeph>. The default value of<codeph> n</codeph> is 1.</p>
-		    <codeblock spectitle="Examples" outputclass="language-json">SELECT DATE_RANGE_MILLIS(1480752000000, 1475478000000, 'month', -1);
+    ]
+}</codeblock></dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-add-str">
+            <title>DATE_ADD_STR(date1, n, part)</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Performs date arithmetic on a date string. 
+                        This calculation is specified by the arguments <codeph>n</codeph> and <codeph>part</codeph>. 
+                        For example a value of 3 for <codeph>n</codeph> and a value of <codeph>day</codeph> for <codeph>part</codeph> 
+                        would add 3 days to the date specified by <codeph>date1</codeph>.
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd><dl>
+                        <dlentry>
+                            <dt><b>date1</b></dt>
+                            <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the date in a <xref
+                                        href="#datefun/date-formats">supported date
+                                    format</xref>.</dd>
+                        </dlentry>
+                        <dlentry>
+                            <dt><b>n</b></dt>
+                            <dd>The value to increment the date component by. This value must be an
+                                    integer, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to an integer, and may be negative to perform
+                                    date subtraction. </dd>
+                                <dd>If a non-integer is passed to the function then
+                                        <codeph>null</codeph> is returned.</dd>
+                        </dlentry>
+                        <dlentry>
+                            <dt><b>part</b></dt>
+                            <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the <xref
+                                        href="#datefun/manipulating-components">component</xref> of
+                                    the date to increment.</dd>
+                                <dd>If an invalid part is passed to the function then
+                                        <codeph>null</codeph> is returned.</dd>
+                        </dlentry>
+                    </dl></dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single integer representing the result of the calculation as an Epoch/UNIX
+                        timestamp in milliseconds.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd><codeblock outputclass="language-json">SELECT DATE_ADD_STR('2016-05-15 03:59:00Z', 3, 'day') as add_3_days,
+   DATE_ADD_STR('2016-05-15 03:59:00Z', 3, 'year') as add_3_years,
+   DATE_ADD_STR('2016-05-15 03:59:00Z', -3, 'day') as sub_3_days,
+   DATE_ADD_STR('2016-05-15 03:59:00Z', -3, 'year') as sub_3_years;
 
-"results": [
-	{
+{
+    "results": [
+        {
+            "add_3_days": "2016-05-18T03:59:00Z",
+            "add_3_years": "2019-05-15T03:59:00Z",
+            "sub_3_days": "2016-05-12T03:59:00Z",
+            "sub_3_years": "2013-05-15T03:59:00Z"
+        }
+    ]
+}</codeblock></dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-diff-millis">
+            <title>DATE_DIFF_MILLIS(date1, date2, part)</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Finds the elapsed time between two Epoch/UNIX timestamps. This elapsed time
+                        is measured from the date specified by <codeph>date2</codeph> to the date
+                        specified by <codeph>date1</codeph>. If <codeph>date1</codeph> is greater
+                        than <codeph>date2</codeph> then the value returned will be positive,
+                        otherwise the value returned will be negative. </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd><dl>
+                        <dlentry>
+                            <dt><b>date1</b></dt>
+                            <dd>An integer, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to an integer, representing a Epoch/UNIX
+                                    timestamp in milliseconds. This is the value that is subtracted
+                                    from <codeph>date1</codeph>.</dd>
+                                <dd>If this argument is not an integer then <codeph>null</codeph> is
+                                    returned.</dd>
+                        </dlentry>
+                        <dlentry>
+                                <dt><b>date2</b></dt>
+                                <dd>An integer, or any valid <xref href="index.dita"
+                                        >expression</xref> which evaluates to an integer,
+                                    representing a Epoch/UNIX timestamp in milliseconds.</dd>
+                                <dd>This is the value that is subtracted from
+                                    <codeph>date1</codeph>.</dd>
+                                <dd>If this argument is not an integer then <codeph>null</codeph> is
+                                    returned.</dd>
+                            </dlentry>
+                        <dlentry>
+                            <dt><b>part</b></dt>
+                            <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                which evaluates to a string, representing the <xref href="#datefun/manipulating-components">component</xref> of the
+                                    date to increment.</dd>
+                                <dd>If an invalid part is passed to the function then
+                                        <codeph>null</codeph> is returned.</dd>
+                        </dlentry>
+                    </dl></dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single integer representing the elapsed time (based on the specified
+                            <codeph>part</codeph>) between both dates.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd><codeblock outputclass="language-json">SELECT DATE_DIFF_MILLIS(1463543940000, 1463284740000, 'day') as add_3_days,
+    DATE_DIFF_MILLIS(1557892740000, 1463284740000, 'year') as add_3_years,
+    DATE_DIFF_MILLIS(1463025540000, 1463284740000, 'day') as sub_3_days,
+    DATE_DIFF_MILLIS(1368590340000, 1463284740000, 'year') as sub_3_years;
+
+{
+    "results": [
+        {
+            "add_3_days": 3,
+            "add_3_years": 3,
+            "sub_3_days": -3,
+            "sub_3_years": -3
+        }
+    ]
+}</codeblock></dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-diff-str">
+            <title>DATE_DIFF_STR(date1, date2, part)</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Finds the elapsed time between two dates specified as formatted strings. This elapsed time
+                        is measured from the date specified by <codeph>date2</codeph> to the date
+                        specified by <codeph>date1</codeph>. If <codeph>date1</codeph> is greater
+                        than <codeph>date2</codeph> then the value returned will be positive,
+                        otherwise the value returned will be negative. </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd><dl>
+                        <dlentry>
+                            <dt><b>date1</b></dt>
+                            <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a date in a <xref
+                                        href="#datefun/date-formats">supported date format</xref>.
+                                    This is the value that <codeph>date2</codeph> is subtracted
+                                    from. </dd>
+                                <dd>If this argument is not a valid date string then
+                                        <codeph>null</codeph> is returned.</dd>
+                        </dlentry>
+                        <dlentry>
+                            <dt><b>date2</b></dt>
+                            <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a date in a <xref
+                                        href="#datefun/date-formats">supported date format</xref>.
+                                    This is the value that is subtracted from
+                                    <codeph>date1</codeph>. </dd>
+                                <dd>If this argument is not a valid date string then
+                                        <codeph>null</codeph> is returned.</dd>
+                        </dlentry>
+                        <dlentry>
+                            <dt><b>part</b></dt>
+                            <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the <xref
+                                        href="#datefun/manipulating-components">component</xref> of
+                                    the date to increment.</dd>
+                                <dd>If an invalid part is passed to the function then
+                                        <codeph>null</codeph> is returned.</dd>
+                        </dlentry>
+                    </dl></dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single integer representing the elapsed time (based on the specified
+                            <codeph>part</codeph>) between both dates.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd><codeblock outputclass="language-json">SELECT DATE_DIFF_STR('2016-05-18T03:59:00Z', '2016-05-15 03:59:00Z', 'day') as add_3_days,
+    DATE_DIFF_STR('2019-05-15T03:59:00Z', '2016-05-15 03:59:00Z', 'year') as add_3_years,
+    DATE_DIFF_STR('2016-05-12T03:59:00Z', '2016-05-15 03:59:00Z', 'day') as sub_3_days,
+    DATE_DIFF_STR('2013-05-15T03:59:00Z', '2016-05-15 03:59:00Z', 'year') as sub_3_years;
+                        
+{
+    "results": [
+        {
+            "add_3_days": 3,
+            "add_3_years": 3,
+            "sub_3_days": -3,
+            "sub_3_years": -3
+        }
+    ]
+}</codeblock></dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-">
+            <title>DATE_FORMAT_STR(date1, fmt)</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Converts datetime strings from one supported date string format to a different supported date string format.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd><dl>
+                        <dlentry>
+                            <dt><b>date1</b></dt>
+                            <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a date in a <xref
+                                        href="#datefun/date-formats">supported date format</xref>. </dd>
+                                <dd>If this argument is not a valid date string then
+                                        <codeph>null</codeph> is returned.</dd>
+                        </dlentry>
+                        <dlentry>
+                            <dt><b>fmt</b></dt>
+                            <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a <xref
+                                        href="#datefun/date-formats">supported date format</xref>.
+                                    If an incorrect format is specified then this defaults to
+                                    ISO-8601.</dd>
+                        </dlentry>
+                    </dl></dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single integer representing the elapsed time (based on the specified
+                            <codeph>part</codeph>) between both dates.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd><codeblock outputclass="language-json">SELECT DATE_FORMAT_STR('2016-05-15T00:00:23+00:00', '2016-01-01') as iso_to_short,
+    DATE_FORMAT_STR('2016-05-15', '2016-01-01T00:00:00+00:00') as short_to_iso,
+    DATE_FORMAT_STR('01:10:05', '2016-01-01T01:01:01Z') as time_to_iso
+
+{
+    "results": [
+        {
+            "iso_to_short": "2016-05-15",
+            "short_to_iso": "2016-05-15T00:00:00-07:00",
+            "time_to_iso": "0000-01-01T01:10:05-08:00"
+        }
+    ]
+}</codeblock></dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-part-millis">
+            <title>DATE_PART_MILLIS(date1, part [, tz])</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Extracts the value of a given date component from an Epoch/UNIX timestamp value.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd><dl>
+                        <dlentry>
+                            <dt><b>date1</b></dt>
+                            <dd>An integer, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to an integer, representing a Epoch/UNIX
+                                    timestamp in milliseconds.</dd>
+                                <dd>If this argument is not an integer then <codeph>null</codeph> is
+                                    returned.</dd>
+                        </dlentry>
+                        <dlentry>
+                            <dt><b>part</b></dt>
+                            <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the <xref
+                                        href="#datefun/extracting-components">component</xref> of
+                                    the date to extract.</dd>
+                                <dd>If an invalid part is passed to the function then
+                                        <codeph>null</codeph> is returned.</dd>
+                        </dlentry>
+                        <dlentry>
+                            <dt><b>tz</b></dt>
+                            <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the <xref
+                                        href="#datefun/date-timezone">timezone</xref> to convert the
+                                    local time to. </dd>
+                                <dd><b>Optional argument</b>, defaults to the system timezone if not
+                                    specified. If an incorrect time zone is provided then
+                                        <codeph>null</codeph> is returned.</dd>
+                        </dlentry>
+                    </dl></dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single integer representing the value of the component extracted from the
+                        timestamp.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd><codeblock outputclass="language-json">SELECT DATE_PART_MILLIS(1463284740000, 'day') as day_local,
+    DATE_PART_MILLIS(1463284740000, 'day', 'America/Tijuana') as day_pst,
+    DATE_PART_MILLIS(1463284740000, 'day', 'UTC') as day_utc,
+    DATE_PART_MILLIS(1463284740000, 'month') as month,
+    DATE_PART_MILLIS(1463284740000, 'week') as week,
+    DATE_PART_MILLIS(1463284740000, 'year') as year;
+
+{
+    "results": [
+        {
+            "day_local": 14,
+            "day_pst": 14,
+            "day_utc": 15,
+            "month": 5,
+            "week": 20,
+            "year": 2016
+        }
+    ]
+}                </codeblock></dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-part-str">
+            <title>DATE_PART_STR(date1, part)</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Extracts the value of a given date component from a date string.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>date1</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a date string in a
+                                        <xref href="#datefun/date-formats">supported date
+                                        format</xref>. </dd>
+                                <dd>If this argument is not a valid date string then
+                                        <codeph>null</codeph> is returned.</dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt><b>part</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the <xref
+                                        href="#datefun/extracting-components">component</xref> of
+                                    the date to extract.</dd>
+                                <dd>If an invalid part is passed to the function then
+                                        <codeph>null</codeph> is returned.</dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single integer representing the value of the component extracted from the
+                        timestamp.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT DATE_PART_STR('2016-05-15T03:59:00Z', 'day') as day,
+    DATE_PART_STR('2016-05-15T03:59:00Z', 'millisecond') as millisecond,
+    DATE_PART_STR('2016-05-15T03:59:00Z', 'month') as month,
+    DATE_PART_STR('2016-05-15T03:59:00Z', 'week') as week,
+    DATE_PART_STR('2016-05-15T03:59:00Z', 'year') as year;
+
+{
+    "results": [
+        {
+            "day": 15,
+            "millisecond": 0,
+            "month": 5,
+            "week": 20,
+            "year": 2016
+        }
+    ]
+}           </codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-range-millis">
+            <title>DATE_RANGE_MILLIS(date1, date2, part [,n])</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Generates an array of dates from the start date specified by <codeph>date1</codeph> and the end date specified by <codeph>date2</codeph>, as Epoch/UNIX timestamps. 
+                        The difference between each subsequent generated date can be adjusted.
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>date1</b></dt>
+                                <dd>An integer, or any valid <xref href="index.dita"
+                                        >expression</xref> which evaluates to an integer,
+                                    representing a Epoch/UNIX timestamp in milliseconds. This is the
+                                    date used as the start date of the array generation.</dd>
+                                <dd>If this argument is not an integer then <codeph>null</codeph> is
+                                    returned.</dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt><b>date2</b></dt>
+                                <dd>An integer, or any valid <xref href="index.dita"
+                                        >expression</xref> which evaluates to an integer,
+                                    representing an Epoch/UNIX timestamp in milliseconds. This is
+                                    the date used as the end date of the array generation. This
+                                    value is exclusive, i.e the end date will not be included in the
+                                    result.</dd>
+                                <dd>If this argument is not an integer then <codeph>null</codeph> is
+                                    returned.</dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt><b>part</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the <xref
+                                        href="#datefun/manipulating-components">component</xref> of
+                                    the date to increment.</dd>
+                                <dd>If an invalid part is passed to the function then
+                                        <codeph>null</codeph> is returned.</dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt><b>n</b></dt>
+                                <dd>An integer, or any valid <xref href="index.dita"
+                                        >expression</xref> which evaluates to an integer,
+                                    representing the value by which to increment the part component
+                                    for each generated date.</dd>
+                                <dd><b>Optional argument</b>, if not specified, this defaults to 1.
+                                    If a value which is not an integer is specified, then
+                                        <codeph>null</codeph> is returned.</dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>An array of integers representing the generated dates, as Epoch/UNIX timestamps, between <codeph>date1</codeph> and <codeph>date2</codeph>.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Limitations</b></dt>
+                    <dd>It is possible to generate very large arrays using this function. In some
+                        cases the query engine may be unable to process all of these and cause
+                        excessive resource consumption. It is therefore recommended that you first
+                        validate the inputs to this function to ensure that the generated result is
+                        a reasonable size.</dd>
+                    <dd>If the start date is greater than the end date passed to the function then
+                        an error will not be thrown, but the result array will be empty. An array of
+                        descending dates can be generated by setting the start date greater than the
+                        end date and specifying a negative value for <codeph>n</codeph>.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT DATE_RANGE_MILLIS(1480752000000, 1475478000000, 'month', -1);
+{
+    "results": [
+        {
             "$1": [
-                1480752000000,
-                1478156400000,
-                1475478000000
+            1480752000000,
+            1478156400000,
+            1475478000000
             ]
         }
     ]
+}
 
 SELECT ARRAY_MILLIS_TO_STR(a,'2016-12-03') 
-	FOR a IN DATE_RANGE_MILLIS(1480752000000, 1449129600000, 'month', -1) 
-	END;							
+    FOR a IN DATE_RANGE_MILLIS(1480752000000, 1449129600000, 'month', -1);
 
-"results": [
+{
+    "results": [
         {
             "$1": [
                 "2016-12-03",
                 "2016-11-03",
                 "2016-10-03"            
-		]
+            ]
         }
-    ]							</codeblock>
-		</section>
-		<section id="fn-date-range-str"><title>DATE_RANGE_STR(expression1, expression2, part
-			[,n])</title>
-			<p>Returns an array of dates from the start date specified by <codeph>expression1</codeph>
-				until the end date specified by <codeph>expression2</codeph>,
-				incrementing the <codeph>part</codeph> specified by <codeph>n</codeph>.
-				The default value of <codeph>n</codeph> is 1. Note that the result does
-				not contain the end
-				date.</p>
-		    <codeblock spectitle="Examples" outputclass="language-json">SELECT DATE_RANGE_STR('2015-11-30T15:04:05.999', '2017-04-14T15:04:06.998', 'quarter');  
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-range-str">
+            <title>DATE_RANGE_STR(date1, date2, part [,n])</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Generates an array of dates from the start date specified by <codeph>date1</codeph> and the end date specified by <codeph>date2</codeph>, as date strings. 
+                        The difference between each subsequent generated date can be adjusted.
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>date1</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a date in a <xref
+                                        href="#datefun/date-formats">supported date format</xref>.
+                                    This is the date used as the start date of the array
+                                    generation.</dd>
+                                <dd>If this argument is not an integer then <codeph>null</codeph> is
+                                    returned.</dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt><b>date2</b></dt>
+                                <dd> A string, or any valid <xref href="index.dita"
+                                        >expression</xref> which evaluates to a string, representing
+                                    a date in a <xref href="#datefun/date-formats">supported date
+                                        format</xref>. This is the date used as the end date of the
+                                    array generation. This value is exclusive, i.e the end date will
+                                    not be included in the result.<p> If this argument is not an
+                                        integer then <codeph>null</codeph> is returned.</p></dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt><b>part</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the <xref
+                                        href="#datefun/manipulating-components">component</xref> of
+                                    the date to increment.</dd>
+                                <dd>If an invalid part is passed to the function then
+                                        <codeph>null</codeph> is returned.</dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt><b>n</b></dt>
+                                <dd>An integer, or any valid <xref href="index.dita"
+                                        >expression</xref> which evaluates to an integer,
+                                    representing the value by which to increment the part component
+                                    for each generated date.</dd>
+                                <dd><b>Optional argument</b>, if not specified, this defaults to 1.
+                                    If a value which is not an integer is specified, then
+                                        <codeph>null</codeph> is returned. </dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>An array of strings representing the generated dates, as Epoch/UNIX timestamps, between <codeph>date1</codeph> and <codeph>date2</codeph>.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Limitations</b></dt>
+                    <dd>It is possible to generate very large arrays using this function. In some
+                        cases the query engine may be unable to process all of these and cause
+                        excessive resource consumption. It is therefore recommended that you first
+                        validate the inputs to this function to ensure that the generated result is
+                        a reasonable size.</dd>
+                    <dd>If the start date is greater than the end date passed to the function then
+                        an error will not be thrown, but the result array will be empty. An array of
+                        descending dates can be generated by setting the start date greater than the
+                        end date and specifying a negative value for <codeph>n</codeph>.</dd>
+                    <dd>Both specified dates must have the same string format otherwise
+                            <codeph>null</codeph> will be returned. To ensure that both dates have
+                        the same format, you should use DATE_FORMAT_STR(). </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT DATE_RANGE_STR('2015-11-30T15:04:05.999', '2017-04-14T15:04:06.998', 'quarter');  
+
 {
-    "requestID": "a26ba6c6-8511-40c9-a9a9-b1c5198b0d44",
-    "clientContextID": "085cf019-fd2f-4bb7-86fd-6b433d87a054",
-    "signature": {
-        "$1": "array"
-    },
     "results": [
         {
             "$1": [
@@ -433,23 +1408,12 @@ SELECT ARRAY_MILLIS_TO_STR(a,'2016-12-03')
                 "2017-03-01T15:04:05.999"
             ]
         }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "2.798619ms",
-        "executionTime": "2.770138ms",
-        "resultCount": 1,
-        "resultSize": 302
-    }
+    ]
 }
 
 SELECT DATE_RANGE_STR('2016-01-01T15:04:05.999', '2016-01-05T15:04:05.998', 'day', 1);
+
 {
-    "requestID": "a18ed242-6d6f-48c3-85d8-4a91b3b2a2d9",
-    "clientContextID": "c58cd51a-8e1b-446a-bc86-31647607d133",
-    "signature": {
-        "$1": "array"
-    },
     "results": [
         {
             "$1": [
@@ -459,23 +1423,12 @@ SELECT DATE_RANGE_STR('2016-01-01T15:04:05.999', '2016-01-05T15:04:05.998', 'day
                 "2016-01-04T15:04:05.999"
             ]
         }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "2.044419ms",
-        "executionTime": "2.01682ms",
-        "resultCount": 1,
-        "resultSize": 216
-    }
+    ]
 }
 
 SELECT DATE_RANGE_STR('2004-01-03','2004-12-03', 'month', 4);
+
 {
-    "requestID": "74bcf130-a21a-4652-8e80-35f0473f90cc",
-    "clientContextID": "8dde1be8-6571-4fa7-bfa1-76e1267e87f3",
-    "signature": {
-        "$1": "array"
-    },
     "results": [
         {
             "$1": [
@@ -484,23 +1437,12 @@ SELECT DATE_RANGE_STR('2004-01-03','2004-12-03', 'month', 4);
                 "2004-09-03"
             ]
         }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "1.036171ms",
-        "executionTime": "1.003194ms",
-        "resultCount": 1,
-        "resultSize": 134
-    }
+    ]
 }
 
 SELECT DATE_RANGE_STR('2016-01-05T15:04:05.999', '2016-01-01T15:04:06.998', 'day', -1)"; 
+
 {
-    "requestID": "5bce3138-b1c9-4a96-b0d6-3255e76cffaa",
-    "clientContextID": "5e0e36c3-6cec-4316-862c-550b3f4d8456",
-    "signature": {
-        "$1": "array"
-    },
     "results": [
         {
             "$1": [
@@ -510,426 +1452,1018 @@ SELECT DATE_RANGE_STR('2016-01-05T15:04:05.999', '2016-01-01T15:04:06.998', 'day
                 "2016-01-02T15:04:05.999"
             ]
         }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "1.435449ms",
-        "executionTime": "1.397815ms",
-        "resultCount": 1,
-        "resultSize": 216
-    }
-}							</codeblock>
-		</section>
-		<section id="fn-date-trunc-millis"><title>DATE_TRUNC_MILLIS(expression, part)</title>
-			<p>Returns UNIX time stamp that has been truncated so that the given date part
-				string is the least significant.</p>
-		    <codeblock outputclass="language-json">SELECT DATE_TRUNC_MILLIS(1463284740000, 'month');
+    ]
+}
+                        
+SELECT DATE_RANGE_STR('2015-01-01T01:01:01', DATE_FORMAT_STR('2016-01-01', '2016-01-01T00:00:00'), 'month');
+
 {
-    "requestID": "1893a1a0-6926-4c6f-a501-c5a99a7e7161",
-    "clientContextID": "f84a7900-e06e-4c41-b41e-41a77ea396fe",
-    "signature": {
-        "$1": "number"
-    },
     "results": [
         {
-            "$1": 1462147200000
+            "$1": [
+                "2015-01-01T01:01:01",
+                "2015-02-01T01:01:01",
+                "2015-03-01T01:01:01",
+                "2015-04-01T01:01:01",
+                "2015-05-01T01:01:01",
+                "2015-06-01T01:01:01",
+                "2015-07-01T01:01:01",
+                "2015-08-01T01:01:01",
+                "2015-09-01T01:01:01",
+                "2015-10-01T01:01:01",
+                "2015-11-01T01:01:01",
+                "2015-12-01T01:01:01"
+            ]
         }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "5.202791ms",
-        "executionTime": "5.116346ms",
-        "resultCount": 1,
-        "resultSize": 43
-    }
+    ]
 }</codeblock>
-		</section>
-		<section id="fn-date-trunc-str"><title>DATE_TRUNC_STR(expression, part)</title>
-			<p>Returns ISO 8601 time stamp that has been truncated so that the given date part string is the
-				least
-				significant.<codeblock outputclass="language-json">SELECT DATE_TRUNC_STR('2016-05-18 00:00:23', 'year');
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-trunc-millis">
+            <title>DATE_TRUNC_MILLIS(date1, part)</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Truncates an Epoch/UNIX timestamp up to the specified date component.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>date1</b></dt>
+                                <dd>An integer, or any valid <xref href="index.dita"
+                                        >expression</xref> which evaluates to an integer,
+                                    representing a Epoch/UNIX timestamp in milliseconds. This is the
+                                    date used as the date to truncate.<p> If this argument is not an
+                                        integer then <codeph>null</codeph> is returned.</p></dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt><b>part</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the <xref
+                                        href="#datefun/manipulating-components">component</xref> to
+                                    truncate to.<p>If an invalid part is specified then
+                                            <codeph>null</codeph> is returned.</p></dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>An array of integers representing the generated dates, as Epoch/UNIX
+                        timestamps, between <codeph>date1</codeph> and <codeph>date2</codeph>.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Limitations</b></dt>
+                    <dd>In some cases, where the timestamp is smaller than the duration of the provided part, this function returns the incorrect result. 
+                        It is recommended that you do not use this function for very small Epoch/UNIX timestamps.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT DATE_TRUNC_MILLIS(1463284740000, 'day') as day,
+    DATE_TRUNC_MILLIS(1463284740000, 'month') as month,
+    DATE_TRUNC_MILLIS(1463284740000, 'year') as year
+
 {
-    "requestID": "5c3d82d7-96c6-4a0e-99ab-4027e30f0ec0",
-    "clientContextID": "e4e92896-04db-47ce-98ee-8f8e099db330",
-    "signature": {
-        "$1": "string"
-    },
     "results": [
         {
-            "$1": "2016-01-01 17:00:00"
+            "day": 1463270400000,
+            "month": 1462147200000,
+            "year": 1451696400000
         }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "6.277112ms",
-        "executionTime": "6.175783ms",
-        "resultCount": 1,
-        "resultSize": 51
-    }
-}</codeblock></p>
-		</section>
-		<section id="fn-date-duration-to-str"><title>DURATION_TO_STR(expression)</title>
-			<p>Converts duration, specified as a floating point number followed by a time unit such as
-				1.3ms, 3.25ns, or 7.6666s, to a query timing string. The conversion
-				function supports nano- (ns) , micro- ( μs), milli- (ms), and second
-				(s) time units.</p>
-		</section>
-		<section id="fn-date-millis"><title>MILLIS(expression)</title>
-			<p>Returns date that has been converted in a supported format to UNIX
-				milliseconds.</p>
-		    <codeblock outputclass="language-json">SELECT MILLIS('2016-05-18 00:00:23');
-{
-    "requestID": "5eb30436-1b6f-48fd-94ac-41cab715980f",
-    "clientContextID": "eb5235cf-7871-4579-818d-171255b33740",
-    "signature": {
-        "$1": "number"
-    },
-    "results": [
-        {
-            "$1": 1463554823000
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "552.639µs",
-        "executionTime": "514.713µs",
-        "resultCount": 1,
-        "resultSize": 43
-    }
+    ]
 }</codeblock>
-		</section>
-	    <section id="fn-date-millis-to-local"><title>MILLIS_TO_LOCAL(millis,fmt)</title>
-	        <p>Converts the UNIX milliseconds into local time in the specified format.  The format can be
-	            any of the supported <xref
-	                href="http://developer.couchbase.com/documentation/server/current/n1ql/n1ql-language-reference/datefun.html"
-	                format="html" scope="external">date formats</xref>.</p>
-	        <codeblock spectitle="Example">SELECT MILLIS_TO_LOCAL(1.453485008e+12, '2006-01-02');
-[
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-trunc-str">
+            <title>DATE_TRUNC_STR(date1, part)</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Truncates a date string up to the specified date component.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>date1</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a date in a <xref
+                                        href="#datefun/date-formats">supported date format</xref>.
+                                    This is the date that is truncated.</dd>
+                                <dd>If this argument is not a valid date format then
+                                        <codeph>null</codeph> is returned.</dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt><b>part</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the <xref
+                                        href="#datefun/manipulating-components">component</xref> to
+                                    truncate to.</dd>
+                                <dd>If an invalid part is specified then <codeph>null</codeph> is
+                                    returned.</dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>This function returns a single date string.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT DATE_TRUNC_STR('2016-05-18T03:59:00Z', 'day') as day,
+    DATE_TRUNC_STR('2016-05-18T03:59:00Z', 'month') as month,
+    DATE_TRUNC_STR('2016-05-18T03:59:00Z', 'week') as week,
+    DATE_TRUNC_STR('2016-05-18T03:59:00Z', 'year') as year
+
+{
+    "results": [
         {
-            "$1": "2016-01-22"
+            "day": "2016-05-18T00:00:00Z",
+            "month": "2016-05-01T00:00:00Z",
+            "week": null,
+            "year": "2016-01-01T00:00:00Z"
         }
-    ]</codeblock>
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-duration-to-str">
+            <title>DURATION_TO_STR(duration)</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Converts a number into a human-readable time duration with units.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>duration</b></dt>
+                                <dd>A number, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a number, which represents the duration to
+                                    convert to a string. This value is specified in nanoseconds
+                                            (<codeph>1x10<sup>-9</sup> seconds</codeph>). </dd>
+                                <dd>If a value which is not a number is specified, then
+                                        <codeph>null</codeph> is returned.</dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single string representing the human readable duration.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT DURATION_TO_STR(2000) as microsecs,
+    DURATION_TO_STR(2000000) as millisecs,
+    DURATION_TO_STR(2000000000) as secs
+                            
+{
+    "results": [
+        {
+            "microsecs": "2µs",
+            "millisecs": "2ms",
+            "secs": "2s"
+        }
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-millis">
+            <title>MILLIS(date1)</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Converts a date string to Epoch/UNIX milliseconds.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>date1</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a date in a <xref
+                                        href="#datefun/date-formats">supported date format</xref>.
+                                    This is the date to convert to Epoch/UNIX milliseconds.</dd>
+                                <dd>If this argument is not a valid date format then
+                                        <codeph>null</codeph> is returned.</dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single integer representing the date string converted to Epoch/UNIX milliseconds.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT MILLIS("2016-05-15T03:59:00Z");
+{
+    "results": [
+        {
+        "$1": 1463284740000
+        }
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-millis-to-local">
+            <title>MILLIS_TO_LOCAL(date1 [, fmt])</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Converts an Epoch/UNIX timestamp into local time in the specified date string format.
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>date1</b></dt>
+                                <dd>An integer, or any valid <xref href="index.dita"
+                                        >expression</xref> which evaluates to an integer,
+                                    representing a Epoch/UNIX timestamp in milliseconds. This is the
+                                    date to convert to local time.</dd>
+                                <dd>If this argument is not an integer then <codeph>null</codeph> is
+                                    returned.</dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt><b>fmt</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a <xref
+                                        href="#datefun/date-formats">supported date format</xref>. </dd>
+                                <dd><b>Optional argument</b>, if unspecified or an incorrect format
+                                    is specified then this defaults to ISO-8601.</dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single date string representing the the local date in the specified
+                        format.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Limitations</b></dt>
+                    <dd>In some cases, where the timestamp is smaller than the duration of the provided part, this function returns the incorrect result. 
+                        It is recommended that you do not use this function for very small Epoch/UNIX timestamps.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT MILLIS_TO_LOCAL(1463284740000) as ISO_8601, 
+    MILLIS_TO_LOCAL(1463284740000, 'invalid format') as invalid_format,
+    MILLIS_TO_LOCAL(1463284740000, '2016-01-01') as short_date;
+
+{
+    "results": [
+        {
+            "ISO_8601": "2016-05-14T20:59:00-07:00",
+            "invalid_format": "2016-05-14T20:59:00-07:00",
+            "short_date": "2016-05-14"
+        }
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-millis-to-str">
+            <title>MILLIS_TO_STR(date1 [, fmt ])</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Converts an Epoch/UNIX timestamp into the specified date string format.
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>date1</b></dt>
+                                <dd>An integer, or any valid <xref href="index.dita"
+                                        >expression</xref> which evaluates to an integer,
+                                    representing a Epoch/UNIX timestamp in milliseconds. This is the
+                                    date to convert.</dd>
+                                <dd>If this argument is not an integer then <codeph>null</codeph> is
+                                    returned.</dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single date string representing the the local date in the specified
+                        format.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Limitations</b></dt>
+                    <dd>In some cases, where the timestamp is smaller than the duration of the provided part, this function returns the incorrect result. 
+                        It is recommended that you do not use this function for very small Epoch/UNIX timestamps.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT MILLIS_TO_STR(1463284740000) as ISO_8601, 
+    MILLIS_TO_STR(1463284740000, 'invalid format') as invalid_format,
+    MILLIS_TO_STR(1463284740000, '2016-01-01') as short_date;
+
+{
+    "results": [
+        {
+            "ISO_8601": "2016-05-14T20:59:00-07:00",
+            "invalid_format": "2016-05-14T20:59:00-07:00",
+            "short_date": "2016-05-14"
+        }
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-millis-to-utc">
+            <title>MILLIS_TO_UTC(date1 [, fmt])</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Converts an Epoch/UNIX timestamp into local time in the specified date string format.
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>date1</b></dt>
+                                <dd>An integer, or any valid <xref href="index.dita"
+                                        >expression</xref> which evaluates to an integer,
+                                    representing a Epoch/UNIX timestamp in milliseconds. This is the
+                                    date to convert to UTC.</dd>
+                                <dd>If this argument is not an integer then <codeph>null</codeph> is
+                                    returned.</dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single date string representing the the date in UTC in the specified
+                        format.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT MILLIS_TO_UTC(1463284740000) as ISO_8601, 
+    MILLIS_TO_UTC(1463284740000, 'invalid format') as invalid_format,
+    MILLIS_TO_UTC(1463284740000, '2016-01-01') as short_date;
+
+{
+    "results": [
+        {
+            "ISO_8601": "2016-05-15T03:59:00Z",
+            "invalid_format": "2016-05-15T03:59:00Z",
+            "short_date": "2016-05-15"
+        }
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-millis-to-tz">
+            <title>MILLIS_TO_ZONE_NAME(date1, tz [, fmt])</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Converts an Epoch/UNIX timestamp into the specified time zone in the specified date string format.
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>date1</b></dt>
+                                <dd>An integer, or any valid <xref href="index.dita"
+                                        >expression</xref> which evaluates to an integer,
+                                    representing a Epoch/UNIX timestamp in milliseconds. This is the
+                                    date to convert.</dd>
+                                <dd>If this argument is not an integer then <codeph>null</codeph> is
+                                    returned.</dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt><b>tz</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the <xref
+                                        href="#datefun/date-timezone">timezone</xref> to convert the
+                                    local time to. Optional argument, defaults to the system
+                                    timezone if not specified. </dd>
+                                <dd>If an incorrect time zone is provided then <codeph>null</codeph>
+                                    is returned.</dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt><b>fmt</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a <xref
+                                        href="#datefun/date-formats">supported date format</xref>. </dd>
+                                <dd><b>Optional argument</b>, if no format or an incorrect format is
+                                    specified then this defaults to ISO-8601.</dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single date string representing the the date in the specified timezone in
+                        the specified format..</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">MILLIS_TO_ZONE_NAME(1463284740000, 'America/New_York') as est,
+    MILLIS_TO_ZONE_NAME(1463284740000, 'Asia/Kolkata') as ist,
+    MILLIS_TO_ZONE_NAME(1463284740000, 'UTC') as utc
+                            
+{
+    "results": [
+        {
+            "est": "2016-05-14T23:59:00-04:00",
+            "invalid_tz": "2016-05-15T03:59:00Z",
+            "ist": "2016-05-15T09:29:00+05:30",
+            "utc": "2016-05-15T03:59:00Z"
+        }
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+	    <section id="fn-date-now-local">
+	        <title>NOW_LOCAL([fmt])</title>
+	        <dl>
+	            <dlentry>
+	                <dt><b>Description</b></dt>
+	                <dd>The timestamp of the query as date string in the system timezone. Will not vary during a query.</dd>
+	            </dlentry>
+	            <dlentry>
+	                <dt><b>Arguments</b></dt>
+	                <dd><dl>
+	                    <dlentry>
+	                        <dt><b>fmt</b></dt>
+	                        <dd>A string, or any valid <xref href="index.dita">expression</xref>
+	                            which evaluates to a string, representing a <xref
+	                                href="#datefun/date-formats">supported date format</xref>.</dd>
+	                        <dd><b>Optional argument</b>, if no format or an incorrect format is
+	                            specified then this defaults to ISO-8601.</dd>
+	                    </dlentry>
+	                </dl></dd>
+	            </dlentry>
+	            <dlentry>
+	                <dt><b>Return Value</b></dt>
+	                <dd>A single date time string in the format specified.</dd>
+	            </dlentry>
+	            <dlentry>
+	                <dt><b>Limitations</b></dt>
+	                <dd>If this function is called multiple times within the same query it will always return the same time. 
+	                    If you wish to use the system time when the function is evaluated, use <xref href="#datefun/fn-date-clock-local">CLOCK_LOCAL()</xref> instead.</dd>
+	            </dlentry>
+	            
+	            <dlentry>
+	                <dt><b>Examples</b></dt>
+	                <dd>
+	                    <codeblock outputclass="language-json">SELECT NOW_LOCAL() as ISO_8601, 
+	                        NOW_LOCAL('invalid date') as invalid_date,
+	                        NOW_LOCAL('2016-01-01') as short_date
+	                        
+	                        {
+	                        "results": [
+	                        {
+	                        "ISO_8601": "2017-02-03T03:10:19.01-08:00",
+	                        "invalid_date": "2017-02-03T03:10:19.01-08:00",
+	                        "short_date": "2017-02-03"
+	                        }
+	                        ]
+	                        }
+	                        
+	                        SELECT NOW_LOCAL(), NOW_LOCAL(), NOW_LOCAL(), NOW_LOCAL(), NOW_LOCAL(), NOW_LOCAL(), CLOCK_LOCAL()
+	                        
+	                        {
+	                        "results": [
+	                        {
+	                        "$1": "2017-02-02T06:56:09.67-08:00",
+	                        "$2": "2017-02-02T06:56:09.67-08:00",
+	                        "$3": "2017-02-02T06:56:09.67-08:00",
+	                        "$4": "2017-02-02T06:56:09.67-08:00",
+	                        "$5": "2017-02-02T06:56:09.67-08:00",
+	                        "$6": "2017-02-02T06:56:09.67-08:00",
+	                        "$7": "2017-02-02T06:56:09.673-08:00"
+	                        }
+	                        ]
+	                        }</codeblock>
+	                </dd>
+	            </dlentry>
+	        </dl>
 	    </section>
-		<section id="fn-date-millis-to-str"><title>MILLIS_TO_STR(expression [, fmt ])</title>
-			<p>Returns the string in the supported format to which the UNIX milliseconds
-				has been converted.</p>
-		    <codeblock outputclass="language-json">SELECT MILLIS_TO_STR(1463554823000);
+        <section id="fn-date-now-millis">
+            <title>NOW_MILLIS()</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>The timestamp of the query as an Epoch/UNIX timestamp. Will not vary during a query.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>This function accepts no arguments.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single float value (with 3 decimal places).</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Limitations</b></dt>
+                    <dd>If this function is called multiple times within the same query it will always return the same time. 
+                        If you wish to use the system time when the function is evaluated, use <xref href="#datefun/fn-date-clock-millis">CLOCK_MILLIS()</xref> instead.</dd>
+                </dlentry>
+                
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT NOW_MILLIS()
 {
-    "requestID": "df68746f-692c-4049-a560-f4ebd7b6bbda",
-    "clientContextID": "e25bde59-a04c-4698-a9d8-4a22d7391ed0",
-    "signature": {
-        "$1": "string"
-    },
     "results": [
         {
-            "$1": "2016-05-18T00:00:23-07:00"
+            "$1": 1486046939117.3264
         }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "430.807µs",
-        "executionTime": "402.176µs",
-        "resultCount": 1,
-        "resultSize": 57
-    }
-}</codeblock>
-		</section>
-		<section id="fn-date-millis-to-utc"><title>MILLIS_TO_UTC(expression [, fmt ])</title>
-			<p>Returns the UTC string to which the UNIX time stamp has been converted in
-				the supported format.</p>
-		    <codeblock outputclass="language-json">SELECT MILLIS_TO_UTC(1463554823000);
-{
-    "requestID": "f020e9bf-cfca-4af1-b2da-f589ce7a649c",
-    "clientContextID": "8321eb01-d474-41eb-bfd3-542a52e513b3",
-    "signature": {
-        "$1": "string"
-    },
-    "results": [
-        {
-            "$1": "2016-05-18T07:00:23Z"
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "473µs",
-        "executionTime": "438µs",
-        "resultCount": 1,
-        "resultSize": 52
-    }
-}</codeblock>
-		</section>
-		<section id="fn-date-millis-to-tz"><title>MILLIS_TO_ZONE_NAME(expression, tz_name [, fmt ])</title>
-            <p>Also: <i>MILLIS_TO_TZ(expression, tz_name [, fmt ])</i></p>
-			<p>Converts the UNIX time stamp to a string in the named time zone, and returns
-				the string.</p>
-		    <codeblock outputclass="language-json">SELECT MILLIS_TO_ZONE_NAME(1483575060859.4465, "EST");
-{
-    "requestID": "7a17284b-93b1-4c89-8c70-83b202c96012",
-    "clientContextID": "9aebf531-7fad-4953-937c-7869560f45a2",
-    "signature": {
-        "$1": "string"
-    },
-    "results": [
-        {
-            "$1": "2017-01-04T19:11:00.859-05:00"
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "505.275µs",
-        "executionTime": "482.449µs",
-        "resultCount": 1,
-        "resultSize": 61
-    }
+    ]
 }
 
-SELECT MILLIS_TO_TZ(1483575060859.4465, "US/Eastern");
-{
-    "requestID": "08da9893-8b87-4e74-81dd-5252c5b7c15c",
-    "clientContextID": "079c52ba-f04c-4722-8602-57f62dd804a2",
-    "signature": {
-        "$1": "string"
-    },
-    "results": [
-        {
-            "$1": "2017-01-04T19:11:00.859-05:00"
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "518.086µs",
-        "executionTime": "494.935µs",
-        "resultCount": 1,
-        "resultSize": 61
-    }
-}</codeblock>
-		</section>
-		<section id="fn-date-now-millis"><title>NOW_MILLIS()</title>
-			<p>Returns statement time stamp as UNIX milliseconds; does not vary during a
-				query.</p>
-		    <codeblock outputclass="language-json">SELECT NOW_MILLIS();
-{
-    "requestID": "f8cd6518-96e3-470e-8275-201cdf333f9a",
-    "clientContextID": "8636256d-cd9f-439f-a972-aea84eedb823",
-    "signature": {
-        "$1": "number"
-    },
-    "results": [
-        {
-            "$1": 1483575060859.4465
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "428.33µs",
-        "executionTime": "398.53µs",
-        "resultCount": 1,
-        "resultSize": 48
-    }
-}</codeblock>
-		</section>
-	    <section id="fn-date-now-local"><title>NOW_LOCAL(void)</title>
-	        <p>Returns the current local time.</p>
-	        <codeblock spectitle="Example">SELECT NOW_LOCAL();
-[
-        {
-            "$1": "2016-09-26T10:58:30.548-07:00"
-        }
-    ]</codeblock>
-	    </section>
-	    <section id="fn-date-now-tz"><title>NOW_TZ(zone)</title>
-	        <p>Returns the current time in specified timezone.</p>
-	        <codeblock spectitle="Example">SELECT NOW_TZ('UTC');
-[
-        {
-            "$1": "2016-09-26T10:58:49.53-07:00"
-        }
-    ],
+SELECT NOW_MILLIS(), NOW_MILLIS(), NOW_MILLIS(), NOW_MILLIS(), NOW_MILLIS(), NOW_MILLIS(), CLOCK_MILLIS()
 
-
-SELECT NOW_TZ('US/Eastern');
-[
-        {
-            "$1": "2016-09-26T11:01:46.769-07:00"
-        }
-]</codeblock>
-	    </section>
-	    <section id="fn-date-now-utc"><title>NOW_UTC()</title>
-	        <p>Returns the current time in UTC.</p>
-	        <codeblock spectitle="Example">SELECT NOW_UTC();
-[
-        {
-            "$1": "2016-09-26T10:58:37.274-07:00"
-        }
-    ]</codeblock>
-	    </section>
-		<section id="fn-date-now-str"><title>NOW_STR([ fmt ])</title>
-			<p>Returns statement time stamp as a string in a supported format; does not vary during a
-				query.</p>
-		    <codeblock outputclass="language-json">SELECT NOW_STR();
 {
-    "requestID": "05dbc109-5d2e-4609-96c7-ecb5e6639394",
-    "clientContextID": "a75596c2-2d4a-46ed-8bbf-92cfa3604314",
-    "signature": {
-        "$1": "string"
-    },
     "results": [
         {
-            "$1": "2017-01-04T16:15:15.704-08:00"
+            "$1": 1486046983987.5046,
+            "$2": 1486046983987.5046,
+            "$3": 1486046983987.5046,
+            "$4": 1486046983987.5046,
+            "$5": 1486046983987.5046,
+            "$6": 1486046983987.5046,
+            "$7": 1486046983987.6514
         }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "1.265853ms",
-        "executionTime": "1.236293ms",
-        "resultCount": 1,
-        "resultSize": 61
-    }
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-now-tz">
+            <title>NOW_TZ(tz [, fmt])</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>The timestamp of the query as date string in the specified timezone. Will
+                        not vary during a query.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>tz</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the <xref
+                                        href="#datefun/date-timezone">timezone</xref> to convert the
+                                    query timestamp to. </dd>
+                                <dd>If an incorrect time zone is provided then <codeph>null</codeph>
+                                    is returned.</dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt><b>fmt</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a <xref
+                                        href="#datefun/date-formats">supported date format</xref>. </dd>
+                                <dd><b>Optional argument</b>, if unspecified or an incorrect format
+                                    is specified then this defaults to ISO-8601.</dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single date string in the format specified.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Limitations</b></dt>
+                    <dd>If this function is called multiple times within the same query it will
+                        always return the same time. If you wish to use the system time when the
+                        function is evaluated, use <xref href="#datefun/fn-date-clock-tz">CLOCK_TZ()</xref> instead.</dd>
+                </dlentry>
+                
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT NOW_TZ('invalid tz') as invalid_tz,
+    NOW_TZ('Asia/Kolkata') as ist,
+    NOW_TZ('UTC') as utc,
+    NOW_TZ('UTC', '2016-01-01') as utc_short_date
+
+{
+    "results": [
+        {
+            "invalid_tz": null,
+            "ist": "2017-02-03T16:42:42.686+05:30",
+            "utc": "2017-02-03T11:12:42.686Z",
+            "utc_short_date": "2017-02-03"
+        }
+    ]
 }
 
-SELECT NOW_STR('1222-11-11');
-{
-    "requestID": "ffe42544-2135-446c-902d-de6c35671552",
-    "clientContextID": "f805dec9-8cc1-4139-8cf2-b62d3ed92d8c",
-    "signature": {
-        "$1": "string"
-    },
-    "results": [
-        {
-            "$1": "2017-01-04"
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "411.815µs",
-        "executionTime": "381.565µs",
-        "resultCount": 1,
-        "resultSize": 42
-    }
-}</codeblock>
-		</section>
-		<section id="fn-date-str-to-duration"><title>STR_TO_DURATION(expression)</title>
-			<p>Converts a string to duration, which is a floating point number followed by a time unit
-				such as s, μs, ms, or ns. The conversion function supports nano-
-				(ns) , micro- ( μs), milli- (ms), and second (s) time units.</p>
-		    <codeblock outputclass="language-json">SELECT STR_TO_DURATION('3ms');
-{
-    "requestID": "733df9f5-3b88-409e-9ebd-9cecdc4bcef6",
-    "clientContextID": "70ef82ae-7b28-4435-a9d7-72a3911d14f6",
-    "signature": {
-        "$1": "number"
-    },
-    "results": [
-        {
-            "$1": 3000000
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "357.033µs",
-        "executionTime": "333.136µs",
-        "resultCount": 1,
-        "resultSize": 37
-    }
-}</codeblock>
-		</section>
-		<section id="fn-date-str-to-millis"><title>STR_TO_MILLIS(expression)</title>
-			<p>Returns date that has been converted in a supported format to UNIX
-				milliseconds.</p>
-		    <codeblock outputclass="language-json">SELECT STR_TO_MILLIS('2017-01-04T16:15:15.704-08:00');
-{
-    "requestID": "384d8902-9ba4-45e1-a5b5-fd576f4b8fb5",
-    "clientContextID": "c58d1032-8757-44d4-9351-6b72be40a2de",
-    "signature": {
-        "$1": "number"
-    },
-    "results": [
-        {
-            "$1": 1483575315704
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "475.904µs",
-        "executionTime": "447.544µs",
-        "resultCount": 1,
-        "resultSize": 43
-    }
-}</codeblock>
-		</section>
-		<section id="fn-date-str-to-utc"><title>STR_TO_UTC(expression)</title>
-			<p>Converts the ISO 8601 time stamp to UTC.</p>
-		    <codeblock outputclass="language-json">SELECT STR_TO_UTC('2017-01-04T16:15:15.704-08:00');
-{
-    "requestID": "03b38851-674f-49cd-843c-fb6f4e2aebd9",
-    "clientContextID": "b4edafac-76a9-4506-93ac-6cc83e1bf793",
-    "signature": {
-        "$1": "string"
-    },
-    "results": [
-        {
-            "$1": "2017-01-05T00:15:15.704Z"
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "469.788µs",
-        "executionTime": "439.53µs",
-        "resultCount": 1,
-        "resultSize": 56
-    }
-}</codeblock>
-		</section>
-	    <section id="fn-date-str-tz"><title>STR_TO_TZ(strdate,zone)</title>
-	        <p>Returns the date specified as a string in the specified timezone.</p>
-	        <codeblock spectitle="Example">SELECT STR_TO_TZ('2016-01-22T09:50:08-08:00', 'UTC');
-[
-        {
-            "$1": "2016-01-22T17:50:08Z"
-        }
-    ]</codeblock>
-	    </section>
-		<section id="fn-date-str-to-tz"><title>STR_TO_ZONE_NAME(expression, tz_name)</title>
-			<p>Converts the supported time stamp string to the named time zone.</p>
-		    <codeblock outputclass="language-json">SELECT STR_TO_ZONE_NAME('2017-01-04T16:15:15.704-08:00', "EST");
-{
-    "requestID": "d551be57-39d3-4fb3-9308-397e663ce652",
-    "clientContextID": "e304c183-00e0-4f1c-bf58-9c14dca937a2",
-    "signature": {
-        "$1": "string"
-    },
-    "results": [
-        {
-            "$1": "2017-01-04T19:15:15.704-05:00"
-        }
-    ],
-    "status": "success",
-    "metrics": {
-        "elapsedTime": "434.274µs",
-        "executionTime": "409.026µs",
-        "resultCount": 1,
-        "resultSize": 61
-    }
-}</codeblock>
-		</section>
-		<section>
-			<title>Example Query Using Date Functions</title>
-			<p>The following query retrieves purchase information for an e-commerce report. The report
-				lists unique customers that purchased something from the company website in the last
-				month. This information is used to identify user activity and growth.</p>
-		    <codeblock outputclass="language-json">SELECT DISTINCT COUNT(purchases.customerId)
-  FROM purchases
-  WHERE STR_TO_MILLIS(purchases.purchasedAt)
-    BETWEEN STR_TO_MILLIS("2014-02-01") AND STR_TO_MILLIS("2014-03-01")         </codeblock>
-			<p>Returns:</p>
-			<codeblock>{
-   "results": [
-     {
-       "$1": 3831
-     }
-   ]
- }                   </codeblock>
-		</section>
+SELECT NOW_TZ('UTC'), NOW_TZ('UTC'), NOW_TZ('UTC'), NOW_TZ('UTC'), 
+    NOW_TZ('UTC'), NOW_TZ('UTC'), NOW_TZ('UTC'), CLOCK_TZ('UTC')
 
-	</conbody>
+{
+    "results": [
+        {
+            "$1": "2017-02-03T11:15:44.457Z",
+            "$2": "2017-02-03T11:15:44.457Z",
+            "$3": "2017-02-03T11:15:44.457Z",
+            "$4": "2017-02-03T11:15:44.457Z",
+            "$5": "2017-02-03T11:15:44.457Z",
+            "$6": "2017-02-03T11:15:44.457Z",
+            "$7": "2017-02-03T11:15:44.457Z",
+            "$8": "2017-02-03T11:15:44.459Z"
+        }
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-now-str">
+            <title>NOW_STR([fmt])</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>The timestamp of the query as date string in the system timezone. Will not
+                        vary during a query.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>fmt</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a <xref
+                                        href="#datefun/date-formats">supported date format</xref>.</dd>
+                                <dd>Optional argument, if unspecified or an incorrect format is
+                                    specified then this defaults to ISO-8601.</dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single date string in the format specified.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Limitations</b></dt>
+                    <dd>If this function is called multiple times within the same query it will
+                        always return the same time. If you wish to use the system time when the
+                        function is evaluated, use <xref href="#datefun/fn-date-clock-str">CLOCK_STR()</xref> instead.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT NOW_STR() as ISO_8601,
+    NOW_STR('invalid date') as invalid_date,
+    NOW_STR('2016-01-01') as short_date
+
+{
+    "results": [
+        {
+            "ISO_8601": "2017-02-03T03:21:29.814-08:00",
+            "invalid_date": "2017-02-03T03:21:29.814-08:00",
+            "short_date": "2017-02-03"
+        }
+    ]
+}
+                            
+SELECT NOW_STR(), NOW_STR(), NOW_STR(), NOW_STR(), NOW_STR(), NOW_STR(), CLOCK_STR()
+                            
+{
+    "results": [
+        {
+            "$1": "2017-02-03T03:22:34.486-08:00",
+            "$2": "2017-02-03T03:22:34.486-08:00",
+            "$3": "2017-02-03T03:22:34.486-08:00",
+            "$4": "2017-02-03T03:22:34.486-08:00",
+            "$5": "2017-02-03T03:22:34.486-08:00",
+            "$6": "2017-02-03T03:22:34.486-08:00",
+            "$7": "2017-02-03T03:22:34.488-08:00"
+        }
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-now-utc">
+            <title>NOW_UTC([fmt])</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>The timestamp of the query as date string in UTC. Will not vary during a
+                        query.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>fmt</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a <xref href="#datefun/date-formats">supported date
+                                        format</xref>. <p><b>Optional argument</b>, if
+                                        unspecified or an incorrect format is specified then this
+                                        defaults to ISO-8601.</p></dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single date string in the format specified.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Limitations</b></dt>
+                    <dd>If this function is called multiple times within the same query it will
+                        always return the same time. If you wish to use the system time when the
+                        function is evaluated, use <xref href="#datefun/fn-date-clock-utc">CLOCK_MILLIS()</xref> instead.</dd>
+                </dlentry>
+                
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT NOW_UTC()
+
+{
+    "results": [
+        {
+            "$1": "2017-02-03T11:16:54.419Z"
+        }
+    ]
+}
+                            
+SELECT NOW_UTC(), NOW_UTC(), NOW_UTC(), NOW_UTC(), NOW_UTC(), NOW_UTC(), NOW_UTC(), CLOCK_UTC()
+                            
+{
+    "results": [
+        {
+            "$1": "2017-02-03T11:18:27.183Z",
+            "$2": "2017-02-03T11:18:27.183Z",
+            "$3": "2017-02-03T11:18:27.183Z",
+            "$4": "2017-02-03T11:18:27.183Z",
+            "$5": "2017-02-03T11:18:27.183Z",
+            "$6": "2017-02-03T11:18:27.183Z",
+            "$7": "2017-02-03T11:18:27.183Z",
+            "$8": "2017-02-03T11:18:27.185Z"
+        }
+    ]                            
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-str-to-duration">
+            <title>STR_TO_DURATION(duration)</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Converts a string representation of a time duration into nanoseconds. This
+                        accepts the following units: <ul id="ul_mg5_nhy_5y">
+                            <li>nanoseconds (<codeph>ns</codeph>)</li>
+                            <li>microseconds (<codeph>us</codeph> or <codeph>µs</codeph>)</li>
+                            <li>milliseconds (<codeph>ms</codeph>)</li>
+                            <li>seconds (<codeph>s</codeph>)</li>
+                            <li>minutes (<codeph>m</codeph>)</li>
+                            <li>hours (<codeph>h</codeph>)</li>
+                        </ul></dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>duration</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the duration to
+                                    convert. <p>If an invalid duration string is specified then
+                                            <codeph>null</codeph> is returned.</p></dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single integer.</dd>
+                </dlentry>
+                
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT STR_TO_DURATION('1h') as hour,
+STR_TO_DURATION('1us') as microsecond,
+STR_TO_DURATION('1ms') as millisecond,
+STR_TO_DURATION('1m') as minute,
+STR_TO_DURATION('1ns') as nanosecond,
+STR_TO_DURATION('1s') as second
+
+{
+    "results": [
+        {
+            "hour": 3600000000000,
+            "microsecond": 1000,
+            "millisecond": 1000000,
+            "minute": 60000000000,
+            "nanosecond": 1,
+            "second": 1000000000
+        }
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-str-to-millis">
+            <title>STR_TO_MILLIS(date1)</title>
+        </section>
+        <section id="section_bwc_tty_5y">
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Converts a date string to Epoch/UNIX milliseconds.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>date1</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a date in a <xref href="#datefun/date-formats">supported date
+                                        format</xref>. This is the date to convert to Epoch/UNIX
+                                        milliseconds.<p>If this argument is not a valid date format
+                                        then <codeph>null</codeph> is returned.</p></dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single integer representing the date string converted to Epoch/UNIX
+                        milliseconds.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT STR_TO_MILLIS("2016-05-15T03:59:00Z");
+
+{
+    "results": [
+        {
+        "$1": 1463284740000
+        }
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-str-to-utc">
+            <title>STR_TO_UTC(date1)</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Converts a date string into the equivalent date in UTC. The output date
+                        format follows the date format of the date passed as input.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>date1</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a date in a <xref href="#datefun/date-formats">supported date
+                                        format</xref>. This is the date to convert to UTC.<p>If this argument
+                                        is not a valid date format then <codeph>null</codeph> is
+                                        returned.</p></dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single date string.</dd>
+                </dlentry>
+                
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT STR_TO_UTC('2016-01-01T00:00:00+08:00') as ISO_8601,
+STR_TO_UTC('2016-01-01') as short_date
+                            
+{
+    "results": [
+        {
+            "ISO_8601": "2015-12-31T16:00:00Z",
+            "short_date": "2016-01-01"
+        }
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="fn-date-str-tz">
+            <title>STR_TO_TZ(date1, tz)</title>
+            <dl>
+                <dlentry>
+                    <dt><b>Description</b></dt>
+                    <dd>Converts a date string to its equivalent in the specified timezone. The
+                        output date format follows the date format of the date passed as input.</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Arguments</b></dt>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><b>date1</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing a date in a <xref href="#datefun/date-formats">supported date
+                                        format</xref>. This is the date to convert to UTC.<p>If this argument
+                                        is not a valid date format then <codeph>null</codeph> is
+                                        returned.</p></dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt><b>tz</b></dt>
+                                <dd>A string, or any valid <xref href="index.dita">expression</xref>
+                                    which evaluates to a string, representing the <xref
+                                        href="#datefun/date-timezone">timezone</xref> to convert the
+                                    local time to. <p>If this argument is not a valid timezone then
+                                            <codeph>null</codeph> is returned.</p></dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+                <dlentry>
+                    <dt><b>Return Value</b></dt>
+                    <dd>A single date string.</dd>
+                </dlentry>
+                
+                <dlentry>
+                    <dt><b>Examples</b></dt>
+                    <dd>
+                        <codeblock outputclass="language-json">SELECT STR_TO_TZ('2016-01-01T00:00:00+08:00', 'America/New_York') as est,
+    STR_TO_TZ('2016-01-01T00:00:00+08:00', 'UTC') as utc,
+    STR_TO_TZ('2016-01-01', 'UTC') as utc_short
+                            
+{
+    "results": [
+        {
+            "est": "2015-12-31T11:00:00-05:00",
+            "utc": "2015-12-31T16:00:00Z",
+            "utc_short": "2016-01-01"
+        }
+    ]
+}</codeblock>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+    </conbody>
 </concept>
