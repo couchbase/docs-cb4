@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_s2r_2yt_gy">
+  <title>Migrating Data for the Timestamp-based Conflict Resolution</title>
+  <shortdesc>The Timestamp-based Conflict Resolution is a new conflict resolution type added in
+    version 4.6.0. This new feature is supported for <b>new</b> buckets that are created in
+    Couchbase Server version 4.6.0. You cannot change the conflict resolution mode to the
+      <i>Timestamp-based Conflict Resolution</i> for existing buckets after upgrading to version
+    4.6.0. </shortdesc>
+  <body>
+    <p>If you wish to enable the timestamp-based conflict resolution for your existing data, then
+      you must migrate your data to version 4.6.0 cluster using the <codeph>cbbackupmgr</codeph>
+      tool. To learn more about the tool, see <xref
+        href="../backup-restore/enterprise-backup-restore.dita#topic_rr5_sv3_t5">cbbackupmgr
+        tool</xref>. <note type="important">This is a one time migration and the bucket must be
+        switched to a new conflict resolution type as part of the migration.</note> To understand
+      more about the new Timestamp-based Conflict Resolution, see <xref
+        href="../xdcr/xdcr-conflict-resolution.dita#conflict-resolution/timestamp-based-conflict-resolution"
+        >Timestamp-based Conflict Resolution</xref>. </p>
+    <p dir="ltr">Here are two scenarios:</p>
+    <ul id="ul_rcb_y32_5y">
+      <li dir="ltr">
+        <p dir="ltr">Scenario 1 - In case of unidirectional replication, for example, for a disaster
+          recovery where Cluster 1 (Bucket A) has one way replication streams to Cluster 2 (Bucket
+          A’).</p>
+      </li>
+      <li dir="ltr">
+        <p dir="ltr">Scenario 2 - In case of bidirectional replication, for example, for data
+          locality where Cluster 1 (Bucket A) has both ways replication streams to Cluster 2 (Bucket
+          A’).</p>
+      </li>
+    </ul>
+    <p>For Scenario 1, perform the following steps to migrate your data to a new cluster:</p>
+    <p>
+      <ol id="ol_qh5_5l2_5y">
+        <li>Stop application traffic coming into Cluster 1 (Bucket A). <p>
+            <note>Allow <i>enough tim</i>e for the replication queues to drain. Check the
+                <b>outbound XDCR mutation</b> statistics to confirm. For instructions, see <xref
+                href="../monitoring/ui-monitoring-statistics.dita#topic16695/outgoing_xdcr_stats"
+                >Monitoring Outgoing XDCR</xref>.</note>
+          </p></li>
+        <li>Stop and delete Replication stream to Cluster 2 (Bucket A’). For instructions, see <xref
+            href="../xdcr/xdcr-create.dita#topic_e5r_qpn_vs/delete-replication">Delete
+            Replication</xref>.</li>
+        <li>Run the <codeph>cbbackupmgr</codeph> tool to backup the entire bucket’s (Bucket A) data.
+          For instructions, see  <xref
+            href="../backup-restore/enterprise-backup-restore.dita#topic_rr5_sv3_t5">cbbackupmgr
+            tool</xref>.</li>
+        <li>Delete Bucket A from Cluster 1. For instructions, see <xref
+            href="../clustersetup/delete-bucket.dita#topic_zdy_mmn_vs">Delete a Bucket</xref>.</li>
+        <li> Upgrade Cluster 1 to Couchbase Server version 4.6.0. For instructions, see <xref
+            href="upgrade.dita#topic_g3h_r2q_fw">Upgrading Couchbase Server</xref>.</li>
+        <li>Create a new Bucket B with the conflict resolution type as <b>Timestamp</b> selected.
+          For instructions, see <xref href="../clustersetup/create-bucket.dita#topic_fym_kmn_vs"
+            >Create a New Bucket</xref>.</li>
+        <li> Run the <codeph>cbbackupmgr</codeph> tool to restore data. When restoring data from
+          backup (use the <cmdname>--force-updates</cmdname> option). Make sure to disable the
+            <b>Conflict Resolution</b> option during the restore. This is required since the
+          conflict resolution types of the source and destination clusters do not match.</li>
+        <li> Once the restore operation is completed on Cluster 1, delete Bucket A’ from Cluster
+          2.</li>
+        <li> Upgrade Cluster 2 to Couchbase Server version 4.6.0.</li>
+        <li>Create a new Bucket B’ with the Conflict Resolution type as <b>Timestamp</b>
+          selected.</li>
+        <li>Create a new unidirectional replication for Bucket B. For instructions, see <xref
+            href="../xdcr/xdcr-create.dita#topic_e5r_qpn_vs/create-replication">Create
+            Replication</xref>.<p/></li>
+      </ol>
+    </p>
+    <p> For Scenario 2, perform the following steps to migrate your data to a new cluster: <ol
+        id="ol_wqq_mm2_5y">
+        <li dir="ltr">Stop application traffic coming to Cluster 1 (Bucket A) and Cluster 2 (Bucket A’).<p>
+            <note>Note: Allow <i>enough time</i> for the replication queues to drain. Check the
+                <b>outbound XDCR mutation</b> statistics to confirm. For instructions, see <xref
+                href="../monitoring/ui-monitoring-statistics.dita#topic16695/outgoing_xdcr_stats"
+                >Monitoring Outgoing XDCR</xref>.</note>
+          </p></li>
+        <li dir="ltr">Stop and delete replication to both clusters. For instructions, see <xref
+            href="../xdcr/xdcr-create.dita#topic_e5r_qpn_vs/delete-replication">Delete
+            Replication</xref>.</li>
+        <li dir="ltr">Run the <codeph>cbbackupmgr</codeph> tool to backup the entire bucket data on
+          both clusters. For instructions, see  <xref
+            href="../backup-restore/enterprise-backup-restore.dita#topic_rr5_sv3_t5">cbbackupmgr
+            tool</xref>.</li>
+        <li dir="ltr">Delete the Bucket A from Cluster 1 and Bucket A’ from Cluster 2. For
+          instructions, see <xref href="../clustersetup/delete-bucket.dita#topic_zdy_mmn_vs">Delete
+            a Bucket</xref>.</li>
+        <li dir="ltr">Upgrade both clusters to Couchbase Server version 4.6.0. For instructions, see
+            <xref href="upgrade.dita#topic_g3h_r2q_fw">Upgrading Couchbase Server</xref>.</li>
+        <li dir="ltr">Create new buckets on both clusters with the conflict resolution type as
+            <b>Timestamp</b> selected. For instructions, see <xref
+            href="../clustersetup/create-bucket.dita#topic_fym_kmn_vs">Create a New
+          Bucket</xref>.</li>
+        <li dir="ltr">Run the <codeph>cbbackupmgr</codeph> tool to restore data. When restoring data
+          from backup (use the <cmdname>--force-updates</cmdname> option). Make sure to disable
+            <b>Conflict Resolution</b> option during the restore. This is required because the
+          conflict resolution types of the source and destination do not match. </li>
+        <li dir="ltr">Once the restore operation is completed on both clusters, create replication
+          streams both ways from Cluster 1 and Cluster 2. For instructions, see <xref
+            href="../xdcr/xdcr-create.dita#topic_e5r_qpn_vs/create-replication">Create
+            Replication</xref>.</li>
+      </ol></p>
+    
+    
+  </body>
+  
+</topic>
