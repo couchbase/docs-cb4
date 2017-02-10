@@ -4,7 +4,7 @@ First of all, thanks for taking the time and effort to contribute!
 The following is a short guide for contributing to the Couchbase Server documentation.
 
 ## Reporting Bugs and Requesting Enhancements
-All bugs and enhancements for Nutshell are tracked via the [DOC project](https://issues.couchbase.com/projects/CBSP/issues) on https://issues.couchbase.com. 
+All bugs and enhancements for the Couchbase Server documentation are tracked via the [DOC project](https://issues.couchbase.com/projects/DOC/issues) on https://issues.couchbase.com. 
 If you have found a bug or think there is room for improvement please don't keep it to yourself, even if you don't intend to make the change yourself!
 Raise a DOC bug and it will get looked at by someone.
 
