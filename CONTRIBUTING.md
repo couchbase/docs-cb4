@@ -8,7 +8,7 @@ All bugs and enhancements for the Couchbase Server documentation are tracked via
 If you have found a bug or think there is room for improvement please don't keep it to yourself, even if you don't intend to make the change yourself!
 Raise a DOC bug and it will get looked at by someone.
 
-You can also raise DOC bugs on specific pages using the 'Feedback On This Page?' button in the bottom-left of the page. 
+You can also raise DOC bugs on specific pages using the 'Feedback On This Page?' button in the bottom-right of any page on https://developer.couchbase.com. 
 
 ### How do I submit a (Good) DOC bug?
 - __Use a clear and descriptive title__ - e.g `Instructions for disabling THP on RHEL/Centos 7 and later do not work`
