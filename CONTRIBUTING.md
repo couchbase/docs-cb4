@@ -12,9 +12,6 @@ You can also raise DOC bugs on specific pages using the 'Feedback On This Page?'
 
 ### How do I submit a (Good) DOC bug?
 - __Use a clear and descriptive title__ - e.g `Instructions for disabling THP on RHEL/Centos 7 and later do not work`
-- __Include relevant logs__ - if possible always include any links to log files
-(on supportal or s3) which reproduce an issue or contain the information
-relevant to an enhancement.
 - __Describe the problem or enhancement in full__ - for any problem, please
 include the problem in detail, including any expected results and how they
 differ from the real results. Please remember that the documentation team are not experts in every individual aspect of Couchbase
