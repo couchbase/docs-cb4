@@ -7,7 +7,7 @@
     </titlealts>
     <body>
         <p>This page will walk you through how some of the queries may be constructed using the C
-            SDK. We'll be using the C API with a C++ JSON library (<xref
+            SDK. The sample app uses the C API with a C++ JSON library (<xref
                 href="https://github.com/open-source-parsers/jsoncpp" format="html" scope="external"
                 >json-cpp</xref>), though you are free to use your own.</p>
         <section>
@@ -24,17 +24,18 @@
         <section>
             <title>Walking Through the API</title>
             <p>The following sections lead you through the primary functions of the sample
-                application. This shows you how to use the various features and services of
-                Couchbase including: <b>connecting</b> to a cluster and bucket, <b>key/value</b>
-                iteraction, document <b>query through N1QL</b> and <b>full text searches</b>.</p>
+                application. </p>
+            <p>This shows you how to use the various features and services of Couchbase including:
+                    <b>connecting</b> to a cluster and bucket, <b>key/value</b> iteraction, document
+                    <b>query through N1QL</b> and <b>full text searches</b>.</p>
         </section>
         <section><title>Configure and Bootstrap the SDK</title><p><b>Relevant Documentation
-                    Topics</b>: <xref href="managing-connections.dita"/></p><p> The first step is to
+                    Topics</b>: <xref href="managing-connections.dita"/></p><p>The first step is to
                 let the application connect to your cluster and obtain a reference to a
-                    <codeph>lcb_t</codeph> (the Bucket is your entry point for the whole storage
+                    <codeph>lcb_t</codeph> (the Bucket is the entry point for the whole storage
                 API). </p>
             <b>Connecting to a Bucket</b>
-            <codeblock outputclass="language-java">lcb_t instance;
+            <codeblock outputclass="language-cpp">lcb_t instance;
 lcb_create_st options;
 memset(&amp;options, 0, sizeof options);
 options.version = 3;
@@ -44,12 +45,13 @@ lcb_connect(instance);
 lcb_wait(instance);
 if (lcb_get_bootstrap_status(instance) != LCB_SUCCESS) {
     printf("Error while bootstrapping: %s\n", lcb_strerror(NULL, lcb_get_bootstrap_status(instance));
-    // .. handle error further..</codeblock>
-            <note type="tip">You could make the bootstrap process safer by providing a list of
+    // .. handle error further..</codeblock><note
+                type="tip">You could make the bootstrap process safer by providing a list of
                 hostnames/IPs to bootstrap from (in case the one node you provided for bootstrap is
-                unfortunately down when creating the Cluster reference). In production the best
-                practice is to provide 3. You can separate the list of hostnames in the connection
-                string using a comma, e.g. <codeph>couchbase://host1,host2,host3</codeph></note>The
+                unavailable when creating the Cluster reference). In production the best practice is
+                to provide at least 3 nodes in the boostrap list. You can separate the list of
+                hostnames in the connection string using a comma, e.g.
+                    <codeph>couchbase://host1,host2,host3</codeph></note>The
                 <apiname>lcb_create</apiname> function creates the raw library handle. The
                 <apiname>lcb_connect</apiname> function starts the connection attempt. The
                 <apiname>lcb_wait</apiname> function must be called to actually wait for the
@@ -59,13 +61,13 @@ if (lcb_get_bootstrap_status(instance) != LCB_SUCCESS) {
             obtained using the <apiname>lcb_strerror</apiname> function.</section>
         <section><title>Manage Users using Key/Value API </title><p><b>Relevant Documentation
                     Topics</b>: <xref href="document-operations.dita"/>, <xref
-                    href="async-programming.dita"/></p><p> Couchbase is a document oriented database
-                which provides access to your data both through its document ID (for high
-                performance access), as well as through views and N1QL (as powerful query
-                languages).</p><p/><b>Creating new users</b>
-            <p> Next we'll prepare the content for our new user (as a JSON object) and the
-                associated document (in order to give it an ID): </p>
-            <codeblock outputclass="language-java">Json::Value doc(Json::objectValue);
+                    href="async-programming.dita"/></p><p>Couchbase Server is a document-oriented
+                database which provides access to your data both through its document ID (for high
+                performance access), as well as through views, N1QL (as powerful query languages)
+                and FTS.</p><b>Creating New Users</b>
+            <p> Next, prepare the content for the new user (as a JSON object) and the associated
+                document (in order to give it an ID):
+                </p><codeblock outputclass="language-cpp">Json::Value doc(Json::objectValue);
 doc["type"] = "user";
 doc["name"] = username;
 // make_pass_hash() is just a stub.
@@ -77,16 +79,17 @@ std::string docid(std::string("user::") + username);
 lcb_CMDSTORE scmd = { 0 };
 LCB_CMD_SET_KEY(&amp;scmd, docid.c_str(), docid.size());
 LCB_CMD_SET_VALUE(&amp;scmd, docbuf.c_str(), docbuf.size());
-// Ensure you've set a callback using lcb_install_callback3(instance, LCB_CALLBACK_STORE, your_callback);</codeblock>
-            <note type="tip"> The <codeph>"user::"</codeph> prefix is arbitrary to this application,
+// Ensure you've set a callback using lcb_install_callback3(instance, LCB_CALLBACK_STORE, your_callback);</codeblock><note
+                type="tip"> The <codeph>"user::"</codeph> prefix is arbitrary to this application,
                 this is just a convention that the app uses to obtain unique keys and have
-                additional information in it, but the key could have been anything else (even
-                sequence numbers or UUIDs) really.</note>
-            <p>Here comes the part where we use the Couchbase API to store the document. Note that
-                you need to install a callback to check the result of the storage operation (using
-                    <apiname>lcb_install_callback3</apiname>), in case it failed.</p><codeblock outputclass="language-java">lcb_store3(instance, NULL, &amp;scmd);</codeblock>
-            <note type="tip">When it comes to storing a document, you have broadly three choices of
-                operation, which you can set using the <apiname>lcb_CMDSTORE::operation</apiname> field<ul>
+                additional information in it, but the key could have been anything (even sequence
+                numbers or UUIDs).</note><p>Now it is time to use the Couchbase Server key/value API
+                to store the document. Note that you need to install a callback to check the result
+                of the storage operation (using <apiname>lcb_install_callback3</apiname>), in case
+                it
+                failed.</p><codeblock outputclass="language-cpp">lcb_store3(instance, NULL, &amp;scmd);</codeblock><note
+                type="tip">When it comes to storing a document, you have three choices of operation,
+                which you can set using the <apiname>lcb_CMDSTORE::operation</apiname> field<ul>
                     <li><codeph>LCB_ADD</codeph> will only work if no document currently exists for
                         the given ID, otherwise a <codeph>LCB_KEY_EEXISTS</codeph> will be received
                         in the callback.</li>
@@ -96,14 +99,14 @@ LCB_CMD_SET_VALUE(&amp;scmd, docbuf.c_str(), docbuf.size());
                     <li><codeph>LCB_SET</codeph> will always work, replacing or creating the
                         document as needed. This is the default operation.</li>
                 </ul></note>
-            <b>Checking login by getting the User's document</b>
-            <codeblock outputclass="language-java">std::string docid(std::string("user::") + username);
+            <b>Checking Login by Getting the User's Document</b>
+            <codeblock outputclass="language-cpp">std::string docid(std::string("user::") + username);
 lcb_CMDGET cmd = { 0 };
 LCB_CMD_SET_KEY(&amp;cmd, docid.c_str(), docid.size());
 lcb_get3(instance, NULL, &amp;cmd);
 lcb_wait(instance);</codeblock>Most
             of the action takes place in the
-            callback:<codeblock outputclass="language-java">static void get_callback(lcb_t, int, const lcb_RESPGET* resp) {
+            callback:<codeblock outputclass="language-cpp">static void get_callback(lcb_t, int, const lcb_RESPGET* resp) {
     if (resp->rc == LCB_KEY_ENOENT) {
         // User doesn't exist. Handle this!
     } else if (resp->rc != LCB_SUCCESS) {
@@ -122,22 +125,23 @@ lcb_wait(instance);</codeblock>Most
     }
     // More handling here
 }</codeblock></section>
-        <section><title>A First N1QL Query: Finding Airports</title><p> In the SDK, we have a
+        <section><title>A First N1QL Query: Finding Airports</title><p>In the SDK, there is a
                     <apiname>lcb_n1ql_query</apiname> function that can issue N1QL queries against
                 Couchbase. The function accepts an <apiname>lcb_CMDN1QL</apiname> structure which
                 contains the encoded query. You can use the <apiname>lcb_N1QLPARAMS</apiname>
                 structure and its associated functions to help you construct the encoded query. If
-                you're using C++ (like we are here), it might be simpler to simply encoding the
-                query per spec.</p><note type="tip">N1QL is a super-set of SQL, so if you're
-                familiar with SQL you'll feel at ease.</note><p> We'll want to select just the
-                airport name from relevant documents in our bucket. Since we want to filter relevant
-                document on a criteria that depends on the input length, let's just do the SELECT
-                and FROM clauses
-                first:</p><codeblock outputclass="language-java">std::string stmt("SELECT airportname FROM ");
+                you're using C++ (as the sample application is), it might be simpler to simply
+                encode the query per the specification.</p><note type="tip">N1QL is a super-set of
+                SQL, so if you're familiar with SQL you'll feel at ease.</note><p>Only the airport
+                names are required for this part of the application, therefore just the airport name
+                from relevant documents in our bucket should be selected. As it needs to filter
+                relevant document on a criteria that depends on the input length, the SELECT and
+                FROM clauses are performed
+                first:</p><codeblock outputclass="language-cpp">std::string stmt("SELECT airportname FROM ");
 stmt.append("`").append("travel-sample").append("`"); // Backticks, because '-' in the bucket name must be escaped
-stmt.append(" WHERE ");</codeblock><p>
-                Then we can chose the correct fields to look into depending on the length of the
-                input.</p><codeblock outputclass="language-java">std::string query_arg;
+stmt.append(" WHERE ");</codeblock><p>Then
+                the correct fields can be chosen to look into, depending on the length of the
+                input.</p><codeblock outputclass="language-cpp">std::string query_arg;
 if (params.size() == 3) {
     stmt.append("faa = $1");
     query_arg = params;
@@ -155,17 +159,17 @@ query["statement"] = stmt;
 query["args"].append(query_arg);
 
 std::string encoded(Json::FastWrite().write(query));</codeblock><p>
-                Then we need to actually execute this
-                statement:</p><codeblock outputclass="language-java">lcb_CMDN1QL cmd = { 0 };
+                Then the statement is actually
+                    executed:</p><codeblock outputclass="language-cpp">lcb_CMDN1QL cmd = { 0 };
 cmd.query = query.c_str();
 cmd.nquery = query.size();
 cmd.callback = query_callback; // We'll show this function soon
 if (lcb_n1ql_query(instance, NULL, &amp;cmd) != LCB_SUCCESS) {
     // Handle error
 }
-lcb_wait(instance);</codeblock><p>
-                Let's have a look at <codeph>query_callback</codeph> to understand how to handle the
-                results.</p><codeblock outputclass="language-java">static void query_callback(lcb_t, int, const lcb_RESPN1QL *resp) {
+lcb_wait(instance);</codeblock><p><codeph>query_callback</codeph>
+                then handles the
+            results.</p><codeblock outputclass="language-cpp">static void query_callback(lcb_t, int, const lcb_RESPN1QL *resp) {
     if (resp->rc != LCB_SUCCESS) {
         // Problem! Handle this
     }
@@ -187,64 +191,64 @@ lcb_wait(instance);</codeblock><p>
         <section>
             <title>More Complex Queries: Finding Routes</title>
             <p><b>Relevant Documentation Topics</b>: <xref href="n1ql-queries-with-sdk.dita"/>.</p>
-            <p> In this service, we have two more complex queries. The first aims at going from
-                human-readable airport name for the departure and arrival airports to FAA codes: </p>
+            <p>In this service, there are two more complex queries. The first aims at transforming
+                the human-readable airport name for the departure and arrival airports to FAA codes: </p>
             <codeblock outputclass="language-sql"><![CDATA[SELECT faa AS fromAirport FROM `travel-sample` WHERE airportname = "Los Angeles Intl"
 UNION SELECT faa AS toAirport FROM `travel-sample` WHERE airportname = "San Francisco Intl"]]></codeblock>
-            <p> The second aims at constructing the result set of available flight paths that
-                connect the two airports: </p>
+            <p>The second aims at constructing the result set of available flight paths that connect
+                the two airports: </p>
             <codeblock outputclass="language-sql"><![CDATA[SELECT a.name, s.flight, s.utc, r.sourceairport, r.destinationairport, r.equipment
 FROM `travel-sample` AS r
 UNNEST r.schedule AS s
 JOIN `travel-sample` AS a ON KEYS r.airlineid
 WHERE r.sourceairport = "LAX" AND r.destinationairport = "SFO" AND s.day = 6
 ORDER BY a.name ASC]]></codeblock>
-            <p> A specificity of N1QL that we see in the second statement is
-                <codeph>UNNEST</codeph>. It extracts a sub-JSON and puts it at the same root level
-                as the bucket (so its possible to do joins on each element in this sub-json as if
-                they were entries in a left-hand side bucket). </p>
+            <p>A specificity of N1QL that can be seen in the second statement is
+                    <codeph>UNNEST</codeph>. It extracts a sub-JSON object and puts it at the same
+                root level as the bucket, so its possible to do joins on each element in this
+                sub-JSON as if they were entries in a left-hand side bucket. </p>
         </section>
         <section>
             <title>Indexing the Data: N1QL &amp; GSI</title>
-            <p> Index management is a bit more advanced (and is already done when loading the
-                sample), so now that you've learned about N1QL, you can have a look at it. For N1QL
-                to work, you must first ensure that at least a <codeph>Primary Index</codeph> has
-                been created. For that you can issue the query: </p>
-            <codeblock outputclass="language-java">CREATE PRIMARY INDEX ON `travel-sample`</codeblock>
-            <p> Refer to the above example on how to execute this query from the SDK. You'll still
+            <p>Index management is a bit more advanced (and is already done when loading the
+                sample), so now that you've learned the bsaics of N1QL, you can have a look at it.
+                For N1QL to work, you must first ensure that at least a <codeph>Primary
+                    Index</codeph> has been created. For that you can issue the query: </p>
+            <codeblock outputclass="language-sql">CREATE PRIMARY INDEX ON `travel-sample`</codeblock>
+            <p>Refer to the above example on how to execute this query from the SDK. You'll still
                 need a callback, though there will be no result rows (but the final callback will be
                 invoked always).</p>
-            <p> You can also create secondary indexes on specific fields of the JSON, for better
+            <p>You can also create secondary indexes on specific fields of the document, for better
                 performance: </p>
-            <codeblock outputclass="language-java">CREATE INDEX `def_username` ON `travel-sample`(username)</codeblock>
-            <p> In this case, give a name to your index, specify the target bucket AND the field(s)
-                in the JSON to index. </p>
+            <codeblock outputclass="language-sql">CREATE INDEX `def_username` ON `travel-sample`(username)</codeblock>
+            <p>In this case, give a name to your index (<codeph>def_username</codeph>), specify the
+                target bucket (<codeph>travel-sample</codeph>) AND the field(s) in the JSON to index
+                    (<codeph>username</codeph>). </p>
         </section>
         <section>
             <title>Full Text Search: Finding Hotels</title>
             <p><b>Relevant Documentation Topics</b>: <xref href="full-text-searching-with-sdk.dita"
                 />, <xref href="../subdocument-operations.dita"/>.</p>
-            <p> In this service, we look for hotels using more fuzzy criterias like the content of
-                the address or the description of an hotel, using FTS. Once we get some hits, we
-                fetch only the relevant data for each hit to be displayed in the UI using the
-                subdocument API. </p>
-            <p>Let's try to find a hotel based on its location and its description. To do this, we
-                first create the JSON query body:</p>
-            <codeblock outputclass="language-java">Json::Value query(Json::objectValue);
+            <p>In this service, hotels are searched for using more fuzzy criterias, like the content
+                of the address or the description of an hotel. This is done using Full Text Search
+                (FTS). When some results match the specified criteria, only the relevant data for
+                each result to be displayed in the UI is fetched using the subdocument API. </p>
+            <p>To find a hotel based on its location and its description, first a JSON query body is
+                created:</p>
+            <codeblock outputclass="language-cpp">Json::Value query(Json::objectValue);
 query["query"]["conjuncts"] = Json::Value(Json::arrayValue);
 Json::Value typeQuery(Json::objectValue);
 typeQuery["term"] = "hotel";
 typeQuery["field"] = "type";
 query["query"]["conjuncts"].append(typeQuery)</codeblock>
-            <p>A conjunction query allows to combine multiple FTS queries into one, in an AND
-                fashion. That search always includes an exact match criteria that restricts it to
-                the <codeph>hotel</codeph> data type (as reflected in the <codeph>type</codeph>
+            <p>A conjunction query allows you to combine multiple FTS queries into one, in an AND
+                fashion. This query always includes an exact match criteria that restricts it to the
+                    <codeph>hotel</codeph> data type (as reflected in the <codeph>type</codeph>
                 field of the JSON document).</p>
-            <p>If the user provided a location keyword, we add a second component to the FTS query
+            <p>If the user provided a location keyword, a second component is added to the FTS query
                 that will look for that keyword in several address-related fields of the document.
-                That is done in an OR fashion, using <codeph>disjuncts</codeph>:</p>
-            <codeblock outputclass="language-java">
-if (!location.empty() &amp;&amp; location != "*") {
+                This is done in an OR fashion, using <codeph>disjuncts</codeph>:</p>
+            <codeblock outputclass="language-cpp">if (!location.empty() &amp;&amp; location != "*") {
     Json::Value locationQuery(Json::objectValue);
     Json::Value disjuncts(Json::objectValue);
     disjuncts["disjuncts"] = Json::Value(Json::arrayValue);
@@ -258,7 +262,7 @@ if (!location.empty() &amp;&amp; location != "*") {
     }
     query["query"]["conjuncts"].append(disjuncts);
 }</codeblock>
-            <codeblock outputclass="language-java">if (!description.empty() &amp;&amp; description != "*") {
+            <codeblock outputclass="language-cpp">if (!description.empty() &amp;&amp; description != "*") {
     Json::Value disjuncts(Json::objectValue);
     std::array&lt;const char *, 2> fields({"description", "name"});
     for (const auto field : fields) {
@@ -268,28 +272,28 @@ if (!location.empty() &amp;&amp; location != "*") {
     }
     query["query"]["conjuncts"].append(disjuncts);
 }</codeblock>
-            <p>Before we execute the query, we would like to limit the number of results to be
-                returned:<codeblock>query["size"] = 100;</codeblock></p>
+            <p>Before the query is executed, you can limit the number of results to be
+                returned:<codeblock outputclass="language-cpp">query["size"] = 100;</codeblock></p>
             <p>The compound FTS query is now ready to be executed.</p>
-            <codeblock outputclass="language-java">lcb_CMDFTS cmd = { 0 };
+            <codeblock outputclass="language-cpp">lcb_CMDFTS cmd = { 0 };
 std::string buf(Json::FastWriter().write(query));
 cmd.query = buf.c_str();
 cmd.nquery = buf.size();
 cmd.callback = search_callback; // Defined later
 lcb_fts_query(instance, NULL, &amp;cmd);
 lcb_wait(instancr);</codeblock>
-            <p>The second step of working with hotels is  done inside the callback. The callback is
-                very similar to the N1QL callback:</p>
-            <p>There we iterate over the FTS hits, but we want to fetch the hotel document
-                corresponding to each hit. Actually, we'd prefer to fetch only the parts of the
-                document that will be displayed in the UI... That's where the sub-document API comes
-                in.</p>
-            <p>Sub-document allows to fetch or mutate only a set of paths inside a JSON document,
-                without having to transmit the whole document back and forth. This can save
-                bandwidth if the document is huge and the parts that we're interested in are few. So
-                here we iterate over the results of the FTS search and trigger a subdoc call:</p>
+            <p>The second step of working with hotels is done inside the callback. The callback is
+                very similar to the N1QL callback.</p>
+            <p>The FTS are iterated over in the callback, and the document corresponding to each
+                result is fetched. In actuality, only the parts of the document that will be
+                displayed in the UI are required. This is where the sub-document API comes in.</p>
+            <p>The sub-document API allows you to fetch or mutate only a set of paths inside a JSON
+                document, without having to send the whole document back and forth. This can save
+                network bandwidth if the document is large and the parts that we're interested in
+                are small. The callback iterates over each result of the FTS search then triggers a
+                subdoc call:</p>
             <p>
-                <codeblock>static void search_callback(lcb_t instance, int, const lcb_RESPFTS* resp) {
+                <codeblock outputclass="language-cpp">static void search_callback(lcb_t instance, int, const lcb_RESPFTS* resp) {
     if (resp->rc != LCB_SUCCESS) {
         // ...
     }
@@ -317,7 +321,7 @@ lcb_wait(instancr);</codeblock>
     // Note, the above requires that the subdoc callback has been installed.
 }</codeblock>
             </p>
-            <codeblock>static void subdoc_callback(lcb_t, int, const lcb_RESPSUBDOC *resp) {
+            <codeblock outputclass="language-cpp">static void subdoc_callback(lcb_t, int, const lcb_RESPSUBDOC *resp) {
     if (resp->rc != LCB_SUCCESS) {
         // Couldn't get hotel description!
     }
