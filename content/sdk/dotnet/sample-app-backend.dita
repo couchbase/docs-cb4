@@ -1,0 +1,482 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="csharp-sample-app-backend">
+  <title>.NET Sample App backend tutorial</title>
+  <titlealts><navtitle>Sample App backend in .NET</navtitle></titlealts>
+  <shortdesc>The .NET SDK tutorial bridges the gap between simple and advanced concepts by walking
+        through a complete web application.</shortdesc>
+    <body>
+
+        <section>
+            <p>The full source code for the tutorial is available <xref
+                    href="https://github.com/couchbaselabs/try-cb-dotnet/" scope="external"
+                    format="html"> on GitHub couchbaselabs/try-cb-dotnet</xref>. The primary focus of
+                the tutorial is to explain the function and theory behind the Couchbase .NET client
+                and how it works together with Couchbase Server, and especially new features in
+                versions 4.0/4.5 like <codeph>N1QL</codeph>, <codeph>FTS</codeph> and
+                    <codeph>sub-document</codeph>. It makes use of the
+                    <codeph>travel-sample</codeph> data set. The code that generates the web
+                application is provided with the source code, but is not discussed in this tutorial. </p>
+        </section>
+
+        <section>
+            <title>Specific .NET prerequisites and set up</title>
+            <p> In addition to the prerequisites mentioned in <xref
+                    href="../sample-application.dita"/>, you'll need: <ul>
+                    <li>Visual Studio 2015 (Community is fine)</li>
+                </ul></p>
+            <p> To get set up for the tutorial proper, follow these steps: <ul>
+                    <li><codeph>git clone
+                            https://github.com/couchbaselabs/try-cb-dotnet.git</codeph> or <xref
+                            href="https://github.com/couchbaselabs/try-cb-dotnet/releases/tag/v2.0.0"
+                            format="zip" scope="external">download the source</xref>
+                    </li>
+                    <li>if you don't want to connect to <codeph>localhost</codeph>, change the
+                        couchbaseServer entry in <xref
+                            href="https://github.com/couchbaselabs/try-cb-dotnet/blob/master/src/try-cb-dotnet/Web.config"
+                            format="html" scope="external"
+                                ><codeph>src/try-cb-dotnet/Web.config</codeph></xref></li>
+                    <li>open the project in Visual Studio and build the project, nuget references
+                        will be restored automatically</li>
+                </ul></p>
+            <note type="note"> If you want to code it yourself, the real work is done in the
+                following classes: <ul>
+                    <li><xref
+                            href="https://github.com/couchbaselabs/try-cb-dotnet/blob/master/src/try-cb-dotnet/Controllers/AirportController.cs"
+                            format="html" scope="external"
+                                ><codeph>src/try-cb-dotnet/Controllers/AirportController.cs</codeph></xref></li>
+                    <li><xref
+                            href="https://github.com/couchbaselabs/try-cb-dotnet/blob/master/src/try-cb-dotnet/Controllers/FlightPathsController.cs"
+                            format="html" scope="external"
+                                ><codeph>src/try-cb-dotnet/Controllers/FlightPathsController.cs</codeph></xref></li>
+                    <li><xref
+                            href="https://github.com/couchbaselabs/try-cb-dotnet/blob/master/src/try-cb-dotnet/Controllers/HotelController.cs"
+                            format="html" scope="external"
+                                ><codeph>src/try-cb-dotnet/Controllers/HotelController.cs</codeph></xref></li>
+                    <li><xref
+                            href="https://github.com/couchbaselabs/try-cb-dotnet/blob/master/src/try-cb-dotnet/Controllers/UserController.cs"
+                            format="html" scope="external"
+                                ><codeph>src/try-cb-dotnet/Controllers/UserController.cs</codeph></xref></li>
+                    <li><xref
+                            href="https://github.com/couchbaselabs/try-cb-dotnet/blob/master/src/try-cb-dotnet/App_Start/CouchbaseConfig.cs"
+                            format="html" scope="external"
+                                ><codeph>src/try-cb-dotnet/App_Start/CouchbaseConfig.cs</codeph></xref></li>
+                </ul><p>There's currently no "fill-in-the-blanks" branch so you'll have to delete
+                    method bodies and try to take it from there.</p></note>
+
+            <note type="tip"> This tutorial focuses on querying through N1QL and FTS rather than
+                mapreduce views. If you want information about using views, see the following
+                resources: <ul>
+                    <li>General Information about views: <xref
+                            href="../../architecture/incremental-map-reduce-views.dita"/>
+                    </li>
+                    <li>Querying views:<xref
+                            href="../../indexes/querying-using-map-reduce-views.dita"/></li>
+                </ul></note>
+        </section>
+       <section>
+            <title>Walking Through the API</title>
+            <p>The following sections lead you through the primary functions of the sample application. All of the REST API application code is
+        in several files according to function.  The following shows you how to program with the various features and services of Couchbase including: <b>connecting</b> to a cluster and bucket, <b>key/value</b> iteraction, document <b>query through N1QL</b> and <b>full text searches</b>.</p>
+        </section>
+        <section id="section_l54_sj3_yy"><title>Configure and Bootstrap the
+                    SDK</title><p><b>Where:</b>
+                <xref
+                    href="https://github.com/couchbaselabs/try-cb-dotnet/blob/master/src/try-cb-dotnet/App_Start/CouchbaseConfig.cs"
+                    format="html" scope="external"
+                        ><codeph>src/try-cb-dotnet/App_Start/CouchbaseConfig.cs</codeph></xref></p><p><b>Goals:</b>
+                Connecting to the <codeph>Cluster</codeph> and getting familiar with
+                    <codeph>ClusterHelper</codeph>.</p><p><b>Relevant Documentation Topics:</b>
+                <xref href="managing-connections.dita" format="dita">Managing
+                Connections</xref></p><p>The first step in the Couchbase SDK is to configure your
+                connection to the cluster. This can be done either programattically or through
+                configuration files. For simplicity, in this sample app we're going to do it
+                programmatically.</p><p>In the sample app, the
+                    <codeph>CouchbaseConfig.Register()</codeph> method is responsible for reading
+                the hostnames and/or IP addresses for the cluster and initializing the connection.
+                First it reads the <codeph>CouchbaseServer</codeph> setting from the
+                    <codeph>web.config</codeph> and then creates a
+                    <codeph>ClientConfiguration</codeph>, setting the Servers with the hostname from
+                the app setting. The <codeph>ClientConfiguration</codeph> is then passed into the
+                    <codeph>ClusterHelper</codeph> utility which uses the configuration to setup
+                everything required.</p><p>
+                <codeblock outputclass="language-csharp">var couchbaseServer = ConfigurationManager.AppSettings.Get("CouchbaseServer");
+ClusterHelper.Initialize(new ClientConfiguration
+{
+    Servers = new List { new Uri(couchbaseServer) }
+});</codeblock>
+            </p>The <codeph>ClusterHelper</codeph> is a utility built into the .NET SDK to help with
+            managing the cluster connection and can be used to get references to a
+                <codeph>bucket</codeph> (which is your entry point for the whole storage API). The
+                <codeph>cluster</codeph> connection should be reused as much as possible, typically
+            called a singleton, because it is expensive to create. The
+                <codeph>ClusterHelper</codeph> stores the connection to the cluster for easy reuse
+            within your applications.<p>To get a references to a bucket, with which you can then
+                execute operations such as Get, Insert and Remove, you can use the
+                    <codeph>GetBucket</codeph> method on <codeph>ClusterHelper</codeph>. This
+                returns an <codeph>IBucket</codeph> which exposes the majority of the operations
+                available in Couchbase.</p><p>An example of getting a reference to a
+                    <codeph>bucket</codeph> and retrieving a document is below:</p><p>
+                <codeblock outputclass="language-csharp">var bucket = ClusterHelper.GetBucket("default");
+var user = bucket.Get&lt;User>("user::" + 123); // retrieves the document 'user::123' and deserializes it into the application User class
+</codeblock>
+            </p></section>
+
+        <section><title>Key/Value: Users</title><b>Where</b>: <xref
+                href="https://github.com/couchbaselabs/try-cb-dotnet/blob/master/src/try-cb-dotnet/Controllers/UserController.cs"
+                format="html" scope="external"
+                    ><codeph>src/try-cb-dotnet/Controllers/UserController.cs</codeph></xref>
+            <p><b>Goals</b>: Use <codeph>Bucket</codeph>'s Key/Value operations and discover the
+                    <codeph>Document</codeph> API.</p><b>Relevant Documentation Topics</b>: <xref
+                href="document-operations.dita"/>, <xref href="async-programming.dita"/>
+            <p>Couchbase Server is a document-oriented database which provides access to your data
+                both through its document ID (for high performance access), as well as through
+                map/reduce views and N1QL (SQL like query language).</p>This is noticeable in the
+            API, where the methods reflect Key/Value operations (<codeph>get</codeph>,
+                <codeph>create</codeph>, etc...) and work with a <codeph>Document&lt;T></codeph>
+            interface that has an <codeph>Id</codeph> and a <codeph>Content</codeph>. <p>Typically,
+                in this type of scenario you would implement the Repository pattern to separte
+                functional logic from business logic. However, to make this sample as easy to get up
+                to speed with controllers are used instead.</p>
+            <b>Creating New Users</b>
+            <p>For the purposes of this sample application users are required to register before
+                they can book flights. All the user related operations are going to exist in the
+                    <codeph>UserController</codeph>.</p><p>The <codeph>SignUp</codeph> method is
+                where new users are registered. The method takes a <codeph>LoginModel</codeph>
+                    (<codeph>src/Models/LoginModel.cs</codeph>) as the only method parameter.
+                ASP.NET has an automatic model binder where it can map a POST request's properties
+                to a custom class, like the <codeph>LoginModel</codeph>. The property types and
+                names have to match for it to assign the
+                value.<codeblock outputclass="language-csharp">public async Task&lt;IHttpActionResult> SignUp(LoginModel model)</codeblock></p><p>The
+                model is validated to ensure that the username and password fields are non-empty and
+                then checked to see if the username already exists. For the purposes of this sample
+                app, the user document keys are in the format <codeph>user::&lt;username></codeph>.
+                The <codeph>ExistsAsync</codeph> method is used to do a non-blocking check to see if
+                the document already exists in the
+                bucket.</p><codeblock outputclass="language-csharp">var userKey = CreateUserKey(model.Username);
+if (await _bucket.ExistsAsync(userKey))
+{
+    return Content(HttpStatusCode.Conflict, new Error($"Username '{model.Username}' already exists"));
+}</codeblock><p>Next
+                a document with the user details is created and stored in Couchbase Server. The
+                    <codeph>userKey</codeph> created earlier is used and alsoa document expiry time
+                is included if one was set on the model. As you do not want to store plain text
+                passwords, the passwords are MD5-hashed before storing it in the user document.
+                <codeblock outputclass="language-csharp">var userDoc = new Document&lt;User>
+{
+    Id = userKey,
+    Content = new User
+    {
+        Username = model.Username,
+        Password = CalcuateMd5Hash(model.Password)
+    },
+    Expiry = model.Expiry
+};
+
+var result = await _bucket.InsertAsync(userDoc);</codeblock></p><p>The
+                non-blocking <codeph>InsertAsync</codeph> method is used to ensure that a thread
+                waiting for the response from Couchbase Server is not blocked. Once the code
+                receives the response, it continues where it left off.</p><p>The last thing to do is
+                to create a security token for the browser, so that the front end knows that
+                additional requests are for a valid user. For this a JWT (JSON Web Token) is used,
+                which includes the username in a list of claims and is then encrypted with a secret
+                key. The secret is stored in the
+                <codeph>Web.Config</codeph>.<codeblock outputclass="language-csharp">var data = new
+{
+    token = BuildToken(model.Username)
+};
+var context = $"Created user with ID '{userKey}' in bucket '{_bucket.Name}' that expires in {userDoc.Expiry}ms";
+return Content(HttpStatusCode.Accepted, new Result(data, context));</codeblock></p><p>The
+                response content has two parts, the first is the JWT and the second part is a
+                narration string which is something the frontend app understands and will display in
+                a console. The narration enables the users of the application to get an idea of what
+                is going on on the server side while browsing the app. It is similar to a log, but
+                sent to the frontend.</p><b>Loging in Signed up Users</b>
+            <p>The <codeph>Login</codeph> method enables users who have already signed up to sign in
+                and use the application. The <codeph>Login</codeph> method signature looks like
+                this:<codeblock outputclass="language-csharp">public async Task&lt;IHttpActionResult> Login(LoginModel model)</codeblock>The
+                    <codeph>LoginModel</codeph> includes <codeph>Username</codeph> and
+                    <codeph>Password</codeph> properties that can be used to find the user document
+                and verify the passwords.</p><p>First the user document must be retrieved and the
+                password checked to ensure that it matches with the model. The user document key
+                needs to be built using the model's username property, the document is then
+                retrieved from Couchbase
+                Server.<codeblock outputclass="language-csharp">var userKey = CreateUserKey(model.Username);
+var userDocument = await _bucket.GetDocumentAsync&lt;User>(userKey);</codeblock></p><p>Now
+                the application has a user document, it can check the passwords match. Remember the
+                password was hashed in the document for added security so the model's password will
+                also have to be hashed before they are
+                compared.<codeblock outputclass="language-csharp">var user = userDocument.Content;
+if (user.Password != CalcuateMd5Hash(model.Password))
+{
+    return Content(HttpStatusCode.Unauthorized, new Error("Invalid username and/or password"));
+}</codeblock></p><p>All
+                that is left to do is create the security token like was done for the
+                    <codeph>SignUp</codeph> method and return it. A narration to go in the response
+                content is also created for the frontend app to report
+                on.<codeblock outputclass="language-csharp">var data = new
+{
+    token = BuildToken(user.Username)
+};
+var context = $"User {model.Username} logged in successfully";
+return Content(HttpStatusCode.OK, new Result(data, context));</codeblock></p><p><b>Getting
+                    a User's Stored Flights</b></p><p>A way to retrieve the flights that a user has
+                booked is required for the application. The <codeph>GetFlightsForUser</codeph>
+                method does
+                this.<codeblock outputclass="language-csharp">public async Task&lt;IHttpActionResult> GetFlightsForUser(string username)</codeblock></p><p>This
+                is going to be the first time that the application checks for a valid security
+                token; it has only generated these so far. The security token is fairly simple and
+                only includes the username of the user, but that is enough for this sample
+                application. To verify the token the <codeph>authentication</codeph> header needs to
+                be fetched and then decrypted. If this fails for any reason, the application returns
+                either a 401 (Unauthorized) or a 403 (Forbidden) response.
+                <codeblock outputclass="language-csharp">var authHeaderValue = GetAuthHeaderValue(Request.Headers);
+if (string.IsNullOrEmpty(authHeaderValue))
+{
+    return Content(HttpStatusCode.Unauthorized, string.Empty);
+}
+if (!VerifyToken(authHeaderValue, username))
+{
+    return Content(HttpStatusCode.Forbidden, string.Empty);
+}</codeblock></p><p>The
+                username is passed in as one of the method parameters, so it can be used to create
+                the user document key and get the document from Couchbase
+                Server.<codeblock outputclass="language-csharp">var userKey = CreateUserKey(username);
+var userDocument = await _bucket.GetDocumentAsync&lt;User>(userKey);</codeblock></p><p>The
+                final thing to do is return the list of flights for the user with some narration for
+                the frontend application to
+                record.<codeblock outputclass="language-csharp">var data = userDocument.Content.Flights;
+var context = $"Retrieved flights for user {username}.";
+return Content(HttpStatusCode.OK, new Result(data, context));</codeblock></p></section>
+
+        <section>
+            <title>N1QL: Flight Paths</title>
+            <p><b>Where</b>: <xref
+                    href="https://github.com/couchbaselabs/try-cb-dotnet/blob/master/src/try-cb-dotnet/Controllers/FlightsController.cs"
+                    format="html" scope="external"
+                        ><codeph>src/try-cb-dotnet/Controllers/FlightsController.cs</codeph></xref></p>
+            <p><b>Goals</b>: Use N1QL to perform <codeph>SELECT</codeph> on Couchbase.</p>
+            <p><b>Relevant Documentation Topics</b>: <xref href="n1ql-queries-with-sdk.dita"/>.</p>
+            <p>In the SDK, there is a <codeph>query</codeph> method that accepts all variants of
+                querying with Couchbase (views, spatial/geo views, N1QL and FTS). For N1QL, the
+                    <codeph>IQueryRequest</codeph> is expected. This allows to wrap a N1QL
+                    <codeph>Statement</codeph>, use positional parameters and provide query tuning
+                (eg Timeout).</p>
+            <note type="tip">N1QL is a super-set of SQL, so if you're familiar with SQL you'll feel
+                at ease.</note>
+            <p>This controller has one method, <codeph>GetFlights</codeph>, which provides flight
+                routes between two airports. It uses a N1QL query to get them. The method has three
+                parameters; <codeph>from</codeph>, <codeph>to</codeph> and <codeph>leave</codeph>
+                (string for departure date). The first thing the application does is validate the
+                parameters, returning a 500 (InternalServerError) if it's
+                not.<codeblock outputclass="language-csharp">if (string.IsNullOrEmpty(from) || string.IsNullOrEmpty(to))
+{
+    return Content(HttpStatusCode.InternalServerError, new Error("Missing or invalid from and/or to airports"));
+}
+
+DateTime leaveDate;
+if (!DateTime.TryParse(leave, out leaveDate))
+{
+    return Content(HttpStatusCode.InternalServerError, new Error("Missing or invalid leave date"));
+}
+
+var dayOfWeek = (int) leaveDate.DayOfWeek + 1; // Get weekday number; Sun (0) to Sat (7)</codeblock></p>
+            <p>Next the <codeph>from</codeph> and <codeph>to</codeph> parameters are used to get the
+                airport FAA code along with its geo-location latitude and longitude.</p>
+            <codeblock outputclass="language-csharp">var airportQuery = new QueryRequest()
+    .Statement("SELECT faa AS fromAirport, geo.lat, geo.lon " +
+        "FROM `travel-sample` " +
+        "WHERE airportname = $1 " +
+        "UNION " +
+        "SELECT faa AS toAirport, geo.lat, geo.lon " +
+        "FROM `travel-sample` " +
+        "WHERE airportname = $2;")
+    .AddPositionalParameter(from, to);
+var airportQueryResult = await _bucket.QueryAsync&lt;dynamic>(airportQuery);</codeblock>
+            <p>After doing some checks to ensure there are results from both airport codes, the
+                application then does some Geo-location calculations to find the distance between
+                the two airports and the estimated travel time. The distance and travel time are
+                then used when calculating ticket
+                prices.<codeblock outputclass="language-csharp">var fromCoordinate = new GeoCoordinate((double) fromAirport.lat, (double) fromAirport.lon);
+var toCoordinate = new GeoCoordinate((double) toAirport.lat, (double) toAirport.lon);
+var distance = fromCoordinate.GetDistanceTo(toCoordinate);
+var flightTime = Math.Round(distance/AverageFlightSpeed, 2);</codeblock></p>
+            <p>Next, all flights between the the two airports have to be
+                retrieved.<codeblock outputclass="language-csharp">var flightQuery = new QueryRequest()
+    .Statement("SELECT a.name, s.flight, s.utc, r.sourceairport, r.destinationairport, r.equipment " +
+        "FROM `travel-sample` AS r " +
+        "UNNEST r.schedule AS s " +
+        "JOIN `travel-sample` AS a ON KEYS r.airlineid " +
+        "WHERE r.sourceairport = $1 " +
+        "AND r.destinationairport = $2 " +
+        "AND s.day = $3 " +
+        "ORDER BY a.name ASC;")
+    .AddPositionalParameter((string) fromAirport.fromAirport, (string) toAirport.toAirport, dayOfWeek);
+queries.Add(flightQuery.GetOriginalStatement());</codeblock></p>
+            <note type="tip"> Yes, you read that right, N1QL can do joins (on a single bucket or on
+                several). It works as long as the "foreign key" described by <codeph>ON
+                    KEYS</codeph> clause can be mapped to a document's key in the joined bucket. </note>
+            <p>A specificity of N1QL that is seen in the second statement is
+                <codeph>UNNEST</codeph>. It extracts a sub-JSON and puts it at the same root level
+                as the bucket (so its possible to do joins on each element in this sub-JSON as if
+                they were entries in a left-hand side bucket). </p>
+            <p>The application now has all flights between the <codeph>from</codeph> and
+                    <codeph>to</codeph> airports but there are not any prices any prices. These are
+                then
+                calculated.<codeblock outputclass="language-csharp">var flights = flightQueryResult.Rows;
+foreach (var flight in flights)
+{
+    flight.FlightTime = flightTime;
+    flight.Price = _random.Next(2000);
+}</codeblock></p>
+        </section>
+
+        <section id="section_tpl_lcd_gy">
+            <title>LINQ: Airports</title>
+            <p><b>Where</b>: <xref
+                    href="https://github.com/couchbaselabs/try-cb-dotnet/blob/master/src/try-cb-dotnet/Controllers/AirportController.cs"
+                    format="html" scope="external"
+                        ><codeph>src/try-cb-dotnet/Controllers/AirportController.cs</codeph></xref></p>
+            <p><b>Goals</b>: Use the LINQ provider to build N1QL queries to retrieve Airport
+                details.</p>
+            <p>LINQ is a standardised way of constructing queries over a data storage engine, such
+                as in-memory collections, SQL and even NoSQL like Couchbase. It's a very simple yet
+                powerful tool that enables developers to write complicated queries
+                programatically.</p>
+            <p>In this Controller the application is trying to find the aiport name, given some
+                additional information about the airport. It uses the LINQ provider to build the
+                queries. </p>
+            <p>The first query looks for an airport using its FAA code.</p>
+            <codeblock outputclass="language-csharp">airports = _context.Query&lt;Airport>()
+    .Where(x => x.Faa == search.ToUpper())
+    .Select(x => x.Airportname);
+"SELECT airportname FROM `travel-sample` WHERE type = 'airport' AND faa = '{search.ToUpper()}'"</codeblock>
+            <p>The second query looks for an airport using its ICAO
+                code.<codeblock outputclass="language-csharp">airports = _context.Query&lt;Airport>()
+    .Where(x => x.Icao == search.ToUpper())
+    .Select(x => x.Airportname);
+"SELECT airportname FROM `travel-sample` WHERE type = 'airport' AND icao = '{search.ToUpper()}'"</codeblock></p>
+            <p>The third query looks for an airport using its
+                name.<codeblock outputclass="language-csharp">airports = _context.Query&lt;Airport>()
+    .Where(x => x.Airportname.Contains(search))
+    .Select(x => x.Airportname);
+"SELECT airportname FROM `travel-sample` WHERE type = 'airport' AND airportname LIKE '%{search}%'"</codeblock></p>
+            <p>Once one of the above queries has been executed, the result then needs to be returned
+                to the frontend application along with a narration of the query that was
+                executed.<codeblock outputclass="language-csharp">var data = airports.Select(airportname => new {airportname});
+return Content(HttpStatusCode.OK, new Result(data, query));</codeblock></p>
+        </section>
+
+        <section>
+            <title>Indexing the Data: N1QL &amp; GSI</title>
+            <p><b>Where</b>: <xref
+                    href="https://github.com/couchbaselabs/try-cb-dotnet/blob/master/src/try-cb-dotnet/App_Start/CouchbaseConfig.cs"
+                    format="html" scope="external"
+                        ><codeph>src/try-cb-dotnet/App_Start/CouchbaseConfig.cs</codeph></xref></p>
+            <p>Index management is a bit more advanced (and is already done when loading the
+                sample), so now that you've learned about N1QL, you can have a look. For N1QL to
+                work, you must first ensure that at least a <codeph>Primary Index</codeph> has been
+                created. For that you can use the DSL from the <codeph>BucketManager</codeph> class: </p>
+            <p><b>Goals</b>: Use the Index DSL to make sure data is indexed ready for N1QL to query
+                it.</p>
+<codeblock outputclass="language-csharp">bucketManager.CreateN1qlPrimaryIndex(false); // create primary index, and don't defer building it</codeblock>
+            <p>The fluent API will guide you with the available options, you just have to declare
+                that you want to <codeph>CreateN1qlPrimaryIndex()</codeph>. </p>
+            <p>You can also create secondary indexes on specific fields of the JSON, for better
+                performance: </p>
+<codeblock outputclass="language-csharp">bucketManager.CreateN1qlIndex("index_name", false, "name", "address", etc);</codeblock>
+            <p>In this case, give a name to your index, specify if the index is to be deferred for
+                building then an array of property names to index.</p>
+        </section>
+        <section><title>Full Text Search: Finding Hotels</title><p><b>Where</b>: <xref
+                    href="https://github.com/couchbaselabs/try-cb-dotnet/blob/master/src/try-cb-dotnet/Controllers/HotelController.cs"
+                    format="html" scope="external"
+                        ><codeph>src/try-cb-dotnet/Controllers/HotelController.cs</codeph></xref></p><p><b>Goals</b>:
+                Use FTS to search for matching Hotels. Use subdoc API to fetch the relevant data for
+                each hit.</p><p><b>Relevant Documentation Topics</b>: <xref
+                    href="full-text-searching-with-sdk.dita"/>, <xref
+                    href="../subdocument-operations.dita"/>.</p><p>In this service, hotels are
+                searched for using more fuzzy criterias, like the content of the address or the
+                description of an hotel. This is done using Full Text Search (FTS). When some
+                results match the specified criteria, only the relevant data for each result to be
+                displayed in the UI is fetched using the subdocument API. </p><p>Let's have a look
+                at the <codeph>FindHotel</codeph> method. It accepts two parameters,
+                    <codeph>location</codeph> and <codeph>description</codeph>, which are the two
+                possible refining criterias for an hotel
+                search.<codeblock outputclass="language-csharp">public HttpResponseMessage FindHotel(string description = null, string location = null)</codeblock></p><p>A
+                    <codeph>ConjunctionQuery</codeph> allows you to combine multiple FTS queries
+                into one, in a logical AND fashion. This query includes an exact match criteria that
+                restricts it to the <codeph>hotel</codeph> data type (as reflected in the
+                    <codeph>type</codeph> field of the JSON
+                document).</p><codeblock outputclass="language-csharp">var query = new ConjunctionQuery(
+    new TermQuery("hotel").Field("type")
+);</codeblock><p>If
+                the user provided a location keyword, a second component is added to the FTS query
+                that will look for that keyword in several address-related fields of the document.
+                That is done in an OR fashion, using a <codeph>Disjunction</codeph>
+                query:</p><codeblock outputclass="language-csharp">if (!string.IsNullOrEmpty(location) &amp;&amp; location != "*")
+{
+    query.And(new DisjunctionQuery(
+        new PhraseQuery(location).Field("address"),
+        new PhraseQuery(location).Field("city"),
+        new PhraseQuery(location).Field("state"),
+        new PhraseQuery(location).Field("country")
+    ));
+}</codeblock><p>Similarly,
+                if a description keyword was provided by the user, the freeform text is inspected of
+                the <codeph>description</codeph> field and <codeph>name</codeph> field of the
+                document:</p><codeblock outputclass="language-csharp">if (!string.IsNullOrEmpty(description) &amp;&amp; description != "*")
+{
+    query.And(new DisjunctionQuery(
+        new PhraseQuery(description).Field("name"),
+        new PhraseQuery(description).Field("description")
+    ));
+}</codeblock><p>The
+                    <codeph>matchPhrase</codeph> FTS query can contain several words and will search
+                for variations of the words (eg. including plural forms or words with the same
+                root).</p><p>The compound FTS query is now ready to be executed. A
+                    <codeph>SearchQuery</codeph> object is built out of it, which also determines
+                which FTS index to use ("hotel") and allows you to set various parameters (like a
+                limit of maximum 100 hits to return). The query is logged (and kept for narration)
+                then executed, returning an <codeph>ISearchQueryResult</codeph>
+            object:</p><codeblock outputclass="language-csharp">var search = new SearchQuery();
+search.Index = "hotel";
+search.Query = query;
+search.Limit(100);</codeblock>The
+            FTS results are then iterated over, and the document corresponding to each result is
+            fetched. In actuality, only the parts of the document that will be displayed in the UI
+            are required. This is where the sub-document API comes in.<p>The sub-document API allows
+                you to fetch or mutate only a set of paths inside a JSON document, without having to
+                send the whole document back and forth. This can save network bandwidth if the
+                document is large and the parts that we're interested in are small. So here the
+                results of the FTS search are iterated over and appropriate subdoc calls are
+                triggered:</p><codeblock outputclass="language-csharp">var result = _bucket.Query(search);
+foreach (var row in result)
+{
+    var fragment = _bucket.LookupIn&lt;Hotel>(row.Id)
+    .Get("name")
+        .Get("description")
+        .Get("address")
+        .Get("city")
+        .Get("state")
+        .Get("country")
+        .Execute();</codeblock><p>Each
+                FTS result is represented as an <codeph>ISearchQueryRow</codeph> which exposes the
+                document's <codeph>Id</codeph>. The sub-document API can then be used to fetch data
+                    (<codeph>bucket.LookupIn&lt;T>(documentId)</codeph>) and specify what parts are
+                wanted: name, description, address, city, state and country. The application then
+                    <codeph>Execute()</codeph> the sub-document query. In the rest of the code, the
+                address-related fields are aggregated together and the data obtained is
+                returned.</p>Now the results are obtained, the application can build up the
+                <codeph>Hotel</codeph> objects and return them along with the FTS query
+            narration.<codeblock outputclass="language-csharp">    hotels.Add(new
+    {
+        name = fragment.Value.Name,
+        description = fragment.Value.Description,
+        address = fragment.Value.GetFullAddress()
+    });
+}
+
+return Request.CreateResponse(new Result(hotels, queryJson));</codeblock></section>
+    </body>
+</topic>

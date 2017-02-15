@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="go-sample-app-backend">
+  <title>Go Sample App backend tutorial</title>
+  <titlealts><navtitle>Sample App backend in Go</navtitle></titlealts>
+  <shortdesc>The Go SDK tutorial bridges the gap between simple and advanced concepts by walking through a complete web application.</shortdesc>
+    <body>
+
+        <section>
+            <p>The full source code for the tutorial is available <xref
+                    href="https://github.com/couchbaselabs/try-cb-golang/" scope="external"
+                    format="html"> on GitHub couchbaselabs/try-cb-golang</xref>.
+                The primary focus of the tutorial is to explain the
+                function and theory behind the Couchbase Java client and how it works together with Couchbase Server, and especially new features in versions 4.0/4.5 like <codeph>N1QL</codeph>, <codeph>FTS</codeph> and <codeph>sub-document</codeph>. It makes use of the <codeph>travel-sample</codeph> data set. The code that generates the web application is provided with the source code,
+                but is not discussed in this tutorial.
+            </p>
+        </section>
+
+        <section>
+            <title>Specific Go prerequisites and set up</title>
+            <p> In addition to the prerequisites mentionned in <xref
+                    href="../sample-application.dita"/>, you'll need: <ul>
+                    <li>Go 1.6+</li>
+                </ul></p>
+            <p> To get set up for the tutorial proper, follow these steps: <ul>
+                    <li><codeph>mkdir try-cb-golang</codeph></li>
+                    <li><codeph>cd try-cb-golang</codeph></li>
+                    <li><codeph>export GOPATH=$PWD</codeph></li>
+                    <li><codeph>go get github.com/couchbaselabs/try-cb-golang</codeph></li>
+                    <li><codeph>cd src/github.com/couchbaselabs/try-cb-golang</codeph></li>
+                    <li>if you don't want to connect to localhost, change the configuration in
+                            <codeph>main.go</codeph> (eg. <codeph>cbConnStr</codeph>) .</li>
+                    <li><codeph>go run main.go</codeph></li>
+                    <li>You should now be able to access the UI on <i>localhost:8080</i></li>
+                </ul></p>
+            <note type="note">
+                <p>If you want to code it yourself, there's currently no "fill-in-the-blanks" branch so you'll have to delete method bodies and try to take it from there.</p>
+            </note>
+
+            <note type="tip"> This tutorial focuses on querying through N1QL and FTS rather than
+                views. If you want information about using views, see the following resources: <ul>
+                    <li>General Information about views: <xref
+                            href="../../architecture/incremental-map-reduce-views.dita"/>
+                    </li>
+                    <li>Querying views:<xref
+                            href="../../indexes/querying-using-map-reduce-views.dita"/></li>
+                </ul></note>
+    </section>
+        <section>
+            <title>Walking Through the API</title>
+            <p>The following sections lead you through the primary functions of the sample
+                application. All of the REST API application code is in the <codeph>main.go</codeph>
+                file. The following shows you how to program with the various features and services
+                of Couchbase including: <b>connecting</b> to a cluster and bucket, <b>key/value</b>
+                iteraction, document <b>query through N1QL</b> and <b>full text searches</b>.</p>
+        </section>
+        <section><title>Configure and Bootstrap the SDK</title>
+            <p><b>Where</b>: <codeph>main()()</codeph></p>
+            <p><b>Goals</b>: Connecting to the <codeph>Cluster</codeph> and getting a reference to a
+                    <codeph>Bucket</codeph>, learn to reuse it.</p>
+            <p><b>Relevant Documentation Topics</b>: <xref href="managing-connections.dita"/></p>
+            <p> The first step is to let the application connect to your cluster and obtain a
+                reference to a <codeph>Bucket</codeph> (the Bucket is your entry point for the whole
+                storage API). The <codeph>cbConnStr</codeph> variable defines the connection string
+                including hostname and protocol for your cluster. The <codeph>cbBucket</codeph> and
+                    <codeph>cbPassword</codeph> variables are used separately and get passed to
+                    <codeph>OpenBucket</codeph> to actually establish a connection to your bucket. </p>
+            <b>Connecting to the Cluster and Bucket</b>
+            <codeblock outputclass="language-go">globalCluster, err = gocb.Connect(cbConnStr)
+// error handling elided...
+
+globalBucket, err = globalCluster.OpenBucket(cbBucket, cbPassword)
+// error handling elided...</codeblock><p>
+                Both bucket and cluster can be managed through the SDK as well (eg. add views or
+                create new buckets), see <xref href="managing-clusters.dita"/> for more information.
+            </p></section>
+        
+        <section>
+            <title>Managing Users using Key/Value API</title>
+            <p><b>Where</b>: <codeph>UserLogin() and UserSignup()</codeph></p>
+            <p><b>Goals</b>: Use <codeph>Bucket</codeph> operations and discover the
+                    <codeph>Document</codeph> API.</p>
+            <p><b>Relevant Documentation Topics</b>: <xref href="document-operations.dita"/>, <xref
+                    href="async-programming.dita"/>, <xref href="../subdocument-operations.dita"
+                /></p>
+            <p>Couchbase is a document oriented database which provides access to your data both
+                through its document ID (for high performance access), as well as through views and
+                N1QL (as powerful query languages).</p>
+            <p>This is noticeable in the API, where the methods reflect Key/Value operations
+                    (<codeph>RetrieveIn</codeph>, <codeph>Upsert</codeph>, etc...) and work with a
+                    <codeph>Sub Document</codeph> interface that has an <codeph>id()</codeph> and
+                requests specific content from the document. The default Document implementation
+                accepts a simple representation of JSON as its content. </p>
+            <b>Creating New Users</b>
+            <p>A new user first goes through the <codeph>UserSignup()</codeph> method which recieves
+                a POST of <codeph>username</codeph> and <codeph>password</codeph> encoded as a JSON
+                object. After registering the user to Couchbase, it uses a JWT encoded version of
+                the username to maintain the session. The JWT token is later used through further
+                interaction to validate the user session and is created using a custom function
+                    <codeph>createJwtToken()</codeph>.</p><note type="tip"> The
+                    <codeph>"user::"</codeph> prefix is arbitrary to this application, this is just
+                a convention that the application uses to obtain unique keys and have additional
+                information in it, but the key could have been anything else (even sequence numbers
+                or UUIDs).</note><p>Here comes the part where the Couchbase API is used to store the
+                document. It's rather simple, the application uses an <codeph>Insert</codeph> method
+                which stores the document, if the record already exists, an error is returned
+                instead: </p><codeblock>globalBucket.Insert(userKey, user, 0).</codeblock><p> The
+                resulting JSON data and confirmation is sent back to the client with a success, or
+                an exception if it failed.</p><note type="tip">When it comes to storing a document,
+                you have a choice of three methods: <ul>
+                    <li><codeph>Insert</codeph> will only work if no document currently exists for
+                        the given ID, otherwise a <codeph>ErrKeyExists</codeph> will be
+                        returned.</li>
+                    <li><codeph>Replace</codeph> on the contrary will only work if the document does
+                        already exist (otherwise a <codeph>ErrKeyNotFound</codeph> is thrown).</li>
+                    <li><codeph>Upsert</codeph> will always work, replacing or creating the document
+                        as needed.</li>
+                </ul></note><p>So the result just contains a JWT (Json WebToken) to identify the new
+                user. If there is a problem, an error and non-successful status code will be
+                returned to the application. But what is this <codeph>narration</codeph> object in
+                the Result?</p><p>The frontend understands this second part of the Result, the
+                narration, as something that it can display in a console, so that users of the
+                application can directly get an idea of what is going on on the server side while
+                browsing the app. It is similar to a log, but transmitted to the frontend.</p>
+            <b>Checking Login by Getting the User's Document</b>
+            <p>In the <codeph>UserLogin()</codeph> method, the application checks a User's
+                credential and for that it needs to retrieve the corresponding document. Since user
+                documents are identified by prefixing their username with <codeph>user::</codeph>,
+                this is pretty simple. Using the sub-document
+                    <codeph>LookupIn(…).Get("password")</codeph> the application can request only
+                the precise values it needs from the document, in this case the password:
+                </p><codeblock outputclass="language-go"><![CDATA[globalBucket.LookupIn(userKey).Get("password").Execute()]]></codeblock><p>
+                If that particular key doesn't exist, the <codeph>LookupIn()</codeph> method returns
+                    <codeph>ErrKeyNotFound</codeph>. This is useful to check whether the user exists
+                at all.</p><p> Otherwise it's just a matter of checking the hashed password with the
+                one provided by the user, and responding accordingly.</p></section>
+        
+        <section>
+            <title>A First N1QL Query: Finding Airports</title>
+            <p><b>Where</b>: <codeph>FlightSearch()</codeph></p>
+            <p><b>Goals</b>: Use N1QL and the DSL to perform your first <codeph>SELECT</codeph> on Couchbase Server.</p>
+            <p><b>Relevant Documentation Topics</b>: <xref href="n1ql-queries-with-sdk.dita"/>.</p>
+            <p> In the SDK, there is an <codeph>ExecuteN1qlQuery</codeph> method, which accepts a
+                    <codeph>N1qlQuery</codeph> structure and performs a N1QL query against the
+                cluster.</p>
+            <note type="tip">N1QL is a super-set of SQL, so if you're familiar with SQL you'll feel at ease.</note>
+            <p>Statements can be provided either in string form or using the DSL.</p>
+            <p>The application needs to select just the airport name from relevant documents in the
+                bucket. Since it wants to filter relevant document on a criteria that depends on the
+                input length, the query starts with "SELECT airportname FROM `travel-sample`".</p>
+            <p>Then the application can choose the correct fields to look into depending on the
+                length of the input. The user can enter either a ICAO or FAA code or a full name of
+                an airport to search for, so the application accommodates each scenario as it builds
+                the N1QL statement. It also uses wildcards (<codeph>%</codeph>) in the statement to
+                give a free form expression: </p>
+            
+            <codeblock outputclass="language-go">var queryStr string
+if len(searchKey) == 3 {
+  queryStr = fmt.Sprintf("SELECT airportname FROM `travel-sample` WHERE faa='%s'", strings.ToUpper(searchKey))
+} else if len(searchKey) == 4 &amp;&amp; searchKey == strings.ToUpper(searchKey) {
+  queryStr = fmt.Sprintf("SELECT airportname FROM `travel-sample` WHERE icao ='%s'", searchKey)
+} else {
+  queryStr = fmt.Sprintf("SELECT airportname FROM `travel-sample` WHERE airportname like '%s%%'", searchKey)
+}</codeblock>
+            
+            <p>The statement is ready! You can execute this statement by wrapping it in a
+                    <codeph>N1qlQuery()</codeph> using <codeph>gocb.NewN1qlQuery(queryStr)</codeph>
+                and invoking <codeph>globalBucket.ExecuteN1qlQuery()</codeph>. Here it is very
+                simple, no placeholders and no particular tuning of the query is necessary, so the
+                simple method: <codeph>globalBucket.ExecuteN1qlQuery(q, nil)</codeph> will be
+                used.</p>
+            <p>The results of the query are return in a <codeph>result</codeph> object, which can
+                then be iterated over to build an array of the results:</p>
+            <codeblock outputclass="language-go">respData.Data = []jsonAirport{}
+var airport jsonAirport
+for rows.Next(&amp;airport) {
+	respData.Data = append(respData.Data, airport)
+	airport = jsonAirport{}
+}</codeblock>
+        </section>
+        
+        <section>
+            <title>More Complex Queries: Finding Routes</title>
+            <p><b>Where</b>: <codeph>FlightSearch()</codeph></p>
+            <p><b>Goals</b>: Let the DSL guide you into making more complex N1QL queries.</p>
+            <p><b>Relevant Documentation Topics</b>: <xref href="n1ql-queries-with-sdk.dita"/>.</p>
+            <p>In this class, there are two more complex queries. The first aims at transforming the
+                human-readable airport name for the departure and arrival airports to FAA codes:</p>
+            <codeblock outputclass="language-sql">SELECT faa AS fromAirport FROM `travel-sample` WHERE airportname = "Los Angeles Intl"
+  UNION SELECT faa AS toAirport FROM `travel-sample` WHERE airportname = "San Francisco Intl"</codeblock>
+            <p>The second aims at constructing the result set of available flight paths that connect
+                the two airports: </p>
+            <codeblock outputclass="language-sql">SELECT a.name, s.flight, s.utc, r.sourceairport, r.destinationairport, r.equipment
+  FROM `travel-sample` AS r
+  UNNEST r.schedule AS s
+  JOIN `travel-sample` AS a ON KEYS r.airlineid
+  WHERE r.sourceairport = "LAX" AND r.destinationairport = "SFO" AND s.day = 6
+  ORDER BY a.name ASC</codeblock>
+            
+            <note type="tip"> Yes, you read that right, N1QL can do joins (on a single bucket or on
+                several). It works as long as the "foreign key" described by <codeph>ON
+                    KEYS</codeph> clause can be mapped to a document's key in the joined bucket. </note>
+            <p>A specificity of N1QL that can be seen in the second statement is
+                    <codeph>UNNEST</codeph>. It extracts a sub-JSON and puts it at the same root
+                level as the bucket (so its possible to do joins on each element in this sub-JSON as
+                if they were entries in a left-hand side bucket). </p>
+            <p>For this final step, try to obtain the equivalent of these statements via the DSL and
+                see how it guides you through the possibilities of the query language. </p>
+        </section>
+        
+        
+        <section>
+            <title>Indexing the Data: N1QL &amp; GSI</title>
+            <p><b>Goals</b>: Use the Index DSL to make sure data is indexed for N1QL to query it.</p>
+            <p>Index management is a bit more advanced (and is already done when loading the
+                sample), so now that you've learned about N1QL, you can have a look at it. There is
+                no code example in this application, but some samples are provided below for your
+                reference.</p>
+            <p>For N1QL to work, you must first ensure that at least a
+                <codeph>Primary Index</codeph> has been created. For that you can use the DSL from the <codeph>Index</codeph> class:
+            </p>
+            <codeblock outputclass="language-go">q := gocb.NewN1qlQuery("CREATE PRIMARY INDEX ON `travel-sample`")
+_, err := globalBucket.ExecuteN1qlQuery(q, nil)</codeblock>
+            <p>You can also create secondary indexes on specific fields of the JSON, for better
+                performance: </p>
+            <codeblock outputclass="language-go">q := gocb.NewN1qlQuery("CREATE INDEX `def_username` ON `travel-sample`(username)")
+_, err := globalBucket.ExecuteN1qlQuery(q, nil)</codeblock>
+            <p>In this case, give a name to your index, specify the target bucket AND the field(s)
+                in the JSON to index. </p>
+        </section>
+        <section><title>Full Text Search: Finding Hotels</title><p><b>Where</b>:
+                    <codeph>HotelSearch()</codeph></p><p><b>Goals</b>: Use FTS to search for
+                matching Hotels. Use sub-document API to fetch the relevant data for each
+                    hit.</p><p><b>Relevant Documentation Topics</b>: <xref
+                    href="full-text-searching-with-sdk.dita"/>, <xref
+                    href="../subdocument-operations.dita"/>.</p><p>In this service, hotels are
+                searched for using more fuzzy criterias, like the content of the address or the
+                description of an hotel. This is done using Full Text Search (FTS). When some
+                results match the specified criteria, only the relevant data for each result to be
+                displayed in the UI is fetched using the subdocument API. </p><p>Let's have a look
+                at the <codeph>HotelSearch()</codeph> method. It accepts two parameters via HTTP,
+                    <codeph>location</codeph> and <codeph>description</codeph>, which are the two
+                possible refining criteria for a hotel
+                search.</p><codeblock outputclass="language-go">qp := cbft.NewConjunctionQuery(cbft.NewTermQuery("hotel").Field("type"))</codeblock><p>A
+                    <codeph>ConjunctionQuery</codeph> allows you to combine multiple FTS queries
+                into one, as an AND operation. That search always includes an exact match criteria
+                that restricts it to the <codeph>hotel</codeph> data type (as reflected in the
+                    <codeph>type</codeph> field of the JSON document).</p><p>If the user provided a
+                location keyword, a second component is added to the FTS query that will look for
+                that keyword in several address-related fields of the document. This is done in an
+                OR fashion, using a <codeph>Disjunction</codeph> this
+                time:</p><pre>if location != "" &amp;&amp; location != "*" {
+	qp.And(cbft.NewDisjunctionQuery(
+		cbft.NewMatchPhraseQuery(location).Field("country"),
+		cbft.NewMatchPhraseQuery(location).Field("city"),
+		cbft.NewMatchPhraseQuery(location).Field("state"),
+		cbft.NewMatchPhraseQuery(location).Field("address"),
+	))
+}</pre><p>Similarly,
+                if a description keyword was provided by the user, the freeform text is inspected of
+                the <codeph>description</codeph> field and <codeph>name</codeph> field of the
+                document:</p><codeblock outputclass="language-go">if description != "" &amp;&amp; description != "*" {
+	qp.And(cbft.NewDisjunctionQuery(
+		cbft.NewMatchPhraseQuery(description).Field("description"),
+		cbft.NewMatchPhraseQuery(description).Field("name"),
+	))
+}</codeblock><p>The
+                    <codeph>MatchPhraseQuery</codeph> can contain several words and will search for
+                variations of the words (eg. including plural forms or words with the same
+                root...).</p><p>The compound FTS query is now ready to be executed. A
+                    <codeph>SearchQuery</codeph> object is built out of it, which also determines
+                which FTS index to use ("hotel") and allows you to set various parameters (like a
+                limit of maximum 100 hits to return). The query is logged (and kept for narration)
+                then executed, returning an <codeph>SearchQueryResult</codeph>
+            object:</p><codeblock outputclass="language-go">q := gocb.NewSearchQuery("travel-search", qp).
+	Limit(100)
+rows, err := globalBucket.ExecuteSearchQuery(q)</codeblock>The
+            FTS results are then iterated over, and the document corresponding to each result is
+            fetched. In actuality, only the parts of the document that will be displayed in the UI
+            are required. This is where the sub-document API comes in.<p>The sub-document API allows
+                you to fetch or mutate only a set of paths inside a JSON document, without having to
+                send the whole document back and forth. This can save network bandwidth if the
+                document is large and the parts that the application is interested in are small. So
+                here the results of the FTS search are iterated over and appropriate subdoc calls
+                are
+            triggered:</p><codeblock outputclass="language-go">for _, hit := range rows.Hits() {
+	res, _ := globalBucket.LookupIn(hit.Id).
+		Get("country").
+		Get("city").
+		Get("state").
+		Get("address").
+		Get("name").
+		Get("description").
+		Execute()
+	// We ignore errors here since some hotels are missing various
+	//  pieces of data, but every key exists since it came from FTS.
+
+	var hotel jsonHotel
+	res.Content("country", &amp;hotel.Country)
+	res.Content("city", &amp;hotel.City)
+	res.Content("state", &amp;hotel.State)
+	res.Content("address", &amp;hotel.Address)
+	res.Content("name", &amp;hotel.Name)
+	res.Content("description", &amp;hotel.Description)
+	respData.Data = append(respData.Data, hotel)
+}</codeblock>Each
+            FTS result is represented as an <codeph>ISearchQueryRow</codeph> which exposes the
+            document's <codeph>Id</codeph>. The sub-document API can then be used to fetch data
+                (<codeph>bucket.LookupIn&lt;T>(documentId)</codeph>) and specify what parts it
+            wants: name, description, address, city, state and country. The application then
+                <codeph>Execute()</codeph> the sub-document query. In the rest of the code, the
+            address-related fields are aggregated together and the data obtained is returned as a
+            JSON object for use in the front-end.</section>
+    </body>
+</topic>
