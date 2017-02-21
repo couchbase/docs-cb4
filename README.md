@@ -3,7 +3,7 @@
 The Couchbase Documentation Repository for Couchbase 4+ DITA based Docs
 
 ### Contributing
-A guide for contributing to the Couchbase Server Documentation can be 
+A guide for contributing to the Couchbase Server Documentation can found be 
 [here](CONTRIBUTING.md).
 
 ### HTML ID tags
