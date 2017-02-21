@@ -64,7 +64,7 @@ Before submitting changes you should ensure that your content builds successfull
 
 ##### FOR COUCHBASE EMPLOYEES
 
-We currently have a version of Oxygen Web Author running, you can use this to edit your DITA files - a short guide on how to use the tool can be found on [the wiki](hub.internal.couchbase.com/confluence/).
+We currently have a version of Oxygen Web Author running, you can use this to edit your DITA files - a short guide on how to use the tool can be found on [the wiki](http://hub.internal.couchbase.com/confluence/display/techpubs/Using+Oxygen+Web+Author).
 
 #### Git
 Due to write restrictions it is preferred if you first create your own fork of this repository and make all of your changes in this forked repository, using Pull
