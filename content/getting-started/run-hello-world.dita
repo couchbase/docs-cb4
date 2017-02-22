@@ -137,40 +137,41 @@
 				means of radio-buttons:
 			</p>
 			
-<codeblock outputclass="language-javascript">if (selectedCountryValue == 0)
+			<codeblock outputclass="language-javascript">if (selectedCountryValue == 0)
 {
-	selectedCountry = "United States";
+    selectedCountry = "United States";
 } 
 else 
 {
-	if (selectedCountryValue == 1)
-	{
-		selectedCountryStyle = "United Kingdom";
-	}
-	else
-	{
-		if (selectedCountryValue == 2)
-		{
-			selectedCountryStyle = "France";
-		}
-	}	
+    if (selectedCountryValue == 1)
+    {
+        selectedCountryStyle = "United Kingdom";
+    }
+    else
+    {
+        if (selectedCountryValue == 2)
+        {
+            selectedCountryStyle = "France";
+        }
+    }	
 }</codeblock>
 			
 			<p>
-				The selected value is made part of a query-string that returns all documents
-				within the <codeph>travel-sample</codeph> bucket that provide a match:
+				The selected value will be made part of a query-string that returns all documents
+				within the <codeph>travel-sample</codeph> bucket that provide a match. This query-string
+				is concatenated on the client-side, solely for the purpose of display:
 			</p>
 			
 			<codeblock outputclass="language-javascript">var selectedQuery = 'SELECT * FROM `travel-sample` WHERE country = ' + '\"' + selectedCountryName + '\"';</codeblock>
 			
 			<p>
-				The query-string is then itself appended to a URL, which features the
+				Only the country-value will be passed to the server. This value is appended to a URL, which features the
 				hostname and port-number at which the node.js server-side program listens:
 			</p>
 			
 			<codeblock outputclass="language-javascript">var nodeJsAddress = "http://localhost:8082/";
 				
-var nodeJsTargetURL = nodeJsAddress + '?' + "myQuery=" + selectedQuery;</codeblock>
+var nodeJsTargetURL = nodeJsAddress + '?' + "myCountryValue=" + selectedCountryName;</codeblock>
 			
 			<p>
 				A <codeph>getJSON</codeph> call passes the query-string to the server-side
@@ -178,31 +179,28 @@ var nodeJsTargetURL = nodeJsAddress + '?' + "myQuery=" + selectedQuery;</codeblo
 			</p>
 			
 			<codeblock outputclass="language-javascript">$.getJSON(nodeJsTargetURL, function(dataReturnedFromCouchbase) 
-{</codeblock>
+    {</codeblock>
 			
 			<p>
-				Returned documents, up to a specified numeric maximum (configurable, but here 10), are added to a display-string,
+				Returned documents, up to a specified numeric maximum (configurable, but here 100), are added to a display-string,
 				which is then shown in the dedicated pane:
 			</p>
-
-			<codeblock outputclass="language-javascript">for (var currentKeyPosition = 0; currentKeyPosition &lt; 10; currentKeyPosition++)
-{	
-					
-	$.each(dataReturnedFromCouchbase[currentKeyPosition], function(key, val) 
-	{	
-						
-		$.each(val, function(newKey, newVal)
-		{			
-			cbDataDisplayString = cbDataDisplayString + \"&lt;i&gt;\" + JSON.stringify(newKey) + "&lt;/i&gt;" + " : " 
-				+ "&lt;b&gt;" + JSON.stringify(newVal) + "&lt;/b&gt;" + '&lt;/p&gt;' + '&lt;p&gt;';
-		});
-	});
-
-	cbDataDisplayString = cbDataDisplayString + '&lt;/br&gt;&lt;/br&gt;&lt;/br&gt;';
+			
+			<codeblock outputclass="language-javascript">for (var currentKeyPosition = 0; currentKeyPosition &lt; 100; currentKeyPosition++)
+{					
+    $.each(dataReturnedFromCouchbase[currentKeyPosition], function(key, val) 
+    {					
+        $.each(val, function(newKey, newVal)
+        {			
+            cbDataDisplayString = cbDataDisplayString + \"&lt;i&gt;\" + JSON.stringify(newKey) + "&lt;/i&gt;" + " : " 
+                + "&lt;b&gt;" + JSON.stringify(newVal) + "&lt;/b&gt;" + '&lt;/p&gt;' + '&lt;p&gt;';
+        });
+    });
+				
+    cbDataDisplayString = cbDataDisplayString + '&lt;/br&gt;&lt;/br&gt;&lt;/br&gt;';
 }
-
+				
 document.getElementById('CouchbaseRetrievalsContent').innerHTML = cbDataDisplayString;</codeblock>
-
 			
 			<p>
 				<b>
@@ -212,7 +210,7 @@ document.getElementById('CouchbaseRetrievalsContent').innerHTML = cbDataDisplayS
 			
 			<p>
 				Now bring up <codeph>nodeJsQueryAgent.js</codeph> in your text editor. Note
-				that the node.js <codeph>require</codeph> construct is used to ensure that the
+				that the node.js <codeph>require</codeph> construct is used, to ensure that the
 				program has access to the right supportive modules. These include the one
 				for Couchbase Server:
 			</p>
@@ -232,30 +230,29 @@ var couchbase = require("couchbase");</codeblock>
 var myBucket = myCluster.openBucket('travel-sample');</codeblock>
 			
 			<p>
-				The Couchbase SDK is now used to query Couchbase Server. A <i>Primary
-				Index</i> is created, to allow a N1QL query to access the data that
-				the cluster contains. Then, a N1QL query is made, specifying the
-				query-string received from the html client. The values returned are
-				passed back to the client, as a JSON string.
+				The country-value, passed by the client, is retrieved from the URL:
 			</p>
-			<codeblock outputclass="language-javascript">myBucket.get(theQueryString, function(err, res)  
-{
-	myBucket.manager().createPrimaryIndex(function()
-	{
-		myBucket.query(
-			couchbase.N1qlQuery.fromString(theQueryString),
-			function (err, rows) 
-			{
-				console.log("Got rows: %j", rows);	
-
-				response.writeHead(200, {"Content-Type": "application/json", 
-							"Access-Control-Allow-Origin": "*"});
-				console.log("Returning...");	
-				response.end(JSON.stringify(rows));
-			});
-		});
-	});		
-
+			
+			<codeblock outputclass="language-javascript">var queryObject = url.parse(request.url, true).query
+var countryValueString = queryObject.myCountryValue;</codeblock>
+			
+			<p>
+				The Couchbase SDK is now used to query Couchbase Server. A <i>parameterized</i> N1QL query is made, whereby the
+				country-value received from the html client is specified as the value for a placeholder. Returned values are
+				then passed back to the client, as a JSON string.
+			</p>
+			<codeblock outputclass="language-javascript">var queryTemplate = couchbase.N1qlQuery.fromString('SELECT * FROM `travel-sample` WHERE country=$1');
+				
+myBucket.query(queryTemplate, [countryValueString], 
+    function (err, rows) 
+    {
+        console.log("Got rows: %j", rows);	
+				
+        response.writeHead(200, {"Content-Type": "application/json", 
+                                    "Access-Control-Allow-Origin": "*"});
+        console.log("Returning...");
+        response.end(JSON.stringify(rows));
+    });							    
 }).listen(8082);</codeblock>
 			
 			<p>
@@ -279,7 +276,8 @@ var myBucket = myCluster.openBucket('travel-sample');</codeblock>
 			<codeblock outputclass="language-bash">$ node nodeJsQueryAgent.js</codeblock>
 			
 			<p>
-				This starts the node.js server. Now, bring up the file 
+				This starts the node.js server: output will appear in this console, as the
+				program runs. Now, bring up the file 
 				<codeph>helloWorldCouchbaseQuery.html</codeph> in a browser. The initial
 				appearance is as follows:
 			</p>
