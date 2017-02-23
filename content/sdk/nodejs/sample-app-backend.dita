@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="nodejs-sample-app-backend">
+  <title>Node.js Sample App backend tutorial</title>
+  <titlealts><navtitle>Sample App backend in Node.js</navtitle></titlealts>
+  <shortdesc>The Node.js SDK tutorial bridges the gap between simple and advanced concepts by walking through a complete web application.</shortdesc>
+    <body>
+
+        <section>
+            <p>The full source code for the tutorial is available on GitHub: <xref
+                    href="https://github.com/couchbaselabs/try-cb-nodejs/" scope="external"
+                    format="html">http://github.com/couchbaselabs/try-cb-nodejs</xref>.
+                The primary focus of the tutorial is to explain the function and theory behind the Couchbase Node.js client and how it works together with Couchbase Server, and especially new features in versions 4.0/4.5 like <codeph>N1QL</codeph>, <codeph>FTS</codeph> and <codeph>sub-document</codeph>. It makes use of the <codeph>travel-sample</codeph> data set. The code that generates the web application is provided with the source code.
+            </p>
+        </section>
+
+        <section>
+            <title>Specific Node.js prerequisites and set up</title>
+            <p> In addition to the prerequisites mentioned in <xref
+                    href="../sample-application.dita"/>, you'll need: <ul>
+                    <li>Node.js and NPM</li>
+                </ul></p>
+            <p> To get set up for the tutorial proper, follow these steps: <ul>
+                    <li><codeph>git clone
+                            https://github.com/couchbaselabs/try-cb-nodejs.git</codeph> or <xref
+                            href="https://github.com/couchbaselabs/try-cb-nodejs" format="zip"
+                            scope="external">download the source.</xref>
+                    </li>
+                    <li>Install necessary libraries: <codeph>npm install.</codeph></li>
+                    <li>Start the application: <codeph>npm run start</codeph>.</li>
+                    <li>Run the app: <xref href="http://localhost:8080" scope="external"
+                            format="html">http://localhost:8080</xref>.</li>
+                    <li>If you don't want to connect to Couchbase on localhost, change the
+                        configuration in <codeph>index.js</codeph>.</li>
+                    <li>Press CONTROL+C to stop the application when finished.</li>
+                </ul></p>
+
+            <note type="tip"> This tutorial focuses on querying through N1QL and FTS rather than
+                map-reduce views. If you want information about using views, see the following
+                resources: <ul>
+                    <li>General Information about views: <xref
+                            href="../../architecture/incremental-map-reduce-views.dita"/>
+                    </li>
+                    <li>Querying views:<xref
+                            href="../../indexes/querying-using-map-reduce-views.dita"/></li>
+                </ul></note>
+    </section>
+        <section>
+        <title>Walking Through the API</title>
+        <p>The following sections lead you through the primary functions of the sample application. All of the REST API application code is
+        in the <codeph>index.js</codeph> file.  The following shows you how to program with the various features and services of Couchbase including: <b>connecting</b> to a cluster and bucket, <b>key/value</b> iteraction, document <b>query through N1QL</b> and <b>full text searches</b>.</p>
+    </section>
+        <section>
+            <title>Configure and Bootstrap the SDK</title><p><b>Where</b>:
+                    <codeph>couchbase.Cluster()</codeph></p><p><b>Goals</b>: Connecting to the
+                    <codeph>Cluster</codeph> and getting a reference to a <codeph>Bucket</codeph>,
+                learn to reuse it.</p><p><b>Relevant Documentation Topics</b>: <xref
+                    href="managing-connections.dita"/></p><p>The first step is to let the
+                application connect to your cluster and obtain a reference to a
+                    <codeph>Bucket</codeph> (this is your entry point for the whole storage API). </p>
+            <b>Connecting to the Cluster and Bucket</b>
+            <codeblock outputclass="language-javascript"><![CDATA[var cluster = new couchbase.Cluster('couchbase://localhost');
+var bucket = cluster.openBucket('travel-sample');]]></codeblock><p> The
+                    <codeph>couchbase.Cluster()</codeph> method instantiates a single cluster object
+                which contains buckets. To open a bucket, use the cluster object
+                    <codeph>cluster.OpenBucket()</codeph>. </p><p> Both bucket and cluster can be
+                managed through the SDK as well (eg. add views or create new buckets), see <xref
+                    href="managing-clusters.dita"/> for more information. </p></section>
+
+        <section>
+            <title>Managing Users using Key/Value API</title><p><b>Where</b>:
+                    <codeph>'/api/user/signup' and '/api/user/login'</codeph></p><p><b>Goals</b>:
+                Use <codeph>Bucket</codeph> operations and discover the <codeph>Document</codeph>
+                API.</p><p><b>Relevant Documentation Topics</b>: <xref
+                    href="document-operations.dita"/>, <xref href="async-programming.dita"/>, <xref
+                    href="../subdocument-operations.dita"/></p><p> Couchbase Server is a document
+                oriented database which provides access to your data both through its document ID
+                (for high performance access), as well as through views, N1QL and FTS.</p><p> This
+                is noticeable in the API, where the methods reflect Key/Value operations (
+                    <codeph>upsert</codeph>,<codeph>lookupIn</codeph>, etc...) and work with a
+                    <codeph>Sub Document</codeph> interface that has uses <codeph>id</codeph> and
+                requests specific content from the document. The default Document implementation
+                accepts a simple representation of JSON as its content. </p>
+            <b>Creating New Users</b>
+            <p> A new user first goes through the <codeph>signup</codeph> method which does a POST
+                of <codeph>username</codeph> and <codeph>password</codeph> encoded as a JSON object.
+                </p><p><codeblock>userrec = {'username': user, 'password': password}</codeblock> A
+                JWT token is also used through further interaction to validate the user
+                session.</p><note type="tip"> The <codeph>"user::"</codeph> prefix is arbitrary to
+                this application, this is just a convention that the app uses to obtain unique keys
+                and have additional information in it, but the key could have been anything else
+                (even sequence numbers or UUIDs).</note><p>Here comes the part where Couchbase API
+                is used to store the document, it's rather simple, using an <codeph>insert</codeph>
+                method
+                <codeblock outputclass="language-javascript"><![CDATA[bucket.insert(userDocKey, userDoc, callbackFn)]]></codeblock></p><p>
+                The resulting JSON data with JWT token and confirmation is sent back to the client
+                with a success or an exception if it failed.</p><note type="tip">When it comes to
+                storing a document, you have a choice of three methods: <ul>
+                    <li><codeph>insert</codeph> will only work if no document currently exists for
+                        the given ID, otherwise an error
+                            <codeph>couchbase.errors.KEY_EEXISTS</codeph> will be returned.</li>
+                    <li><codeph>replace</codeph> on the contrary will only work if the document does
+                        already exist otherwise an error
+                            <codeph>couchbase.errors.KEY_ENOENT</codeph> will be returned.</li>
+                    <li><codeph>upsert</codeph> will always work, replacing or creating the document
+                        as needed.</li>
+                </ul>
+            </note><p>So the result in fact just contains a JWT (Json WebToken) to identify the new
+                user. If there is a problem, a Not OK status code will be returned to the client
+                along with the error message.</p>
+            <b>Checking User Login</b>
+            <p> In the <codeph>login</codeph> route, in order to check a User's credential, the
+                corresponding user document has to be retrieved. The user documents are identified
+                by prefixing their username with <codeph>user::</codeph>, fetching the document
+                using <codeph>get</codeph> api and verifying if the passwords match in the callback
+                to validate the user login.
+                <codeblock outputclass="language-javascript"><![CDATA[bucket.get(userDocKey, callbackFn)]]></codeblock></p><p>
+                If that particular key doesn't exist, the <codeph>get</codeph> method returns
+                    <codeph>couchbase.errors.KEY_ENOENT</codeph>. That's useful to check if the user
+                exists at all.</p><p> Otherwise it's just a matter of checking the password with the
+                one provided by the user, and responding accordingly.</p></section>
+
+        <section>
+            <title>A First N1QL Query: Finding Airports</title>
+            <p><b>Where</b>: <codeph>'/api/airports'</codeph></p>
+            <p><b>Goals</b>: Use N1QL and the DSL to perform your first <codeph>SELECT</codeph> on Couchbase.</p>
+            <p><b>Relevant Documentation Topics</b>: <xref href="n1ql-queries-with-sdk.dita"/>.</p>
+            <p>In the SDK, there is a <codeph>query</codeph> method that accepts all variants of
+                querying with Couchbase (views, spatial/geo views, N1QL and FTS). For N1QL, the
+                    <codeph>couchbase.N1qlQuery</codeph> is used to create the query. </p>
+            <note type="tip">N1QL is a super-set of SQL, so if you're familiar with SQL you'll feel at ease.</note>
+            <p> Statements can be provided either in String form or using the DSL.</p>
+            <p>The <codeph>airports</codeph> route is expected to return a reponse containing a
+                    <codeph>List</codeph> several matching rows.</p>
+            <p>Just the airport name has to be selected from relevant documents in the
+                    <codeph>bucket</codeph> and filtered based on a criteria that depends on the
+                input length, so let's just do the SELECT and FROM clauses
+                first:<codeblock outputclass="language-sql"><![CDATA[queryprep = "SELECT airportname FROM `travel-sample` WHERE "]]></codeblock></p>
+            <p>Then just the correct fields can be selected to look into depending on the length of
+                the input. The user can enter either a ICAO or FAA code or a full name of an airport
+                to search for, so each scenario can be accommodated as the N1QL statement is built.
+                There can also be wildcards in the statement to give a free form expression: </p>
+
+        <codeblock outputclass="language-javascript"><![CDATA[var qs;
+if (searchTerm.length === 3) {
+    // FAA code
+    qs = "SELECT airportname from `travel-sample` WHERE faa = '" + searchTerm.toUpperCase() + "';";
+} else if (searchTerm.length === 4 &&
+      (searchTerm.toUpperCase() === searchTerm ||
+        searchTerm.toLowerCase() === searchTerm)) {
+    // ICAO code
+    qs = "SELECT airportname from `travel-sample` WHERE icao = '" + searchTerm.toUpperCase() + "';";
+} else {
+    // Airport name
+    qs = "SELECT airportname from `travel-sample` WHERE LOWER(airportname) LIKE '%" + searchTerm.toLowerCase() + "%';";
+}]]></codeblock>
+            <p>The statement is ready! You can execute this statement by wrapping it in a
+                    <codeph>couchbase.N1qlQuery.fromString()</codeph>. Here it is very simple, no
+                placeholders and no particular tuning of the query is necessary, so the simple
+                method will be used:
+                <codeblock outputclass="language-javascript"><![CDATA[bucket.query(q, callbackFn)]]> </codeblock></p>
+            <p>The results of the query are returned in a list of records in the callback, which then is added to the response:</p>
+            <codeblock outputclass="language-javascript"><![CDATA[function(err, rows) {
+    if (err) {
+      res.status(500).send({
+        error: err
+      });
+      return;
+    }
+
+    res.send({
+      data: rows,
+      context: [qs]
+    });
+  }
+]]></codeblock>
+        </section>
+
+        <section>
+            <title>More Complex Queries: Finding Routes</title>
+            <p><b>Where</b>: <codeph>'/api/flightPaths/:from/:to'</codeph></p>
+            <p><b>Goals</b>: Let the DSL guide you into making more complex N1QL queries.</p>
+            <p><b>Relevant Documentation Topics</b>: <xref href="n1ql-queries-with-sdk.dita"/>.</p>
+            <p>In this class, there are two more complex queries. The first aims at transforming the
+                human-readable airport name for the departure and arrival airports to FAA codes:</p>
+            <codeblock outputclass="language-sql">SELECT faa AS fromAirport FROM `travel-sample` WHERE airportname = "Los Angeles Intl"
+  UNION SELECT faa AS toAirport FROM `travel-sample` WHERE airportname = "San Francisco Intl"</codeblock>
+            <p>The second aims at constructing the result set of available flight paths that connect
+                the two airports: </p>
+            <codeblock outputclass="language-sql">SELECT a.name, s.flight, s.utc, r.sourceairport, r.destinationairport, r.equipment
+  FROM `travel-sample` AS r
+  UNNEST r.schedule AS s
+  JOIN `travel-sample` AS a ON KEYS r.airlineid
+  WHERE r.sourceairport = "LAX" AND r.destinationairport = "SFO" AND s.day = 6
+  ORDER BY a.name ASC</codeblock>
+            <note type="tip"> Yes, you read that right, N1QL can do joins (on a single bucket or on
+                several). It works as long as the "foreign key" described by <codeph>ON
+                    KEYS</codeph> clause can be mapped to a document's key in the joined bucket. </note>
+            <p>A specificity of N1QL that can be seen in the second statement is
+                    <codeph>UNNEST</codeph>. It extracts a sub-JSON and puts it at the same root
+                level as the bucket (so its possible to do joins on each element in this sub-JSON as
+                if they were entries in a left-hand side bucket). </p>
+            <p>For this final step, try to obtain the equivalent of these statements via the DSL and
+                see how it guides you through the possibilities of the query language. </p>
+        </section>
+        <section>
+            <title>Indexing the Data: N1QL &amp; GSI</title>
+            <p><b>Goals</b>: Use the Index DSL to make sure data is indexed for N1QL to query it.</p>
+            <p>Index management is a bit more advanced (and is already done when loading the
+                sample), so now that you've learned about N1QL, you can have a look at it. There is
+                no code example in this application, but some is presented below for your
+                reference.</p>
+                <p>For N1QL to work, you must first ensure that at least a
+                <codeph>Primary Index</codeph> has been created. For that you can use the DSL from the <codeph>Index</codeph> class:
+            </p>
+<codeblock outputclass="language-javascript"><![CDATA[bucketmanager.createPrimaryIndex(options, callbackFn)]]></codeblock>
+            <p>You can also create secondary indexes on specific fields of the JSON, for better
+                performance: </p>
+<codeblock outputclass="language-javascript"><![CDATA[bucketmanager.createIndex(options, callbackFn)]]></codeblock>
+            <p>Use options to give a name to your index and also specify the fields in case of
+                secondary index. </p>
+        </section>
+        <section><title>Full Text Search: Finding Hotels</title><p><b>Where</b>:
+                    <codeph>'/api/hotel/:description/:location'</codeph></p><p><b>Goals</b>: Use FTS
+                to search for matching Hotels. Use sub-document API to fetch the relevant data for
+                each hit.</p><p><b>Relevant Documentation Topics</b>: <xref
+                    href="full-text-searching-with-sdk.dita"/>, <xref
+                    href="../subdocument-operations.dita"/>.</p><p>In this service, the hotels can
+                be looked up using more fuzzy criteria like the content of the address or the
+                description of a hotel, using FTS. Once there are some results, fetch only the
+                relevant data for each result to be displayed in the UI using the sub-document API.
+                </p><p>The <codeph>'/api/hotel/'</codeph> route accepts two parameters,
+                    <codeph>location</codeph> and <codeph>description</codeph>, which are the two
+                possible refining criteria for a hotel search. To find hotels,
+                use:<codeblock outputclass="language-javascript"><![CDATA[couchbase.SearchQuery.term('hotel').field('type')]]></codeblock></p><p>A
+                    <codeph>ConjunctionQuery</codeph> allows you to combine multiple FTS queries
+                into one, as an AND operation. That search always includes an exact match criteria
+                that restricts it to the <codeph>hotel</codeph> data type (as reflected in the
+                    <codeph>type</codeph> field of the JSON document).</p><p>If the user provided a
+                location keyword, add a second component to the FTS query that will look for that
+                keyword in several address-related fields of the document. That is done in an OR
+                fashion, using a <codeph>Disjunction</codeph> this time:</p><codeblock outputclass="language-javascript"><![CDATA[var qp = couchbase.SearchQuery.conjuncts(couchbase.SearchQuery.term('hotel').field('type'));
+if (location && location !== '*') {
+    qp.and(couchbase.SearchQuery.disjuncts(
+        couchbase.SearchQuery.matchPhrase(location).field("country"),
+        couchbase.SearchQuery.matchPhrase(location).field("city"),
+        couchbase.SearchQuery.matchPhrase(location).field("state"),
+        couchbase.SearchQuery.matchPhrase(location).field("address")
+    ));
+  }]]></codeblock><p>Similarly, if a description keyword was provided by the user, the search query
+                can use the freeform text <codeph>description</codeph> field and
+                    <codeph>name</codeph> field of the document:</p><codeblock outputclass="language-javascript"><![CDATA[if (description && description !== '*') {
+    qp.and(
+        couchbase.SearchQuery.disjuncts(
+            couchbase.SearchQuery.matchPhrase(description).field("description"),
+            couchbase.SearchQuery.matchPhrase(description).field("name")
+        ));
+  }
+]]></codeblock><p>The <codeph>MatchPhraseQuery</codeph> can contain several words and will search
+                for variations of the words (e.g. including plural forms or words with the same
+                root...).</p><p>The compound FTS query is now ready to be executed. Build a
+                    <codeph>SearchQuery</codeph> object out of it, which also determines which FTS
+                index to use ("hotels") and allows to set various parameters (like a limit of
+                maximum 100 hits to return). The query is logged (and kept for narration) then
+                executed, returning a <codeph>SearchQueryResult</codeph>
+            object:</p><codeblock outputclass="language-javascript"><![CDATA[couchbase.SearchQuery.new('travel-search', qp).limit(100);]]></codeblock>The
+            FTS results are then iterated over, and the document corresponding to each result is
+            fetched. In actuality, only the parts of the document that will be displayed in the UI
+            are required. This is where the sub-document API comes in.<p>The sub-document API allows
+                you to fetch or mutate only a set of paths inside a JSON document, without having to
+                send the whole document back and forth. This can save network bandwidth if the
+                document is large and the parts that the application is interested in are small. So
+                here the results of the FTS search are iterated over and appropriate subdoc calls
+                are triggered:</p><codeblock outputclass="language-javascript"><![CDATA[for (var i = 0; i < rows.length; ++i) {
+      (function(row) {
+        bucket.lookupIn(row.id)
+            .get('country')
+            .get('city')
+            .get('state')
+            .get('address')
+            .get('name')
+            .get('description')
+            .execute(function (err, docFrag) {
+              if (totalHandled === -1) {
+                return;
+              }
+              var doc = {};
+              try {
+                doc.country = docFrag.content('country');
+                doc.city = docFrag.content('city');
+                doc.state = docFrag.content('state');
+                doc.address = docFrag.content('address');
+                doc.name = docFrag.content('name');
+              } catch (e) { }
+
+              // This is in a separate block since some versions of the
+              //  travel-sample data set do not contain a description.
+              try {
+                doc.description = docFrag.content('description');
+              } catch (e) { }
+
+              results.push(doc);
+                            totalHandled++;
+
+              if (totalHandled >= rows.length) {
+                res.send({
+                  data: results,
+                  context: []
+                });
+              }
+            });
+      })(rows[i]);
+    }]]></codeblock><p>Each FTS result is represented as a row dictionary with each document's
+                    <codeph>id</codeph>. The sub-document API is dedicated to fetching data
+                    (<codeph>bucket.lookupIn(documentId).get('country').get('city')...</codeph>)
+                with specific fields to be looked up: country, city, state, address, name and
+                description. In the rest of the code, the address-related fields are checked for
+                some empty values and then aggregated together and the data obtained is returned as
+                a JSON document for the browser.</p></section>
+    </body>
+</topic>

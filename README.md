@@ -2,6 +2,10 @@
 
 The Couchbase Documentation Repository for Couchbase 4+ DITA based Docs
 
+### Contributing
+A guide for contributing to the Couchbase Server Documentation can be found 
+[here](CONTRIBUTING.md).
+
 ### HTML ID tags
 All major content within the documentation should be annotated with ID
 tags to allow linking to specific sections of content within the
@@ -51,6 +55,6 @@ was forked and it was done without history.  That's a todo for later.
 
 Generating docs is done like this:
 ```
-dita -f html5 -i cb-docs.ditamap -o ~/tmp/output/
+dita -f html5 -i cb-docs.ditamap -o ~/tmp/output/ -Deditlink.remote.ditamap.url=https://github.com/couchbase/docs-cb4/edit/master/content/cb-docs.ditamap
 ```
 
