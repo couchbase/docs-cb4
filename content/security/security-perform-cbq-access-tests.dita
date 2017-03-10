@@ -1,0 +1,339 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_auth_for_admins">
+ 
+ <title>
+  Perform cbq Access Tests
+ </title>
+ 
+ <shortdesc>
+  By using cbq with appropriate username-password combinations, you can test Couchbase
+  <i>Role Based Access Control</i>.
+ </shortdesc>
+ 
+ <body>
+  
+  <section>
+   
+    <title>
+     Access cbq
+    </title>
+   
+    <p>
+     The <codeph>cbq</codeph> tool provides a command-line shell, whereby <i>N1QL</i> queries can be issued. See
+     <xref href="../sdk/webui-cli-access.dita" scope="local" format="dita">Browser and CLI Access</xref>
+     for details on the tool's location. See
+     <xref href="../getting-started/try-a-query.dita" scope="local" format="dita">Run Your First N1QL Query</xref>
+     for an introduction to using Nq1QL.
+    </p>
+   
+  </section>
+  
+  <section>
+   
+   <title>
+    Start and Manage a Reader-Session
+   </title>
+   
+   <p>
+    RBAC requires that programs and applications authenticate with appropriate credentials, just like users. When
+    you start a <codeph>cbq</codeph> session therefore, you must specify the username and password of a user
+    who has been granted roles that are appropriate for tasks you wish to perform. 
+   </p>
+   
+   <p>
+    To start a <codeph>cbq</codeph> session for a reader of data within the
+    <codeph>composers</codeph> bucket, enter the following against the command-line prompt:
+   </p>
+   
+   <codeblock outputclass="bourne">$ ./cbq -e http://localhost:8091 -u=composerReader -p=composerReader
+Connected to : http://localhost:8091/. Type Ctrl-D or \QUIT to exit.
+    
+Path to history file for the shell : /Users/username/.cbq_history
+cbq></codeblock>
+   
+   <p>
+    The <codeph>cbq</codeph> prompt has now appeared, which means that you can enter N1QL queries for the user
+    identified by the credentials you just specified. Enter the
+    following N1QL query, to return all data from the <codeph>composers</codeph> bucket: 
+   </p>
+   
+   <codeblock outputclass="javascript">cbq> SELECT * FROM composers;</codeblock>
+   
+   <p>
+    This returns the following:
+   </p>
+   
+   <codeblock outputclass="javascript">{
+    "requestID": "54d5c199-47c1-415a-bdf1-c4c09a9a5695",
+    "errors": [
+        {
+            "code": 4000,
+            "msg": "No index available on keyspace philosophers that matches your query. Use CREATE INDEX or CREATE PRIMARY INDEX to create an index, or check that your expected index is online."
+        }
+    ],
+    "status": "fatal",
+    "metrics": {
+        "elapsedTime": "1.199283ms",
+        "executionTime": "1.160132ms",
+        "resultCount": 0,
+        "resultSize": 0,
+        "errorCount": 1
+    }
+}</codeblock>   
+   
+   <p>
+    An error has been returned, notifying you that no index yet exists on the <codeph>composers</codeph> bucket. To create
+    an index, enter the following N1QL statement:
+   </p>
+   
+   <codeblock outputclass="javascript">cbq> CREATE PRIMARY INDEX composersIndex4 ON composers USING GSI;</codeblock>
+   
+   <p>
+    The response to this index-creation operation is as follows:
+   </p>
+
+   <codeblock outputclass="javascript">{
+    "requestID": "438e4f8f-b26a-4da3-a02c-8edd26098c80",
+    "signature": null,
+    "results": [
+    ],
+    "errors": [
+        {
+            "code": 10000,
+            "msg": "User does not belong to a specified role. Keyspace composers"
+        }
+    ],
+    "status": "stopped",
+    "metrics": {
+        "elapsedTime": "5.501864ms",
+        "executionTime": "5.475007ms",
+        "resultCount": 0,
+        "resultSize": 0,
+        "errorCount": 1
+    }
+}</codeblock>
+   
+   <p>
+    Another error has been returned, this time stating that the current user <codeph>does not belong to
+    a specified role</codeph>. This indicates that the role associated with the current user, that of
+    read-access to data in the <codeph>composers</codeph> bucket, is insufficient to allow index-creation.
+    Index-creation requires the <i>Query Manage Index</i> role, which you allocated to 
+    <codeph>composerIndexMaker</codeph>.
+   </p>
+   
+  </section>
+  
+  <section>
+   <title>
+    Start and Manage an Index-Writer Session
+   </title>
+   
+   <p>
+    Exit the current <codeph>cbq</codeph> session by hiting <codeph>Ctrl-D</codeph>. Then, start a
+    new session as follows:
+   </p>
+   
+   <codeblock outputclass="bourne">$ ./cbq -e http://localhost:8091 -u=composersIndexMaker -p=composersIndexMaker
+Connected to : http://localhost:8091/. Type Ctrl-D or \QUIT to exit.
+    
+Path to history file for the shell : /Users/username/.cbq_history 
+cbq> </codeblock>
+   
+   <p>
+    Note that the credentials with which you have started this new session are those of the user who was assigned
+    the <i>Query Manage Index</i> role.
+   </p>
+   
+   <p>
+    Re-attempt to create an index on the <codeph>composers</codeph> bucket, and observe the response.
+   </p>
+
+   <codeblock outputclass="javascript">cbq> CREATE PRIMARY INDEX composersIndex ON composers USING GSI;
+{
+    "requestID": "a2caf557-43e0-4214-a77e-ee47ee4022b7",
+    "signature": null,
+    "results": [
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "1.255453164s",
+        "executionTime": "1.255435173s",
+        "resultCount": 0,
+        "resultSize": 0
+    }
+}
+cbq></codeblock>
+   
+   <p>
+    The response contains a <codeph>"status"</codeph> value of <codeph>"success"</codeph>. Therefore,
+    queries can now be performed on bucket-data.
+   </p>
+   
+  </section>
+  
+  <section>
+   
+   <title>
+    Re-start the Reader-Session
+   </title>
+   
+   <p>
+    Again exit the current session by hitting <codeph>Ctrl-D</codeph>. Restart the session for
+    the user <codeph>composerReader</codeph>, and again attempt to return all bucket-data:
+   </p>
+   
+   <codeblock outputclass="javascript">$ ./cbq -e http://localhost:8091 -u=composerReader -p=composerReader
+Connected to : http://localhost:8091/. Type Ctrl-D or \QUIT to exit.
+    
+Path to history file for the shell : /Users/username/.cbq_history
+cbq> SELECT * FROM composers;
+{
+    "requestID": "f3f939ed-7b03-4eeb-b345-a800cd6e4936",
+    "signature": {
+        "*": "*"
+    },
+    "results": [
+        {
+            "composers": {
+                "born": "1685",
+                "died": "1750",
+                "name": "Johann Sebastian Bach",
+                "title": "Mass in B Minor"
+            }
+        },
+    {
+            "composers": {
+                "born": "1756",
+                "died": "1791",
+                "name": "Wolfgang Amadeus Mozart",
+                "title": "Don Giovanni"
+            }
+        },
+        {
+             "composers": {
+                 "born": "1770",
+                 "died": "1827",
+                 "name": "Ludwig Van Beethoven",
+                 "title": "Fidelio"
+            }
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "8.87967ms",
+        "executionTime": "8.683901ms",
+        "resultCount": 3,
+        "resultSize": 614
+    }
+}
+cbq></codeblock>
+   
+   <p>
+    This time, all data has been successfully returned. Continue by making a change to a data-element, and
+    observing the response:
+   </p>
+   
+   <codeblock outputclass="javascript">cbq> UPDATE composers SET born = "1773" WHERE name = "Ludwig Van Beethoven";
+{
+   "requestID": "6195bab8-2300-45a6-b340-a2476a87987c",
+   "signature": null,
+   "results": [
+   ],
+   "errors": [
+       {
+           "code": 10000,
+           "msg": "User does not belong to a specified role. Keyspace composers"
+       }
+   ],
+   "status": "stopped",
+   "metrics": {
+       "elapsedTime": "1.892719ms",
+       "executionTime": "1.874123ms",
+       "resultCount": 0,
+       "resultSize": 0,
+       "errorCount": 1
+   }
+}
+cbq></codeblock>
+   
+   <p>
+    Again, an error is returned indicating that the user has the wrong role for the
+    attempted operation. This is because the <codeph>UPDATE</codeph> operation requires
+    read-write permission rather than read; and so must be performed by the previously
+    defined <codeph>composersReaderWriter</codeph> user.
+   </p>
+   
+   <p>
+    Again, exit the current <codeph>cbq</codeph> session by hitting <codeph>Ctrl-D</codeph>.
+   </p>
+   
+  </section>
+  
+  <section>
+   
+   <title>
+    Start and Manage a Reader-Writer Session
+   </title>
+   
+   <p>
+    Start a new <codeph>cbq</codeph> session, providing the credentials of the user with read-write permission on the bucket.
+    Then, perform the 
+    required <codeph>UPDATE</codeph> operation, and check the results by means of a subsequent query:
+   </p>
+
+   <codeblock outputclass="javascript">$ ./cbq -e http://localhost:8091 -u=composersReaderWriter -p=composersReaderWriter
+Connected to : http://localhost:8091/. Type Ctrl-D or \QUIT to exit.
+    
+Path to history file for the shell : /Users/username/.cbq_history 
+cbq> UPDATE composers SET born = "1773" WHERE name = "Ludwig Van Beethoven";
+{
+    "requestID": "8ffff862-f646-49f4-b2b7-83e45a9e9fa9",
+    "signature": null,
+    "results": [
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "9.116733ms",
+        "executionTime": "9.094233ms",
+        "resultCount": 0,
+        "resultSize": 0,
+        "mutationCount": 1
+    }
+}
+cbq> SELECT * FROM composers WHERE name="Ludwig Van Beethoven";
+{
+    "requestID": "47611014-882d-4971-aa86-9665fd6fa437",
+    "signature": {
+        "*": "*"
+    },
+    "results": [
+        {
+            "composers": {
+                "born": "1773",
+                "died": "1827",
+                "name": "Ludwig Van Beethoven",
+                "title": "Fidelio"
+             }
+         }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "8.192009ms",
+        "executionTime": "8.166378ms",
+        "resultCount": 1,
+        "resultSize": 199
+    }
+}
+cbq></codeblock>
+   
+   <p>
+    As the output confirms, the correct credentials for the write-operation were supplied, and the specified data-value was
+    therefore successfully updated.
+   </p>
+
+  </section>
+  
+ </body>
+
+</topic>
