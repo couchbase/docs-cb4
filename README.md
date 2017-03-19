@@ -15,7 +15,7 @@ must be replaced with underscores.
 
 ### Code Samples
 Inclusion of code samples is an important aspect of our documentation.
-Code-samples within our documentation should be commited to the
+Code-samples within our documentation should bde commited to the
 devguide-examples repository, and then the same code should be
 included within the documentation directly as a code block.  These
 code-blocks should have a comment on the first line indicating the
