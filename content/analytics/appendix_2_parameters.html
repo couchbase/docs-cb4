@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta description="A description of Couchbase Analytics query performanc tuning.">
+    <title>Appendix 2. Performance Tuning</title>
+  </head>
+  <body>
+    <main role="main"><article role="article" aria-labelledby="ariaid-title1">
+    <div class="body">
+      <!--
+ ! Licensed to the Apache Software Foundation (ASF) under one
+ ! or more contributor license agreements.  See the NOTICE file
+ ! distributed with this work for additional information
+ ! regarding copyright ownership.  The ASF licenses this file
+ ! to you under the Apache License, Version 2.0 (the
+ ! "License"); you may not use this file except in compliance
+ ! with the License.  You may obtain a copy of the License at
+ !
+ !   http://www.apache.org/licenses/LICENSE-2.0
+ !
+ ! Unless required by applicable law or agreed to in writing,
+ ! software distributed under the License is distributed on an
+ ! "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ ! KIND, either express or implied.  See the License for the
+ ! specific language governing permissions and limitations
+ ! under the License.
+ !-->
+
+<p>The SET statement can be used to override some cluster-wide configuration parameters for a specific request:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>      SET &lt;IDENTIFIER&gt; &lt;STRING_LITERAL&gt;
+</code></pre>
+</div>
+
+<p>As parameter identifiers are qualified names (containing a ‘.’) they have to be escaped using backticks (``).
+Note that changing query parameters will not affect query correctness but only impact performance
+characteristics, such as response time and throughput.</p>
+
+<h2 id="parallelism-parameter"><a id="Parallelism_parameter">Parallelism Parameter</a></h2>
+<p>The system can execute each request using multiple cores on multiple machines (a.k.a., partitioned parallelism)
+in a cluster. A user can manually specify the maximum execution parallelism for a request to scale it up and down
+using the following parameter:</p>
+
+<ul>
+  <li>
+    <p><strong>compiler.parallelism</strong>: the maximum number of CPU cores can be used to process a query.
+There are three cases of the value <em>p</em> for compiler.parallelism:</p>
+
+    <ul>
+      <li>
+        <p><em>p</em> &lt; 0 or <em>p</em> &gt; the total number of cores in a cluster:  the system will use all available cores in the
+cluster;</p>
+      </li>
+      <li>
+        <p><em>p</em> = 0 (the default):  the system will use the storage parallelism (the number of partitions of stored datasets)
+as the maximum parallelism for query processing;</p>
+      </li>
+      <li>
+        <p>all other cases:  the system will use the user-specified number as the maximum number of CPU cores to use for
+executing the query.</p>
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<h2 id="memory-parameters"><a id="Memory_parameters">Memory Parameters</a></h2>
+<p>In the system, each blocking runtime operator such as join, group-by and order-by
+works within a fixed memory budget, and can gracefully spill to disks if
+the memory budget is smaller than the amount of data they have to hold.
+A user can manually configure the memory budget of those operators within a query.
+The supported configurable memory parameters are:</p>
+
+<ul>
+  <li>
+    <p><strong>compiler.groupmemory</strong>: the memory budget that each parallel group-by operator instance can use;
+32MB is the default budget.</p>
+  </li>
+  <li>
+    <p><strong>compiler.sortmemory</strong>: the memory budget that each parallel sort operator instance can use;
+32MB is the default budget.</p>
+  </li>
+  <li>
+    <p><strong>compiler.joinmemory</strong>: the memory budget that each parallel hash join operator instance can use;
+32MB is the default budget.</p>
+  </li>
+</ul>
+
+<p>For each memory budget value, you can use a 64-bit integer value
+with a 1024-based binary unit suffix (for example, B, KB, MB, GB).
+If there is no user-provided suffix, “B” is the default suffix. See the following examples.</p>
+
+<h5 id="example">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SET `compiler.groupmemory` "64MB"
+
+SELECT msg.authorId, COUNT(*)
+FROM GleambookMessages msg
+GROUP BY msg.authorId;
+</code></pre>
+</div>
+
+<h5 id="example-1">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SET `compiler.sortmemory` "67108864"
+
+SELECT VALUE user
+FROM GleambookUsers AS user
+ORDER BY ARRAY_LENGTH(user.friendIds) DESC;
+</code></pre>
+</div>
+
+<h5 id="example-2">Example</h5>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SET `compiler.joinmemory` "132000KB"
+
+SELECT u.name AS uname, m.message AS message
+FROM GleambookUsers u JOIN GleambookMessages m ON m.authorId = u.id;
+</code></pre>
+</div>
+
+
+    </div>
+    </article>
+    </main>
+  </body>
+</html>
