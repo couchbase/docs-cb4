@@ -3,43 +3,219 @@
   PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
 <concept id="topic_9" xml:lang="en-US">
   <title  id="title__Toc272567416">Subqueries</title>
-	<shortdesc>A subquery is an expression that is evaluated by executing an inner SELECT query.</shortdesc>
-  <conbody >
-    <p>When an expression is 
-      contained in a N1QL statement, the expression is evaluated once for every input document to the statement. 
-      In the case of a subquery expression, the inner SELECT is executed once for every input document to the outer 
-      statement. A subquery expression returns an array every time it is evaluated; the array contains the results of 
-      the inner SELECT query. A subquery can refer to variables in the outer statement.</p>
-<p>A subquery is just another expression, so it can appear in most places where an expression can
-      appear; typically, a SELECT list or a WHERE clause. Subqueries are mostly used in SELECT,
-      UPDATE and DELETE statements. Many queries that use subqueries can be made to run faster by
-      rewriting them to use JOINs instead of subqueries. </p>
-   <p>In N1QL, if a subquery has a FROM clause, then USE KEYS is mandatory for the primary keyspace
-      of the subquery. </p> 
-    <p >Here's an example of a subquery breakdown. Let’s say you want to find all purchases in April 2014 where at least one product costs over $500. You’d break this down into two queries. </p>
-    <ul>
-       
-    <li >What products were purchased in April, 2014?</li>
-      <li >Of those products, what products cost more than $500?</li>
-    </ul>
-    
-    <p >Each query builds on the results of the previous one. The first query finds the 
-      products purchased in April, 2014. The second query is a subquery. It takes the result 
-      set from the first query, and finds the products that cost more than $500. 
+	<shortdesc>In N1QL, a subquery is a SELECT query that is a constituent part of another N1QL query
+    or subquery.</shortdesc>
+  <conbody>
+    <p> Using subqueries, you can create multiple levels of nesting of queries in a whole query. The
+      outer levels of queries are called outer or parent queries, and inner level subqueries are
+      called inner or child queries, or simply subqueries.</p>
+      <p>Currently, a
+        subquery in N1QL is limited to a SELECT query, whereas the outermost parent query can be any
+        DML statement, such as SELECT, INSERT, UPDATE, DELETE or MERGE.</p>
+    <p>Typically, a subquery can appear itself as a SELECT statement, or it can be a constituent
+      part of another language expression used in the parent query.</p>
+    <p/>
+  
+  
+  <section>
+    <title>Subquery Expressions</title>
+    <p>Subqueries are N1QL expressions, and N1QL evaluates them similar to any other N1QL <xref
+          href="https://developer.couchbase.com/documentation/server/4.5/n1ql/n1ql-language-reference/index.html"
+          format="html" scope="external">language expressions</xref>. Subquery expressions can be
+        combined with other N1QL expressions, and used at most parts of a query where generic
+        expressions can be used, for example, a SELECT projection list or a WHERE-clause, or
+        FROM-clause, or other DML statements such as INSERT, UPDATE, DELETE, or MERGE statements. </p>
+      <p>A subquery is an expression that is evaluated by executing an inner SELECT query. When an
+        expression is contained in a N1QL statement, the expression is evaluated once for every
+        input document to the statement, and same applies to a subquery-expression:<ul
+          id="ul_elr_wp2_3z">
+          <li>
+            In the case of a subquery expression, the inner SELECT or subquery is
+              executed once for every input document considered in the outer query. 
+          </li>
+          <li>
+            A subquery expression returns an array every time it is evaluated; and the
+              array contains the results of the inner SELECT subquery. 
+            <p/>
+          </li>
+        </ul></p>
+  </section><section>
+    <title>Nested Paths and FROM Clause</title>
+    <p>In N1QL, <xref
+          href="https://developer.couchbase.com/documentation/server/4.5/n1ql/n1ql-intro/queriesandresults.html"
+          format="html" scope="external">nested paths</xref> indicate an expression to access nested
+        sub-documents within a JSON document. For example, <ul id="ul_iqp_cq2_3z">
+          <li> The latitude of a location in the type = airport documents in the travel-sample are
+            in the geo subdocument, and can be addressed as the nested path `travel-sample`.geo.lat </li>
+          <li> A period (.) notation is used to address subdocument fields within a document. </li>
+        </ul>N1QL restricts the usage of nested paths in the FROM-clause of a outermost parent
+        query. The parent query can have only a keyspace identifier or a subquery expression in the
+        FROM-clause. Starting with Couchbase Server 5.0 version, a subquery can use nested paths in
+        the FROM-clause of the subquery. </p>
+      <p>See SELECT syntax for more details. </p>
+      <p>
+        <note>In earlier Couchbase Server versions 4.5 and 4.6, nested paths cannot be used in the
+          FROM-clause of any query or subquery.</note>
       </p>
-    <p >The final result set contains those products purchased in April, 2014 with a price over $500.</p>
- 
- <p>Example:</p>
-    <p>List all purchases in April 2014 having at least one product costing over $500. </p>
- <codeblock>
- SELECT purchases.purchaseId, l.product 
- FROM purchases UNNEST purchases.lineItems l 
- WHERE DATE_PART_STR(purchases.purchasedAt,"month") = 4
-      AND DATE_PART_STR(purchases.purchasedAt,"year") = 2014 
-      AND EXISTS (SELECT product.productId FROM product USE KEYS l.product WHERE product.unitPrice > 500);
-  
- </codeblock>
-  
-  
-  </conbody>
+  </section><section><title>Correlated Subquery and JOINs</title>A subquery that refers to variables, aliases,
+      attributes, or keyspace in the outer statement is called as Correlated subquery. These queries
+      are special because their performance characteristics can be very different from
+      non-correlated queries. Typically, correlated queries are expensive, and query engines take
+      special care in planning and executing such query. <p dir="ltr">For non-correlated queries, a
+        subquery is evaluated once and resulting values are substituted in the parent query for all
+        of the documents at the outer level. However, when a query includes a correlated subquery,
+        the evaluation of the subquery depends on the outer query for its values. Because, the
+        subquery refers some values or attributes in the outer query. Hence, the subquery is
+        executed repeatedly, once for each document that is selected in the outer query.</p><p
+        dir="ltr">In N1QL, if a correlated subquery has a FROM-clause, then the USE KEYS clause is
+        mandatory for the primary keyspace of the subquery.</p><p>Correlated subqueries can be
+        alternatively formulated using JOINs since conceptually, a correlated query execution
+        involves same steps as that of JOIN. <ul id="ul_h5m_pq2_3z">
+          <li>For instance, evaluating nested subquery corresponding to each outer query document is
+            equivalent to a nested-loop-join operation. </li>
+          <li>This is one reason for the above mentioned mandatory requirement of USE KEYS clause
+            for certain correlated queries using FROM-clause. </li>
+          <li>In general, N1QL recommends usage of JOIN queries when possible, instead of
+            semantically equivalent correlated sub-queries. However, in some cases, it may be easier
+            or intuitive to formulate some queries using sub-queries (instead of JOINs). In such
+            case, it is recommended to understand the EXPLAIN query plans and performance of both
+            queries.</li>
+        </ul></p></section><section><title>Examples</title><p>Example 1- Here is an example of aggregating using correlated
+        subquery expression in projection. This query finds the top 3 overall rated hotels. The
+        subquery in the projection finds the average Overall rating across all rating of the given
+        hotel document ‘t’. Note also that the subquery uses nested paths in the from-clause.</p><p>
+        <codeblock>SELECT name, (SELECT raw avg(s.ratings.Overall)
+              FROM   t.reviews  as s)[0] AS overall_avg_rating
+FROM   `travel-sample` AS t 
+WHERE type = "hotel" 
+ORDER BY overall_avg_rating DESC
+LIMIT 3;
+[
+  {
+    "name": "Culloden House Hotel",
+    "overall_avg_rating": 5
+  },
+  {
+    "name": "The Bulls Head",
+    "overall_avg_rating": 5
+  },
+  {
+    "name": "La Pradella",
+    "overall_avg_rating": 5
+  }
+]</codeblock>
+      </p><p>Example 2: The following query shows how to use correlated subquery expression in
+        projection with predicates and sorted results on specific nested fields. This query finds
+        flight schedules starting after 10PM from SFO airport.</p><p>
+        <codeblock>SELECT  id, sourceairport, destinationairport,
+(SELECT s.*
+ FROM `travel-sample`.schedule s
+ WHERE s.utc > "22:00:00"
+ ORDER BY s.utc)  after_10pm
+FROM `travel-sample` 
+WHERE type = "route" and sourceairport = "SFO"
+limit 2;
+[
+  {
+    "after_10pm": [
+      {
+        "day": 2,
+        "flight": "DL708",
+        "utc": "22:07:00"
+      },
+      {
+        "day": 6,
+        "flight": "DL868",
+        "utc": "23:00:00"
+      }
+    ],
+    "destinationairport": "LHR",
+    "id": 21756,
+    "sourceairport": "SFO"
+  },
+  {
+    "after_10pm": [
+      {
+        "day": 3,
+        "flight": "WS580",
+        "utc": "22:42:00"
+      }
+    ],
+    "destinationairport": "YYC",
+    "id": 64657,
+    "sourceairport": "SFO"
+  }
+]
+</codeblock>
+      </p><p>Example 3: The following query uses correlated subquery expression as predicate in the
+        WHERE-clause, and finds the source airports from which more than 4 flights are scheduled on
+        day 1.</p><p>
+        <codeblock>SELECT airline, sourceairport     
+FROM  `travel-sample`
+WHERE  type = "route" AND (SELECT raw count(*) 
+        FROM   `travel-sample`.schedule as s WHERE s.day = 1)[0]  > 4
+limit 3;
+[
+  {
+    "airline": "FR",
+    "sourceairport": "BRE"
+  },
+  {
+    "airline": "WX",
+    "sourceairport": "ANR"
+  },
+  {
+    "airline": "BK",
+    "sourceairport": "TSN"
+  }
+</codeblock>
+      </p>Example 4: The following query finds the top 3 hotels and number of reviewers, which have
+      Overall rating at least 4, and rated by minimum 6 people. Note that it is a correlated
+      subquery expression in the LET clause, with nested paths (i.e t.ratings) in the subquery FROM-path.<p>
+        <codeblock>SELECT name, cnt_reviewers
+FROM   `travel-sample` AS t 
+LET cnt_reviewers = (SELECT raw count(*)
+                     FROM t.reviews AS s 
+                     WHERE s.ratings.Overall >= 4)[0] 
+WHERE type = "hotel" and cnt_reviewers >= 6
+ORDER BY cnt_reviewers DESC
+LIMIT 3;
+
+[
+  {
+    "name": "Holiday Inn London Kensington Forum",
+    "x": 9
+  },
+  {
+    "name": "Campanile",
+    "x": 9
+  },
+  {
+    "name": "Drop in Chalets",
+    "x": 9
+  }
+]
+</codeblock>
+      </p>Example 5: This example shows usage of subquery expressions in MERGE statement. This query
+      uses constant expression as the MERGE source data, and updates the vacancy to false for
+      matching documents. For the sake of demonstrating update operation, this query saves the
+      current value of vacancy to a new attribute old_vacancy.<p>
+        <codeblock>MERGE INTO `travel-sample` t USING [{"id":"21728"},{"id":"21730"}] source
+ON KEY "hotel_"|| source.id
+WHEN MATCHED THEN UPDATE SET t.old_vacancy = t.vacancy, t.vacancy = false 
+RETURNING meta(t).id, t.old_vacancy, t.vacancy;
+[
+  {
+    "id": "hotel_21728",
+    "old_vacancy": false,
+    "vacancy": false
+  },
+  {
+    "id": "hotel_21730",
+    "old_vacancy": true,
+    "vacancy": false
+  }
+]
+</codeblock>
+      </p></section></conbody>
 </concept>
