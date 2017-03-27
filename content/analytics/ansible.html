@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta description="A description of running a Couchbase Analytics cluster using Ansible.">
+    <title>Running a Couchbase Analytics cluster using Ansible</title>
+  </head>
+  <body>
+    <main role="main"><article role="article" aria-labelledby="ariaid-title1">
+    <div class="body">
+      <!--
+ ! Copyright 2016-2017 Couchbase, Inc.
+ !-->
+
+<!--
+ ! Licensed to the Apache Software Foundation (ASF) under one
+ ! or more contributor license agreements.  See the NOTICE file
+ ! distributed with this work for additional information
+ ! regarding copyright ownership.  The ASF licenses this file
+ ! to you under the Apache License, Version 2.0 (the
+ ! "License"); you may not use this file except in compliance
+ ! with the License.  You may obtain a copy of the License at
+ !
+ !   http://www.apache.org/licenses/LICENSE-2.0
+ !
+ ! Unless required by applicable law or agreed to in writing,
+ ! software distributed under the License is distributed on an
+ ! "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ ! KIND, either express or implied.  See the License for the
+ ! specific language governing permissions and limitations
+ ! under the License.
+ !-->
+
+<ul>
+  <li><a href="#Introduction">Introduction</a></li>
+  <li><a href="#Prerequisites">Prerequisites</a></li>
+  <li><a href="#config">Configuration and parameters</a></li>
+  <li><a href="#lifecycle">Manage the lifecycle of your instance</a></li>
+</ul>
+
+<h2 id="introduction"><a id="Introduction">Introduction</a></h2>
+<p>This installation option provides several wrapped <a href="https://www.ansible.com/">Ansible</a>-based
+scripts to deploy, start, stop, and erase a Couchbase Analytics instance on a multi-node cluster without requiring
+users to interact with each individual node in the cluster.</p>
+
+<h2 id="prerequisites"><a id="Prerequisites">Prerequisites</a></h2>
+<ul>
+  <li>
+    <p>Supported operating systems: <strong>Linux</strong> and <strong>MacOS</strong></p>
+  </li>
+  <li>
+    <p>Install pip on your client machine:</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code> CentOS: sudo yum install python-pip
+ Ubuntu: sudo apt-get install python-pip
+ MacOS:  brew install pip
+</code></pre>
+    </div>
+  </li>
+  <li>
+    <p>Install Ansible, boto, and boto3 on your client machine:</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code> pip install ansible
+ pip install boto
+ pip install boto3
+</code></pre>
+    </div>
+
+    <p><strong>Make sure that the version of Ansible is no less than 2.2.1.0.</strong></p>
+  </li>
+  <li>
+    <p>Download a released <a href="http://asterixdb.apache.org/download.html">simple server package</a>.</p>
+
+    <p>Alternatively, you can follow the <a href="https://github.com/apache/asterixdb#build-from-source">instruction</a> to
+build from source.</p>
+  </li>
+  <li>
+    <p>In the extracted directory from the <code class="highlighter-rouge">simple server package</code>, navigate to <code class="highlighter-rouge">opt/ansible/</code></p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code>$cd opt/ansible
+</code></pre>
+    </div>
+
+    <p>The following files and directories are in the directory <code class="highlighter-rouge">opt/ansible</code>:</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code>README  bin  conf  yaml
+</code></pre>
+    </div>
+
+    <p><code class="highlighter-rouge">bin</code> contains scripts that deploy, start, stop and erase a multi-node Couchbase Analytics instance, according to
+the configuration specified in files under <code class="highlighter-rouge">conf/</code>. <code class="highlighter-rouge">yaml</code> contains internal Ansible scripts that the shell
+scripts in <code class="highlighter-rouge">bin</code> use.</p>
+  </li>
+</ul>
+
+<h2 id="configuration-and-parameters"><a id="config">Configuration and parameters</a></h2>
+<ul>
+  <li>
+    <p><strong>Parameters</strong>. Edit the instance configuration file <code class="highlighter-rouge">conf/cc.conf</code> when necessary.
+You can add/update whatever parameters in the <strong>[common]</strong> and <strong>[nc]</strong> sections (except IPs and ports).
+For example:</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code>  [common]
+  log.level=INFO
+
+  [nc]
+  txn.log.dir=txnlog
+  iodevices=iodevice
+  command=asterixnc
+</code></pre>
+    </div>
+
+    <p>More parameters and their usage can be found <a href="ncservice.html#Parameters">here</a>.
+Note that with this installation option, all parameters in the <strong>[cc]</strong> and <strong>[ncservice]</strong>
+section will use defaults and cannot be changed.</p>
+  </li>
+  <li>
+    <p><strong>Nodes and account</strong>. Edit the inventory file <code class="highlighter-rouge">conf/inventory</code> when necessary.
+You mostly only need to sepecify the node DNS names (or IPs) for the cluster controller, i.e., the master node,
+in the <strong>[cc]</strong> section, and node controllers, i.e., slave nodes, in the <strong>[ncs]</strong> section.
+The following example configures a cluster with two slave nodes (172.0.1.11 and 172.0.1.12) and
+one master node (172.0.1.10).</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code> [cc]
+ 172.0.1.10
+
+ [ncs]
+ 172.0.1.11
+ 172.0.1.12
+</code></pre>
+    </div>
+
+    <p><strong>Configure passwordless ssh from your current client that runs the scripts to all nodes listed
+in <code class="highlighter-rouge">conf/inventory</code>.</strong>
+If the ssh user account for target machines is different from your current username, please uncomment
+and edit the following two lines:</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code>  ;[all:vars]
+  ;ansible_ssh_user=&lt;fill with your ssh account username&gt;
+</code></pre>
+    </div>
+
+    <p>If you want to specify advanced Ansible builtin variables, please refer to the
+<a href="http://docs.ansible.com/ansible/intro_inventory.html">Ansible documentation</a>.</p>
+  </li>
+  <li>
+    <p><strong>Remote working directories</strong>. Edit <code class="highlighter-rouge">conf/instance_settings.yml</code> to change the instance binary directories
+when necessary. By default, the binary directory will be under the home directory (as the value of
+Ansible builtin variable ansible_env.HOME) of the ssh user account on each node.</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code>   # The parent directory for the working directory.
+   basedir: ""
+
+   # The working directory.
+   binarydir: "/"
+</code></pre>
+    </div>
+  </li>
+</ul>
+
+<h2 id="manage-the-lifecycle-of-your-instance"><a id="lifecycle">Manage the lifecycle of your instance</a></h2>
+<ul>
+  <li>
+    <p>Deploy the Couchbase Analytics binary to all nodes:</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code>bin/deploy.sh
+</code></pre>
+    </div>
+  </li>
+  <li>
+    <p>Launch your cluster instance:</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code>bin/start.sh
+</code></pre>
+    </div>
+
+    <p>Now you can use the multi-node Couchbase Analytics instance.</p>
+  </li>
+  <li>
+    <p>If you want to stop the the multi-node Couchbase Analytics instance, run the following script:</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code> bin/stop.sh
+</code></pre>
+    </div>
+  </li>
+  <li>
+    <p>If you want to remove the Couchbase Analytics binary on all nodes, run the following script:</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code> bin/erase.sh
+</code></pre>
+    </div>
+  </li>
+</ul>
+
+    </div>
+    </article>
+    </main>
+  </body>
+</html>
