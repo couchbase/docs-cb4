@@ -18,25 +18,22 @@
       clauses of the DML statements such as projection, WHERE predicates, FROM data source etc. For
       example, this function can be used to integrate with Couchbase FTS and run fuzzy text searches
       in N1QL queries, or INSERT-SELECT statement to import external data into Couchbase Server.</p>
+    <p><codeph>CURL()</codeph> function is enabled by default. Full Administrators can access this
+      function and allow access to users by defining a QUERY_EXTERNAL_ACCESS role. </p>
       
     <section id="section_vm2_vcw_1z">
       <title>Syntax</title>
-      <p><codeph>CURL(request, url, [options])</codeph></p>
+      <p><codeph>CURL(url, [options])</codeph></p>
       <dl>
         <dlentry>
           <dt>Arguments</dt>
           <dd>
             <ul>
-              <li><codeph>request</codeph> - is a string and is one of the supported HTTP request
-                GET or POST methods.</li>
               <li><codeph>url</codeph> - is a string representing the URL of the data source.</li>
               <li><codeph>options</codeph> - is an optional JSON object representing various
                 supported options. This includes options and parameters to be sent to the URL source
                 endpoint.</li>
             </ul>
-            <note>Currently all values passed to the arguments must be static values and cannot
-              include any other N1QL functions or expressions that may have to be evaluated,
-              including any references to documents or attributes.</note>
           </dd>
         </dlentry>
        <dlentry>
@@ -48,7 +45,7 @@
               evaluated. </p>
             <p>For example, check the following example:</p>
             <p>
-              <codeblock>SELECT CURL(TO_UPPER(“POST”), b.url, { “data” : “address=”||b.data }) 
+              <codeblock outputclass="json">SELECT CURL(TO_UPPER(“POST”), b.url, { “data” : “address=”||b.data }) 
 FROM bucket b;</codeblock>
             </p>
             <p>This example is invalid, because:</p>
@@ -87,7 +84,7 @@ FROM bucket b;</codeblock>
                   <row>
                     <entry><codeph>user</codeph></entry>
                     <entry>Server username and password.</entry>
-                    <entry>[:PASSWORD]USERNAME</entry>
+                    <entry>USERNAME[:PASSWORD]</entry>
                   </row>
                   <row>
                     <entry><codeph>basic</codeph></entry>
@@ -123,6 +120,17 @@ FROM bucket b;</codeblock>
                 </thead>
                 <tbody>
                   <row>
+                    <entry><codeph>get</codeph></entry>
+                    <entry>The Get request for CURL.</entry>
+                    <entry>BOOLEAN <p>Example: <codeph>{"get": true}</codeph></p></entry>
+                  </row>
+                  <row>
+                    <entry><codeph>request</codeph></entry>
+                    <entry>Sets the request method. This only accepts GET or POST requests. This is
+                      case sensitive.</entry>
+                    <entry>String<p>Example: <codeph>{“request”:”POST”}</codeph></p></entry>
+                  </row>
+                  <row>
                     <entry><codeph>connect-timeout</codeph></entry>
                     <entry>The maximum time allowed for connection in seconds.</entry>
                     <entry>Integer<p>Example: <codeph>{"connect-timeout":30}</codeph></p></entry>
@@ -136,13 +144,16 @@ FROM bucket b;</codeblock>
                     <entry><codeph>data</codeph></entry>
                     <entry>POST data to be sent to the HTTP/REST service. The string data should be
                       formatted exactly same as HTTP POST data.</entry>
-                    <entry>String<p>Example:
-                      <codeph>{"data":"address=Half+Moon+Bay"}</codeph></p></entry>
+                    <entry>String or [...string, string….]<p>Example:
+                          <codeph>{"data":"address=Half+Moon+Bay"}</codeph></p><p><codeph>{"data":"address=Half+Moon+Bay,california"}</codeph></p></entry>
                   </row>
                   <row>
                     <entry><codeph>header</codeph></entry>
                     <entry>Passes custom header line to the server.</entry>
-                    <entry>String<p>Example: <codeph>{"header":"Content-Type: application/json"}</codeph></p></entry>
+                    <entry>String or [...string, string….]<p>Example:
+                          <codeph>{"header":"Content-Type:
+                          application/json"}</codeph></p><p><codeph>{"header":"Content-Type:
+                          application/json, Content-Length: 115"}</codeph></p></entry>
                   </row>
                   <row>
                     <entry><codeph>show-error</codeph></entry>
@@ -185,12 +196,12 @@ FROM bucket b;</codeblock>
           scope="external">https://developers.google.com/maps/documentation/geocoding/intro</xref>)
         The corresponding <codeph>curl</codeph> command is also provided below.</p>
       <p>
-        <codeblock>Curl Request:
+        <codeblock outputclass="json">Curl Request:
 curl https://maps.googleapis.com/maps/api/geocode/json?address=Half+Moon+Bay
 
 Query:
-SELECT CURL("GET","https://maps.googleapis.com/maps/api/geocode/json",
-           {"data":"address=Half+Moon+Bay"} );
+SELECT CURL("https://maps.googleapis.com/maps/api/geocode/json",
+           {"data":"address=Half+Moon+Bay" , "request":"GET"} );
 Results:
 [
   {
@@ -278,42 +289,89 @@ Results:
         parameters from the Geocoding API. The <codeph>data</codeph> option represents the HTTP POST
         data. </p>
       <p>
-        <codeblock>Curl Request:
+        <codeblock outputclass="json">Curl Request:
 curl https://maps.googleapis.com/maps/api/geocode/json?address=santa+cruz&amp;components=country:ES
 
 Query:
-SELECT CURL("GET","https://maps.googleapis.com/maps/api/geocode/json",
-           {"data":"address=santa+cruz&amp;components=country:ES"}).results[0].geometry;
+SELECT CURL("https://maps.googleapis.com/maps/api/geocode/json", 
+           {"data":["address=santa+cruz","components=country:ES"],"get":true});
 
 Results:
 [
   {
-    "geometry": {
-      "bounds": {
-        "northeast": {
-          "lat": 28.487616,
-          "lng": -16.2356646
-        },
-        "southwest": {
-          "lat": 28.4280248,
-          "lng": -16.3370045
+    "$1": {
+      "results": [
+        {
+          "address_components": [
+            {
+              "long_name": "Santa Cruz de Tenerife",
+              "short_name": "Santa Cruz de Tenerife",
+              "types": [
+                "locality",
+                "political"
+              ]
+            },
+            {
+              "long_name": "Santa Cruz de Tenerife",
+              "short_name": "TF",
+              "types": [
+                "administrative_area_level_2",
+                "political"
+              ]
+            },
+            {
+              "long_name": "Canary Islands",
+              "short_name": "CN",
+              "types": [
+                "administrative_area_level_1",
+                "political"
+              ]
+            },
+            {
+              "long_name": "Spain",
+              "short_name": "ES",
+              "types": [
+                "country",
+                "political"
+              ]
+            }
+          ],
+          "formatted_address": "Santa Cruz de Tenerife, Spain",
+          "geometry": {
+            "bounds": {
+              "northeast": {
+                "lat": 28.487616,
+                "lng": -16.2356646
+              },
+              "southwest": {
+                "lat": 28.4280248,
+                "lng": -16.3370045
+              }
+            },
+            "location": {
+              "lat": 28.4636296,
+              "lng": -16.2518467
+            },
+            "location_type": "APPROXIMATE",
+            "viewport": {
+              "northeast": {
+                "lat": 28.487616,
+                "lng": -16.2356646
+              },
+              "southwest": {
+                "lat": 28.4280248,
+                "lng": -16.3370045
+              }
+            }
+          },
+          "place_id": "ChIJcUElzOzMQQwRLuV30nMUEUM",
+          "types": [
+            "locality",
+            "political"
+          ]
         }
-      },
-      "location": {
-        "lat": 28.4636296,
-        "lng": -16.2518467
-      },
-      "location_type": "APPROXIMATE",
-      "viewport": {
-        "northeast": {
-          "lat": 28.487616,
-          "lng": -16.2356646
-        },
-        "southwest": {
-          "lat": 28.4280248,
-          "lng": -16.3370045
-        }
-      }
+      ],
+      "status": "OK"
     }
   }
 ]</codeblock>
@@ -334,9 +392,9 @@ Results:
           <codeph>CURL(...).results[*].t </codeph>and alias it to <codeph>route</codeph> as the left
         side bucket for the <codeph>JOIN</codeph>. </p>
       <p>
-        <codeblock>Query:
+        <codeblock outputclass="json">Query:
 SELECT DISTINCT airline.name, airline.callsign, route.destinationairport, route.stops, route.airline
-FROM CURL("POST", "http://hostname:8093/query/service", 
+FROM CURL("http://hostname:8093/query/service", 
      {"data" : "statement=SELECT * FROM `travel-sample` t WHERE t.type = 'route'"
       }).results[*].t  route
   JOIN `travel-sample` airline 
@@ -367,23 +425,31 @@ Results:
           <codeph>`travel-sample`</codeph>, running the following N1QL query finds all documents
         that have “sanfrancisco” anywhere in the document, using the full-text searching
         capabilities of the Couchbase FTS service. </p>
-      <codeblock>Query:
+      <codeblock outputclass="json">Query:
 SELECT result.hits[*].id
-FROM CURL("POST","http://localhost:8094/api/index/fts_travel/query",
+FROM CURL("http://127.0.0.1:8094/api/index/fts_travel/query",
      {"header":"Content-Type: application/json",
       "user":"travel-sample:", 
-      "data":{"explain":false,"fields": ["*"],"highlight": {},
-              "query": {"query": "sanfrancisco"}}}) result;
+      "data":'{"explain":false,"fields": ["*"],"highlight": {},
+              "query": {"query": "sanfrancisco"}}'}) result;
 
 Results:
 [
   {
     "id": [
-      "hotel_5843",
-      "hotel_8712"
+      "landmark_25611",
+      "landmark_26260",
+      "landmark_25993",
+      "hotel_25793",
+      "landmark_25612",
+      "landmark_25732",
+      "hotel_25592",
+      "hotel_25964",
+      "hotel_25510",
+      "hotel_26023"
     ]
   }
-  ]</codeblock><p><b>Example 5:</b> The following example uses the <codeph>CURL()</codeph> function with a WHERE
+]</codeblock><p><b>Example 5:</b> The following example uses the <codeph>CURL()</codeph> function with a WHERE
         clause. It uses the Yahoo finance API to find the day’s low value (i.e
           <codeph>DaysLow</codeph>) of HDP stock and finds all the documents in the
           <codeph>default</codeph> bucket that have ‘min_threshold’ attribute value greater than the
@@ -391,7 +457,7 @@ Results:
       <p>Insert the following documents into the <codeph>default</codeph> bucket, representing
         customers and their minimum thresholds, and then run the <codeph>SELECT</codeph> query: </p>
       <p>
-        <codeblock>INSERT INTO default (KEY, VALUE)
+        <codeblock outputclass="json">INSERT INTO `travel-sample` (KEY, VALUE)
   VALUES
      ("k1", 
          {"custID" : 12345, "min_threshold" : 4}), 
@@ -399,19 +465,18 @@ Results:
              {"custID" : 44444, "min_threshold" : 12});
 
 Query:
-SELECT ‘min_threshold’, 
-       <b>meta</b>().id, 
+SELECT min_threshold, 
+       meta().id, 
        to_number(hdp_low) hdp_low 
-FROM default 
-USE KEYS [“k1”, “k2”]
-LET hdp_low = curl("GET","https://query.yahooapis.com/v1/public/yql", {"data":"q=select%20*%20from%20yahoo.finance.quotes%20where%20symbol%20in%20(%22HDP%22)&amp;format=json&amp;diagnostics=true&amp;env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys&amp;callback="}).query.results.quote.DaysLow
+FROM `travel-sample`
+USE KEYS ["k1", "k2"]
+LET hdp_low = curl("https://query.yahooapis.com/v1/public/yql", {"data":"q=select%20*%20from%20yahoo.finance.quotes%20where%20symbol%20in%20(%22HDP%22)&amp;format=json&amp;diagnostics=true&amp;env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys&amp;callback="}).query.results.quote.DaysLow
 WHERE to_number(hdp_low) &lt; min_threshold;
 
 Results:
-
 [
   {
-    "hdp_low": 10.05,
+    "hdp_low": 9.48,
     "id": "k2",
     "min_threshold": 12
   }
