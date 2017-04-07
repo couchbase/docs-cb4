@@ -44,6 +44,13 @@ Below is a basic style guide that we try to follow throughout our entire documen
 
 ### Workflow 
 
+#### Simple Workflow
+
+For very simple changes, you can edit the content directly on Github by clicking the 'Edit on Github' which can be
+found on every page of the documentation.
+
+Once you have made the changes, enter an appropriate commit message (please replace the default 'Update blah' message) and click 'Commit Changes'. Then follow the on-screen instructions to open a pull request with your changes.
+
 #### Working with DITA
 
 Currently, the documentation is written in a markup language called [DITA](https://docs.oasis-open.org/dita/v1.2/cs01/spec/archSpec/ditamarkup.html).
@@ -62,10 +69,6 @@ if you would prefer to work with a WYSIWYG editor. Once you are familiar with th
 
 Before submitting changes you should ensure that your content builds successfully following the build instructions in the readme.
 
-##### FOR COUCHBASE EMPLOYEES
-
-We currently have a version of Oxygen Web Author running, you can use this to edit your DITA files - a short guide on how to use the tool can be found on [the wiki](http://hub.internal.couchbase.com/confluence/display/techpubs/Using+Oxygen+Web+Author).
-
 #### Git
 Due to write restrictions it is preferred if you first create your own fork of this repository and make all of your changes in this forked repository, using Pull
 requests to merge changes from the fork to the main repository.
@@ -74,7 +77,7 @@ Setting up a fork is easy, just press the 'Fork' button in the top-right of the 
 
 Once you have your own fork, you are ready to make changes.
 
-A common workflow can be found below
+A common workflow can be found below:
 
 ```
 # Only required when first setting up the local repo
