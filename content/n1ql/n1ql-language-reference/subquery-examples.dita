@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="topic_9" xml:lang="en-US">
+  <title id="title__Toc272567416">Examples</title>
+  <shortdesc/>
+  <conbody>
+    <section>
+      <title>Example1</title>
+      <p>Here is an example of aggregating using correlated subquery expression in projection. This
+        query finds the top 3 overall rated hotels. The subquery in the projection finds the average
+        Overall rating across all rating of the given hotel document ‘t’. Note also that the
+        subquery uses nested paths in the from-clause.</p>
+      <p>
+        <codeblock>SELECT name, (SELECT raw avg(s.ratings.Overall)
+              FROM   t.reviews  as s)[0] AS overall_avg_rating
+FROM   `travel-sample` AS t 
+WHERE type = "hotel" 
+ORDER BY overall_avg_rating DESC
+LIMIT 3;
+[
+  {
+    "name": "Culloden House Hotel",
+    "overall_avg_rating": 5
+  },
+  {
+    "name": "The Bulls Head",
+    "overall_avg_rating": 5
+  },
+  {
+    "name": "La Pradella",
+    "overall_avg_rating": 5
+  }
+]</codeblock>
+      </p>
+    </section>
+    <section>
+      <title>Example 2</title>
+      <p>The following query shows how to use correlated subquery expression in projection with
+        predicates and sorted results on specific nested fields. This query finds flight schedules
+        starting after 10PM from SFO airport.</p>
+      <p>
+        <codeblock>SELECT  id, sourceairport, destinationairport,
+(SELECT s.*
+ FROM `travel-sample`.schedule s
+ WHERE s.utc > "22:00:00"
+ ORDER BY s.utc)  after_10pm
+FROM `travel-sample` 
+WHERE type = "route" and sourceairport = "SFO"
+limit 2;
+[
+  {
+    "after_10pm": [
+      {
+        "day": 2,
+        "flight": "DL708",
+        "utc": "22:07:00"
+      },
+      {
+        "day": 6,
+        "flight": "DL868",
+        "utc": "23:00:00"
+      }
+    ],
+    "destinationairport": "LHR",
+    "id": 21756,
+    "sourceairport": "SFO"
+  },
+  {
+    "after_10pm": [
+      {
+        "day": 3,
+        "flight": "WS580",
+        "utc": "22:42:00"
+      }
+    ],
+    "destinationairport": "YYC",
+    "id": 64657,
+    "sourceairport": "SFO"
+  }
+]
+</codeblock>
+      </p>
+    </section>
+    <section>
+      <title>Example 3</title>
+      <p>The following query uses correlated subquery expression as predicate in the WHERE-clause,
+        and finds the source airports from which more than 4 flights are scheduled on day 1.</p>
+      <p>
+        <codeblock>SELECT airline, sourceairport     
+FROM  `travel-sample`
+WHERE  type = "route" AND (SELECT raw count(*) 
+        FROM   `travel-sample`.schedule as s WHERE s.day = 1)[0]  > 4
+limit 3;
+[
+  {
+    "airline": "FR",
+    "sourceairport": "BRE"
+  },
+  {
+    "airline": "WX",
+    "sourceairport": "ANR"
+  },
+  {
+    "airline": "BK",
+    "sourceairport": "TSN"
+  }
+]          </codeblock>
+      </p>
+    </section>
+    <section id="section_onz_3tj_mz">
+      <title>Example 4</title>
+      <p>The following query finds the top 3 hotels and number of reviewers, which have Overall
+        rating at least 4, and rated by minimum 6 people. Note that it is a correlated subquery
+        expression in the LET clause, with nested paths (i.e t.ratings) in the subquery
+        FROM-path.</p>
+      <p>
+        <codeblock>SELECT name, cnt_reviewers
+FROM   `travel-sample` AS t 
+LET cnt_reviewers = (SELECT raw count(*)
+                     FROM t.reviews AS s 
+                     WHERE s.ratings.Overall >= 4)[0] 
+WHERE type = "hotel" and cnt_reviewers >= 6
+ORDER BY cnt_reviewers DESC
+LIMIT 3;
+
+[
+  {
+    "name": "Holiday Inn London Kensington Forum",
+    "x": 9
+  },
+  {
+    "name": "Campanile",
+    "x": 9
+  },
+  {
+    "name": "Drop in Chalets",
+    "x": 9
+  }
+]</codeblock>
+      </p>
+    </section>
+    <section>
+      <title>Example 5</title>
+      <p>This example shows usage of subquery expressions in MERGE statement. This query uses
+        constant expression as the MERGE source data, and updates the vacancy to false for matching
+        documents. For the sake of demonstrating update operation, this query saves the current
+        value of vacancy to a new attribute old_vacancy.</p>
+      <p>
+        <codeblock>MERGE INTO `travel-sample` t USING [{"id":"21728"},{"id":"21730"}] source
+ON KEY "hotel_"|| source.id
+WHEN MATCHED THEN UPDATE SET t.old_vacancy = t.vacancy, t.vacancy = false 
+RETURNING meta(t).id, t.old_vacancy, t.vacancy;
+[
+  {
+    "id": "hotel_21728",
+    "old_vacancy": false,
+    "vacancy": false
+  },
+  {
+    "id": "hotel_21730",
+    "old_vacancy": true,
+    "vacancy": false
+  }
+]      </codeblock>
+      </p>
+    </section>
+    <section>
+      <title>Example 6</title>
+      <p> Here is an example of LET variable in the FROM clause.</p>
+      <p>
+        <codeblock>SELECT count(*) FROM `travel-sample` t
+LET x = t.geo
+WHERE (SELECT RAW y.alt FROM x y)[0] > 6000;</codeblock>
+      </p>
+    </section>
+    <section id="section_cjh_pck_mz">
+      <title>Example 7</title>
+      <p dir="ltr">An example of using same keyspace name in subquery from-clause that is used in
+        the parent query.</p>
+      <p>
+        <codeblock>SELECT array_length((SELECT RAW t1.geo.alt 
+                     FROM `travel-sample` t1))
+FROM `travel-sample` LIMIT 4;
+
+[
+  {
+    "$1": 31596
+  },
+  ...
+]</codeblock>
+      </p>
+    </section><section>
+        <title>Example 8</title>
+      <p dir="ltr">An example of using alias name in subquery from-clause</p>
+      <p>
+        <codeblock>SELECT array_length((SELECT RAW t1.geo.alt FROM t t1))
+FROM `travel-sample` t;
+[
+  {
+    "$1": 1
+  },
+  ...
+]</codeblock>
+      </p>
+      </section><section>
+        <title>Example 9</title>
+      <p dir="ltr">A non-correlated subquery with UPDATE.</p>
+      <p>
+        <codeblock>Update `travel-sample`  t1 set airportname_dup = "high_altitude_" || airportname
+WHERE  type = "airport" AND t1.geo.alt IN (select raw t2.geo.alt 
+FROM `travel-sample` t2 
+WHERE t2.geo.alt > 6000)
+RETURNING *;</codeblock>
+      </p>
+      </section><section>
+        <title>Example 10</title>
+      <p dir="ltr">A correlated subquery with UPDATE with nested paths.</p>
+      <p>
+        <codeblock>UPDATE  `travel-sample`  t1
+SET airportname_dup = "high_altitude_" || airportname
+WHERE  type = "airport" AND (SELECT RAW geo.alt 
+   FROM t1.geo 
+   WHERE geo.alt > 6000)[0] = t1.geo.alt
+RETURNING *;</codeblock>
+      </p>
+      </section>
+    <section id="section_s2j_fnx_mz"><title>Example 11</title>The following correlated subquery with
+      UPDATE. Here, the subquery filters for 5 rated reviews and sorts them by reviewer name. The
+      result of the subquery is assigned to a new field ‘reviews_5star’ in the hotel document.<p>
+        <codeblock>UPDATE  `travel-sample`  t1 
+SET reviews_5star = (select raw t2 
+    FROM t1.reviews t2
+    WHERE t2.ratings.Overall = 5
+    ORDER BY t2.author)
+WHERE  type = "hotel"
+LIMIT 1
+RETURNING t1.reviews[*].author, t1.reviews1;</codeblock>
+      </p></section><section>
+        <title>Example 12</title>
+        <p>A non-correlated subquery with INSERT.</p>
+      <p>
+        <codeblock>INSERT INTO  `travel-sample`  t1 (KEY _k, VALUE _v)  
+SELECT "newkey_" || meta(t2).id as _k, t2.airportname as _v
+FROM `travel-sample` t2 
+WHERE t2.type = "airport" AND t2.geo.alt > 6400
+RETURNING _k;</codeblock>
+      </p>
+      </section><section><title>Example 13</title>A correlated subquery with DELETE all hotel records which got zero
+      overall rating by more than 4
+      reviewers.<codeblock>DELETE FROM `travel-sample` t 
+WHERE type = "hotel" AND (SELECT RAW count(*) 
+FROM t.reviews t2
+WHERE t2.ratings.Overall = 0 )[0] > 4;</codeblock></section>
+  </conbody>
+</concept>
