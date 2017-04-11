@@ -4,19 +4,21 @@
  <title>FROM clause</title>
 
  <conbody>
-  <p>The FROM clause defines the keyspaces and input objects for the query.</p>
-  <p>This is an optional clause for your query. If this clause is omitted, the input for the query is a single 
-   empty object. You can perform calculations with the SELECT statement if the FROM clause is omitted.</p>
-     <p>Every FROM clause specifies one or more keyspaces. The first keyspace is called the primary keyspace.</p>
+  <p>The FROM-clause of a SELECT query or subquery defines the keyspaces and the source of input
+            documents or objects for the query. Every FROM clause specifies one or more keyspaces.
+            The first keyspace is called the primary keyspace. This is an optional clause for your
+            query. If this clause is omitted, the input for the query is a single empty object. You
+            can perform calculations with the SELECT statement if the FROM clause is omitted.</p>
  
 <codeblock>FROM <varname>from-term</varname></codeblock>
  
  <p>where <i>from-term</i> has the following syntax:</p>
      
-  <codeblock><varname>from-path</varname> [ ( [ AS ] alias ) ] [ <varname>use-keys-clause</varname> ] | 
-<varname>from-term</varname> <varname>join-clause</varname> | 
-<varname>from-term</varname> <varname>nest-clause</varname> | 
-<varname>from-term</varname> <varname>unnest-clause</varname>   </codeblock>
+  <codeblock>
+from-term::= keyspace-ref [ [ AS ] alias ] [ use-keys-clause ]  
+                        | “(” select “)” [ AS ] alias
+                        | expr [ AS ] alias
+                        | from-term ( join-clause | nest-clause | unnest-clause )   </codeblock>
  
      <p><i>from-path:</i></p>
      <codeblock>[ namespace : ] path </codeblock>
@@ -73,6 +75,235 @@
  <codeblock>SELECT * FROM main:customer</codeblock>
      <p>This queries the customer keyspace in the main namespace.</p>
      <p>If the namespace is omitted, the default namespace in the current session is used.</p>
+        <p>The <codeph>from-term</codeph> defines the input objects for the query and it can be
+            either a keyspace identifier or an expression. When using nested subqueries, the
+                <codeph>from-term</codeph> of the outermost parent query can only have a keyspace
+            identifier, a subquery, or a constant expression since the <codeph>from-term</codeph>
+            needs to independently produce input documents for the query. However, the subqueries
+            can use generic variable expressions, which may be dependent on the <xref
+                href="subqueries.dita#topic_9/section_onz_3tj_mz"/>. For more details, see <xref
+                href="subqueries.dita#topic_9"/>. </p>
+        <p>
+            <note>Couchbase Server version 4.x supports only keyspace identifier or a subquery in
+                the <codeph>from-term</codeph>, but not expressions. Couchbase Server version 5.0
+                adds support for generic <xref href="index.dita#n1ql-lang-ref">expressions</xref> in
+                the <codeph>from-term</codeph>.</note>
+        </p>
+        <section id="section_ekc_ftt_nz"><title>Keyspace Identifier</title><p>This is the name or
+                identifier of an independent keyspace that can serve as a data source or bucket of
+                one or more documents. Such keyspace is not dependent on any of the <xref
+                    href="subqueries.dita#topic_9/section_onz_3tj_mz"/>.</p>The following example Q1
+            uses the keyspace <codeph>`travel-sample`</codeph>:<p>
+                <codeblock>Example Q1:
+
+SELECT t1.city
+FROM `travel-sample` t1
+WHERE t1.type = "landmark" LIMIT 4;</codeblock>
+            </p><p dir="ltr">The following non-correlated subquery Q2 uses the keyspace
+                    <codeph>`travel-sample`</codeph> independent of the same keyspace used in the
+                outer query: </p><p>
+                <codeblock>Example Q2: Find cities that have landmarks and airports.
+
+SELECT t1.city
+FROM `travel-sample` t1
+WHERE t1.type = "landmark" AND 
+      t1.city IN (SELECT RAW city
+                        FROM `travel-sample` 
+                        WHERE type = "airport");</codeblock>
+            </p><p dir="ltr">The following correlated subquery Q2A uses keyspace alias from outer
+                query.</p><p>
+                <codeblock>Example Q2A: Find cities that have museum landmarks.
+
+SELECT t1.city, t1.name
+FROM `travel-sample` t1
+WHERE t1.type = "landmark" AND 
+      (SELECT raw t2
+       FROM split(t1.name) t2 WHERE t2 = "museum")[0]
+       is not null;</codeblock>
+            </p><p dir="ltr">The following subquery Q2B uses different keyspaces in outer/inner
+                queries.</p><p>
+                <codeblock>Example Q2B: Find cities that have landmarks and breweries.
+
+SELECT t1.city
+FROM `travel-sample` t1
+WHERE t1.type = "landmark" AND 
+      t1.city IN (SELECT RAW b1.city
+                        FROM `beer-sample` b1
+                        WHERE b1.type = "brewery");</codeblock>
+            </p></section>
+        <section id="section_fkc_ftt_nz">
+            <title>N1QL Expression</title>
+            <p>Couchbase Server version 5.0 adds support for generic <xref
+                    href="index.dita#n1ql-lang-ref">expressions</xref> in the
+                    <codeph>from-term</codeph>. This is a very powerful functionality as it enables
+                usage of various N1QL functions, operators, path expressions, language constructs on
+                constant expressions, variables, and subqueries. <ul id="ul_jwy_fyx_mz">
+                    <li dir="ltr">
+                        <p dir="ltr">When the <codeph>from-term</codeph> is an expression, USE KEYS
+                            or USE INDEX clauses are not allowed.</p>
+                    </li>
+                    <li dir="ltr">
+                        <p dir="ltr">When using JOIN clause, NEST clause, or UNNEST clause, the left
+                            side keyspace can be an expression or subquery, but the right side
+                            keyspace must be a keyspace identifier.</p>
+                        <dl>
+                            <dlentry>
+                                <dt>Independent Constant Expression</dt>
+                                <dd>This includes any N1QL expressions of JSON scalar values, static
+                                    JSON literals, objects, or N1QL functions. For example:<p>
+                                        <codeblock>SELECT * FROM [1, 2, “name”, { “type” : “airport”, “id” : “SFO”}]  AS  ks1
+SELECT * FROM CURL(...) as ks2;</codeblock>
+                                    </p><p dir="ltr">Note that functions such as CURL() can
+                                        independently produce input data objects for the query.
+                                        However, other N1QL functions can also be used in the
+                                        expressions.</p></dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt>Variable N1QL Expression</dt>
+                                <dd>This includes expressions that refers to any variabled defined
+                                    in the expression for the query. This is applicable to only
+                                    subqueries because the outermost level query cannot use any
+                                    variables in its own FROM clause. This makes the subquery
+                                    correlated with outer queries, as explained in the <xref
+                                        href="subqueries.dita#topic_9"/> section. </dd>
+                            </dlentry>
+                        </dl>
+                        <dl>
+                            <dlentry>
+                                <dt>Subquery and Subquery Expressions</dt>
+                                <dd>A subquery itself can appear as <codeph>from-term</codeph>
+                                    expression. In this case, the subquery results are fed as data
+                                    source to the outer query. Further, subqueries can occur as a
+                                    subquery, or as constituent part of a bigger N1QL expression.<p
+                                        dir="ltr">For example, the following example Q3 shows a
+                                        simple case of using subquery in FROM clause, though N1QL is
+                                        powerful enough to express it without a subquery (as shown
+                                        in Q3A):</p><p>
+                                        <codeblock>Example Q3: Find highest altitude airports/cities in each country
+ 
+SELECT t1.country, t1.max_country_alt, 
+       ARRAY x.city FOR x IN t1.c 
+       WHEN x.alt = t1.max_country_alt END
+FROM (SELECT  country, array_agg({"alt": geo.alt , city}) c,
+   max_country_alt
+      FROM `travel-sample` 
+      WHERE type = "airport"
+      GROUP BY country 
+ LETTING max_country_alt = max(geo.alt) ) t1;</codeblock>
+                                        <codeblock>Example Q3A: Query Q3 without using subqueries
+
+SELECT  country, 
+        (ARRAY x.city FOR x IN array_agg({"alt": geo.alt, city}) 
+        WHEN x.alt = max_country_alt END) AS max_alt_city,
+        max_country_alt
+FROM `travel-sample` 
+WHERE type = "airport"
+GROUP BY country LETTING max_country_alt = max(geo.alt)</codeblock>
+                                    </p>A more realistic example of needing subquery in the FROM
+                                    clause arises in more complicated scenarios such as when
+                                    multiple levels of aggregates (sort orders and limits) are
+                                    required, or when the subquery results of one keyspace may need
+                                    to be JOINed with another keyspace. </dd>
+                                <dd>For example, the following example Q4 finds for each country,
+                                    total number of airports at different altitudes, and the total
+                                    number of corresponding cities with those airports. In this
+                                    case, the inner query finds first level of grouping of different
+                                    altitudes by country, and corresponding number of cities. Then
+                                    the outer query builds on the inner query results to count
+                                    number of different altitude groups for each country, and the
+                                    total number of cities.<p>
+                                        <codeblock>Example Q4:
+
+SELECT t1.country, num_alts, total_cities
+FROM (SELECT country, geo.alt AS alt,
+             count(city) AS num_cities
+            FROM `travel-sample` 
+            WHERE type = "airport"
+            GROUP BY country, geo.alt) t1
+GROUP BY t1.country 
+LETTING num_alts = count(t1.alt), total_cities = sum(t1.num_cities)
+[
+  {
+    "country": "United Kingdom",
+    "num_alts": 128,
+    "total_cities": 187
+  },
+  {
+    "country": "France",
+    "num_alts": 196,
+    "total_cities": 221
+  },
+  {
+    "country": "United States",
+    "num_alts": 946,
+    "total_cities": 1560
+  }
+]</codeblock>
+                                    </p>This is equivalent to blending the results of the following
+                                    two queries by country. The subquery in the
+                                        <codeph>from-term</codeph> simplified it
+                                    above.<codeblock>SELECT country,count(city) AS num_cities
+FROM `travel-sample` 
+WHERE type = "airport"
+GROUP BY country;
+
+SELECT country, count(distinct geo.alt) AS num_alts
+FROM `travel-sample` 
+WHERE type = "airport"
+GROUP BY country;</codeblock>
+                                    For more details and examples, see <xref
+                                        href="subqueries.dita#topic_9"/>. </dd>
+                            </dlentry>
+                            <dlentry>
+                                <dt>Nested Path Expressions</dt>
+                                <dd>Expressions used in the <codeph>from-term</codeph> can have
+                                    nested paths, including constant or variable or subquery
+                                    expressions. Similarly, variable expressions are allowed only n
+                                    subqueries and not in the outermost parent queries. </dd>
+                                <dd>Further, the nested path variable expression in subquery
+                                    from-term must resolve to variables/aliases in scope, and not to
+                                    any keyspace/bucket identifiers. Otherwise, it results in a
+                                    syntax error. Note that, when an expression cannot be resolved
+                                    to any variables in scope, it is considered keyspace identifier.
+                                    See <xref href="subqueries.dita#topic_9"/> for more details. <p
+                                        dir="ltr">The following example shows usage of nested path
+                                        over subquery expression:</p><p>
+                                        <codeblock>SELECT x.alt 
+FROM (SELECT geo from `travel-sample` 
+      WHERE type = "airport")[*].geo AS x
+LIMIT 2;
+[
+  {
+    "alt": 12
+  },
+  {
+    "alt": 295
+  }
+]</codeblock>
+                                    </p>The following example shows usage of nested path over
+                                    constant
+                                    expression:<codeblock>SELECT x FROM 
+         [{"a" : 1, "b" : {"c" : 2}},
+          {"a" : 3, "b" : {"d" : 4}}][*].b AS x
+LIMIT 2;
+[
+  {
+    "x": {
+      "c": 2
+    }
+  },
+  {
+    "x": {
+      "d": 4
+    }
+  }
+]</codeblock></dd>
+                            </dlentry>
+                        </dl>
+                    </li>
+                </ul></p>
+        </section>
+     
  
      <section><title>USE KEYS Clause</title>
      <p>Specific primary keys within a keyspace (bucket) can be specified. Only values having those primary keys will be included as inputs to the query.</p>
@@ -81,31 +312,6 @@
          <p>To specify multiple keys:</p>
          <codeblock>SELECT * FROM customer USE KEYS [ "acme-uuid-1234-5678", "roadster-uuid-4321-8765" ]</codeblock>
          <p>In the FROM clause of a subquery, USE KEYS is mandatory for the primary keyspace.</p>
-     </section>
-     <section><title>Nested Paths</title>
-  <p>Nested paths within keyspaces can be specified using the period [.] as a level designation. </p>
-  <p>For each document in the keyspace, the path is evaluated and its value becomes an input to the
-            query. For a given document, if any element of the path is NULL or MISSING, that
-            document is skipped and does not contribute any inputs to the query.</p>
-  
-  <p>For example, if some customer documents contain a primary_contact object, the following query can retrieve them:</p>
-  
-  <codeblock>SELECT * FROM customer.primary_contact</codeblock>
-  <p>Here is the result set:</p>
-  <codeblock>[
-    {"name" : "John Smith", "phone" : "+1-650-555-1234", 
-      "address" : { ... } },
-    {"name" : "Jane Brown", "phone" : "+1-650-555-5678", 
-      "address" : { ... } }     
-]  </codeblock>
-  <p>Nested paths can have arbitrary depth and can include array subscripts. For example, the following query:</p>
-  <codeblock>SELECT * FROM customer.primary_contact.address</codeblock>
-  <p>returns this result set:</p>
-  <codeblock>[
-  { "street" : "101 Main St.", "zip" : "94040" },         
-  { "street" : "3500 Wilshire Blvd.", "zip" : "90210" }     
-] </codeblock>
-         
      </section>
      <section id="join-clause"><title>JOIN Clause</title>
     <p>The JOIN clause enables you to create new input objects by combining two or more source
