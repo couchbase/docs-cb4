@@ -4,11 +4,28 @@
  <title>FROM clause</title>
 
  <conbody>
-  <p>The FROM-clause of a SELECT query or subquery defines the keyspaces and the source of input
+  <p>The FROM clause of a SELECT query or subquery defines the keyspaces and the source of input
             documents or objects for the query. Every FROM clause specifies one or more keyspaces.
             The first keyspace is called the primary keyspace. This is an optional clause for your
             query. If this clause is omitted, the input for the query is a single empty object. You
             can perform calculations with the SELECT statement if the FROM clause is omitted.</p>
+        <p>The <codeph>from-term</codeph> defines the input objects for the query and it can be
+            either a keyspace identifier or an expression. When using nested subqueries, the
+                <codeph>from-term</codeph> of the outermost parent query can only have a <xref
+                href="#concept_rnt_zfk_np/section_ekc_ftt_nz" format="dita">keyspace
+                identifier</xref>, a subquery, or a <xref
+                href="#concept_rnt_zfk_np/section_fkc_ftt_nz" format="dita">constant
+                expression</xref> since the <codeph>from-term</codeph> needs to independently
+            produce input documents for the query. However, the subqueries can use generic variable
+            expressions, which may be dependent on the <xref
+                href="subqueries.dita#topic_9/section_onz_3tj_mz"/>. For more details, see <xref
+                href="subqueries.dita#topic_9"/>. </p>
+        <p>
+            <note>Couchbase Server version 4.x supports only keyspace identifier or a subquery in
+                the <codeph>from-term</codeph>, but not expressions. Couchbase Server version 4.6.2
+                adds support for generic <xref href="index.dita#n1ql-lang-ref">expressions</xref> in
+                the <codeph>from-term</codeph>.</note>
+        </p>
  
 <codeblock>FROM <varname>from-term</varname></codeblock>
  
@@ -75,31 +92,18 @@ from-term::= keyspace-ref [ [ AS ] alias ] [ use-keys-clause ]
  <codeblock>SELECT * FROM main:customer</codeblock>
      <p>This queries the customer keyspace in the main namespace.</p>
      <p>If the namespace is omitted, the default namespace in the current session is used.</p>
-        <p>The <codeph>from-term</codeph> defines the input objects for the query and it can be
-            either a keyspace identifier or an expression. When using nested subqueries, the
-                <codeph>from-term</codeph> of the outermost parent query can only have a keyspace
-            identifier, a subquery, or a constant expression since the <codeph>from-term</codeph>
-            needs to independently produce input documents for the query. However, the subqueries
-            can use generic variable expressions, which may be dependent on the <xref
-                href="subqueries.dita#topic_9/section_onz_3tj_mz"/>. For more details, see <xref
-                href="subqueries.dita#topic_9"/>. </p>
-        <p>
-            <note>Couchbase Server version 4.x supports only keyspace identifier or a subquery in
-                the <codeph>from-term</codeph>, but not expressions. Couchbase Server version 5.0
-                adds support for generic <xref href="index.dita#n1ql-lang-ref">expressions</xref> in
-                the <codeph>from-term</codeph>.</note>
-        </p>
+        <p/>
         <section id="section_ekc_ftt_nz"><title>Keyspace Identifier</title><p>This is the name or
                 identifier of an independent keyspace that can serve as a data source or bucket of
                 one or more documents. Such keyspace is not dependent on any of the <xref
                     href="subqueries.dita#topic_9/section_onz_3tj_mz"/>.</p>The following example Q1
-            uses the keyspace <codeph>`travel-sample`</codeph>:<p>
+            uses the keyspace <codeph>`travel-sample`</codeph>.<p>
                 <codeblock>Example Q1:
 
 SELECT t1.city
 FROM `travel-sample` t1
 WHERE t1.type = "landmark" LIMIT 4;</codeblock>
-            </p><p dir="ltr">The following non-correlated subquery Q2 uses the keyspace
+            </p><p dir="ltr">The following non-correlated subquery example Q2 uses the keyspace
                     <codeph>`travel-sample`</codeph> independent of the same keyspace used in the
                 outer query: </p><p>
                 <codeblock>Example Q2: Find cities that have landmarks and airports.
@@ -118,22 +122,22 @@ SELECT t1.city, t1.name
 FROM `travel-sample` t1
 WHERE t1.type = "landmark" AND 
       (SELECT raw t2
-       FROM split(t1.name) t2 WHERE t2 = "museum")[0]
-       is not null;</codeblock>
-            </p><p dir="ltr">The following subquery Q2B uses different keyspaces in outer/inner
-                queries.</p><p>
+       FROM split(t1.name) t2 
+       WHERE t2 = "museum")[0] is not null;</codeblock>
+            </p><p dir="ltr">The following subquery example Q2B uses different keyspaces in
+                outer/inner queries.</p><p>
                 <codeblock>Example Q2B: Find cities that have landmarks and breweries.
 
 SELECT t1.city
 FROM `travel-sample` t1
 WHERE t1.type = "landmark" AND 
       t1.city IN (SELECT RAW b1.city
-                        FROM `beer-sample` b1
-                        WHERE b1.type = "brewery");</codeblock>
+                  FROM `beer-sample` b1
+                  WHERE b1.type = "brewery");</codeblock>
             </p></section>
         <section id="section_fkc_ftt_nz">
             <title>N1QL Expression</title>
-            <p>Couchbase Server version 5.0 adds support for generic <xref
+            <p>Couchbase Server version 4.6.2 adds support for generic <xref
                     href="index.dita#n1ql-lang-ref">expressions</xref> in the
                     <codeph>from-term</codeph>. This is a very powerful functionality as it enables
                 usage of various N1QL functions, operators, path expressions, language constructs on
@@ -148,20 +152,24 @@ WHERE t1.type = "landmark" AND
                             keyspace must be a keyspace identifier.</p>
                         <dl>
                             <dlentry>
-                                <dt>Independent Constant Expression</dt>
+                                <dt><b>Independent Constant Expression</b></dt>
+                                <dd/>
                                 <dd>This includes any N1QL expressions of JSON scalar values, static
                                     JSON literals, objects, or N1QL functions. For example:<p>
-                                        <codeblock>SELECT * FROM [1, 2, “name”, { “type” : “airport”, “id” : “SFO”}]  AS  ks1
+                                        <codeblock>SELECT * FROM [1, 2, "name", { "type" : "airport", "id" : "SFO"}]  AS  ks1
 SELECT * FROM CURL(...) as ks2;</codeblock>
-                                    </p><p dir="ltr">Note that functions such as CURL() can
+                                    </p><p dir="ltr">Note that functions such as <xref
+                                            href="curl.dita#topic_8_8">CURL()</xref> can
                                         independently produce input data objects for the query.
                                         However, other N1QL functions can also be used in the
                                         expressions.</p></dd>
                             </dlentry>
                             <dlentry>
-                                <dt>Variable N1QL Expression</dt>
-                                <dd>This includes expressions that refers to any variabled defined
-                                    in the expression for the query. This is applicable to only
+                                <dt><b>Variable N1QL Expression</b></dt>
+                                <dd/>
+                                <dd>This includes expressions that refers to any <xref
+                                        href="subqueries.dita#topic_9/section_onz_3tj_mz">variables
+                                        in scope</xref> for the query. This is applicable to only
                                     subqueries because the outermost level query cannot use any
                                     variables in its own FROM clause. This makes the subquery
                                     correlated with outer queries, as explained in the <xref
@@ -170,7 +178,8 @@ SELECT * FROM CURL(...) as ks2;</codeblock>
                         </dl>
                         <dl>
                             <dlentry>
-                                <dt>Subquery and Subquery Expressions</dt>
+                                <dt><b>Subquery and Subquery Expressions</b></dt>
+                                <dd/>
                                 <dd>A subquery itself can appear as <codeph>from-term</codeph>
                                     expression. In this case, the subquery results are fed as data
                                     source to the outer query. Further, subqueries can occur as a
@@ -178,7 +187,7 @@ SELECT * FROM CURL(...) as ks2;</codeblock>
                                         dir="ltr">For example, the following example Q3 shows a
                                         simple case of using subquery in FROM clause, though N1QL is
                                         powerful enough to express it without a subquery (as shown
-                                        in Q3A):</p><p>
+                                        in example Q3A):</p><p>
                                         <codeblock>Example Q3: Find highest altitude airports/cities in each country
  
 SELECT t1.country, t1.max_country_alt, 
@@ -217,9 +226,9 @@ GROUP BY country LETTING max_country_alt = max(geo.alt)</codeblock>
 SELECT t1.country, num_alts, total_cities
 FROM (SELECT country, geo.alt AS alt,
              count(city) AS num_cities
-            FROM `travel-sample` 
-            WHERE type = "airport"
-            GROUP BY country, geo.alt) t1
+      FROM `travel-sample` 
+      WHERE type = "airport"
+      GROUP BY country, geo.alt) t1
 GROUP BY t1.country 
 LETTING num_alts = count(t1.alt), total_cities = sum(t1.num_cities)
 [
@@ -240,7 +249,7 @@ LETTING num_alts = count(t1.alt), total_cities = sum(t1.num_cities)
   }
 ]</codeblock>
                                     </p>This is equivalent to blending the results of the following
-                                    two queries by country. The subquery in the
+                                    two queries by country, but the subquery in the
                                         <codeph>from-term</codeph> simplified it
                                     above.<codeblock>SELECT country,count(city) AS num_cities
 FROM `travel-sample` 
@@ -251,27 +260,31 @@ SELECT country, count(distinct geo.alt) AS num_alts
 FROM `travel-sample` 
 WHERE type = "airport"
 GROUP BY country;</codeblock>
-                                    For more details and examples, see <xref
-                                        href="subqueries.dita#topic_9"/>. </dd>
+                                    See <xref href="subqueries.dita#topic_9"/> for details and
+                                    examples. </dd>
                             </dlentry>
                             <dlentry>
                                 <dt>Nested Path Expressions</dt>
+                                <dd/>
                                 <dd>Expressions used in the <codeph>from-term</codeph> can have
                                     nested paths, including constant or variable or subquery
-                                    expressions. Similarly, variable expressions are allowed only n
-                                    subqueries and not in the outermost parent queries. </dd>
+                                    expressions. Similarly, variable expressions are allowed only
+                                    subqueries and not in outermost parent queries. </dd>
                                 <dd>Further, the nested path variable expression in subquery
-                                    from-term must resolve to variables/aliases in scope, and not to
-                                    any keyspace/bucket identifiers. Otherwise, it results in a
-                                    syntax error. Note that, when an expression cannot be resolved
-                                    to any variables in scope, it is considered keyspace identifier.
-                                    See <xref href="subqueries.dita#topic_9"/> for more details. <p
-                                        dir="ltr">The following example shows usage of nested path
-                                        over subquery expression:</p><p>
+                                        <codeph>from-term</codeph> must resolve to variables/aliases
+                                    in scope, and not to any keyspace/bucket identifiers. Otherwise,
+                                    it results in a syntax error. Note that, when an expression
+                                    cannot be resolved to any variables in scope, it is considered
+                                    keyspace identifier. See <xref
+                                        href="subqueries.dita#topic_9/nested-path-expr">Nested Paths
+                                        in Subqueries</xref> for more details. <p dir="ltr">The
+                                        following example shows usage of nested path over subquery
+                                        expression:</p><p>
                                         <codeblock>SELECT x.alt 
 FROM (SELECT geo from `travel-sample` 
       WHERE type = "airport")[*].geo AS x
 LIMIT 2;
+
 [
   {
     "alt": 12
@@ -280,12 +293,13 @@ LIMIT 2;
     "alt": 295
   }
 ]</codeblock>
-                                    </p>The following example shows usage of nested path over
+                                    </p><p/>The following example shows usage of nested path over
                                     constant
                                     expression:<codeblock>SELECT x FROM 
          [{"a" : 1, "b" : {"c" : 2}},
           {"a" : 3, "b" : {"d" : 4}}][*].b AS x
 LIMIT 2;
+
 [
   {
     "x": {

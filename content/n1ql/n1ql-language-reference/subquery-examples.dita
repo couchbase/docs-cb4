@@ -12,12 +12,13 @@
         overall rating across all rating of the given hotel document <codeph>t</codeph>. Note that
         the subquery uses nested paths in the FROM clause.</p>
       <p>
-        <codeblock>SELECT name, (SELECT raw avg(s.ratings.Overall)
+        <codeblock outputclass="json">SELECT name, (SELECT raw avg(s.ratings.Overall)
               FROM   t.reviews  as s)[0] AS overall_avg_rating
 FROM   `travel-sample` AS t 
 WHERE type = "hotel" 
 ORDER BY overall_avg_rating DESC
 LIMIT 3;
+
 [
   {
     "name": "Culloden House Hotel",
@@ -40,7 +41,7 @@ LIMIT 3;
         predicates and sorted results on specific nested fields. This query finds flight schedules
         starting after 10PM from SFO airport.</p>
       <p>
-        <codeblock>SELECT  id, sourceairport, destinationairport,
+        <codeblock outputclass="json">SELECT  id, sourceairport, destinationairport,
             (SELECT s.*
              FROM `travel-sample`.schedule s
              WHERE s.utc > "22:00:00"
@@ -48,6 +49,7 @@ LIMIT 3;
 FROM `travel-sample` 
 WHERE type = "route" and sourceairport = "SFO"
 LIMIT 2;
+
 [
   {
     "after_10pm": [
@@ -87,11 +89,12 @@ LIMIT 2;
       <p>The following query uses correlated subquery expression as predicate in the WHERE clause,
         and finds the source airports from which more than 4 flights are scheduled on day 1.</p>
       <p>
-        <codeblock>SELECT airline, sourceairport     
+        <codeblock outputclass="json">SELECT airline, sourceairport     
 FROM  `travel-sample`
 WHERE  type = "route" AND (SELECT raw count(*) 
-                      FROM `travel-sample`.schedule as s WHERE s.day = 1)[0]  > 4
+                           FROM `travel-sample`.schedule as s WHERE s.day = 1)[0]  > 4
 LIMIT 3;
+
 [
   {
     "airline": "FR",
@@ -115,7 +118,7 @@ LIMIT 3;
         expression in the LET clause, with nested paths (that is <codeph>t.ratings</codeph>) in the
         subquery FROM path.</p>
       <p>
-        <codeblock>SELECT name, cnt_reviewers
+        <codeblock outputclass="json">SELECT name, cnt_reviewers
 FROM   `travel-sample` AS t 
 LET cnt_reviewers = (SELECT raw count(*)
                      FROM t.reviews AS s 
@@ -147,10 +150,11 @@ LIMIT 3;
         documents. For the sake of demonstrating update operation, this query saves the current
         value of vacancy to a new attribute old_vacancy.</p>
       <p>
-        <codeblock>MERGE INTO `travel-sample` t USING [{"id":"21728"},{"id":"21730"}] source
+        <codeblock outputclass="json">MERGE INTO `travel-sample` t USING [{"id":"21728"},{"id":"21730"}] source
 ON KEY "hotel_"|| source.id
 WHEN MATCHED THEN UPDATE SET t.old_vacancy = t.vacancy, t.vacancy = false 
 RETURNING meta(t).id, t.old_vacancy, t.vacancy;
+
 [
   {
     "id": "hotel_21728",
@@ -169,7 +173,7 @@ RETURNING meta(t).id, t.old_vacancy, t.vacancy;
       <title>Example 6</title>
       <p> Here is an example of LET variable in the FROM clause.</p>
       <p>
-        <codeblock>SELECT count(*) FROM `travel-sample` t
+        <codeblock outputclass="json">SELECT count(*) FROM `travel-sample` t
 LET x = t.geo
 WHERE (SELECT RAW y.alt FROM x y)[0] > 6000;</codeblock>
       </p>
@@ -179,7 +183,7 @@ WHERE (SELECT RAW y.alt FROM x y)[0] > 6000;</codeblock>
       <p dir="ltr">An example of using same keyspace name in subquery FROM clause that is used in
         the parent query.</p>
       <p>
-        <codeblock>SELECT array_length((SELECT RAW t1.geo.alt 
+        <codeblock outputclass="json">SELECT array_length((SELECT RAW t1.geo.alt 
                      FROM `travel-sample` t1))
 FROM `travel-sample` LIMIT 4;
 
@@ -194,7 +198,7 @@ FROM `travel-sample` LIMIT 4;
         <title>Example 8</title>
       <p dir="ltr">An example of using alias name in the subquery FROM clause.</p>
       <p>
-        <codeblock>SELECT array_length((SELECT RAW t1.geo.alt FROM t t1))
+        <codeblock outputclass="json">SELECT array_length((SELECT RAW t1.geo.alt FROM t t1))
 FROM `travel-sample` t;
 [
   {
@@ -207,7 +211,7 @@ FROM `travel-sample` t;
         <title>Example 9</title>
       <p dir="ltr">A non-correlated subquery with UPDATE.</p>
       <p>
-        <codeblock>Update `travel-sample`  t1 set airportname_dup = "high_altitude_" || airportname
+        <codeblock outputclass="json">Update `travel-sample`  t1 set airportname_dup = "high_altitude_" || airportname
 WHERE  type = "airport" AND t1.geo.alt IN (SELECT raw t2.geo.alt 
                                            FROM `travel-sample` t2 
                                            WHERE t2.geo.alt > 6000)
@@ -217,7 +221,7 @@ RETURNING *;</codeblock>
         <title>Example 10</title>
       <p dir="ltr">A correlated subquery with UPDATE with nested paths.</p>
       <p>
-        <codeblock>UPDATE  `travel-sample`  t1
+        <codeblock outputclass="json">UPDATE  `travel-sample`  t1
 SET airportname_dup = "high_altitude_" || airportname
 WHERE  type = "airport" AND (SELECT RAW geo.alt 
                              FROM t1.geo 
@@ -229,19 +233,19 @@ RETURNING *;</codeblock>
       UPDATE. In this example, the subquery filters for 5 rated reviews and sorts them by reviewer
       name. The result of the subquery is assigned to a new field <codeph>reviews_5star</codeph> in
       the hotel document.<p>
-        <codeblock>UPDATE  `travel-sample`  t1 
+        <codeblock outputclass="json">UPDATE `travel-sample` t1 
 SET reviews_5star = (SELECT raw t2 
-      FROM t1.reviews t2
-      WHERE t2.ratings.Overall = 5
-      ORDER BY t2.author)
-WHERE  type = "hotel"
+                     FROM t1.reviews t2
+                     WHERE t2.ratings.Overall = 5
+                     ORDER BY t2.author)
+WHERE type = "hotel"
 LIMIT 1
 RETURNING t1.reviews[*].author, t1.reviews1;</codeblock>
       </p></section><section>
         <title>Example 12</title>
         <p>A non-correlated subquery with INSERT.</p>
       <p>
-        <codeblock>INSERT INTO  `travel-sample`  t1 (KEY _k, VALUE _v)  
+        <codeblock outputclass="json">INSERT INTO `travel-sample`  t1 (KEY _k, VALUE _v)  
 SELECT "newkey_" || meta(t2).id as _k, t2.airportname as _v
 FROM `travel-sample` t2 
 WHERE t2.type = "airport" AND t2.geo.alt > 6400
@@ -249,7 +253,7 @@ RETURNING _k;</codeblock>
       </p>
       </section><section><title>Example 13</title>A correlated subquery with DELETE all hotel records which got zero
       overall rating by more than 4
-      reviewers.<codeblock>DELETE FROM `travel-sample` t 
+      reviewers.<codeblock outputclass="json">DELETE FROM `travel-sample` t 
 WHERE type = "hotel" AND (SELECT RAW count(*) 
                           FROM t.reviews t2
                           WHERE t2.ratings.Overall = 0 )[0] > 4;</codeblock></section>
