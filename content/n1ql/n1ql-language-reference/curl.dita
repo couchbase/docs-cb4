@@ -18,8 +18,22 @@
       clauses of the DML statements such as projection, WHERE predicates, FROM data source etc. For
       example, this function can be used to integrate with Couchbase FTS and run fuzzy text searches
       in N1QL queries, or INSERT-SELECT statement to import external data into Couchbase Server.</p>
-    <p><codeph>CURL()</codeph> function is enabled by default. Full Administrators can access this
-      function and allow access to users by defining a QUERY_EXTERNAL_ACCESS role. </p>
+    <p>The <codeph>CURL()</codeph> function is enabled by default for the Full Administrator role.
+      Full Administrators can assign the QUERY_EXTERNAL_ACCESS role to other users to use the CURL
+      functionality. </p>
+    <p>CURL runs on the query node within a cluster. In order to identify a request from N1QL’s CURL
+      function, a custom header is always set for all requests. The custom header format is:
+        <codeph>"X-N1QL-User-Agent: couchbase/n1ql/&lt;n1ql-version"</codeph>. For external clients
+      that wish to disallow N1QL <codeph>CURL()</codeph> from accessing their REST API endpoints,
+      can explicitly check for the above header and block it. The general external endpoints will
+      ignore this header value. </p>
+    <p>A <codeph>user-agent</codeph> is always set by default. This can be reset using the
+        <codeph>-user-agent </codeph>option. The value set by default is
+        <codeph>couchbase/n1ql/&lt;n1ql-version></codeph>. </p>
+    <p>For the <codeph>CURL()</codeph> functionality, internally a specific set of SSL ciphers
+      (MEDIUM or HIGH) are supported. This is dependent on the
+        <codeph>COUCHBASE_SSL_CIPHER_LIST</codeph>.</p>
+    <p> </p>
       
     <section id="section_vm2_vcw_1z">
       <title>Syntax</title>
@@ -29,7 +43,9 @@
           <dt>Arguments</dt>
           <dd>
             <ul>
-              <li><codeph>url</codeph> - is a string representing the URL of the data source.</li>
+              <li><codeph>url</codeph> - is a string representing the URL of the data source. The
+                URL needs to point to a JSON endpoint and must be either http:// or https:// only.
+                No other protocol is supported. The redirection of URL is not allowed.</li>
               <li><codeph>options</codeph> - is an optional JSON object representing various
                 supported options. This includes options and parameters to be sent to the URL source
                 endpoint.</li>
@@ -99,8 +115,23 @@ FROM bucket b;</codeblock>
                   <row>
                     <entry><codeph>anyauth</codeph></entry>
                     <entry>CURL to figure out authentication method by itself, and use the most
-                      secure one (this is basic only for now).</entry>
+                      secure one (this supports only basic authentication).</entry>
                     <entry>Boolean</entry>
+                  </row>
+                  <row>
+                    <entry><codeph>cacert</codeph></entry>
+                    <entry>
+                      <p>Specify CA signed certificate file name. Certificates should be stored on
+                        the local machine - on each query node within a cluster. To store
+                        certificates, access</p>
+                      <p><filepath>/Couchbase/var/lib/couchbase/n1qlcerts </filepath>. This is not
+                        visible to the user. The file name cannot contain a path. If it is not a
+                        match to the existing contents of <filepath>n1qlcerts</filepath> directory,
+                        the function displays an error. For all expired and invalid certificates
+                        will get an error.</p>
+                    </entry>
+                    <entry>FILENAME <p>For example, this is the certificate .<codeph>pem</codeph>
+                        file for AWS.</p></entry>
                   </row>
                 </tbody>
               </tgroup>
@@ -122,53 +153,65 @@ FROM bucket b;</codeblock>
                   <row>
                     <entry><codeph>get</codeph></entry>
                     <entry>The Get request for CURL.</entry>
-                    <entry>BOOLEAN <p>Example: <codeph>{"get": true}</codeph></p></entry>
+                    <entry>BOOLEAN <p/><p>Example: <codeph>{"get": true}</codeph></p></entry>
                   </row>
                   <row>
                     <entry><codeph>request</codeph></entry>
                     <entry>Sets the request method. This only accepts GET or POST requests. This is
                       case sensitive.</entry>
-                    <entry>String<p>Example: <codeph>{“request”:”POST”}</codeph></p></entry>
+                    <entry>String<p/><p>Example: <codeph>{“request”:”POST”}</codeph></p></entry>
                   </row>
                   <row>
                     <entry><codeph>connect-timeout</codeph></entry>
                     <entry>The maximum time allowed for connection in seconds.</entry>
-                    <entry>Integer<p>Example: <codeph>{"connect-timeout":30}</codeph></p></entry>
+                    <entry>Integer<p/><p>Example:
+                      <codeph>{"connect-timeout":30}</codeph></p></entry>
                   </row>
                   <row>
                     <entry><codeph>max-time</codeph></entry>
                     <entry>The maximum time allowed for the transfer in seconds.</entry>
-                    <entry>Integer<p>Example: <codeph>{"max-time":30}</codeph></p></entry>
+                    <entry>Integer<p/><p>Example: <codeph>{"max-time":30}</codeph></p></entry>
                   </row>
                   <row>
                     <entry><codeph>data</codeph></entry>
                     <entry>POST data to be sent to the HTTP/REST service. The string data should be
                       formatted exactly same as HTTP POST data.</entry>
-                    <entry>String or [...string, string….]<p>Example:
+                    <entry>String or [...string, string….]<p/><p>Example:
                           <codeph>{"data":"address=Half+Moon+Bay"}</codeph></p><p><codeph>{"data":"address=Half+Moon+Bay,california"}</codeph></p></entry>
                   </row>
                   <row>
                     <entry><codeph>header</codeph></entry>
                     <entry>Passes custom header line to the server.</entry>
-                    <entry>String or [...string, string….]<p>Example:
+                    <entry>String or [...string, string….]<p/><p>Example:
                           <codeph>{"header":"Content-Type:
-                          application/json"}</codeph></p><p><codeph>{"header":"Content-Type:
-                          application/json, Content-Length: 115"}</codeph></p></entry>
+                          application/json"}</codeph></p><p><codeph>{"header":["Content-Type:
+                          application/json", "Content-Length: 115"]}</codeph></p></entry>
                   </row>
                   <row>
                     <entry><codeph>show-error</codeph></entry>
                     <entry>Displays error message.</entry>
-                    <entry>Boolean<p>Example: <codeph>{"show-error": true}</codeph></p></entry>
+                    <entry>Boolean<p/><p>Example: <codeph>{"show-error": true}</codeph></p></entry>
                   </row>
                   <row>
                     <entry><codeph>silent</codeph></entry>
                     <entry>The silent mode.</entry>
-                    <entry>Boolean<p>Example: <codeph>{"silent": false}</codeph></p></entry>
+                    <entry>Boolean<p/><p>Example: <codeph>{"silent": false}</codeph></p></entry>
                   </row>
                   <row>
                     <entry><codeph>keepalive-time</codeph></entry>
-                    <entry>The number of seconds to wait between the keepalive probes.</entry>
-                    <entry>Integer<p>Example: <codeph>{"keepalive-time":20}</codeph></p></entry>
+                    <entry>The number of seconds to wait between the <codeph>keepalive</codeph>
+                      probes.</entry>
+                    <entry>Integer<p/><p>Example: <codeph>{"keepalive-time":20}</codeph></p></entry>
+                  </row>
+                  <row>
+                    <entry><codeph>user-agent</codeph></entry>
+                    <entry>The value for the user-agent to send tit o the server.</entry>
+                    <entry>String</entry>
+                  </row>
+                  <row>
+                    <entry><codeph>data-urlencode</codeph></entry>
+                    <entry>Encode the data and send it to the server.</entry>
+                    <entry>String or [...string, string….]</entry>
                   </row>
                 </tbody>
               </tgroup>
@@ -182,7 +225,10 @@ FROM bucket b;</codeblock>
             JSON, and the function itself doesn’t do any additional processing. However, if the
             query parameter <codeph>pretty=true</codeph>, then the data received is in pretty
             format. It may result in errors or undefined behavior if the returned data from the URL
-            is not well defined JSON.</dd>
+            is not well defined JSON. The errors returned by CURL (such as moved permanently), can
+            be in different formats, like HTML, XML, plain strings and can be a large blob. The N1QL
+            function returns a “Not a JSON endpoint” error when it returns any other format other
+            than JSON.</dd>
         </dlentry>
       </dl>
     </section>
