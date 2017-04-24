@@ -67,9 +67,31 @@
             </dd>
           </dlentry>
           <dlentry>
-            <dt><varname>filter_expression</varname></dt>
-            <dd>Specifies WHERE clause predicates to qualify the subset of documents to include in
-              the index. </dd>
+            <dt><varname>simple_array_expr</varname></dt>
+            <dd>When using <i>simple_array_expr</i>, only an array variable name <i>var</i> or an
+              expression <i>expr</i> that can evaluate to an array can be specified.  In this case,
+              all elements of the array are indexed. </dd>
+            <dd>
+              <note>Currently, array indexing is limited to using only one index key with
+                  <i>array_expr</i>.  That is, to create an array index involving multiple array
+                elements or multiple arrays:</note>
+              <ul id="ul_myd_drj_rz">
+                <li>The <i>var_expr</i> can be constructed as a compound object constituted with
+                  different elements of the same array or multiiple arrays.</li>
+                <li>Subsequent SELECT or DML must use similar compund objects in the WERE clause to
+                  use the array index.  See examples below.</li>
+              </ul>
+              <note>Couchbase Server 4.6.2 release introduces the following enhacements to array
+                indexing:</note>
+              <ul id="ul_yzs_2rj_rz">
+                <li>Allow arbitrary variable names in array index select.  That is, a SELECT query
+                  that needs to use an array index can use different variable names in the query
+                  from those used in the array index definition.</li>
+                <li>Support <i>simple_array_expr</i> that provides simpler syntax for array indexing
+                  when all array elements are indexed, without requiring to use the ARRAY operator
+                  in the index definition.</li>
+              </ul>
+            </dd>
           </dlentry>
           <dlentry>
             <dt>USING GSI</dt>
@@ -118,29 +140,32 @@
           They can efficiently index and query recursive trees of arbitrary depth.</note></p>
     </section>
     <section>
-      <title>Examples</title>
-      <p>The following samples use the <codeph>travel-sample</codeph> bucket. </p>
-      <p><b>Indexing individual elements in an array</b></p>
+      <title>N1QL Examples</title>
+      <p>The following samples use the <codeph>travel-sample</codeph> bucket that is shipped with
+        the product. </p>
+      <p><b>Example 1: Indexing all DISTINCT elements in an array</b></p>
       <p>Create an index on all schedules:
-        <codeblock>CREATE INDEX isched 
-        ON `travel-sample` ( DISTINCT ARRAY v FOR v IN schedule END );</codeblock></p>
+        <codeblock>CREATE INDEX idx_sched 
+        ON `travel-sample` ( DISTINCT ARRAY v.flight FOR v IN schedule END );</codeblock></p>
       <p>The following query finds the list of scheduled 'AA' flights:
-        <codeblock> SELECT  * from  `travel-sample`
-        WHERE ANY v IN schedule SATISFIES v.flight LIKE 'AA%' END;</codeblock></p>
-      <p><b>Indexing individual attributes of an array of documents</b></p>
+        <codeblock>SELECT * FROM `travel-sample`
+WHERE ANY v IN schedule SATISFIES v.flight LIKE 'AA%' END;</codeblock></p>
+      <p><b>Example 2: Partial index (with WHERE clause) of individual attributes from selected
+          elements (using WHEN clause) of an array</b></p>
       <p>Create an index on flight IDs scheduled in the first 4 days of the week:
-        <codeblock>CREATE INDEX iflight_day 
-       ON `travel-sample` ( DISTINCT ARRAY v.flight FOR v IN schedule WHEN v.day &lt; 4 END )
-       WHERE type = "route" ;</codeblock></p>
-      <p><b>Compound indexing with individual elements of an array and other attributes</b></p>
+        <codeblock>CREATE INDEX idx_flight_day 
+ON `travel-sample` ( ALL ARRAY v.flight FOR v IN schedule WHEN v.day &lt; 4 END )
+WHERE type = "route" ;</codeblock></p>
+      <p><b>Example 3: Compound indexing with individual elements of an array and other
+          attributes</b></p>
       <p>Create an index on scheduled flight IDs and number of stops:
-        <codeblock>CREATE INDEX iflight_stops 
-       ON `travel-sample` ( stops, DISTINCT ARRAY v.flight FOR v IN schedule END )
-       WHERE type = "route" ;</codeblock></p>
+        <codeblock>CREATE INDEX idx_flight_stops 
+ON `travel-sample` ( stops, DISTINCT ARRAY v.flight FOR v IN schedule END )
+WHERE type = "route" ;</codeblock></p>
       <p>The following query finds the list of scheduled 'AA' flights that have one or more stops:
         <codeblock>SELECT * FROM `travel-sample`
 WHERE type = "route" AND ANY v IN schedule SATISFIES v.flight LIKE 'AA%' END AND stops >= 0;     </codeblock></p>
-      <p><b>Indexing the individual elements of nest arrays</b></p>
+      <p><b>Example 4: Indexing the individual elements of nest arrays</b></p>
       <p>Use the DISTINCT ARRAY clause in a nested fashion to index specific attributes of a
         document when the array contains other arrays or documents that contain arrays. For example, <codeblock>cbq> UPDATE `travel-sample` 
 SET schedule[0] = {"day" : 7, "special_flights" : 
@@ -306,26 +331,24 @@ SELECT b[1] FROM default;</codeblock></li>
           <li>Support <codeph>simple_array_expression</codeph> that provides simpler syntax for
             array indexing when all array elements are indexed, without requiring to use the ARRAY
             operator in the index definition.</li>
-        </ul></note><title>Examples</title>The following examples use the <xref
+        </ul></note><title>Array Examples</title>The following examples use the <xref
         href="https://developer.couchbase.com/documentation/server/4.6/sdk/sample-application.html"
         format="html" scope="external">travel-sample</xref> bucket that is shipped with the product.
-          <p><b>Example 1:  Indexing all DISTINCT elements in an
-        array</b><codeblock><b>C1: Create an index of all schedules:</b>
-    CREATE INDEX idx_sched
-    ON `travel-sample`(DISTINCT ARRAY v FOR v IN schedule END );
-
-<b>Q1: The following query finds the list of scheduled 'UA' flights:</b>
-    SELECT * FROM `travel-sample`
-    WHERE ANY v IN schedule SATIFIES v.flight LIKE 'UA%' END;</codeblock></p><p><b>Example
+          <p><b>Example 1:  Indexing all DISTINCT elements in an array</b></p><p>Create an index of
+        all
+        schedules:<codeblock>C1: CREATE INDEX idx_sched
+    ON `travel-sample`(DISTINCT ARRAY v FOR v IN schedule END );</codeblock></p>The
+      following query finds the list of schedule 'UA'
+          flights:<codeblock>Q1: SELECT * FROM `travel-sample`
+    WHERE ANY v IN schedule SATIFIES v.flight LIKE 'UA%' END;</codeblock><p><b>Example
           2:  Partial index (with WHERE clause) of individual attributes from selected elements
-          (using WHEN clause) of an
-        array</b><codeblock><b>C2: Create an index on flight IDs scheduled in the first 4 days of the week:</b>
-    CREATE INDEX idx_flight_day
+          (using WHEN clause) of an array</b></p><p>Create an index on flight IDs schedule in the
+        first 4 days of the
+        week:<codeblock>C2: CREATE INDEX idx_flight_day
     ON `travel-sample`(ALL ARRAY v.flight FOR v IN SCHEDULE WHEN v.day &lt; 4 END)
-    WHERE type = "route";
-
-<b>Q2: The following query finds the list of schedule 'UA' flights on day 1:</b>
-    SELECT * FROM `travel-sample`
+    WHERE type = "route";</codeblock></p><p>The
+        following query finds the list of scheduled 'UA' flights on day
+        1:<codeblock>Q2: SELECT * FROM `travel-sample`
     WHERE type = "route" AND
     ANY v IN schedule SATISFIES (v.flight LIKE 'UA%') AND (v.day=1) END;</codeblock></p><p>
         <note> The index C2 qualifies for the query Q2 because:<ul id="ul_sdz_wfp_qz">
@@ -336,14 +359,13 @@ SELECT b[1] FROM default;</codeblock></li>
           </ul></note>
       </p></section>
     <section id="section_ggq_qhp_qz"><b>Example 3:  Compound array index with individual elements of
-        an array and other non-array
-        fields</b><codeblock><b>C3: Create an index on scheduled flight IDs and number of stops:</b>
-    CREATE INDEX idx_stops_flight
+        an array and other non-array fields</b></section>
+    <section id="section_csb_22k_rz">Create an index on scheduled flight IDs and number of
+      stops:<codeblock>C3: CREATE INDEX idx_stops_flight
     ON `travel-sample` (stops, DISTINCT ARRAY v.flight FOR v IN schedule END)
-    WHERE type = "route";
-
-<b>Q3: The following query finds the list of scheduled UA flights that have one or more stops:</b>
-    SELECT * FROM `travel-sample`
+    WHERE type = "route";</codeblock>The
+      following query find the list of scheduled UA flights that have one or more
+        stops:<codeblock>Q3: SELECT * FROM `travel-sample`
     WHERE type = "route"
     AND stops >= 0
     AND ANY v IN schedule SATISFIES v.flight LIKE 'UA%' END;</codeblock><b>Example
@@ -351,12 +373,37 @@ SELECT b[1] FROM default;</codeblock></li>
     <section id="section_hgq_qhp_qz">Use the DISTINCT ARRAY clause in a nested fashion to index
       specific attributes of a document when the array contains other arrays or documents that
       contain arrays.  For
-      example,<codeblock>Update `travel-sample`
-SET schedule[0] = {"day": 7, "special_flights" :
-    [{
-
-C4: Create an index on scheduled flight IDs and number of stops:
-    CREATE </codeblock></section>
+      example,<codeblock>cbq> Update `travel-sample`
+     SET schedule[0] = {"day": 7, "special_flights" :
+         [ {"flight" : "AI444", "utc" : "4:44:44"},
+           {"flight" : "AI333", "utc" : "3:33:33"}
+         ] }
+     WHERE type = "route" 
+     AND destinationairport = "CDG"
+     AND sourceairport = "TLV";</codeblock></section>
+    <section id="section_g1q_mgk_rz">Create an index on scheduled flight IDs and number of
+      stops:<codeblock>C4: CREATE INDEX idx_nested ON `travel-sample`
+    (DISTINCT ARRAY 
+        <b>(DISTINCT ARRAY y.flight
+        FOR y IN x-special_flights END)</b>
+    FOR x IN schedule END)
+    WHERE type = "route" ;</codeblock></section>
+    <p>
+      <note>In this case, the inner ARRAY construct (in <b>bold</b>) is used as the <i>var_expr</i>
+        for the outer ARRAY construct.</note>
+    </p>
+    <section id="section_xk2_1jk_rz">The following query Q4 uses nested ANY operator to use the
+      index:<codeblock>Q4: SELECT count(*) FROM `travel-sample`
+    WHERE type = "route"
+    AND ANY x IN schedule SATISFIES
+        (ANY y IN x.special_flights SATISFIES y.flight IS NOT NULL END)
+    END;</codeblock></section>
+    <section id="section_pqv_z3k_rz">The following query Q5 uses UNNEST operator to use the
+      index:<codeblock>Q5: SELECT count(*) FROM `travel-sample`
+    UNNEST schedule AS x
+    UNNEST x.special_flights AS y
+    WHERE type = "route"
+    AND y.flight IS NOT NULL;</codeblock></section>
   </body>
   <related-links><link href="http://blog.couchbase.com/2016/may/1.making-most-of-your-arrays..-with-covering-array-indexes-and-more" format="html" scope="external"> <linktext>Blog: Covering Array Indexes </linktext></link></related-links>
 </topic>
