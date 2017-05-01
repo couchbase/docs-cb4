@@ -36,8 +36,8 @@ Below is a basic style guide that we try to follow throughout our entire documen
 - Write in American English (spelling and word usage).
 - Use parallel structure in lists (that means use the same sentence pattern for each item). If your list is made up of fully formed sentences then they should end with full stops.
 - Spell out acronyms and include them in parentheses the first time they are used in a document, ex. General Motors (GM). Common acronyms like noSQL don’t require spelling out.
-- Bold text: use bold tags for a filename, directory name or something the reader has to notice/click.
-- Inline code: use the inline code syntax when you include a function, class or method name.
+- Bold text: use bold tags for a filename, directory name (`<filepath></filepath>`) or something the reader has to notice/click (`<uicontrol></uicontrol>`).
+- Inline code: use the inline code syntax when you include a variable name (`<varname></varname>`), function, class or method name (`<codeph></codeph>`).
 - Screenshots of a browser window or IDE must be taken with the default theme of that editor/browser. Do not include screenshots wider than 700px.
 - Use contractions (such as can’t and won’t).
 - Use simple sentences.
