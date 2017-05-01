@@ -23,11 +23,16 @@
     statement and the USING GSI clause. For more information on the syntax and examples, see <xref
      href="../n1ql/n1ql-language-reference/createindex.dita"/> statement.</p></section>
    <section><title>Placement of Global Secondary Indexes</title>
-   <p>GSIs reside on the index nodes in the cluster. Each index service node can host multiple indexes. Every index has an index key(s) (used for lookup). When the index type is not primary index, index can have an index filter with the WHERE clause.</p> <codeblock>CREATE INDEX index_name ON ( index_key1, ..., index_keyN) 
+   <p>GSIs reside on the index nodes in the cluster. Each index service node can host multiple
+    indexes and a single index can be hosted on multiple index nodes. Every index has an index
+    key(s) (used for lookup). When the index type is not primary index, index can have an index
+    filter with the WHERE clause.</p> <codeblock>CREATE INDEX index_name ON ( index_key1, ..., index_keyN) 
     WHERE index_filter 
     WITH { "nodes": [ "node1:8091" ] } 
     USING GSI | VIEW;</codeblock>
-   <p>Based on the index filter, the index can be partitioned across multiple index service nodes and placed on a given node using the WITH clause and "nodes" argument in CREATE INDEX statement.</p>
+   <p>Based on the index filter, the index can be partitioned across multiple index service nodes
+    and placed on given nodes using the WITH clause and "nodes" argument in CREATE INDEX
+    statement.</p>
    <p>Administrators can place each index partition in a separate node to distribute index maintenance and index scan load. Index metadata stored on the index node knows about the distribution of the index. GSI does not use scatter-gather. Instead, based on the index metadata, it only touches the nodes that have the relevant data.</p>
   </section>
   <section><title>Index Performance</title>
@@ -48,26 +53,19 @@
    </ul></p>
    <p>The default storage setting for GSI is standard GSI. Memory optimized GSI setting can be selected at the time of the initial cluster setup. Write mode can be selected when the storage setting for GSI is standard. You can change the write mode at any time while the cluster is running, however the setting change require a restart of the index service which can cause a short period of unavailability.</p>
    <p>Global secondary indexes can be placed on a single node. However as the  number of index scans, mutations, the total items indexed, and the total index size increases, it will be necessary to scale the index. You can scale the index in 2 ways: <ul>
-    <li>Load balancing with GSI. You can create multiple copies of the same index to allow scans to be routed to multiple nodes by placing the copies of the same index in separate index service nodes.</li>
+    <li>Load balancing with GSI. You can create replicas of the same index to allow scans to be
+      routed to multiple nodes.</li>
     <li>Partitioning with GSI. You can split the index into multiple partitions, to distribute indexed items, index scan requests, and limit the mutations and size the single index has to handle.</li>
    </ul>In either approach, you also need to scale the index service to allocate more computational resources to indexes.</p>
    <dl>
     <dlentry>
      <dt>Load Balancing with GSI</dt>
-     <dd>Some of your indexes may become hot as they are utilized more often by N1QL queries
-      required for your application logic. You can create multiple copies of the same index across
-      multiple index service nodes under different index names. N1QL automatically load balances
-      across multiple copies of the same index both for load balancing and availability of queries.
-       <p>To load-balance GSIs, you must manually specify the nodes on which indexes should be built
-       on.</p><p> For example, create two indexes <varname>productName_index1</varname> and
-        <varname>productName_index2</varname>, using the following commands:
-       <codeblock>CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
-       WHERE type="product" USING GSI WITH {"nodes":["node1:8091"]};
-      
-CREATE INDEX productName_index2 ON bucket_name(productName, ProductID) 
-       WHERE type="product" USING GSI WITH {"nodes":["node2:8091"]}; </codeblock>
-       The indexing load will be distributed equally between the indexes
-        <varname>productName_index1</varname> and <varname>productName_index2</varname>. </p></dd>
+     <dd>It is possible to create indexes with replicas distributed amongst multiple nodes. Unlike
+      replicas used in the data service, each replica index is considered to be equivalent to the
+      active index. This means that the query service automatically load balances between the
+      replica indexes, even when using the USE INDEX statement or prepared statements.</dd>
+     <dd>See <xref href="#concept_bb5_khb_ys/gsi-ha" format="dita"/> for further details on index
+      replication.</dd>
     </dlentry>
     <dlentry>
      <dt>Partitioning with GSI</dt>
@@ -124,18 +122,49 @@ CREATE INDEX productName_index2 ON bucket_name(productName, ProductID)
       API.</li>
     </ul>For N1QL, the default consistency setting is <codeph>not_bounded</codeph>.</p>
   </section>
-  <section><title>Index Replication and High Availability with N1QL</title>
-   <p>GSIs are not automatically replicated however you can create "replicas" yourself and achieve full high availability.</p>
-   <p>To create a replica of a GSI, you can create an identical index definition with unique index names under 2 or more nodes. Queries will load balance across the indexes and if one of the indexes become unavailable, all requests are automatically rerouted to the available remaining index without application or admin intervention. You can create more than 2 copies of the index for better redundancy and load balancing.</p><codeblock>CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
-    WHERE type="product" 
-    USING GSI 
-    WITH {"nodes":["node1:8091"]};
-    
-CREATE INDEX productName_index2 ON bucket_name(productName, ProductID) 
-    WHERE type="product" 
-    USING GSI 
-    WITH {"nodes":["node2:8091"]};</codeblock>
-  </section>
+  <section id="gsi-ha"><title>Index Replication and High Availability with N1QL</title><p>Individual
+    GSIs can be automatically replicated to other nodes in the cluster to achieve high availability,
+    ensuring that an index continues to function even if a node hosting the index is unavailable.
+    Queries will load balance across the indexes and if one of the indexes become unavailable, all
+    requests are automatically rerouted to the available remaining index without application or
+    admin intervention. </p><p>Replica indexes can be created in three different ways, each using
+    the <xref href="../n1ql/n1ql-language-reference/createindex.dita#concept_npk_mth_rq"/>
+    statement. The first of these is to specify the nodes which the index should be located in the
+    WITH clause. The following example creates an index with two replicas, one on
+     <codeph>node2</codeph> and one on <codeph>node3</codeph>, with the active on
+     <codeph>node1</codeph>.</p><codeblock id="nodes-example">CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
+       WHERE type="product" USING GSI 
+       WITH {"nodes":["node1:8091", "node2:8091", "node3:8091"]};</codeblock>
+   <!-- Referenced in createindex.dita --><p>It is also possible to create an index with replicas
+    without specifying which nodes the index should reside on. Adding <varname>num_replica</varname>
+    to the WITH clause creates an index with the specified number of replicas, distributed across
+    index nodes in the cluster. When creating an index with replicas in this manner, the indexer
+    will attempt to distribute the replicas based on the server groups in use in the cluster where
+    possible. This means that should an entire server group go down, a replica of the index should
+    still be available on one (or more) of the nodes in another (or multiple) server
+    group(s).</p><p>The following example creates an index with two replicas without explicitly
+    specifying which nodes they should reside
+    on:<codeblock>CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
+       WHERE type="product" USING GSI 
+       WITH {"num_replica": 2};</codeblock></p><p>If
+    both <varname>nodes</varname> and <varname>num_replica</varname> are specified in the WITH
+    clause, then the number of nodes specified must be one greater than
+     <varname>num_replica</varname>.</p><p>Finally, it is possible to create GSIs with replicas
+    without explicitly stating the number of replicas. This is done by altering the number of
+    replicas that the indexer will create, which defaults to 0. Changing the default number of
+    replicas can be done using the following curl command and must be done by a full
+    administrator:<codeblock>curl -u &lt;username>:&lt;password> &lt;host>:9102/settings -d "{\"indexer.settings.num_replica\": &lt;num_replicas>}"</codeblock></p>If
+   manually specifying the number of replicas to create for a given index in the CREATE INDEX
+   statement, then this takes precedence over the default number of replicas from the indexer.<note
+    type="important">When using any of the three above methods, you must ensure that the number of
+    replicas being created is less than the number of index nodes in your cluster, otherwise the
+    index creation will fail. Once an index has been created with a given number of replicas, if the
+    number of index nodes in a cluster goes below the number of nodes required then new replicas
+    will be created on any incoming index nodes, until the desired number of replicas exist for a
+    given index.</note>Once an index with replicas has been created, you will be able to see each of
+   its replicas (and active) as individual entries in the 'Index' tab in the web console. However,
+   as the replicas are opaque to the query service, you will not see these replicas in
+    <codeph>system:indexes</codeph>.</section>
   <section id="std-gsi"><title>Standard Global Secondary Indexes</title>
    <p>Standard global secondary indexes is the default storage setting for Couchbase Server clusters. Standard global secondary indexes (also called global secondary indexes, indexes, or GSI) can index larger data sets as long as there is disk space available for storing the index.</p>
    <p>Standard Global Secondary Indexes uses ForestDB for indexes that can utilize both memory and persistent storage for index maintenance and index scans. ForestDB is Couchbase’s state-of-the-art storage engine with a modified data structure to increase read and write performance from storage. </p>
