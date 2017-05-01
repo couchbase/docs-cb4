@@ -8,10 +8,11 @@
       versions where secondary indexes could only be created and subsequently queried on whole
       arrays. You can now create an index of array elements ranging from plain scalar values to
       complex arrays or JSON objects nested deeper in the array. </p>
-    <section> <title>N1QL Syntax</title>
+    <section>
+      <title>N1QL Syntax</title>
       <codeblock>CREATE INDEX [ <varname>index_name</varname> ] 
-        ON <varname>named_keyspace_ref</varname> ( <varname>expression</varname> || <varname>array_expression</varname>, … )
-        [ WHERE <varname>filter_expressions</varname> ]
+        ON <varname>named_keyspace_ref</varname> ( <varname>index_key1</varname>, <i>index_key2</i> | <i>index_key3</i>, ... )
+        [ WHERE <varname>filter_expr</varname> ]
         [ USING GSI ]
         [ WITH { "nodes": [ "<varname>node_name</varname>" ], 
                 "defer_build": true | false
@@ -25,38 +26,84 @@
           </dlentry>
           <dlentry>
             <dt><varname>named_keyspace_ref</varname></dt>
-            <dd><codeblock><varname>named_keyspace_ref</varname> ::= [ <varname>namespace-name</varname> : ] <varname>keyspace-name</varname></codeblock> <p>Specify the name of the keyspace or bucket to create an index on</p></dd>
-          </dlentry>
-          <dlentry>
-            <dt><varname>expression</varname></dt>
-            <dd>Refers to the an attribute name or a function (or expression) that returns a single
-              element.</dd>
-          </dlentry>
-          <dlentry>
-            <dt><varname>array_expression</varname></dt>
             <dd>
-              <codeblock><varname>array_expression</varname> ::= 
-[ ALL ] DISTINCT ARRAY <varname>var_expression</varname> FOR <varname>variable1</varname> ( IN | WITHIN ) [<b>TO_ARRAY</b>] <varname>expression1</varname>
-                                      [ , <varname>variable2</varname> ( IN | WITHIN ) [<b>TO_ARRAY</b>] <varname>expression2</varname> ]
-                                      [ ( WHEN <varname>condition</varname> ) ] END</codeblock>
-              <p>The <cmdname>ARRAY</cmdname> operator lets you map and filter the elements or
+              <codeblock><varname>named_keyspace_ref</varname> ::= [ <varname>namespace_name</varname> : ] <varname>keyspace_name</varname></codeblock>
+              <p>Specify the name of the keyspace or bucket to create an index on</p>
+            </dd>
+          </dlentry>
+          <dlentry>
+            <dt><varname>index_key</varname></dt>
+            <dd>
+              <codeblock><varname>index_key</varname> ::= <varname>expr</varname> | <varname>array_expr</varname></codeblock>
+            </dd>
+            <dd>Refers to the an attribute name or a scalar function or an ARRAY expression on the
+              attribute.  This constitutes an index-key for the index.  </dd>
+          </dlentry>
+          <dlentry>
+            <dt><varname>expr</varname></dt>
+            <dd>A <xref href="index.dita#n1ql-lang-ref">N1QL expression</xref> over any fields in
+              the document. This cannot use constant expressions, aggregate functions, or
+              sub-queries.</dd>
+          </dlentry>
+          <dlentry>
+            <dt><varname>array_expr</varname></dt>
+            <dd><codeblock><varname>array_expr</varname> ::= full_array_expr | simple_array_expr
+full_array_expr ::=
+    (ALL | DISTINCT) ARRAY <varname>var_expr</varname> 
+        FOR <varname>var1</varname> ( IN | WITHIN ) <varname>expr1</varname>
+        [ , <varname>var2</varname> ( IN | WITHIN ) <varname>expr2</varname> ]
+        [ ( WHEN <varname>condition</varname> ) ] END
+simple_array_expr ::=
+    (ALL | DISTINCT) <varname>expr</varname></codeblock><p>The
+                  <cmdname>ARRAY</cmdname> operator lets you map and filter the elements or
                 attributes of a collection, object, or objects. It evaluates to an array of the
-                operand expression that satisfies the WHEN clause, if specified. </p>
-              <p><varname>var_expression</varname> evaluates to a function of
-                  <varname>variable1</varname>/<varname>variable2</varname> etc, and
-                  <varname>expression1/expression</varname> etc evaluate to an array of objects,
-                each of which is represented by the variables.  </p>
-              <p>
-                <note>The variables used in query predicates (<varname>where-clause</varname>) of
-                  subsequent SELECT/UPDATE/UPSERT/DELETE statements must be the same as those used
-                  in the above <varname>array_expression</varname>. See <xref
+                operand expression that satisfies the WHEN clause, if specified.
+                  </p><p><varname>var_expr</varname> ::= function(<varname>var1</varname>,
+                  <varname>var2</varname>, ...)</p><p>
+                <ul id="ul_pw5_xgl_rz">
+                  <li>The expression is a function of the variables <varname>var1</varname>,
+                      <varname>var2</varname>, etc. used in the FOR clause, and the expressions
+                      <varname>expr1</varname>, <varname>expr2</varname>, etc. evaluate to an array
+                    of objects, elements of which are represented by the variables
+                      <varname>var1</varname>, <varname>var2</varname>, etc. respectively.</li>
+                  <li>The <varname>var_expr</varname> itself can be an
+                    <varname>array_expr</varname>, allowing nested array expression.  This enables
+                    creating array indexes on nested array fields. See examples below.</li>
+                </ul>
+              </p><varname>simple_array_expr</varname>
+              <p>When using <varname>simple_array_expr</varname>, only an array field name or an
+                expression <varname>expr</varname> that can evaluate to an array can be specified.
+                In this case, all elements of the array are indexed.</p><note>Currently, array
+                indexing is limited to using only one index key with <varname>array_expr</varname>.
+                Furthermore, the <varname>array_expr</varname> must be the first index-key for the
+                index to be leverages for a SELECT statement with an UNNEST clause on the array.  To
+                create an array index involving multiple array elements or multiple
+                arrays:</note><ul id="ul_cpy_q3l_rz">
+                <li>The <varname>var_expr</varname> can be constructed as a compound object
+                  constituted with different elements of the same array or multiple arrays.</li>
+                <li>Subsequent SELECT or DML must use similar compound objects in the WHERE clause
+                  to use the array index. See examples below.</li>
+              </ul><note>Couchbase 4.6.2 release introduces the following enhancements to array
+                indexing:</note><ul id="ul_wb3_y3l_rz">
+                <li>Allow arbitrary variable names in array index selection. That is, a SELECT query
+                  or DML that needs to use the array index can use different variable names in the
+                  query from those used in the array index definition. In earlier releases, the
+                  variable names must exactly match. See <xref
+                    href="https://developer.couchbase.com/documentation/server/4.5/n1ql/n1ql-language-reference/indexing-arrays.html"
+                    format="html" scope="external">4.5 documentation</xref> for details.</li>
+                <li>Support <varname>simple_array_expr</varname>, which provides simpler syntax for
+                  array indexing when all array elements are indexed as is, without requiring to use
+                  the ARRAY operator in the index definition.</li>
+              </ul><p>
+                <note>The variables used in query predicates (WHERE clauses) of subsequent
+                  SELECT/UPDATE/UPSERT/DELETE statements must be the same as those used in the above
+                    <varname>array_expr</varname>. See <xref
                     href="#topic_hv4_sbr_w5/query-predicate-format" format="dita">Format of Query
                     Predicate in SELECT, UPDATE, or DELETE</xref> for details.</note>
-              </p>
-            </dd> 
+              </p></dd>
           </dlentry>
           <dlentry>
-            <dt><varname>filter_expression</varname></dt>
+            <dt><varname>filter_expr</varname></dt>
             <dd>Specifies WHERE clause predicates to qualify the subset of documents to include in
               the index. </dd>
           </dlentry>
@@ -69,11 +116,12 @@
             <dd>Use the WITH clause to specify additional options and is fully supported with nodes
               and <varname>defer_build</varname> expressions.</dd>
           </dlentry>
-        </dl> </p><p>See the <xref
-          href="http://developer.couchbase.com/documentation/server/4.1/n1ql/n1ql-language-reference/createindex.html"
-          format="html" scope="external">CREATE INDEX</xref> statement for more details on the
-        syntax. </p> 
-      <p id="query-predicate-format"><b>Format of Query Predicate in SELECT, UPDATE, or DELETE</b></p>
+        </dl>
+      </p>
+      <p>See the <xref href="createindex.dita#concept_npk_mth_rq">CREATE INDEX</xref> statement for
+        more details on the syntax. </p>
+      <p id="query-predicate-format"><b>Format of Query Predicate in SELECT, UPDATE, or
+        DELETE</b></p>
       <p>The query predicate, which must appear in the WHERE clause of a SELECT, UPDATE, or DELETE
         statement, must have the exact matching format as the variable in the array index key,
         including the name of the variable <varname>x</varname>. </p>
@@ -100,47 +148,375 @@
               <varname>UPPER(x)</varname> is sargable for the predicate <codeph>UPPER(x) LIKE
               "John%"</codeph>.</li>
           <li>IN vs. WITHIN: Index key (a) can be used for query predicate (c). Index key (b) can be
-            used for both query predicates (c) and (d).</li></ul><note> Index key (b) is strictly more expensive than index key (a), for both index maintenance and query processing. Index key (b) and query predicate (d) are very powerful. They can efficiently index and query recursive trees of arbitrary depth.</note></p>
+            used for both query predicates (c) and (d).</li>
+        </ul><note> Index key (b) is strictly more expensive than index key (a), for both index
+          maintenance and query processing. Index key (b) and query predicate (d) are very powerful.
+          They can efficiently index and query recursive trees of arbitrary depth.</note></p>
     </section>
-    <section><title>Examples</title>
-      <p>The following samples use the <codeph>travel-sample</codeph> bucket. </p>
-      <p><b>Indexing individual elements in an array</b></p>
-      <p>Create an index on all schedules:
-        <codeblock>CREATE INDEX isched 
-        ON `travel-sample` ( DISTINCT ARRAY v FOR v IN schedule END );</codeblock></p>
-      <p>The following query finds the list of scheduled 'AA' flights:
-        <codeblock> SELECT  * from  `travel-sample`
-        WHERE ANY v IN schedule SATISFIES v.flight LIKE 'AA%' END;</codeblock></p>
-      <p><b>Indexing individual attributes of an array of documents</b></p>
-      <p>Create an index on flight IDs scheduled in the first 4 days of the week:
-        <codeblock>CREATE INDEX iflight_day 
-       ON `travel-sample` ( DISTINCT ARRAY v.flight FOR v IN schedule WHEN v.day &lt; 4 END )
-       WHERE type = "route" ;</codeblock></p>
-      <p><b>Compound indexing with individual elements of an array and other attributes</b></p>
-      <p>Create an index on scheduled flight IDs and number of stops:
-        <codeblock>CREATE INDEX iflight_stops 
-       ON `travel-sample` ( stops, DISTINCT ARRAY v.flight FOR v IN schedule END )
-       WHERE type = "route" ;</codeblock></p>
-      <p>The following query finds the list of scheduled 'AA' flights that have one or more stops:
+    <section>
+      <title>Examples</title>
+      <p>The following samples use the <xref
+          href="https://developer.couchbase.com/documentation/server/4.6/sdk/sample-application.html"
+          format="html" scope="external">travel-sample</xref> bucket that is shipped with the
+        product. </p>
+      <p><b>Example 1: Indexing all DISTINCT elements in an array</b></p>
+      <p>C1: Create an index on all schedules:
+        <codeblock>CREATE INDEX idx_sched 
+ON `travel-sample` ( DISTINCT ARRAY v.flight FOR v IN schedule END );</codeblock></p>
+      <p>Q1: The following query finds the list of scheduled 'UA' flights:
         <codeblock>SELECT * FROM `travel-sample`
-WHERE type = "route" AND ANY v IN schedule SATISFIES v.flight LIKE 'AA%' END AND stops >= 0;     </codeblock></p>
-      
-      
-      <p><b>Indexing the individual elements of nest arrays</b></p>
+WHERE ANY v IN schedule SATISFIES v.flight LIKE 'UA%' END;</codeblock></p>
+      <p><b>Example 2: Partial index (with WHERE clause) of individual attributes from selected
+          elements (using WHEN clause) of an array:</b></p>
+      <p>C2: Create an index on flight IDs scheduled in the first 4 days of the week:
+        <codeblock>CREATE INDEX idx_flight_day 
+ON `travel-sample` ( ALL ARRAY v.flight FOR v IN schedule WHEN v.day &lt; 4 END )
+WHERE type = "route" ;</codeblock></p>
+      <p>Q2: The following query finds the list of scheduled 'UA' flights on day 1:
+        <codeblock>SELECT * FROM `travel-sample`
+WHERE type = "route"
+AND ANY v IN schedule SATISFIES (v.flight LIKE 'UA%') AND (v.day=1) END;</codeblock></p>
+      <note>The index C2 qualifies for the query Q2 because:</note>
+      <ul id="ul_x12_tkl_rz">
+        <li>Q2 predicate <codeph>type = "route"</codeph> matches that of the partial index WHERE
+          clause.</li>
+        <li>The ANY operator uses the index key <codeph>v.flight</codeph> on which the index C2 is
+          defined.</li>
+        <li>The ANY-SATISFIES condition <codeph>v.day=1</codeph> in Q2 is sargable to that in the
+          index definition WHEN clause <codeph>v.day&lt;4</codeph>.</li>
+      </ul>
+      <p><b>Example 3: Compound array index with individual elements of an array and other non-array
+          fields</b></p>
+      <p>C3: Create an index on scheduled flight IDs and number of stops:
+        <codeblock>CREATE INDEX idx_flight_stops 
+ON `travel-sample` 
+    ( stops, DISTINCT ARRAY v.flight FOR v IN schedule END )
+WHERE type = "route" ;</codeblock></p>
+      <p>Q3: The following query finds the list of scheduled 'UA' flights that have one or more
+        stops:
+        <codeblock>SELECT * FROM `travel-sample`
+WHERE type = "route"
+AND stops >=0
+AND ANY v IN schedule SATISFIES v.flight LIKE 'UA%' END;  </codeblock></p>
+      <p><b>Example 4: Indexing the individual elements of nest arrays</b></p>
       <p>Use the DISTINCT ARRAY clause in a nested fashion to index specific attributes of a
-        document when the array contains other arrays or documents that contain arrays. For example, <codeblock>cbq> UPDATE `travel-sample` 
-SET schedule[0] = {"day" : 7, "special_flights" : 
+        document when the array contains other arrays or documents that contain arrays. For example,
+        <codeblock>cbq> UPDATE `travel-sample` 
+     SET schedule[0] = {"day" : 7, "special_flights" : 
                     [ {"flight" : "AI444", "utc" : "4:44:44"}, 
-                      {"flight" : "AI333", "utc" : "3:33:33" } 
+                      {"flight" : "AI333", "utc" : "3:33:33"} 
                     ] } 
-WHERE type = "route" AND destinationairport = "CDG" AND sourceairport = "TLV";</codeblock>
-        <codeblock>cbq> CREATE INDEX inested ON `travel-sample`
-( DISTINCT ARRAY (DISTINCT ARRAY y FOR y IN x.special_flights END) FOR x IN schedule END) 
+     WHERE type = "route" 
+     AND destinationairport = "CDG" AND sourceairport = "TLV";</codeblock>
+        C4: The following creates a partial index on a nested array
+          <varname>special_flights</varname>:<codeblock>CREATE INDEX idx_nested ON `travel-sample`
+    (DISTINCT ARRAY
+        <b>(DISTINCT ARRAY y.flight
+        FOR y IN x.special_flights END)</b>
+    FOR x IN schedule END) 
 WHERE type = "route";</codeblock></p>
     </section>
-    <section id="array-idx-limitations"><title>Limitations</title>
-      <p> Let's use the following sample document with Doc_Id "foo" to explain the limitations:
-        <codeblock>"foo": {
+    <section>
+      <note>In this case, the inner ARRAY construct (in <b>bold</b>) is used as the
+          <varname>var_expr</varname> for the outer ARRAY construct in the N1QL Syntax above.</note>
+    </section>
+    <section><p>Q4: The following query uses nested ANY operator to use the index:</p><p>
+        <codeblock>SELECT count(*) FROM `travel-sample`
+WHERE type = "route"
+AND ANY x in schedule SATISFIES
+    (ANY y in x.special_flights SATISFIES y.flight IS NOT NULL END)
+END;</codeblock>
+      </p><p>Q4A: The following query uses UNNEST operators to use the index:</p><p>
+        <codeblock>SELECT count(*) FROM `travel-sample`
+UNNEST schedule AS x
+UNNEST x.special_flights AS y
+WHERE type = "route"
+AND y.flight IS NOT NULL;</codeblock>
+      </p><b>Example 5:  Array Index with multiple elements of an array</b><p>C5:  Create an index
+        on <varname>flight</varname> and <varname>day</varname> fields in
+          <varname>schedule</varname>:</p><p>
+        <codeblock>CREATE INDEX idx_flight_day ON `travel-sample`
+    ( DISTINCT ARRAY [v.flight, v.day] FOR v IN schedule END)
+WHERE type = "route" ;</codeblock>
+      </p><p>Q5: The following query finds the list of scheduled 'US681' flights on day 2:</p><p>
+        <codeblock>SELECT meta().id FROM `travel-sample`
+WHERE type = "route"
+AND ANY v in schedule SATISFIES [v.flight, v.day] = ["US681", 2] END;</codeblock>
+      </p><b>Example 6:  Indexing all elements in an array using simplified syntax</b><p>C6:  Create
+        an index on all schedules using simplified array index syntax:</p><p>
+        <codeblock>CREATE INDEX idx_sched_simple
+ON `travel-sample` (ALL schedule)
+WHERE type = "route";</codeblock>
+      </p><p>Q6:  The following query finds details of all route documents matching a specific
+        schedule.  Note that elements of schedule array are objects, and hence the right side value
+        of the predicate condition should be similarly structured object.</p><p>
+        <codeblock>SELECT * FROM `travel-sample`
+WHERE type = "route"
+AND ANY v IN schedule 
+SATISFIES v = {"day":2, "flight": "US681", "utc": "19:20:00"} END;</codeblock>
+      </p><p>Q6A:  This is a variant of Q6 using the UNNEST in the SELECT statement.  The following
+        query finds details of all route documents matching a specific schedule. </p><p>
+        <codeblock>SELECT * FROM `travel-sample` t
+UNNEST schedule sch
+WHERE t.type = "route"
+AND sch = {"day":2, "flight": "US681", "utc": "19:20:00"};</codeblock>
+      </p></section>
+    <section>
+      <title>Covering Array Index</title>
+      <p>Covering indexes is an efficient method of using an Index for a particular query, whereby
+        the index itself can completely cover the query in terms of providing all data required for
+        the query. Basically, it avoids the fetch phase of the query processing and related overhead
+        in fetching the required documents from data-service nodes. See more details <b
+          id="docs-internal-guid-f865f11e-a60e-7655-3f51-ac566e4376a8"><xref
+            href="https://developer.couchbase.com/documentation/server/current/indexes/covering-indexes.html"
+            format="html" scope="external">here</xref></b>.</p>
+      <p>Array indexing requires special attention to create covered array indexes. In general, the
+        array field itself should be included as one of the index keys in the CREATE INDEX
+        definition. For example, the index C1 does not cover the query Q1 because the Q1 projection
+        list includes * which needs to fetch the document from the Data Service. The following Q7 is
+        covered by index C7:</p>
+      <p>C7:  Creating a Covered Array Index.</p>
+      <p>
+        <codeblock>CREATE INDEX idx_sched_covered ON `travel-sample`
+   ( DISTINCT ARRAY v.flight FOR v IN schedule END, schedule)
+WHERE type = "route";</codeblock>
+      </p>
+    </section>
+    <section>Q7:  Covered Array Index using the ANY clause.</section>
+    <section id="section_xjg_gyq_rz">
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample`
+USE INDEX (idx_sched_covered)<b>
+WHERE type = "route"</b>
+<b>AND ANY v IN schedule SATISFIES</b> v.flight LIKE 'UA%' END;
+
+Result:
+    {
+      "plan": {
+        "#operator": "Sequence",
+        "~children": [
+          {
+            "#operator": "DistinctScan",
+            "scan": {
+              "#operator": "IndexScan2",
+              "covers": [
+                 "cover ((DISTINCT (ARRAY (`v`.`flight`) FOR `v`
+                    IN (`travel-sample`.`schedule`) END)))",
+                 "cover ((`travel-sample`.`schedule`))",
+                 "cover ((meta(`travel-sample`).`id`))"
+              ],
+              "filter_covers": {
+                <b>"cover ((`travel-sample`.`type`))": "route",
+                "cover (any `v` IN (`travel-sample`.`schedule`) 
+                SATISFIES ((\"UA" &lt;= (`v`.`flight`)) 
+                AND ((`v`.`flight`) &lt; \"UB\")) END)":
+                   true,
+                     "cover (ANY `v` IN (`travel-sample`.`schedule`)
+                     SATISFIES ((`v`.`flights`) LIKE \"UA%\" END)": true</b>
+              },
+              "index": "idx_sched_covered",
+       ...</codeblock>
+      <note>The query Q7 needs index C7 to cover it because the query predicate refers to the array
+          <codeph>schedule</codeph> in the ANY operator.</note>
+      <note>The index keys of an index must be used in the WHERE clause of a DML to use the index
+        for that query.  In the SELECT or DML WHERE clause, Covered Array Indexes can be used by the
+        following operators:</note>
+      <p>
+        <ul id="ul_kbj_sgr_rz">
+          <li>ANY:  As shown in query Q7.</li>
+          <li>ANY AND EVERY:  As shown in query Q7A (a variant of Example Q7).</li>
+        </ul>
+      </p>
+      <p>Q7A:  Covered Array Index using the ANY AND EVERY clause.</p>
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample`
+USE INDEX (idx_sched_covered)
+<b>WHERE type = "route"</b>
+<b>AND ANY AND EVERY v IN schedule</b> SATISFIES v.flight LIKE 'UA%' END;
+ 
+Result:
+   {
+      "plan": {
+        "#operator": "Sequence",
+        "~children": [
+          {
+            "#operator": "DistinctScan",
+            "scan": {
+              "#operator": "IndexScan2",
+              "covers": [
+                 "cover ((DISTINCT (ARRAY (`v`.`flight`) FOR `v`
+                    IN (`travel-sample`.`schedule`) END)))",
+                 "cover ((`travel-sample`.`schedule`))",
+                 "cover ((meta(`travel-sample`).`id`))"
+              ],
+              "filter_covers": {
+       <b>         "cover ((`travel-sample`.`type`))": "route",</b>
+              },
+              "index": "idx_sched_covered",
+       ...</codeblock>
+      <p>Q7B:  Covered Array Index using the UNNEST clause and aliasing.</p>
+      <codeblock>EXPLAIN SELECT meta().id FROM <b>`travel-sample` t</b>
+USE INDEX (idx_sched_covered)
+<b>UNNEST schedule v
+WHERE travel-sample.type = "route" AND v.flight LIKE 'UA%';</b>
+
+Result:
+    { 
+      "plan": {
+        "#operator": "Sequence",
+        "~children": [
+          {
+            "#operator": "DistinctScan",
+            "scan": {
+              "#operator": "IndexScan2",
+              "covers": [
+                 "cover ((DISTINCT (ARRAY (`v`.`flight`) FOR `v`
+                    IN (`t`.`schedule`) END)))",
+                 "cover ((`t`.`schedule`))",
+                 "cover ((meta(`t`).`id`))"
+              ],
+              "filter_covers": {
+                <b>"cover ((`t`.`type`))": "route",</b>
+              },
+              "index": "idx_sched_covered",
+       ...</codeblock>
+    </section>
+    <note>The Q7 Examples have the following limitation:  the collection operator EVERY cannot use
+      array indexes or covered array indexes because the EVERY operator needs to apply the SATISFIES
+      predicate to all elements in the array, including the case where an array has zero elements.
+      As items cannot be indexed, it is not possible to index MISSING items, so the EVERY operator
+      is evaluated in the N1QL engine and cannot leverage the array index scan.  For example, the
+      following query Q7C uses the non-array index <codeph>def_type</codeph> ignoring the <xref
+        href="https://developer.couchbase.com/documentation/server/4.6/n1ql/n1ql-language-reference/hints.html"
+        format="html" scope="external">USE INDEX hint</xref> to use the array indexes (note that
+      query C7 defines a DISTINCT array index while C7C defines an ALL array index, and both are
+      ignored).</note>
+    <p>C7C:  Non-array index with an ALL array index.</p>
+    <codeblock>CREATE INDEX idx_sched_covered_all ON `travel-sample`
+   ( ALL ARRAY v.flight FOR v IN schedule END, schedule)
+WHERE type = "route";</codeblock>
+    <p>Q7C:  Non-array index with an ALL array index.</p>
+    <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample`
+USE INDEX (idx_sched_covered_all, idx_sched_covered)
+WHERE type = "route" 
+AND EVERY v IN schedule SATISFIES v.flight LIKE 'UA%' END;
+
+Result:
+{
+  "plan": {
+     "#operator": "Sequence",
+     "~children": [
+       {
+         "#operator": "IndexScan2",
+         "index": "def_type",
+         ...</codeblock>
+    <section>
+      <title>Implicit Covered Array Index</title>
+      <p>N1QL supports simplified Implicit Covered Array Index syntax in certain cases where the
+        mandatory array index-key requirement is relaxed to create a covering array-index.  This
+        special optimization applies to those queries and DML which have WHERE clause predicates
+        that can be exactly and completely pushed to the indexer during the array index scan.  For
+        example:</p>
+      <p>
+        <ul id="ul_fls_24y_rz">
+          <li>ANY operator with an =, &lt;, >, and LIKE predicate in the SATISFIES clause.  Not that
+            the GSI indexes are tree structures that support exact match and range matches.  And the
+            ANY predicate returns <codeph>true</codeph> as long as it finds at least one matching
+            item in the index.  Hence, an item found in the index can cover the query.  Furthermore,
+            this is covered by both ALL and DISTINCT array indexes.<p>C8:  Creating an Implicit
+              Covered Array Index with
+              DISTINCT.<codeblock>CREATE INDEX idx_sched_covered_simple ON `travel-sample`
+  ( DISTINCT ARRAY v.flight FOR v IN schedule END)
+WHERE type = "route";</codeblock></p><p>Q8: Implicit Covered Array Index using the ANY
+              clause.<codeblock>EXPLAIN SELECT meta().id FROM `travel-sample`
+USE INDEX (idx_sched_covered_simple)
+WHERE type = "route"
+AND ANY v IN schedule SATISFIES v.flight LIKE 'UA%' END;
+
+Result:
+{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+        "#operator": "DistinctScan",
+        "scan": {
+          "#operator": "IndexScan2",
+          "covers": [
+            "cover ((DISTINCT (ARRAY (`v`.`flight`) FOR `v` 
+                   IN (`travel-sample`.`schedule`) END)))",
+            "cover ((meta(`travel-sample`).`id`))"
+          ],
+          "filter_covers": {
+            "cover ((`travel-sample`.`type`))": "route",
+            "cover (any `v` in (`travel-sample`.`schedule`)
+                   SATISFIES ((\"UA\" &lt;= (`v`.`flight`)) 
+                   AND ((`v`.`flight`) &lt; \"UB\")) END)": true,
+            "cover (any `v` in (`travel-sample`.`schedule`)
+                   SATISFIES ((`v`.`flight`) LIKE \"UA%\") END)": true
+          },
+          ...</codeblock></p></li>
+        </ul>
+      </p>
+      <ul>
+        <li>UNNEST operator with =, &lt;, >, or LIKE predicate in the WHERE clause.  This applies to
+          only ALL array indexes because, for such index, all array elements are indexed in the
+          array index, and the UNNEST operation needs all the elements to reconstruct the array.
+          Note that the array cannot be reconstructed if on DISTINCT elements of the array are
+            indexed.<p>For example, the following query Q8A can be covered with the ALL index
+              <varname>idx_sched_covered_simple_all</varname> in C8A, but Q8B is not covered when
+            using the DISTINCT <varname>index idx_sched_covered_simple</varname> defined in
+            C8.</p><p>C8A:  UNNEST covered with the ALL
+            index.<codeblock>CREATE INDEX idx_sched_covered_simple_all ON `travel-sample`
+  ( ALL ARRAY v.flight FOR v IN schedule END)
+WHERE type = "route";</codeblock></p><p>Q8A:
+            UNNEST not covered when using the DISTINCT index.</p><p>
+            <codeblock>EXPLAIN SELECT meta(t).id FROM `travel-sample` t
+USE INDEX (idx_sched_covered_simple_all)
+UNNEST schedule v
+WHERE t.type = "route"
+AND v.flight LIKE 'UA%';
+
+Result:
+{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+        "#operator": "IndexScan2",
+        "covers": [
+          "cover ((`v`.`flight`))",
+          "cover ((meta(`t`).`id`))"
+        ],
+        "filter_covers": {
+          "cover (((`t`.`schedule`) &lt; {}))": true,
+          "cover (([] &lt;= (`t`.`schedule`)))": true,
+          "cover ((`t`.`type`))": "route",
+          "cover (is_array((`t`.`schedule`)))": true
+        },
+        "index": "idx_sched_covered_simple_all",
+        "index_id": "623509c163434cd5",
+        "keyspace": "travel-sample",
+        "namespace": "default",
+        "spans": [
+          {
+            "exact": true,
+            "range": [
+              {
+                "high": "\"UB\"",
+                "inclusion": 1,
+                "low": "\"UA\""
+              }
+            ]
+          }
+        ],
+        "using": "gsi"
+      }
+...</codeblock>
+          </p></li>
+      </ul>
+    </section>
+    <section id="array-idx-limitations">
+      <title>Limitations</title>
+      <p> Let's use the following sample document with Doc_Id "foo" to explain the limitations: <codeblock>"foo": {
           "a":1,
           "b":[1,2],
           "c":{"ca":[1,2,3], "cb":4},  
@@ -151,7 +527,7 @@ WHERE type = "route";</codeblock></p>
           "f":[[17,18],
           [19,20,21]]
           }   </codeblock><ul>
-        <li>Covering indexes with indexed arrays do not cover queries where the array needs to be
+          <li>Covering indexes with indexed arrays do not cover queries where the array needs to be
             reconstructed in full form, with duplicates and position of each element placed
             correctly in the projection. <table frame="all" rowsep="1" colsep="1"
               id="table_crm_35r_w5">
@@ -166,47 +542,119 @@ WHERE type = "route";</codeblock></p>
                 </thead>
                 <tbody>
                   <row>
-                    <entry><image href="../../introduction/images/yes.png" id="image_mq3_1wr_w5" align="center"
-                        placement="break"/></entry>
-                    <entry><codeblock>SELECT a 
+                    <entry>
+                      <image href="../../introduction/images/yes.png" id="image_mq3_1wr_w5"
+                        align="center" placement="break"/>
+                    </entry>
+                    <entry>
+                      <codeblock>SELECT a 
          FROM default 
-         WHERE ANY i IN b SATISFIES i &lt; 5 END;</codeblock></entry>
+         WHERE ANY i IN b SATISFIES i &lt; 5 END;</codeblock>
+                    </entry>
                   </row>
                   <row>
-                    <entry><image href="../../introduction/images/yes.png" id="image_p2j_cwr_w5" align="center"
-                        placement="break"/></entry>
-                    <entry><codeblock>SELECT ARRAY_DISTINCT(b) 
+                    <entry>
+                      <image href="../../introduction/images/yes.png" id="image_p2j_cwr_w5"
+                        align="center" placement="break"/>
+                    </entry>
+                    <entry>
+                      <codeblock>SELECT ARRAY_DISTINCT(b) 
         FROM default 
-        WHERE a = 5;</codeblock></entry>
+        WHERE a = 5;</codeblock>
+                    </entry>
                   </row>
                   <row>
-                    <entry><image href="../../introduction/images/no.png" id="image_phk_dwr_w5" align="center"
-                        placement="break"/></entry>
-                    <entry> <codeblock>SELECT b,a 
-       FROM default;</codeblock></entry>
+                    <entry>
+                      <image href="../../introduction/images/no.png" id="image_phk_dwr_w5"
+                        align="center" placement="break"/>
+                    </entry>
+                    <entry>
+                      <codeblock>SELECT b,a 
+       FROM default;</codeblock>
+                    </entry>
                   </row>
                 </tbody>
               </tgroup>
             </table></li>
-        <li>Indexed arrays do not maintain duplicate elements of an array or the position of the
+          <li>Indexed arrays do not maintain duplicate elements of an array or the position of the
             elements within an array in the GSI array index. This means that GSI array indexes do
             not cover expressions that reference the array attribute itself. For example, the
             following statements are not
             supported:<codeblock>SELECT b FROM default;
 SELECT b[*] FROM default;
 SELECT b[1] FROM default;</codeblock></li>
-
-        <li>Array indexes only support ANY, ANY AND EVERY, ARRAY, DISTINCT, IN, WITHIN, and UNNEST
+          <li>Array indexes only support ANY, ANY AND EVERY, ARRAY, DISTINCT, IN, WITHIN, and UNNEST
             operators. Other operators such as ALL and EVERY are not supported. <note>EVERY operator
               evaluates to true for arrays with zero elements, whereas ANY AND EVERY evaluates to
               true when the array has at least one matching element.</note></li>
-        <li>The total size of the array index keys cannot exceed 10K for a single document. 
-        The array index key size is calculated using the total size of all array elements being indexed 
-        in a single document. If the total array index key size exceeds 10K in a single document, the 
-        items are skipped. The following error is logged to indicate that an item is skipped when building 
-	 the index: "<systemoutput>Encoded array key is too long</systemoutput>" in the <filepath>indexer.log</filepath> file. The <filepath>indexer.log</filepath> file is included in cbcollect_info output. For example, the array key size for the following index is calculated by adding all the elements in this list : "{[1,1], [1,2]}". You can contact Couchbase Support for details on how to change the limit on array index key size.
-        <codeblock>CREATE INDEX i1 on default(a,ARRAY x FOR x IN b END) USING GSI;</codeblock> </li>
-      </ul></p>
+          <li>The total size of the array index keys cannot exceed 10K for a single document. The
+            array index key size is calculated using the total size of all array elements being
+            indexed in a single document. If the total array index key size exceeds 10K in a single
+            document, the items are skipped. The following error is logged to indicate that an item
+            is skipped when building the index: "<systemoutput>Encoded array key is too
+              long</systemoutput>" in the <filepath>indexer.log</filepath> file. The
+              <filepath>indexer.log</filepath> file is included in
+              <filepath>cbcollect_info</filepath> output. For example, the array key size for the
+            following index is calculated by adding all the elements in this list : "{[1,1],
+            [1,2]}". You can contact Couchbase Support for details on how to change the limit on
+            array index key size.
+            <codeblock>CREATE INDEX i1 on default(a,ARRAY x FOR x IN b END) USING GSI;</codeblock>
+          </li>
+        </ul></p>
+    </section>
+    <section>
+      <title>Summary</title>
+      <p> The following table summarizes N1QL-supported collection operators in the DML WHERE clause
+        for different kinds of array index features:<table frame="all" rowsep="1" colsep="1"
+          id="table_kyc_brz_rz">
+          <title>N1QL-supported collection operators</title>
+          <tgroup cols="5" align="center">
+            <colspec colname="c1" colnum="1" colwidth="1*"/>
+            <colspec colname="c2" colnum="2" colwidth="1*"/>
+            <colspec colname="c3" colnum="3" colwidth="1*"/>
+            <colspec colname="c4" colnum="4" colwidth="1*"/>
+            <colspec colname="c5" colnum="5" colwidth="1*"/>
+            <thead>
+              <row>
+                <entry>Operator in the SELECT/DML WHERE clause</entry>
+                <entry>Array index with same variable names in Index definition and DML</entry>
+                <entry>Array index with arbitrary Variable names in Index definition and DML</entry>
+                <entry>Covered Array Index (with explicit array index-key)</entry>
+                <entry>Implicit Covered Array Index (without explicit array index-key)</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry><b>ANY</b></entry>
+                <entry>✓ (both ALL &amp; DISTINCT)</entry>
+                <entry>✓ (both ALL &amp; DISTINCT)</entry>
+                <entry>✓ (both ALL &amp; DISTINCT)</entry>
+                <entry>✓ (both ALL &amp; DISTINCT)</entry>
+              </row>
+              <row>
+                <entry><b>UNNEST</b></entry>
+                <entry>✓ (only ALL, with array as leading index-key)</entry>
+                <entry>✘</entry>
+                <entry>✓ (only ALL, with array as leading index-key)</entry>
+                <entry>✓ (only ALL, with array as leading index-key)</entry>
+              </row>
+              <row>
+                <entry><b>ANY AND EVERY</b></entry>
+                <entry>✓ (both ALL &amp; DISTINCT)</entry>
+                <entry>✓ (both ALL &amp; DISTINCT)</entry>
+                <entry>✓ (both ALL &amp; DISTINCT)</entry>
+                <entry>✘</entry>
+              </row>
+              <row>
+                <entry><b>EVERY</b></entry>
+                <entry>✘</entry>
+                <entry>✘</entry>
+                <entry>✘</entry>
+                <entry>✘</entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table></p>
     </section>
   </body>
   <related-links><link href="http://blog.couchbase.com/2016/may/1.making-most-of-your-arrays..-with-covering-array-indexes-and-more" format="html" scope="external"> <linktext>Blog: Covering Array Indexes </linktext></link></related-links>
