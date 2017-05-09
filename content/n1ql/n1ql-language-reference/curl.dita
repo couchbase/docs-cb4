@@ -18,22 +18,7 @@
       clauses of the DML statements such as projection, WHERE predicates, FROM data source etc. For
       example, this function can be used to integrate with Couchbase FTS and run fuzzy text searches
       in N1QL queries, or INSERT-SELECT statement to import external data into Couchbase Server.</p>
-    <p>The <codeph>CURL()</codeph> function is enabled by default for the Full Administrator role.
-      Full Administrators can assign the QUERY_EXTERNAL_ACCESS role to other users to use the CURL
-      functionality. </p>
-    <p>CURL runs on the query node within a cluster. In order to identify a request from N1QL’s CURL
-      function, a custom header is always set for all requests. The custom header format is:
-        <codeph>"X-N1QL-User-Agent: couchbase/n1ql/&lt;n1ql-version"</codeph>. For external clients
-      that wish to disallow N1QL <codeph>CURL()</codeph> from accessing their REST API endpoints,
-      can explicitly check for the above header and block it. The general external endpoints will
-      ignore this header value. </p>
-    <p>A <codeph>user-agent</codeph> is always set by default. This can be reset using the
-        <codeph>-user-agent </codeph>option. The value set by default is
-        <codeph>couchbase/n1ql/&lt;n1ql-version></codeph>. </p>
-    <p>For the <codeph>CURL()</codeph> functionality, internally a specific set of SSL ciphers
-      (MEDIUM or HIGH) are supported. This is dependent on the
-        <codeph>COUCHBASE_SSL_CIPHER_LIST</codeph>. </p>
-    <p> </p>
+    <p/>
       
     <section id="section_vm2_vcw_1z">
       <title>Syntax</title>
@@ -52,33 +37,6 @@
             </ul>
           </dd>
         </dlentry>
-       <dlentry>
-         <dt>Limitations</dt>
-         <dd>
-            <p>Any values passed to the arguments of <codeph>CURL()</codeph> must be static values.
-              That means, they cannot include any references to names/aliases of documents or
-              attributes in the documents, or any N1QL functions or expressions that may need to be
-              evaluated. </p>
-            <p>For example, check the following example:</p>
-            <p>
-              <codeblock outputclass="json">SELECT CURL(TO_UPPER(“POST”), b.url, { “data” : “address=”||b.data }) 
-FROM bucket b;</codeblock>
-            </p>
-            <p>This example is invalid, because:</p>
-            <ul id="ul_mjt_z1h_cz">
-              <li dir="ltr">
-                <p dir="ltr">for the first argument, <codeph>TO_UPPER()</codeph> function cannot be
-                  evaluated.</p>
-              </li>
-              <li dir="ltr">
-                <p dir="ltr">for the second argument, <codeph>b.url</codeph> refers to alias b and
-                  attribute url in the document.</p>
-              </li>
-              <li dir="ltr">for the third argument, the string concatenation operator (||) cannot be
-                evaluated.</li>
-            </ul>
-          </dd>
-       </dlentry>
        <dlentry>
          
       <dt>Options</dt> 
@@ -120,14 +78,13 @@ FROM bucket b;</codeblock>
                   </row>
                   <row>
                     <entry><codeph>cacert</codeph></entry>
-                    <entry> Specify CA signed certificate file name. Certificates should be stored
-                      on the local machine, on each query node within a cluster. To store
-                      certificates, access
-                        <filepath>/Couchbase/var/lib/couchbase/n1qlcerts</filepath>. This is not
-                      visible to the user. The file name cannot contain a path. If it is not a match
-                      to the existing contents of <filepath>n1qlcerts</filepath> directory, the
-                      function displays an error. For all expired and invalid certificates will get
-                      an error. </entry>
+                    <entry>Specify CA signed certificate file name. Certificates should be stored on
+                      the local machine, on each query node within a cluster. To store certificates,
+                      access <filepath>/Couchbase/var/lib/couchbase/n1qlcerts</filepath>. This is
+                      not visible to the user. The file name cannot contain a path. If it is not a
+                      match to the existing contents of <filepath>n1qlcerts</filepath> directory,
+                      the function displays an error. For all expired and invalid certificates will
+                      get an error. </entry>
                     <entry>FILENAME <p>For example, this is the certificate <codeph>.pem</codeph>
                         file for AWS.</p></entry>
                   </row>
@@ -231,6 +188,66 @@ FROM bucket b;</codeblock>
             than JSON.</dd>
         </dlentry>
       </dl>
+    </section><section>
+      <title>Security</title>
+      <p>It is important to understand the potential security implications in using the
+          <codeph>CURL() </codeph>function. Note that <codeph>CURL()</codeph> function can connect
+        to any REST end point accessible to the Query node (where the function is executed) inside
+        or outside the firewall. This may open security vulnerabilities if proper security measures
+        are not implemented. For example, consider a scenario where the Query engine port is
+        accessible outside the firewall, but other Couchbase components such as FTS service or
+        Mobile Sync Gateway are not. However, these ports may be accessible from the Query node. In
+        such case, a N1QL client outside the firewall may use the <codeph>CURL()</codeph> function
+        to access the other REST endpoints inside the firewall which are not accessible otherwise.
+        Similarly, it may open vulnerabilities for Denial of Service attacks.</p>
+      <p>The following security measures must be used to control risks associated when using the
+          <codeph>CURL()</codeph> function.</p>
+      <p>
+        <ul id="ul_xmc_dl4_vz">
+          <li>The <codeph>CURL()</codeph> function is enabled for the Full Administrator role by
+            default. </li>
+          <li>The RBAC role QUERY_EXTERNAL_ACCESS is required for a user to run the
+              <codeph>CURL()</codeph> function. Full Administrators can assign the
+            QUERY_EXTERNAL_ACCESS role to other users. </li>
+          <li>A white list of URLs and REST points must be configured on the Query nodes before
+            being able to use the <codeph>CURL()</codeph> function.</li>
+          <li>For the <codeph>CURL()</codeph> functionality, internally a specific set of SSL
+            ciphers (MEDIUM or HIGH) are supported. This is dependent on the
+              <codeph>COUCHBASE_SSL_CIPHER_LIST</codeph>.</li>
+          <li>CURL runs on the query node within a cluster. In order to identify a request from
+            N1QL’s <codeph>CURL()</codeph> function, a custom header is always set for all requests.
+            The custom header format is: <codeph>"X-N1QL-User-Agent:
+              couchbase/n1ql/&lt;n1ql-version"</codeph>. For external clients that wish to disallow
+            N1QL <codeph>CURL()</codeph> from accessing their REST API endpoints, can explicitly
+            check for the above header and block it. The general external endpoints will ignore this
+            header value. </li>
+          <li>A <codeph>user-agent</codeph> is always set by default. This can be reset using the
+              <codeph>-user-agent </codeph> option. The value set by default is
+              <codeph>couchbase/n1ql/&lt;n1ql-version></codeph>.  </li>
+        </ul>
+      </p>
+    </section>
+    <section id="section_sjr_yk4_vz">
+      <title>Limitations</title>
+      <p>
+        <ul id="ul_kwk_vn4_vz">
+          <li>The URL needs to point to a JSON endpoint and must be either http:// or https:// only.
+            No other protocol is supported. The redirection of URL is not allowed.</li>
+          <li>You cannot access any files from the local file system. </li>
+          <li>The amount of memory used for the CURL result is controlled using the
+              <codeph>result-cap</codeph> option. The default is 20MB.</li>
+          <li>Any values passed to the arguments of <codeph>CURL()</codeph> must be static values.
+            That means, they cannot include any references to names or aliases of documents or
+            attributes in the documents, or any N1QL functions or expressions that may need to be
+            evaluated.  <p>For example, check the following example:</p><p>
+              <codeblock outputclass="json">SELECT CURL(b.url, { “data” : “address=”||b.data }) 
+FROM bucket b;</codeblock>
+            </p><p>The above example is invalid, because the first argument <codeph>b.url</codeph>
+              refers to alias <codeph>b</codeph> and attribute <codeph>url</codeph> in the document.
+              In the second argument, the string concatenation operator (||) cannot be
+              evaluated.</p></li>
+        </ul>
+      </p>
     </section>
     <section id="section_l3z_kdw_1z">
       <title>Examples</title><p>The following examples are using CURL in the query projection list. </p>
