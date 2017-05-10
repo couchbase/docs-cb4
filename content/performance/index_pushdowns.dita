@@ -4,8 +4,8 @@
     <title>Index Pushdown Optimizations</title>
     <body>
         <p>N1QL Query Engine implements many query processing optimizations to achieve the best
-            possible performance for N1QL queries.  The GSI Indexes are a vital part of query
-            performance and are tightly coupled with the N1QL engine.  The following links explain
+            possible performance for N1QL queries. The GSI Indexes are a vital part of query
+            performance and are tightly coupled with the N1QL engine. The following links explain
             the basics of Indexing and how it helps query performance:<ul id="ul_y5t_zvh_vz">
                 <li><xref href="../concepts/indexing.dita#concept_kl3_y5f_ps">Indexing</xref></li>
                 <li><xref href="../indexes/n1ql-in-couchbase.dita#concept_kfz_ghb_ys">Indexes for
@@ -14,10 +14,10 @@
                         Documents and Query Performance</xref></li>
             </ul></p>
         <p>Index Pushdowns are performance optimizations where the N1QL engine pushes more of the
-            work down to the Indexer.  Query Indexer not only indexes data, it also supports various
+            work down to the Indexer. Query Indexer not only indexes data, it also supports various
             operations such as point scans, range scans, array indexing, sort order, and pagination.
             N1QL tries to leverage the indexer functionality as much as possible by pushing down the
-            operations to indexer as part of the index scan.  This helps performance, predominantly,
+            operations to indexer as part of the index scan. This helps performance, predominantly,
             in two ways:<ol id="ol_hmj_kwh_vz">
                 <li>Minimize the amount of data transferred from Indexer nodes to Query nodes.</li>
                 <li>Minimize the amount of processing done at Query nodes.</li>
@@ -775,11 +775,331 @@ Result:
                     Server adding the line “Limit: 1” automatically since the maximum value will
                     already be at the beginning of the list, and Couchbase Server is smart enough to
                     know that only 1 record is needed.</note><note>In order for this function to be
-                    utilized, a WHERE clause must be included.</note></p><b>Example 1</b>:  MAX() of
-            a string
-            field.<codeblock>EXPLAIN SELECT MAX(city) 
+                    utilized, a WHERE clause must be included.</note></p><b>Example 1</b>: MAX of a
+            string field – Finding the alphabetically highest city name in
+                <codeph>travel-sample</codeph>.<codeblock outputclass="language-json">EXPLAIN SELECT MAX(city) 
 FROM `travel-sample` 
+USE INDEX (def_city)
 WHERE city is not null;</codeblock></section>
+        <section>Result:<codeblock outputclass="language-json">{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+        "#operator": "IndexScan2",
+        "covers": [
+          "cover ((`travel-sample`.`city`))",
+          "cover ((meta(`travel-sample`).`id`))"
+        ],
+        "index": "def_city",
+        "index_id": "e0a377e15a408175",
+        "index_projection": {
+          "entry_keys": [
+            0
+          ]
+        },
+        "keyspace": "travel-sample",
+        "namespace": "default",
+        "spans": [
+          {
+            "exact": true,
+            "range": [
+              {
+                "inclusion": 0,
+                "low": "null"
+              }
+            ]
+          }
+        ],
+        "using": "gsi"
+      },
+      {
+        "#operator": "Parallel",
+        "~child": {
+          "#operator": "Sequence",
+          "~children": [
+            {
+              "#operator": "Filter",
+              "condition": "(cover ((`travel-sample`.`city`)) is not null)"
+            },
+            {
+              "#operator": "InitialGroup",
+              "aggregates": [
+                "max(cover ((`travel-sample`.`city`)))"
+              ],
+              "group_keys": []
+            }
+          ]
+        }
+      },
+      {
+        "#operator": "IntermediateGroup",
+        "aggregates": [
+          "max(cover ((`travel-sample`.`city`)))"
+        ],
+        "group_keys": []
+      },
+      {
+        "#operator": "FinalGroup",
+        "aggregates": [
+          "max(cover ((`travel-sample`.`city`)))"
+        ],
+        "group_keys": []
+      },
+      {
+        "#operator": "Parallel",
+        "~child": {
+          "#operator": "Sequence",
+          "~children": [
+            {
+              "#operator": "InitialProject",
+              "result_terms": [
+                {
+                  "expr": "max(cover ((`travel-sample`.`city`)))"
+                }
+              ]
+            },
+            {
+              "#operator": "FinalProject"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "text": "SELECT MAX(city) \nFROM `travel-sample` \nuse index (def_city)\nWHERE city is not null;"
+}</codeblock><b>Example
+                2</b>:  Max of an integer field -- Finding the northernmost latitude of any hotel in
+                <codeph>travel-sample</codeph>.<codeblock>SELECT MAX(geo.lat) AS Latitude 
+FROM `travel-sample` 
+WHERE type="hotel";
+
+Result:
+[
+  {
+    "Latitude": 60.15356
+  }
+]</codeblock></section>
+        <section id="section_ojw_5sw_vz"><title>MIN() Pushdown</title><p><i>(Introduced in Couchbase
+                    Server 5.0)</i></p><p>This function returns the lowest value of a string or
+                numeric input field.<note>Using MIN() with the ASC operator results in Couchbase
+                    Server adding the line <codeph>Limit: 1</codeph> automatically since the minimum
+                    value will already be at the beginning of the list, and Couchbase Server is
+                    smart enough to know that only 1 record is needed.</note><note>In order for this
+                    function to be utilized, a WHERE clause must be included.</note></p><b>Example
+                3</b>:  Min of a string field -- Finding the alphabetically lowest city name in
+                <codeph>travel-sample</codeph>.<codeblock>EXPLAIN SELECT MIN(city) 
+FROM `travel-sample` 
+use index (def_city)
+WHERE city is not null;</codeblock></section>
+        <section>Result:<codeblock>{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+        "#operator": "IndexScan2",
+        "covers": [
+          "cover ((`travel-sample`.`city`))",
+          "cover ((meta(`travel-sample`).`id`))"
+        ],
+        "index": "def_city",
+        "index_id": "e0a377e15a408175",
+        "index_projection": {
+          "entry_keys": [
+            0
+          ]
+        },
+        "keyspace": "travel-sample",
+        "limit": "1",
+        "namespace": "default",
+        "spans": [
+          {
+            "exact": true,
+            "range": [
+              {
+                "inclusion": 0,
+                "low": "null"
+              }
+            ]
+          }
+        ],
+        "using": "gsi"
+      },
+      {
+        "#operator": "Parallel",
+        "maxParallelism": 1,
+        "~child": {
+          "#operator": "Sequence",
+          "~children": [
+            {
+              "#operator": "Filter",
+              "condition": "(cover ((`travel-sample`.`city`)) is not null)"
+            },
+            {
+              "#operator": "InitialGroup",
+              "aggregates": [
+                "min(cover ((`travel-sample`.`city`)))"
+              ],
+              "group_keys": []
+            }
+          ]
+        }
+      },
+      {
+        "#operator": "IntermediateGroup",
+        "aggregates": [
+          "min(cover ((`travel-sample`.`city`)))"
+        ],
+        "group_keys": []
+      },
+      {
+        "#operator": "FinalGroup",
+        "aggregates": [
+          "min(cover ((`travel-sample`.`city`)))"
+        ],
+        "group_keys": []
+      },
+      {
+        "#operator": "Parallel",
+        "maxParallelism": 1,
+        "~child": {
+          "#operator": "Sequence",
+          "~children": [
+            {
+              "#operator": "InitialProject",
+              "result_terms": [
+                {
+                  "expr": "min(cover ((`travel-sample`.`city`)))"
+                }
+              ]
+            },
+            {
+              "#operator": "FinalProject"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "text": "SELECT MIN(city) \nFROM `travel-sample` \nuse index (def_city)\nWHERE city is not null;"
+}</codeblock></section>
+        <section id="section_qzp_fzw_vz"><title>COUNT() Pushdown</title><p><i>(Introduced in
+                    Couchbase Server 5.0)</i></p><p>This function returns the total number of values
+                of a string or numeric input field.<note>In order for this function to be utilized,
+                    a WHERE clause must be included.</note></p><b>Example 4</b>:  Count of a string
+            field -- Finding the number of cities entered in
+            <codeph>travel-sample</codeph>.<codeblock>SELECT COUNT(city) AS NumberOfCities
+FROM `travel-sample` 
+use index (def_city)
+WHERE city is not null;</codeblock></section>
+        <section>Result:<codeblock>[
+  {
+    "NumberOfCities": 7341
+  }
+]</codeblock></section>
+        <section>Example 4a:  The details behind Example
+            4.<codeblock>EXPLAIN SELECT COUNT(city) AS NumberOfCities
+FROM `travel-sample` 
+use index (def_city)
+WHERE city is not null;</codeblock></section>
+        <section>Result:<codeblock>{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+        "#operator": "IndexCountScan2",
+        "covers": [
+          "cover ((`travel-sample`.`city`))",
+          "cover ((meta(`travel-sample`).`id`))"
+        ],
+        "index": "def_city",
+        "index_id": "e0a377e15a408175",
+        "keyspace": "travel-sample",
+        "namespace": "default",
+        "spans": [
+          {
+            "exact": true,
+            "range": [
+              {
+                "inclusion": 0,
+                "low": "null"
+              }
+            ]
+          }
+        ],
+        "using": "gsi"
+      },
+      {
+        "#operator": "IndexCountProject",
+        "result_terms": [
+          {
+            "as": "NumberOfCities",
+            "expr": "count((`travel-sample`.`city`))"
+          }
+        ]
+      }
+    ]
+  },
+  "text": "SELECT COUNT(city) AS NumberOfCities\nFROM `travel-sample` \nuse index (def_city)\nWHERE city is not null;"
+}</codeblock></section>
+        <section id="section_qf1_k1x_vz"><title>COUNT(DISTINCT) Pushdown</title><p><i>(Introduced in
+                    Couchbase Server 5.0)</i></p><p>This function returns the total number of unique
+                values of a string or numeric input field.<note>In order for this function to be
+                    utilized, a WHERE clause must be included.</note></p><b>Example 5</b>:  Count
+            Distinct of a string field -- Finding the number of unique city names in
+                <codeph>travel-sample</codeph>.<codeblock>SELECT COUNT (DISTINCT city) AS NumberOfDistinctCities
+FROM `travel-sample` 
+use index (def_city)
+WHERE city is not null;</codeblock></section>
+        <section>Result:<codeblock>[
+  {
+    "NumberOfDistinctCities": 2301
+  }
+]</codeblock></section>
+        <section><b>Example 5a</b>:  The details behind Example
+            5.<codeblock>EXPLAIN SELECT COUNT (DISTINCT city) AS NumberOfDistinctCities
+FROM `travel-sample` 
+use index (def_city)</codeblock></section>
+        <section>Result:<codeblock>{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+        "#operator": "IndexCountDistinctScan2",
+        "covers": [
+          "cover ((`travel-sample`.`city`))",
+          "cover ((meta(`travel-sample`).`id`))"
+        ],
+        "index": "def_city",
+        "index_id": "e0a377e15a408175",
+        "keyspace": "travel-sample",
+        "namespace": "default",
+        "spans": [
+          {
+            "exact": true,
+            "range": [
+              {
+                "inclusion": 0,
+                "low": "null"
+              }
+            ]
+          }
+        ],
+        "using": "gsi"
+      },
+      {
+        "#operator": "IndexCountProject",
+        "result_terms": [
+          {
+            "as": "NumberOfDistinctCities",
+            "expr": "count(distinct (`travel-sample`.`city`))"
+          }
+        ]
+      }
+    ]
+  },
+  "text": "SELECT COUNT (DISTINCT city) AS NumberOfDistinctCities\nFROM `travel-sample` \nuse index (def_city)\nWHERE city is not null;"
+}</codeblock></section>
     </body>
     
 </topic>
