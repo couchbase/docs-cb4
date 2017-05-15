@@ -26,9 +26,9 @@
     
     <ul>
      <li>
-      <b>Couchbase buckets</b>: Allow data to be automatically replicated for high availability, using the
+      <b>Couchbase buckets</b>: These allow data to be automatically replicated for high availability, using the
       <xref href="./high-availability-replication-architecture.dita" scope="local" format="dita">Database
-       Change Protocol (DCP)</xref>, and dynamically scaled across multiple servers, by means of 
+       Change Protocol (DCP)</xref>; and dynamically scaled across multiple servers, by means of 
       <xref href="../xdcr/xdcr-intro.dita" scope="local" format="dita">Cross Datacenter Replication (XDCR)</xref>. 
       
       <p>
@@ -36,18 +36,51 @@
       </p>
       
       <p>
-       If a Couchbase bucket's RAM-quota is exceeded, items are <i>ejected</i>. See below for a definition
-       of <i>ejection</i>.
+       If a Couchbase bucket's RAM-quota is exceeded, items are <i>ejected</i>. This means
+       that data, which is resident both in memory and on disk, is removed from memory, but
+       not from disk. Therefore, if removed data is subsequently needed, it is reloaded
+       into memory from disk. For a Couchbase bucket, ejection can be either of the following, 
+       based on 
+       configuration performed at the time of bucket-creation:
+       
+       <ul>
+        
+        <li>
+         <i>Value-only</i>: Only key-values are removed.
+         
+         <p>
+          <!-- Vertical space -->
+          
+         </p>
+         
+        </li>
+        
+        <li>
+         <i>Full</i>: All data &#8212; including keys, key-values, and meta-data &#8212; is removed.
+         
+         <p>
+          <!-- Vertical space -->
+          
+         </p>
+         
+        </li>
+        
+       </ul>
+       
+      </p>
+      
+      <p>
+       Generally, <i>Value-only</i> favors performance at the expense of memory; and <i>Full</i> vice versa.
       </p>
       
       <p>
        <!-- Vertical space -->
       </p>
-      
+
      </li>
      
      <li>
-      <b>Ephemeral buckets</b>: Are an alternative to Couchbase buckets, to be used whenever persistence
+      <b>Ephemeral buckets</b>: These are an alternative to Couchbase buckets, to be used whenever persistence
       is not required: for example, when repeated disk-access involves too much overhead. This allows 
       highly consistent in-memory performance, without disk-based
       fluctuations. It also allows faster node rebalances and restarts. 
@@ -74,7 +107,25 @@
        </li>
        
        <li>
-        Resident data-items are <i>ejected</i> from RAM, to make way for new data. 
+        Resident data-items are <i>ejected</i> from RAM, to make way for new data. For
+        an Ephemeral bucket, this means
+        that data, which is resident in memory (but, due to
+        this type of bucket, can never be on disk), is 
+        removed from memory. Therefore, if removed
+        data is subsequently needed, it cannot be re-acquired from Couchbase Server.
+        
+        <p>
+         <!--Vertical space -->
+        </p>
+        
+        <p>
+         For an Ephemeral bucket, ejection removes all of an item's data: however,
+         a <i>tombstone</i> (a record of the ejected item, which
+         includes keys and metadata) is retained until the next scheduled purge 
+         of metadata for the current node. See
+         <xref href="./core-data-access-bucket-disk-storage.dita" scope="local" format="dita">Bucket Disk Storage</xref>
+         for more information.
+        </p>
         
         <p>
          <!-- Vertical space -->
@@ -87,7 +138,7 @@
      </li>
      
      <li>
-      <b>Memcached buckets</b>: Are designed to be used alongside other database platforms, such as ones
+      <b>Memcached buckets</b>: These are designed to be used alongside other database platforms, such as ones
       employing relational database technology. By caching frequently-used data, Memcached buckets reduce the number
       of queries a database-server must perform. Each 
       Memcached bucket provides a directly addressable, distributed, in-memory key-value cache.
@@ -98,9 +149,14 @@
       
       <p>
        Memcached buckets are <i>not persistent on disk</i>: they only exist in RAM. If a Memcached bucket's
-       RAM-quota is exceeded, items are <i>ejected</i>. 
+       RAM-quota is exceeded, items are <i>ejected</i>. For a Memcached bucket, this means that data, 
+       which is resident in memory (but, due to
+       this type of bucket, can never be on disk), is 
+       removed from memory. Therefore, if removed
+       data is subsequently needed, it cannot be re-acquired from Couchbase Server. Ejection
+       removes all of an item's data. 
       </p>
-      
+
       <p>
        <!-- Vertical space -->
       </p>
@@ -110,103 +166,13 @@
     </ul>
    
    <p>
-    All bucket types are fully compatible with the Memcached open source distributed key-value cache.
+    For all bucket-types, items are selected for ejection by means of the
+    <i>Not Recently Used</i> (NRU) algorithm.
    </p>
-   
-  </section>
-  
-  <section id="ejection-definitions">
-   <title>
-    Ejection
-   </title>
    
    <p>
-    The effect
-    of ejection depends on bucket-type:
+    All bucket types are fully compatible with the Memcached open source distributed key-value cache.
    </p>
-   
-   <ul>
-    
-    <li>
-     <b>Couchbase-Bucket Item-Ejection</b>: Data, which is resident both in memory and on disk, is removed from memory, but not 
-     from disk. Therefore, if removed data is 
-     subsequently needed, it is reloaded into memory from disk. 
-     
-     <p>
-      Ejection can be either of the following, based on configuration performed at the time of
-      bucket-creation: 
-      
-     </p>
-     
-     <ul>
-      
-      <li>
-       <i>Value-only</i>: Only key-values are removed.
-       
-       <p>
-        <!-- Vertical space -->
-        
-       </p>
-       
-      </li>
-      
-      <li>
-       <i>Full</i>: All data &#8212; including keys, key-values, and meta-data &#8212; is removed.
-       
-       <p>
-        <!-- Vertical space -->
-        
-       </p>
-       
-      </li>
-      
-     </ul>
-     
-     <p>
-      Generally, <i>Value-only</i> favors performance at the expense of memory; and <i>Full</i> vice versa.
-     </p>
-     
-     <p>
-      When a Couchbase bucket's RAM-quota is exceeded, items are selected for ejection; by 
-      means of the <i>Not Recently Used</i> (NRU) algorithm. 
-     </p>
-     
-     <p>
-      <!--Vertical space -->
-     </p>
-     
-    </li>
-    
-    <li>
-     <b>Memcached and Ephemeral-Bucket Item-Ejection</b>: Data, which is resident in memory (but, due to
-     these types of bucket, can never be on disk), is 
-     removed from memory. Therefore, if removed
-     data is subsequently needed, it cannot be re-acquired from Couchbase Server.
-     
-     <p>
-      <!--Vertical space -->
-     </p>
-     
-     <p>
-      Ejection removes all of an item's data: however, for Ephemeral buckets,
-      a <i>tombstone</i> (a record of the ejected item, which
-      includes keys and metadata) is retained until the next scheduled purge of metadata for the current node. See
-      <xref href="./core-data-access-bucket-disk-storage.dita" scope="local" format="dita">Bucket Disk Storage</xref>
-      for more information.
-     </p>
-     
-     <p>
-      When an Ephemeral or Memcached bucket's RAM-quota is exceeded, items are selected for ejection; by 
-      means of the <i>Not Recently Used</i> (NRU) algorithm. 
-     </p>
-
-     <p>
-      <!--Vertical space -->
-     </p>
-     
-    </li>
-    
-   </ul>
    
   </section>
   
@@ -257,7 +223,14 @@
        </row>
        
        <row>
-        <entry>Replication</entry>
+        <entry>Replication (DCP)</entry>
+        <entry>No</entry>
+        <entry>Yes</entry>
+        <entry>Yes</entry>
+       </row>
+       
+       <row>
+        <entry>Cross Datacenter Replication (XDCR)</entry>
         <entry>No</entry>
         <entry>Yes</entry>
         <entry>Yes</entry>
@@ -283,14 +256,7 @@
         <entry>Full smart client support</entry>
         <entry>Full smart client support</entry>
        </row>
-       
-       <row>
-        <entry>XDCR</entry>
-        <entry>No</entry>
-        <entry>Yes</entry>
-        <entry>Yes</entry>
-       </row>
-       
+
        <row>
         <entry>Backup</entry>
         <entry>No</entry>
@@ -341,38 +307,10 @@
        </row>
        
        <row>
-        <entry>DCP</entry>
-        <entry>No</entry>
-        <entry>Yes</entry>
-        <entry>Yes</entry>
-       </row>
-       
-       <row>
         <entry>Encrypted data access</entry>
         <entry>Yes </entry>
         <entry>Yes</entry>
         <entry>Yes</entry>
-       </row>
-       
-       <row>
-        <entry>Indexing: MOI</entry>
-        <entry>No </entry>
-        <entry>Yes</entry>
-        <entry>Yes</entry>
-       </row>
-       
-       <row>
-        <entry>Indexing: ForestDB</entry>
-        <entry>No </entry>
-        <entry>Yes</entry>
-        <entry>No</entry>
-       </row>
-       
-       <row>
-        <entry>Indexing: Plasma</entry>
-        <entry>No </entry>
-        <entry>Yes</entry>
-        <entry>No</entry>
        </row>
        
        <row>
@@ -403,14 +341,14 @@
    <p>
     Couchbase and Ephemeral buckets both provide a highly available, dynamically reconfigurable, distributed 
     data-store; which survives node failures, and allows cluster-reconfiguration to occur while service-requests
-    continue to be handled. The similarities and differences between these bucket-types are summarized in the following
-    table.
+    continue to be handled. The following
+    table compares the principal capabilities shared by both bucket-types.
    </p> 
    
    <table frame="all" rowsep="1" colsep="1" id="table_dcd_m3l_xs">
     
      <title>
-      Couchbase and Ephemeral bucket-capabilities
+      Couchbase and Ephemeral bucket-capabilities compared
      </title>
     
      <tgroup cols="3" align="left">
@@ -428,28 +366,6 @@
       <tbody>
        
        <row>
-        <entry>
-         Caching
-        </entry>
-        
-        <entry>
-         Couchbase buckets operate through RAM. The data is stored in RAM and persisted to
-         disk. The data is cached in RAM until RAM-capacity is exhausted; at which point data is <i>ejected</i>
-         from RAM. Following ejection, or at any other time when not in RAM, requested bucket-data is loaded
-         automatically from disk.
-        </entry>
-        
-        <entry>
-         Ephemeral buckets operate exclusively within RAM. The data is not persisted to
-         disk: it is cached in RAM until RAM-capacity is exhausted; at which point,
-         in accordance with an administrator's previously selected set-up options,
-         either no additional data can be added, or the <i>Not Recently Used</i> algorithm is
-         employed, in order to <i>eject</i> data.
-        </entry>
-        
-       </row>
-       
-       <row>
         
         <entry>
          Persistence
@@ -457,8 +373,8 @@
         
         <entry>
          Couchbase buckets are persisted asynchronously, from memory to disk. This
-         provides protection from server-restarts. You can set persistence-properties at the bucket
-         level. 
+         provides protection from server-restarts. You can set persistence-properties at the 
+         bucket level. 
         </entry>
         
         <entry>
@@ -470,19 +386,22 @@
        <row>
         
         <entry>
-         Replication
+         Replication (DCP and XDCR)
         </entry>
         
         <entry>
          Couchbase buckets can be replicated across a configurable number of servers.
          If the host machine fails, a replica server is promoted to be the host server,
          providing high availability cluster operations via failover. You can configure replication
-         at the bucket level.
+         at the bucket level. Additionally, <i>Cross Datacenter Replication</i> (XDCR) allows
+         replication of Couchbase bucket-data between clusters.
         </entry>
         
         <entry>
          Ephemeral buckets can be replicated across a configurable number of servers,
          exactly as can Couchbase buckets; but without being persisted to disk.
+         Likewise, XDCR allows replication of
+         Ephemeral bucket-data between clusters and without persistence.
         </entry>
         
        </row>
@@ -490,7 +409,7 @@
        <row>
         
         <entry>
-         Rebalancing
+         Rebalance
         </entry>
         
         <entry>
@@ -501,7 +420,7 @@
         
         <entry>
          Rebalancing redistributes Ephemeral buckets, exactly as it does Couchbase buckets; but
-         without the data being persisted to disk.
+         without the data being persisted to disk. 
         </entry>
         
        </row>
