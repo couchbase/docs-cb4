@@ -778,16 +778,21 @@ Result:
                 following operators. </p>
         </section>
         <section id="section_vhq_grr_vz"><title>MAX() Pushdown</title><p><i>(Introduced in Couchbase
-                    Server 5.0)</i></p><p>This function returns the highest value of a string or
-                numeric input field. <note>Using MAX() with the DESC operator results in Couchbase
-                    Server adding the line “Limit: 1” automatically since the maximum value will
-                    already be at the beginning of the list, and Couchbase Server is smart enough to
-                    know that only 1 record is needed.</note><note>In order for this function to be
-                    utilized, a WHERE clause must be included.</note></p><b>Example 1</b>: MAX of a
-            string field – Finding the alphabetically highest city name in
-                <codeph>travel-sample</codeph>.<codeblock outputclass="language-json">EXPLAIN SELECT MAX(city) 
+          Server 5.0)</i></p><p>This function returns the highest value of the input field based on
+        the default collation rules (for details, see <xref
+          href="../n1ql/n1ql-language-reference/datatypes.dita#topic_4">Data types</xref> and <xref
+          href="../n1ql/n1ql-language-reference/comparisonops.dita#topic_7_2">Comparison
+          Operators</xref>)</p><p>MAX() can be pushed to the Indexer only when the index is created
+        with matching index keys in descending order. In such cases, the minimum value will be the
+        first entry in the Index when keys are in ascending order, so the N1QL engine will
+        automatically add the hint<codeph> Limit: 1 </codeph>to the index scan. In the EXPLAIN
+        output of the query, you can see the<codeph> limit </codeph>hint. </p><b>Example 1</b>: MAX
+      of a string field – Finding the alphabetically highest city name in
+        <codeph>travel-sample</codeph>.<codeblock outputclass="language-json">CREATE INDEX idx_city_desc ON `travel-sample`(city DESC);
+
+EXPLAIN SELECT MAX(city) 
 FROM `travel-sample` 
-USE INDEX (def_city)
+USE INDEX (idx_city_desc)
 WHERE city is not null;</codeblock></section>
         <section>Result:<codeblock outputclass="language-json">{
   "plan": {
@@ -799,15 +804,16 @@ WHERE city is not null;</codeblock></section>
           "cover ((`travel-sample`.`city`))",
           "cover ((meta(`travel-sample`).`id`))"
         ],
-        "index": "def_city",
+        "index": "idx_city_desc",
         "index_id": "e0a377e15a408175",
         "index_projection": {
           "entry_keys": [
             0
           ]
         },
-        "keyspace": "travel-sample",
-        "namespace": "default",
+        "keyspace": "travel-sample",      //
+        "limit": "1",                     // added hint
+        "namespace": "default",           //
         "spans": [
           {
             "exact": true,
@@ -876,29 +882,23 @@ WHERE city is not null;</codeblock></section>
     ]
   },
   "text": "SELECT MAX(city) \nFROM `travel-sample` \nuse index (def_city)\nWHERE city is not null;"
-}</codeblock><b>Example
-                2</b>:  Max of an integer field -- Finding the northernmost latitude of any hotel in
-                <codeph>travel-sample</codeph>.<codeblock outputclass="language-json">SELECT MAX(geo.lat) AS Latitude 
-FROM `travel-sample` 
-WHERE type="hotel";
-
-Result:
-[
-  {
-    "Latitude": 60.15356
-  }
-]</codeblock></section>
+}</codeblock></section>
         <section id="section_ojw_5sw_vz"><title>MIN() Pushdown</title><p><i>(Introduced in Couchbase
-                    Server 5.0)</i></p><p>This function returns the lowest value of a string or
-                numeric input field.<note>Using MIN() with the ASC operator results in Couchbase
-                    Server adding the line <codeph>Limit: 1</codeph> automatically since the minimum
-                    value will already be at the beginning of the list, and Couchbase Server is
-                    smart enough to know that only 1 record is needed.</note><note>In order for this
-                    function to be utilized, a WHERE clause must be included.</note></p><b>Example
-                3</b>:  Min of a string field -- Finding the alphabetically lowest city name in
-                <codeph>travel-sample</codeph>.<codeblock outputclass="language-json">EXPLAIN SELECT MIN(city) 
+          Server 5.0)</i></p><p>This function returns the lowest value of the input field based on
+        the default collation rules (for details, see <xref
+          href="../n1ql/n1ql-language-reference/datatypes.dita#topic_4">Data types</xref> and <xref
+          href="../n1ql/n1ql-language-reference/comparisonops.dita#topic_7_2">Comparison
+          Operators</xref>)</p><p>MIN() can be pushed to the Indexer only when the index is created
+        with matching index keys in ascending order. In such cases, the maximum value will be the
+        first entry in the Index when keys are in DESC order, so the N1QL engine will automatically
+        add the hint<codeph> Limit: 1 </codeph>to the index scan. In the EXPLAIN output of the
+        query, you can see the<codeph> limit </codeph>hint. </p><b>Example 2</b>: MIN of a string
+      field – Finding the alphabetically lowest city name in
+      <codeph>travel-sample</codeph>.<codeblock outputclass="language-json">CREATE INDEX idx_city_asc ON `travel-sample`(city ASC);
+
+EXPLAIN SELECT MAX(city) 
 FROM `travel-sample` 
-use index (def_city)
+USE INDEX (idx_city_desc)
 WHERE city is not null;</codeblock></section>
         <section>Result:<codeblock outputclass="language-json">{
   "plan": {
@@ -910,16 +910,16 @@ WHERE city is not null;</codeblock></section>
           "cover ((`travel-sample`.`city`))",
           "cover ((meta(`travel-sample`).`id`))"
         ],
-        "index": "def_city",
+        "index": "idx_city_asc",
         "index_id": "e0a377e15a408175",
         "index_projection": {
           "entry_keys": [
             0
           ]
         },
-        "keyspace": "travel-sample",
-        "limit": "1",
-        "namespace": "default",
+        "keyspace": "travel-sample",        //
+        "limit": "1",                       // added hint
+        "namespace": "default",             //
         "spans": [
           {
             "exact": true,
@@ -992,23 +992,27 @@ WHERE city is not null;</codeblock></section>
   "text": "SELECT MIN(city) \nFROM `travel-sample` \nuse index (def_city)\nWHERE city is not null;"
 }</codeblock></section>
         <section id="section_qzp_fzw_vz"><title>COUNT() Pushdown</title><p><i>(Introduced in
-                    Couchbase Server 5.0)</i></p><p>This function returns the total number of values
-                of a string or numeric input field.<note>In order for this function to be utilized,
-                    a WHERE clause must be included.</note></p><b>Example 4</b>:  Count of a string
-            field -- Finding the number of cities entered in
-            <codeph>travel-sample</codeph>.<codeblock outputclass="language-json">SELECT COUNT(city) AS NumberOfCities
+          Couchbase Server 5.0)</i></p><p>This function returns the total number of values of an
+        input field.  As you can see in Example 3, the index <codeph>IndexCountScan2</codeph> is
+        pushed down by the Query Service.</p><b>Example 3</b>: Count of a string field -- Finding
+      the number of cities entered in
+      <codeph>travel-sample</codeph>.<codeblock outputclass="language-json">CREATE INDEX idx_city_asc ON `travel-sample`(city ASC);
+
+SELECT COUNT(city) AS NumberOfCities
 FROM `travel-sample` 
-use index (def_city)
+use index (idx_city_asc)
 WHERE city is not null;</codeblock></section>
         <section>Result:<codeblock outputclass="language-json">[
   {
     "NumberOfCities": 7341
   }
 ]</codeblock></section>
-        <section>Example 4a:  The details behind Example
-            4.<codeblock outputclass="language-json">EXPLAIN SELECT COUNT(city) AS NumberOfCities
+        <section>Example 3a: The details behind Example
+      3.<codeblock outputclass="language-json">CREATE INDEX idx_city_asc ON `travel-sample`(city ASC);
+
+EXPLAIN SELECT COUNT(city) AS NumberOfCities
 FROM `travel-sample` 
-use index (def_city)
+use index (idx_city_asc)
 WHERE city is not null;</codeblock></section>
         <section>Result:<codeblock outputclass="language-json">{
   "plan": {
@@ -1020,7 +1024,7 @@ WHERE city is not null;</codeblock></section>
           "cover ((`travel-sample`.`city`))",
           "cover ((meta(`travel-sample`).`id`))"
         ],
-        "index": "def_city",
+        "index": "idx_city_asc",
         "index_id": "e0a377e15a408175",
         "keyspace": "travel-sample",
         "namespace": "default",
