@@ -1,0 +1,66 @@
+diff --git a/content/n1ql/n1ql-language-reference/indexing-arrays.dita b/content/n1ql/n1ql-language-reference/indexing-arrays.dita
+index 1db726b..b9dfbae 100644
+--- a/content/n1ql/n1ql-language-reference/indexing-arrays.dita
++++ b/content/n1ql/n1ql-language-reference/indexing-arrays.dita
+@@ -165,8 +165,8 @@ WHERE type = "route";</codeblock></p>
+             correctly in the projection. <table frame="all" rowsep="1" colsep="1"
+               id="table_crm_35r_w5">
+               <tgroup cols="2">
+-                <colspec colname="c1" colnum="1" colwidth="1*"/>
+-                <colspec colname="c2" colnum="2" colwidth="7.33*"/>
++                <colspec colname="c1" colnum="1" colwidth="1*" align="center"/>
++                <colspec colname="c2" colnum="2" colwidth="7.33*" align="left"/>
+                 <thead>
+                   <row>
+                     <entry>Supported</entry>
+@@ -226,12 +226,44 @@ SELECT b[1] FROM default;</codeblock></li>
+             document, the items are skipped. The following error is logged to indicate that an item
+             is skipped when building the index: "<systemoutput>Encoded array key is too
+               long</systemoutput>" in the <filepath>indexer.log</filepath> file. The
+-              <filepath>indexer.log</filepath> file is included in cbcollect_info output. For
+-            example, the array key size for the following index is calculated by adding all the
+-            elements in this list : "{[1,1], [1,2]}". You can contact Couchbase Support for details
+-            on how to change the limit on array index key size.
+-            <codeblock>CREATE INDEX i1 on default(a,ARRAY x FOR x IN b END) USING GSI;</codeblock>
+-          </li>
++              <filepath>indexer.log</filepath> file is included in <codeph>cbcollect_info</codeph>
++            output. For example, the array key size for the following index is calculated by adding
++            all the elements in this list: "{[1,1], [1,2]}". You can contact Couchbase Support for
++            details on how to change the limit on array index key size.
++            <codeblock>CREATE INDEX i1 on default(a,ARRAY x FOR x IN b END) USING GSI;</codeblock></li>
++          <li>The 10K limit is the default value for the index setting
++              <codeph>max_array_seckey_size</codeph>. This refers to the sum of all index keys of
++            the array index for a document.<ul id="ul_gdn_xql_wz">
++              <li>For simple array index, it means the size of the entire array.</li>
++              <li>For composite array index, it refers sum of sizes of all index keys.</li>
++            </ul>You can change the setting
++            with:<codeblock>curl -X POST http://localhost:9102/settings -u <varname>Administrator</varname>:<varname>password</varname> 
++     -d '{"indexer.settings.max_array_seckey_size": 51200}’</codeblock></li>
++          <li>Non-array indexes have the 4K limit only on each index-key of the index.<p>For
++              example, consider the
++                document:<codeblock>{ aName :  aval, bName : bval, cName : [cval1, cval2, ...] }</codeblock><ul
++                id="ul_kzz_ysl_wz">
++                <li>Non-array
++                  index<codeblock>CREATE INDEX idx1 bucket(aval, bval);
++
++Max(size(aval) + size(bval)) &lt; 4K</codeblock></li>
++                <li>Non-covering array
++                  index<codeblock>CREATE INDEX idx2 bucket(aval, ARRAY x FOR x IN cName END);
++
++[ (size(aval) + size(cval1)) 
+++ (size(aval) + size(cval2)) 
+++ (size(aval) + size(cval3)) ...]  &lt; max_array_seckey_size 
++
++Max(size(aval) + size(<varname>x</varname>)) &lt; 4K   (where <varname>x</varname> is any element of the array)</codeblock></li>
++                <li>Covering array
++                  index<codeblock>CREATE INDEX idx3 bucket(aval, ARRAY x FOR x IN cName END, cName);
++
++[ (size(aval) + size(cval1) + size(cName)) 
+++ (size(aval) + size(cval2) + size(cName)) 
+++ (size(aval) + size(cval3) + size(cName)) ...]  &lt; max_array_seckey_size
++
++Max(size(aval) + size(x) + size(cName)) &lt; 4K</codeblock></li>
++              </ul></p></li>
+         </ul></p>
+     </section>
+     <section>
