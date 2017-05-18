@@ -3,11 +3,14 @@
 <topic id="topic_hv4_sbr_w5">
   <title>Array Indexing</title>
   <body>
+    <p><i>(Introduced in Couchbase Server 4.5)</i></p>
     <p>Couchbase 4.5 adds the capability to create global indexes on array elements and optimizes
       the execution of queries involving array elements. This is a huge leap from the previous
       versions where secondary indexes could only be created and subsequently queried on whole
       arrays. You can now create an index of array elements ranging from plain scalar values to
-      complex arrays or JSON objects nested deeper in the array. </p>
+      complex arrays or JSON objects nested deeper in the array. <note> To create Covering Array
+        Indexes, the array itself must also be added to the list of other index keys provided to the
+        CREATE INDEX statement.</note></p>
     <section>
       <title>N1QL Syntax</title>
       <codeblock>CREATE INDEX [ <varname>index_name</varname> ] 
@@ -40,16 +43,17 @@
             <dt><varname>array_expression</varname></dt>
             <dd>
               <codeblock><varname>array_expression</varname> ::= 
-[ ALL ] DISTINCT ARRAY <varname>var_expression</varname> FOR <varname>variable1</varname> ( IN | WITHIN ) [<b>TO_ARRAY</b>] <varname>expression1</varname>
-                                      [ , <varname>variable2</varname> ( IN | WITHIN ) [<b>TO_ARRAY</b>] <varname>expression2</varname> ]
-                                      [ ( WHEN <varname>condition</varname> ) ] END</codeblock>
-              <p>The <cmdname>ARRAY</cmdname> operator lets you map and filter the elements or
+[ ALL ] DISTINCT ARRAY <varname>var_expression</varname> 
+FOR <varname>variable1</varname> ( IN | WITHIN ) [<b>TO_ARRAY</b>] <varname>expression1</varname>
+[ , <varname>variable2</varname> ( IN | WITHIN ) [<b>TO_ARRAY</b>] <varname>expression2</varname> ]
+[ ( WHEN <varname>condition</varname> ) ] END</codeblock>
+              <p>The<cmdname> ARRAY </cmdname>operator lets you map and filter the elements or
                 attributes of a collection, object, or objects. It evaluates to an array of the
                 operand expression that satisfies the WHEN clause, if specified. </p>
-              <p><varname>var_expression</varname> evaluates to a function of
-                  <varname>variable1</varname>/<varname>variable2</varname> etc, and
-                  <varname>expression1/expression</varname> etc evaluate to an array of objects,
-                each of which is represented by the variables. </p>
+              <p><varname>var_expression </varname>evaluates to a function of<varname>
+                  variable1</varname>/<varname>variable2/etc. </varname>and<varname>
+                  expression1/expression2/etc. </varname> evaluate to an array of objects, each of
+                which is represented by the variables. </p>
               <p>
                 <note>The variables used in query predicates (<varname>where-clause</varname>) of
                   subsequent SELECT/UPDATE/UPSERT/DELETE statements must be the same as those used
@@ -85,67 +89,77 @@
         statement, must have the exact matching format as the variable in the array index key,
         including the name of the variable <varname>x</varname>. </p>
       <p>Consider the following expressions used in a CREATE INDEX statement:
-        <codeblock>(a) DISTINCT ARRAY f(x) FOR x IN expr1 END;
+        <codeblock>(a) DISTINCT ARRAY <varname>f(x)</varname> FOR <varname>x</varname> IN <varname>expr1</varname> END;
 
-(b) DISTINCT ARRAY f(x) FOR x WITHIN expr1 END;</codeblock></p>
+(b) DISTINCT ARRAY <varname>f(x)</varname> FOR <varname>x</varname> WITHIN <varname>expr1</varname> END;</codeblock></p>
       <p>And the expression used in the SELECT <varname>where-clause</varname>
-        as:<codeblock>(c) ANY x IN expr2 SATISFIES g(x) END;
+        as:<codeblock>(c) ANY <varname>x</varname> IN <varname>expr2</varname> SATISFIES <varname>g(x)</varname> END;
 
-(d) ANY x WITHIN expr2 SATISFIES g(x) END</codeblock></p>
+(d) ANY <varname>x</varname> WITHIN <varname>expr2</varname> SATISFIES <varname>g(x)</varname> END</codeblock></p>
       <p>The following dependencies must be satisfied in Couchbase Server 4.5 for N1QL to consider
         the array index: <ul id="ul_k1w_4y2_cv">
           <li>The index keys used in CREATE INDEX must be used in the
               <varname>where-clause</varname>.</li>
-          <li><varname>expr2</varname> in (c) and (d) must be equivalent to <varname>expr1</varname>
-            in (a) and (b). This is a formal notion of equivalence. For example, if they are the
-            same expressions, or equivalent arithmetic expressions such as (x+y) and (y+x).</li>
-          <li>The variable <varname>x</varname> in (c) and (d) must be exactly the same variable
-            name as <varname>x</varname> in (a) and (b).</li>
-          <li>g(x) in (c) and (d) must be sargable for <codeph>f(x)</codeph> in (a) and (b). In
-            other words, if there was a scalar index with key <codeph>f(x)</codeph>, that index
-            would be applicable to the predicate <codeph>g(x)</codeph>. For example, the index key
-              <varname>UPPER(x)</varname> is sargable for the predicate <codeph>UPPER(x) LIKE
+          <li><varname>expr2 </varname>in (c) and (d) must be equivalent to<varname> expr1
+            </varname>in (a) and (b). This is a formal notion of equivalence. For example, if they
+            are the same expressions, or equivalent arithmetic expressions such as (x+y) and
+            (y+x).</li>
+          <li>The variable<varname> x </varname>in (c) and (d) must be exactly the same variable
+            name as<varname> x </varname>in (a) and (b).</li>
+          <li><varname>g(x) </varname>in (c) and (d) must be sargable for<varname> f(x) </varname>in
+            (a) and (b). In other words, if there was a scalar index with key<varname>
+              f(x)</varname>, that index would be applicable to the predicate<varname>
+              g(x)</varname>. For example, the index key<codeph> UPPER(<varname>x</varname>)
+            </codeph>is sargable for the predicate<codeph> UPPER(<varname>x</varname>) LIKE
               "John%"</codeph>.</li>
-          <li>IN vs. WITHIN: Index key (a) can be used for query predicate (c). Index key (b) can be
-            used for both query predicates (c) and (d).</li>
+          <li>IN vs. WITHIN: Index key (a) can be used only for query predicate (c), while index key
+            (b) can be used for both query predicates (c) and (d).</li>
         </ul><note> Index key (b) is strictly more expensive than index key (a), for both index
-          maintenance and query processing. Index key (b) and query predicate (d) are very powerful.
-          They can efficiently index and query recursive trees of arbitrary depth.</note></p>
+          maintenance and query processing.  Index key (b) and query predicate (d) are very
+          powerful. They can efficiently index and query recursive trees of arbitrary
+        depth.</note></p>
     </section>
     <section>
       <title>Examples</title>
-      <p>The following samples use the <codeph>travel-sample</codeph> bucket. </p>
-      <p><b>Indexing individual elements in an array</b></p>
+      <p>The following samples use the<codeph> travel-sample </codeph>bucket. </p>
+      <p><b>Example 1:  Indexing individual elements in an array</b></p>
       <p>Create an index on all schedules:
         <codeblock>CREATE INDEX isched 
-        ON `travel-sample` ( DISTINCT ARRAY v FOR v IN schedule END );</codeblock></p>
+ON `travel-sample` ( DISTINCT ARRAY v FOR v IN schedule END );</codeblock></p>
       <p>The following query finds the list of scheduled 'AA' flights:
-        <codeblock> SELECT  * from  `travel-sample`
-        WHERE ANY v IN schedule SATISFIES v.flight LIKE 'AA%' END;</codeblock></p>
-      <p><b>Indexing individual attributes of an array of documents</b></p>
+        <codeblock>SELECT * from  `travel-sample`
+WHERE ANY v IN schedule SATISFIES v.flight LIKE 'AA%' END;</codeblock></p>
+      <p><b>Example 2:  Indexing individual attributes of an array of documents</b></p>
       <p>Create an index on flight IDs scheduled in the first 4 days of the week:
         <codeblock>CREATE INDEX iflight_day 
-       ON `travel-sample` ( DISTINCT ARRAY v.flight FOR v IN schedule WHEN v.day &lt; 4 END )
-       WHERE type = "route" ;</codeblock></p>
-      <p><b>Compound indexing with individual elements of an array and other attributes</b></p>
+ON `travel-sample` ( DISTINCT ARRAY v.flight FOR v IN schedule WHEN v.day &lt; 4 END )
+WHERE type = "route" ;</codeblock></p>
+      <p><b>Example 3:  Compound indexing with individual elements of an array and other
+          attributes</b></p>
       <p>Create an index on scheduled flight IDs and number of stops:
         <codeblock>CREATE INDEX iflight_stops 
-       ON `travel-sample` ( stops, DISTINCT ARRAY v.flight FOR v IN schedule END )
-       WHERE type = "route" ;</codeblock></p>
-      <p>The following query finds the list of scheduled 'AA' flights that have one or more stops:
+ON `travel-sample` ( stops, DISTINCT ARRAY v.flight FOR v IN schedule END )
+WHERE type = "route" ;</codeblock></p>
+      <p>The following query finds the list of scheduled<codeph> AA </codeph>flights that have one
+        or more stops:
         <codeblock>SELECT * FROM `travel-sample`
-WHERE type = "route" AND ANY v IN schedule SATISFIES v.flight LIKE 'AA%' END AND stops >= 0;     </codeblock></p>
-      <p><b>Indexing the individual elements of nest arrays</b></p>
+WHERE type = "route" AND ANY v IN schedule 
+SATISFIES v.flight LIKE 'AA%' END AND stops >= 0;     </codeblock></p>
+      <p><b>Example 4:  Indexing the individual elements of nest arrays</b></p>
       <p>Use the DISTINCT ARRAY clause in a nested fashion to index specific attributes of a
         document when the array contains other arrays or documents that contain arrays. For example, <codeblock>cbq> UPDATE `travel-sample` 
-SET schedule[0] = {"day" : 7, "special_flights" : 
-                    [ {"flight" : "AI444", "utc" : "4:44:44"}, 
-                      {"flight" : "AI333", "utc" : "3:33:33" } 
-                    ] } 
-WHERE type = "route" AND destinationairport = "CDG" AND sourceairport = "TLV";</codeblock>
+     SET schedule[0] = {"day" : 7, "special_flights" : 
+                       [ {"flight" : "AI444", "utc" : "4:44:44"}, 
+                         {"flight" : "AI333", "utc" : "3:33:33" } 
+                       ] } 
+     WHERE type = "route" 
+     AND destinationairport = "CDG" 
+     AND sourceairport = "TLV";</codeblock>
         <codeblock>cbq> CREATE INDEX inested ON `travel-sample`
-( DISTINCT ARRAY (DISTINCT ARRAY y FOR y IN x.special_flights END) FOR x IN schedule END) 
-WHERE type = "route";</codeblock></p>
+     (DISTINCT ARRAY 
+       (DISTINCT ARRAY y FOR y IN x.special_flights END) 
+     FOR x IN schedule END) 
+     WHERE type = "route";</codeblock></p>
     </section>
     <section id="array-idx-limitations">
       <title>Limitations</title>
@@ -224,16 +238,16 @@ SELECT b[1] FROM default;</codeblock></li>
             array index key size is calculated using the total size of all array elements being
             indexed in a single document. If the total array index key size exceeds 10K in a single
             document, the items are skipped. The following error is logged to indicate that an item
-            is skipped when building the index: "<systemoutput>Encoded array key is too
-              long</systemoutput>" in the <filepath>indexer.log</filepath> file. The
-              <filepath>indexer.log</filepath> file is included in <codeph>cbcollect_info</codeph>
-            output. For example, the array key size for the following index is calculated by adding
-            all the elements in this list: "{[1,1], [1,2]}". You can contact Couchbase Support for
-            details on how to change the limit on array index key size.
+            is skipped when building the index: <systemoutput> Encoded array key is too long
+            </systemoutput> in the<filepath> indexer.log </filepath>file. The<filepath> indexer.log
+            </filepath>file is included in<codeph> cbcollect_info </codeph>output.  For example, the
+            array key size for the following index is calculated by adding all the elements in this
+              list:<codeph> {[1,1], [1,2]}</codeph>. You can contact Couchbase Support for details
+            on how to change the limit on array index key size.
             <codeblock>CREATE INDEX i1 on default(a,ARRAY x FOR x IN b END) USING GSI;</codeblock></li>
-          <li>The 10K limit is the default value for the index setting
-              <codeph>max_array_seckey_size</codeph>. This refers to the sum of all index keys of
-            the array index for a document.<ul id="ul_gdn_xql_wz">
+          <li>The 10K limit is the default value for the index setting<codeph>
+              max_array_seckey_size</codeph>. This refers to the sum of all index keys of the array
+            index for a document.<ul id="ul_gdn_xql_wz">
               <li>For simple array index, it means the size of the entire array.</li>
               <li>For composite array index, it refers sum of sizes of all index keys.</li>
             </ul>You can change the setting
@@ -269,13 +283,13 @@ Max(size(aval) + size(x) + size(cName)) &lt; 4K</codeblock></li>
     <section>
       <title>Simplified Array Syntax</title>
     </section>
-    <section><i>(New in Couchbase Server 5.0)</i><p>Using Couchbase Server 5.0, you can now use more
-        simplified syntax to create an array index, for
+    <section><i>(Introduced in Couchbase Server 5.0)</i><p>You can now use a more simplified syntax
+        to create an array index, for
         example:<codeblock>CREATE INDEX idx_sas
 ON `travel-sample` ( DISTINCT `schedule` )
 WHERE type = "airline";</codeblock></p></section>
-    <section>In the above example, you can directly use <codeph>schedule</codeph> instead of an
-        <varname>array_expression</varname>.</section>
+    <section>In the above example, you can directly use<codeph> schedule </codeph>instead of
+        an<varname> array_expression</varname>.</section>
   </body>
   <related-links><link href="http://blog.couchbase.com/2016/may/1.making-most-of-your-arrays..-with-covering-array-indexes-and-more" format="html" scope="external"> <linktext>Blog: Covering Array Indexes </linktext></link></related-links>
 </topic>
