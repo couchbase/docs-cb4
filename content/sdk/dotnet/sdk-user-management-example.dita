@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
-<topic id="sdk_authentication">
+<topic id="dotnet_sdk_user_management">
     
     <title>
-        SDK User-Management
+        .NET SDK User-Management Example
     </title>
     
     <shortdesc>
-        The SDK now lets you create <i>users</i>, assign them <i>roles</i> and 
-        associated <i>privileges</i>, and remove them from the system. 
+        The .NET SDK now lets you create <i>users</i>, assign them <i>roles</i> and 
+        associated <i>privileges</i>, and remove them from the system.  
     </shortdesc>
     
     <body>
@@ -18,22 +18,184 @@
             </title>
             
             <p>
-                
+                Users who have been assigned the <b>Admin</b> role for the cluster are able
+                to create, edit, and remove users. The .NET SDK provides APIs to support these
+                activities. A high-level summary of the APIs can be found in
+                <xref href="../sdk-user-management-overview.dita" scope="local" format="dita">SDK User-Management Overview</xref>.
             </p>
             
         </section>
         
         <section>
             <title>
-                User Management Example
+                .NET User-Management Example
             </title>
             
             <p>
-                
+                The following code-example demonstrates how the user-management APIs can be used. It assumes that Couchbase Server is
+                established on <codeph>localhost</codeph>; that the Full Administrator username and
+                password are <codeph>Administrator</codeph> and <codeph>password</codeph> respectively;
+                and that the <codeph>travel-sample</codeph> bucket is 
+                installed. For information on installing the <codeph>travel-sample</codeph> bucket, see
+                <xref href="../../settings/install-sample-buckets.dita" scope="local" format="dita">Install Sample Buckets</xref>.
             </p>
+            
+            <codeblock outputclass="language-csharp">using System;
+using System.Collections.Generic;
+using System.Linq;
+using Couchbase;
+using Couchbase.Configuration.Client;
+using Couchbase.Management;
+using Couchbase.N1QL;
 
+namespace UserManagementExample
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            // Access the cluster that is running on the local host, authenticating with
+            // the username and password of the Full Administrator. This
+            // provides all privileges.
+            var cluster = new Cluster(new ClientConfiguration
+            {
+                Servers = new List&lt;Uri&gt;
+                {
+                    new Uri("http://10.111.170.101:8091")
+                }
+            });
+        
+            Console.WriteLine("Authenticating as administrator.");
+            cluster.Authenticate("Administrator", "password");
+        
+            // Create a user and assign roles.
+            cluster.CreateManager()
+                .UpsertUser("cbtestuser", "cbtestuserpwd", "cbtestuser",
+        
+                    // Roles required for the reading of data from
+                    // the bucket.
+                    new Role {Name = "data_reader", BucketName = "travel-sample"},
+                    new Role {Name = "query_select", BucketName = "travel-sample"},
+        
+                    // Roles required for the writing of data into
+                    // the bucket.
+                    new Role {Name = "data_writer", BucketName = "travel-sample"},
+                    new Role {Name = "query_insert", BucketName = "travel-sample"},
+                    new Role {Name = "query_delete", BucketName = "travel-sample"},
+        
+                    // Role required for the creation of indexes
+                    // on the bucket.
+                    new Role {Name = "query_manage_index", BucketName = "travel-sample"}
+            );
+        
+            // List current users.
+            Console.WriteLine("Listing current users.");
+            var listOfUsers = cluster.CreateManager().GetUsers().Value;
+    
+            var ofUsers = listOfUsers as User[] ?? listOfUsers.ToArray();
+            for (var j = 0; j &lt; ofUsers.Count(); j++)
+            {
+                var currentUser = ofUsers[j];
+    
+                Console.WriteLine(Environment.NewLine + "USER #" + j + ": " + Environment.NewLine);
+    
+                Console.WriteLine("User's name is: " + currentUser.Name);
+                Console.WriteLine("User's domain is: " + currentUser.Domain);
+    
+                var currentRoles = currentUser.Roles.ToArray();
+                var arraySize = currentRoles.Length;
+    
+                for (var i = 0; i &lt; arraySize; i++)
+                {
+                    Console.WriteLine("User has the role: " + currentRoles[i].Name + ", applicable to bucket " +
+                    currentRoles[i].BucketName);
+                }
+            }
+    
+            // Access the cluster with the username and password assigned by the administrator'
+            Console.WriteLine("Authenticating as user." + Environment.NewLine);
+            cluster.Authenticate("cbtestuser", "cbtestuserpwd");
+    
+            // Open the travel-sample bucket.
+            Console.WriteLine("Opening travel-sample bucket as user." + Environment.NewLine);
+            var travelSample = cluster.OpenBucket("travel-sample");
+    
+            // Create a N1QL Primary Index (but ignore if one already exists).
+            travelSample.CreateManager().CreateN1qlPrimaryIndex(false);
+    
+            // Read out an existing document within the bucket.
+            Console.WriteLine("Reading out airline_10 document");
+            var returnedAirline10Doc = travelSample.GetDocument&lt;dynamic&gt;("airline_10");
+            Console.WriteLine("Found: " + returnedAirline10Doc.Content);
+        
+            // Create a new document.
+            Console.WriteLine(Environment.NewLine + "Creating new document as user.");
+            var airline11Document = new Document&lt;dynamic&gt;
+            {
+                Id = "airline_11",
+                Content = new
+                {
+                    callsign = "MILE-AIR",
+                    iata = "Q5",
+                    icao = "MLA",
+                    id = 11,
+                    name = "40-Mile Air",
+                    type = "airline"
+                }
+            };
+        
+            // Upsert the document to the bucket.
+            Console.WriteLine("Upserting new document as user.");
+            travelSample.Upsert(airline11Document);
+        
+            Console.WriteLine("Reading out airline11Document as user.");
+            var returnedAirline11Doc = travelSample.GetDocument&lt;dynamic&gt;("airline_11");
+            Console.WriteLine("Found: " + returnedAirline11Doc.Content);
+        
+            // Perform a N1QL Query.
+            Console.WriteLine("Performing query as user.");
+            var returnedValues = "Query-results are: \n\t";
+        
+            var result = travelSample.Query&lt;dynamic&gt;(new QueryRequest("SELECT * FROM `travel-sample` LIMIT 5"));
+            foreach (var row in result)
+            {
+                returnedValues = returnedValues + row + Environment.NewLine + Environment.NewLine + '\t';
+            }
+        
+            Console.WriteLine(returnedValues);
+        
+            // Access the cluster that is running on the local host, authenticating with
+            // the username and password of the Full Administrator. This
+            // provides all privileges.
+            Console.WriteLine("Re-authenticating as administrator.");
+            cluster.Authenticate("Administrator", "password");
+        
+            // Remove known user.
+            Console.WriteLine("Removing user as administrator.");
+            var userToBeRemoved = "cbtestuser";
+            var whetherOrNotUserWasRemoved = cluster.CreateManager().RemoveUser(userToBeRemoved).Success;
+        
+            if (!whetherOrNotUserWasRemoved)
+            {
+                Console.WriteLine("Could not delete user " + userToBeRemoved + ".");
+            }
+            else
+            {
+                Console.WriteLine("Deleted user " + userToBeRemoved + ".");
+            }
+        
+            // Disconnect from the cluster.
+            //
+            cluster.Dispose();
+        
+            Console.Read();
+        }
+    }
+}</codeblock>
+            
+            
         </section>
         
     </body>
-        
+    
 </topic>
