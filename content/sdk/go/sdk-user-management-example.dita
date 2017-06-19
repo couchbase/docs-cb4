@@ -32,8 +32,174 @@
             </title>
             
             <p>
-                
+                The following code-example demonstrates how the user-management APIs can be used. It assumes that Couchbase Server is
+                established on <codeph>localhost</codeph>; that the Full Administrator username and
+                password are <codeph>Administrator</codeph> and <codeph>password</codeph> respectively;
+                and that the <codeph>travel-sample</codeph> bucket is 
+                installed. For information on installing the <codeph>travel-sample</codeph> bucket, see
+                <xref href="../../settings/install-sample-buckets.dita" scope="local" format="dita">Install Sample Buckets</xref>.
             </p>
+            
+            <codeblock outputclass="language-go">package main
+                
+import (
+    "github.com/couchbase/gocb"
+    "log"
+    "time"
+)
+
+func main() {
+    // Access the cluster that is running on the local host, authenticating with
+    // the username and password of the Full Administrator. This
+    // provides all privileges.
+    cluster, err := gocb.Connect("couchbase://localhost")
+    if err != nil {
+        panic(err)
+}
+
+    // Authenticate to the cluster
+    log.Printf("Authenticating as administrator.")
+    cluster.Authenticate(gocb.PasswordAuthenticator{
+    "Administrator",
+    "password"})
+
+    // Create a user and assign roles.
+    log.Printf("Upserting new user.")
+    userSettings := gocb.UserSettings{
+        Password: "cbtestuserpwd",
+        Roles: []gocb.UserRole{
+            // Roles required for the reading of data from the bucket.
+            {"data_reader", "travel-sample"},
+            {"query_select", "travel-sample"},
+            // Roles required for the writing data into the bucket.
+            {"data_writer", "travel-sample"},
+            {"query_insert", "travel-sample"},
+            {"query_delete", "travel-sample"},
+            // Role required for the creation of indexes on the bucket.
+            {"query_manage_index", "travel-sample"},
+        },
+    }
+    err = cluster.Manager("", "").UpsertUser("cbtestuser", &amp;userSettings)
+    if err != nil {
+        panic(err)
+    }
+
+    time.Sleep(100 * time.Millisecond)
+
+    // List current users
+    users, err := cluster.Manager("","").GetUsers()
+    if err != nil {
+        panic(err)
+    }
+    for i, user := range users {
+        log.Printf("")
+        log.Printf("USER # %d", i)
+
+        if user.Name != "" {
+            log.Printf("Users name is: %s", user.Name)
+        }
+
+        log.Printf("Users id is: %s", user.Id)
+        //log.Printf("Users domain is: %s", user.Domain)
+
+        for _, role := range user.Roles {
+            log.Printf("User has the role: %s, for bucket %s", role.Role, role.BucketName)
+        }
+        log.Printf("")
+    }
+
+    // Access the cluster that is running on the local host, specifying
+    // the username and password already assigned by the administrator
+    log.Printf("Authenticating as user")
+    cluster.Authenticate(gocb.PasswordAuthenticator{
+        "cbtestuser",
+        "cbtestuserpwd",
+    })
+
+    // Open a known, existing bucket (created by the administrator).
+    log.Printf("Opening travel-sample bucket as user")
+    travelSample, err := cluster.OpenBucket("travel-sample", "")
+    if err != nil {
+        panic(err)
+    }
+
+    // Create a N1QL Primary Index (but ignore if one already exists).
+    err = travelSample.Manager("", "").CreatePrimaryIndex("", true, false)
+    if err != nil {
+        panic(err)
+    }
+
+    // Read out a known, existing document within the bucket (created
+    // by the administrator).
+    log.Printf("Reading out ariline_10 document")
+    var airline10doc interface{}
+    _, err = travelSample.Get("airline_10", &amp;airline10doc)
+    if err != nil {
+        panic(err)
+    }
+    log.Printf("Found: %+v", airline10doc)
+
+    // Create a new document.
+    log.Printf("Creating new document as user.")
+    airlineObj := map[string]interface{}{
+        "callsign": "MILE-AIR",
+        "iata": "Q5",
+        "icao": "MLA",
+        "id": 11,
+        "name": "40-Mile Air",
+        "type": "airline",
+    }
+
+    // Upsert the document to the bucket
+    log.Printf("Upserting new document as user.")
+    _, err = travelSample.Upsert("airline_11", airlineObj, 0)
+    if err != nil {
+        panic(err)
+    }
+
+    log.Printf("Reading out ariline11 document as user.")
+    var airline11doc interface{}
+    _, err = travelSample.Get("airline_11", &amp;airline11doc)
+    if err != nil {
+        panic(err)
+    }
+    log.Printf("Found: %+v", airline11doc)
+
+
+    // Perform a N1QL Query.
+    log.Printf("Performing query as user.")
+    q := gocb.NewN1qlQuery("SELECT * FROM `travel-sample` LIMIT 5")
+    rows, err := travelSample.ExecuteN1qlQuery(q, nil)
+    if err != nil {
+        panic(err)
+    }
+
+    log.Printf("Query-results are:")
+    // Print each row returned by the query.
+    var row interface{}
+    for rows.Next(&amp;row) {
+        log.Printf("%+v", row)
+}
+
+    // Access the cluster that is running on the local host, authenticating with
+    // the username and password of the Full Administrator. This
+    // provides all privileges.
+    log.Printf("Re-authenticating as administrator.")
+    cluster.Authenticate(gocb.PasswordAuthenticator{
+        "Administrator",
+        "password"})
+
+    // Remove known user.
+    log.Printf("Removing user as administrator.")
+    userToBeRemoved := "cbtestuser"
+    err = cluster.Manager("", "").RemoveUser(userToBeRemoved)
+    if err != nil {
+        log.Printf("Could not delete user %s: %s", userToBeRemoved, err)
+    } else {
+        log.Printf("Deleted user %s", userToBeRemoved)
+    }
+
+}</codeblock>
             
         </section>
         
