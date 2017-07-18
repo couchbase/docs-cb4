@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_ip2_cdf_p1b">
+  <title>Global Secondary Index Storage</title>
+  <body>
+    <section id="section_dj1_3df_p1b">
+      <title>Nitro</title>
+      <p dir="ltr">Memory-Optimized Indexes use a totally in-memory storage engine designed for
+        low-latency, high-throughput storage of indexes called Nitro. Its write throughput scales
+        almost-linearly with CPU cores due to its innovative use of lockless data structures. Fast
+        index scans of these datastructures are facilitated by skip lists, drastically improving
+        query performance when using indexes.</p>
+      <p dir="ltr">Overlying the skiplist used to store the data is a powerful Multi Version
+        Concurrency Control component designed to offer the following:</p>
+      <ul id="ul_vhc_jdf_p1b">
+        <li dir="ltr">
+          <p dir="ltr"><b>Immutable Snapshots</b>: Concurrent writers add or remove items into the
+            skiplist simultaneously. A snapshot of the current items can be created to provide a
+            point-in-time view of the skiplist. This is useful for providing repeatable stable
+            scans. Users can create and manage multiple snapshots. If an application requires
+            atomicity for a batch of skiplist operations, it can apply a batch of operations and
+            create a new snapshot. Changes are invisible to scans until a new snapshot is created.
+          </p>
+        </li>
+        <li dir="ltr">
+          <p dir="ltr"><b>Fast and Low Overhead Snapshots</b>: Readers of the skiplist use a
+            snapshot handle to perform all lookup and range queries. An indexer application
+            typically requires many snapshots to be created every second to serve incoming queries.
+            The overhead of creating and maintaining a snapshot is therefore minimal to service the
+            high rate of snapshot generation.</p>
+        </li>
+        <li dir="ltr">
+          <p dir="ltr"><b>Avoid Phantom Reads</b>: A query operation using a specific snapshot must
+            always return the same results. Items being removed or added to an index will not be
+            visible to the query, a query operation using a snapshot is repeatable.</p>
+        </li>
+        <li dir="ltr">
+          <p dir="ltr"><b>Memory Efficiency</b>: Disk-oriented data structures such as B+Trees
+            process updates in the unit of disk page sizes. This approach introduces significant
+            storage overhead per item. For a single entry update, the entire residing page needs to
+            be copied. Nitro allocates the only exact amount of space required to hold an item. This
+            is important for predictable capacity planning and minimization of memory usage. </p>
+        </li>
+        <li dir="ltr">
+          <p dir="ltr"><b>Fast and Scalable Garbage Collection</b>: For a system that generates
+            hundred immutable snapshots per second, there could be hundreds of snapshots becoming
+            unused every second. The garbage collector is therefore efficient enough to keep up with
+            high rates of garbage generation. The Nitro garbage collector is concurrent and scales
+            linearly with the number of concurrent writers used by the system.</p>
+        </li>
+      </ul>
+      <fig><title>Nitro Architecture</title><image href="images/nitro.png" scale="30" id="image_wvs_l2f_p1b" placement="inline"/></fig>
+      
+      <p dir="ltr">While Nitro is a memory-optimized storage engine, the index is also snapshotted
+        to disk at regular intervals to allow the indexer to recover from a restart without needing
+        to rebuild the entire index.</p></section>
+    <section id="section_wlt_pdf_p1b">
+      <title><b id="docs-internal-guid-332cbb82-57a2-9969-4401-ac4882964da7">Plasma</b></title>
+      <p dir="ltr">The Plasma index storage engine is an extension of the Nitro storage engine, used
+        by Standard Global Secondary Indexes. This extension allows the index to exist partially in
+        memory and partially on disk, removing the constraint of having to have enough memory to
+        store all indexes in their entirety.</p>
+      <p dir="ltr">Plasma uses lockless data structures for its on-disk format to ensure that
+        concurrent disk access does not become a significant bottleneck. Specifically, Plasma stores
+        the evicted pages using a log-structured format which is a form of append-only storage.
+        Unlike B+-Trees traditionally used to store database indexes, log structured files do not
+        rely on threads holding intermediate locks when inserting items. This means that writer
+        threads do not interfere with each other and slow down the insertion of items.</p>
+      <p dir="ltr">The on-disk format also reduces the write amplification experienced when writing
+        data to disk. It does this by incrementally persisting new data as it is evicted from the
+        in-memory skiplist (based on an LRU algorithm) rather than always persisting entire
+        snapshots. To retain data consistency, previous unused snapshots are merged and written to
+        disk as full snapshots at a regular interval (every 10 minutes).</p>
+    </section>
+  </body>
+</topic>
