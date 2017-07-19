@@ -11,7 +11,7 @@ def convert_file(path):
     substitute_regex = re.compile('\(\d*\)')
     tree = etree.parse(path)
     root = tree.getroot()
-    topic = root.find('.//topic')
+    root_topic = root.find('.//topic')
     title = root.find('.//topic/title')
     title.text = substitute_regex.sub('', title.text)
     to_remove = [root.find('.//topic/topic[@id="_see_also"]'),
@@ -20,8 +20,8 @@ def convert_file(path):
     name_topic = root.find('.//topic/topic[@id="_name"]')
     name_topic_content = root.find('.//topic/topic[@id="_name"]/body/p')
     short_desc = name_topic_content.text.split(' - ', 1)[1]
-    topic.remove(name_topic)
-
+    root_topic.remove(name_topic)
+    
     synopsis_topic = root.find('.//topic/topic[@id="_synopsis"]/body')
     synopsis_lq = root.find('.//topic/topic[@id="_synopsis"]/body/lq')
     synopsis_lines = root.find('.//topic/topic[@id="_synopsis"]/body/lq/lines/*')
@@ -51,9 +51,17 @@ def convert_file(path):
             links_to_create.append(href)
     
     for element in to_remove:
-        topic.remove(element)
+        root_topic.remove(element)
     
-    final_topic = root.find('.//topic//topic[last()]')
+    for topic in root_topic.findall('./topic'):
+        topic_body = topic.find('./body')
+        section = etree.Element('section')
+        section.append(topic.find('./title'))
+        section.extend(topic_body)
+        root_topic.remove(topic)
+        root_topic.find('./body').append(section)
+
+    root_topic.remove(root_topic.find('./prolog'))
     related_links = etree.Element('related-links')
 
     for link in links_to_create:
@@ -61,8 +69,8 @@ def convert_file(path):
         related_links.append(link_element)
     
     short_desc = etree.XML('<shortdesc>{}</shortdesc>'.format(short_desc))
-    topic.insert(1, short_desc)
-    final_topic.append(related_links)
+    root_topic.insert(1, short_desc)
+    root_topic.append(related_links)
     
     result = '<?xml version="1.0" standalone="no"?>'
     result += '<!DOCTYPE dita PUBLIC "-//OASIS//DTD DITA Composite//EN" "../../../../dtd/ditabase.dtd">'
