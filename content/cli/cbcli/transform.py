@@ -13,7 +13,7 @@ def convert_file(path):
     root = tree.getroot()
     root_topic = root.find('.//topic')
     title = root.find('.//topic/title')
-    title.text = substitute_regex.sub('', title.text)
+    title.text = substitute_regex.sub('', title.text).replace('couchbase-cli-', '')
     to_remove = [root.find('.//topic/topic[@id="_see_also"]'),
                  root.find('.//topic/topic[@id="_couchbase_cli"]')]
 
