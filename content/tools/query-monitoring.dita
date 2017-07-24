@@ -79,9 +79,45 @@
             </codeph>(eg MB-15902, MB-17399)</li>
           <li>Extra counters to keep track of specific requests (e.g. cancelled, MB-20157)</li>
           <li>Extend killing request to CREATE INDEX (MB-19882)</li>
-        </ul></p><b>Language Impact</b><p>None - only new system keyspaces
-          created.</p><p><b>Implementation</b></p><p>Cluster Monitoring<ul id="ul_kh4_5n1_q1b">
-          <li>For single N1QL node systems or standalone services</li>
-        </ul></p><p/></section>
+        </ul></p><b>Language Impact</b><p>
+        <ul id="ul_jqp_qgw_q1b">
+          <li>None - only new system keyspaces created.</li>
+        </ul>
+      </p><p><b>Implementation</b></p><p>Cluster Monitoring<ul id="ul_kh4_5n1_q1b">
+          <li>For single N1QL node systems or standalone services (such as nodes running outside of
+            a cluster), system keyspaces <codeph>active_requests</codeph>,
+              <codeph>completed_requests</codeph> and <codeph>prepareds</codeph> will see no change
+            in behavior.</li>
+          <li>System keyspaces <codeph>active_requests</codeph>, <codeph>completed_requests</codeph>
+            and <codeph>prepareds</codeph> will include a node name in the output document.</li>
+          <li>New admin <codeph>completed_requests</codeph> endpoint to return a single completed
+            request is required (already exists for <codeph>active_requests</codeph>and
+              <codeph>prepareds</codeph>) and will be used for fetch operations.</li>
+          <li>New admin endpoints to list <codeph>RequestId</codeph> for
+              <codeph>active_requests</codeph> and <codeph>completed_requests</codeph> as well as
+            names for <codeph>prepareds</codeph> are required since they will be used for per node
+            scan operations.</li>
+          <li>System keyspaces will sport a secondary index on the node name.<ul id="ul_ezn_5hw_q1b">
+              <li>The node name, if present in the WHERE clause, will be pushed down.</li>
+              <li>Where the node name matches the local node, the local operation will be used.</li>
+              <li>Only nodes specified in the WHERE clause, if any, will be accessed.</li>
+              <li>Otherwise all nodes will be scanned.</li>
+              <li>Once a primary or secondary scan has produced a list of candidate entries, fetches
+                will be done either locally or using the single entry endpoint as provided
+                above.</li>
+            </ul></li>
+          <li>In order to access remote nodes, we need:<ul id="ul_aqx_23w_q1b">
+              <li>A node map from <codeph>ns_server</codeph> (this is already available,
+                clearly)</li>
+              <li>The ability to access N1QL endpoints directly from the datastore / system
+                layer.</li>
+            </ul></li>
+          <li>Fetch and delete will require a node name as part of the key.</li>
+        </ul>Alternative Designs for Cluster Monitoring</p><p>The advantage of the scheme above is
+        that is simple and consistent with the existing infrastructure, and avoids pitfalls like
+        clients switching to different nodes in the cluster for each subsequent request (and
+        therefore unexpectedly not finding entries), however, it lends itself to inconsistent
+        performance: where the monitoring information accessed is local, latency will be low, where
+        remote access is required, latency will be higher.</p><p/></section>
   </body>
 </topic>
