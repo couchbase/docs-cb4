@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="c_sdk_xattr_example">
+    
+    <title>
+        Sample Code
+    </title>
+    
+    <shortdesc>
+        The C SDK supports creation and handling of <i>extended attributes</i>.  
+    </shortdesc>
+    
+    <body>
+        <section>
+            <title>
+                Subdocument Operations and Extended Attributes
+            </title>
+            
+            <p>
+                A high-level summary of extended attributes can be found in
+                <xref href="./sdk-xattr-overview.dita" scope="local" format="dita">Extended
+                Attributes</xref>. Extended attributes are handled by means of
+                extensions to the <i>Subdocument API</i>.
+            </p>
+            
+        </section>
+        
+        <section>
+            <title>
+                C Extended Attributes Example
+            </title>
+            
+            <p>
+                The following code demonstrates how 
+                extended attributes be used. It assumes that Couchbase Server is
+                established on <codeph>localhost</codeph>; that the Full Administrator username and
+                password are <codeph>Administrator</codeph> and <codeph>password</codeph> respectively;
+                and that the <codeph>travel-sample</codeph> bucket is 
+                installed. For information on installing the <codeph>travel-sample</codeph> bucket, see
+                <xref href="../../settings/install-sample-buckets.dita" scope="local" format="dita">Install Sample Buckets</xref>.
+            </p>
+            
+<codeblock outputclass="language-c">using System;
+using System.Collections.Generic;
+using Couchbase;
+using Couchbase.Configuration.Client;
+using Couchbase.Core;
+using Couchbase.Management;
+
+namespace XATTRsSample
+{
+    class Program
+    {
+        static void Main()
+        {
+            var config = new ClientConfiguration
+            {
+                Servers = new List&lt;Uri&gt; {new Uri("http://10.112.170.101:8091/")}
+            };
+
+            // Access the cluster that is running on the local host, authenticating with
+            // the username and password of the Full Administrator. This
+            // provides all privileges.
+            //
+            using (var cluster = new Cluster(config))
+            {
+                Console.WriteLine("Authenticating as administrator.");
+                cluster.Authenticate("Administrator", "password");
+
+                // Open the travel-sample bucket.
+                //
+                var bucket = cluster.OpenBucket("travel-sample");
+
+                // Add key-value pairs to hotel_10138, representing traveller-Ids and
+                // associated discount percentages.
+                //
+                bucket.MutateIn&lt;dynamic&gt;("hotel_10138")
+                    .Upsert("discounts.jsmith123", "20", SubdocMutateFlags.CreatePath | SubdocMutateFlags.XattrPath)
+                    .Upsert("discounts.pjones356", "30", SubdocMutateFlags.CreatePath | SubdocMutateFlags.XattrPath)
+
+                    // The following lines, "insert" and "remove", simply demonstrate insertion and
+                    // removal of the same path and value.
+                    //
+                    .Insert("discounts.jbrown789", "25", SubdocMutateFlags.CreatePath | SubdocMutateFlags.XattrPath)
+                    .Remove("discounts.jbrown789", SubdocMutateFlags.XattrPath)
+                    .Execute();
+
+                    // Add key-value pairs to hotel_10142, again representing traveller-Ids and 
+                    // associated discount percentages.
+                    //
+                    bucket.MutateIn&lt;dynamic&gt;("hotel_10142")
+                        .Upsert("discounts.jsmith123", "15", SubdocMutateFlags.CreatePath | SubdocMutateFlags.XattrPath)
+                        .Upsert("discounts.pjones356", "10", SubdocMutateFlags.CreatePath | SubdocMutateFlags.XattrPath)
+                        .Execute();
+
+                    // Create a user and assign roles. This user will search for their
+                    // available discounts.
+                    //
+                    Console.WriteLine("Upserting new user.");
+
+                    cluster.CreateManager().UpsertUser("jsmith123", "jsmith123pwd", "John Smith",
+                        new Role[]
+                        {
+                            // Roles required for the reading of data from
+                            // the bucket.
+                            //
+                            new Role {Name = "data_reader", BucketName = "travel-sample"},
+                            new Role {Name = "query_select", BucketName = "travel-sample"},
+
+                            // Roles required for the writing of data into
+                            // the bucket.
+                            //
+                            new Role {Name = "data_writer", BucketName = "travel-sample"},
+                            new Role {Name = "query_insert", BucketName = "travel-sample"},
+                            new Role {Name = "query_delete", BucketName = "travel-sample"},
+
+                            // Role required for the creation of indexes
+                            // on the bucket.
+                            //
+                            new Role {Name = "query_manage_index", BucketName = "travel-sample"}
+                        }
+                    );
+                }
+
+                using (var cluster = new Cluster(config))
+                {
+                    // Re-access the cluster as the created user.
+                    //
+                    Console.WriteLine("User now connecting and authenticating.");
+                    cluster.Authenticate("jsmith123", "jsmith123pwd");
+
+                    Console.WriteLine("Opening travel-sample bucket as user.");
+                    var bucket = cluster.OpenBucket("travel-sample");
+
+                    // Perform a N1QL Query to return document IDs from the bucket. These IDs will be
+                    // used to reference each document in turn, and check for extended attributues
+                    // corresponding to discounts.
+                    //
+                    Console.WriteLine("Searching for discounts, as user.");
+                    var result = cluster.Query&lt;dynamic&gt;(
+                        "SELECT id, meta(`travel-sample`).id " +
+                        "AS docID FROM `travel-sample`;"
+                    );
+
+                    // Get the docID of each document returned, and use the ID to determine whether
+                    // the extended attribute exists.
+                    //
+                    var resultsReturned = string.Empty;
+                    var searchPath = "discounts.jsmith123";
+
+                    foreach (var row in result)
+                    {
+                        // Get the docID of the current document.
+                        //
+                        var theId = (string) row.docID;
+
+                        // Determine whether a hotel-discount has been applied to this user.
+                        //
+                        var whetherDiscountExistsForUser = bucket.LookupIn&lt;dynamic&gt;(theId)
+                            .Exists(searchPath, SubdocLookupFlags.XattrPath)
+                            .Execute();
+
+                        // If so, get the discount-percentage.
+                        //
+                        if (whetherDiscountExistsForUser.Success)
+                        {
+                            var percentageValueOfDiscount = bucket.LookupIn&lt;dynamic&gt;(theId)
+                            .Get(searchPath, SubdocLookupFlags.XattrPath)
+                            .Execute();
+
+                            // If the percentage-value is greater than 15, include the document in the
+                            // results to be returned.
+                            //
+                            if (percentageValueOfDiscount.Content&lt;int&gt;(searchPath) &gt; 15)
+                            {
+                                resultsReturned = resultsReturned + Environment.NewLine + bucket.Get&lt;dynamic&gt;(theId);
+                            }
+                        }
+                    }
+
+                    // Display the results, which features only hotels offering more than a 15% discount
+                    // to the current user.
+                    //
+                    Console.WriteLine("Results returned are: {0}", resultsReturned);
+            }
+        }
+    }
+}</codeblock>
+
+        </section>
+        
+    </body>
+        
+</topic>
