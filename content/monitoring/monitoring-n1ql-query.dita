@@ -6,7 +6,7 @@
     resources is very important for smoother operational performance and efficiency of the system.
     In fact, often it is vital for diagnosing and troubleshooting issues such as query performance,
     resource bottlenecks, and overloading of various services.</shortdesc>
-  <body>  
+  <body>
     <p>Couchbase Server 4.5 introduced system keyspaces to provide various monitoring details and
       statistics about individual queries and query service. When running on a cluster with multiple
       query nodes, stats about all queries on all query nodes are collected in these system
@@ -36,11 +36,12 @@
           >system:user_info</xref></li>
         <li><xref href="#topic_nvs_ghr_dz/section_t5h_wxt_n1b" format="dita"
             >system:applicable_roles</xref></li>
-      </ul></p><note>You can use REST endpoints and system keyspaces to get the diagnostic information, except for
-        <codeph>vitals</codeph>, which is only available using the REST API option. </note>
-   <section>
-     <title>Authentication and Client Privileges</title>
-     <p>Client applications must be authenticated with sufficient privileges to access system
+      </ul></p>
+    <note>You can use REST endpoints and system keyspaces to get the diagnostic information, except
+      for <codeph>vitals</codeph>, which is only available using the REST API option. </note>
+    <section>
+      <title>Authentication and Client Privileges</title>
+      <p>Client applications must be authenticated with sufficient privileges to access system
         keyspaces.</p>
       <p>
         <ul id="ul_usw_2nk_3z">
@@ -57,7 +58,8 @@
             </ul></li>
         </ul>
       </p>
-   </section> <section>
+    </section>
+    <section>
       <title>Query Monitoring Settings</title>
       <p>The monitoring settings can be set for each query engine (using the REST API) or for each
         query statement (using the cbq command line tool). Both settings are actually set via REST
@@ -107,7 +109,8 @@ cat  ./query_settings.json
               </ol>
             </dd>
           </dlentry>
-        </dl><dl>
+        </dl>
+        <dl>
           <dlentry>
             <dt>Enabling Settings per Session or per Query</dt>
             <dd>You can enable monitoring and profiling settings for each query statement. To set
@@ -122,8 +125,10 @@ cbq> \set;
               <codeblock outputclass="language-json">curl -v http://localhost:8093/query/service -d "profile='timings'&amp;statement=SELECT * FROM default LIMIT 1";</codeblock></dd>
           </dlentry>
         </dl>
-      </p><p></p>
-    </section><section id="monitor-profile-details">
+      </p>
+      <p/>
+    </section>
+    <section id="monitor-profile-details">
       <title>Monitoring and Profiling Details</title>
       <p>Couchbase Server 5.0 introduces a collection of detailed query monitoring and profiling
         information. The profiling and finer query execution timing details can be obtained for any
@@ -376,7 +381,8 @@ cbq> SELECT * FROM `travel-sample` WHERE type = "airline" LIMIT 1;
     ...</codeblock>
               </p> For the complete output, see <xref href="#topic_nvs_ghr_dz/example-1"
                 format="dita">Example 1</xref>.</dd>
-          </dlentry><dlentry>
+          </dlentry>
+          <dlentry>
             <dt id="plan">Attribute Meta in System Keyspaces</dt>
             <dd><p/>This is a new virtual attribute in document metadata introduced in Couchbase
               Server 5.0.<p dir="ltr">The <codeph>meta().plan</codeph> captures the whole query
@@ -404,13 +410,126 @@ cbq> SELECT * FROM `travel-sample` WHERE type = "airline" LIMIT 1;
           </dlentry>
         </dl>
       </p>
-    </section><section id="vitals"><title>Vitals</title>
-      <p>The <cmdname>Vitals</cmdname> API provides data about the running state and health
-        of the query engine, such as number of logical cores, active threads, queued threads,CPU utilization, memory usage, network utilization, garbage collection percentage, and so on. This information can be very useful to assess the current workload and performance characteristics of a query engine, and hence load-balance the requests being sent to various query engines. </p>
+    </section>
+    <section><title>N1QL Cluster Monitoring</title><p><b>Theme</b></p><p>The second wave of
+        monitoring features will focus on:<ul id="ul_hh4_5n1_q1b">
+          <li>Cluster aware operation</li>
+          <li>Further diagnostics</li>
+          <li>More system keyspaces</li>
+        </ul><b>Requirements</b><ul id="ul_ih4_5n1_q1b">
+          <li>Ability to access active / completed / prepared requests across all N1QL nodes from
+              N1QL<ul id="ul_jh4_5n1_q1b">
+              <li>Aside from a language completeness point of view, this is required by the upcoming
+                Query Monitoring admin console feature</li>
+            </ul></li>
+          <li>Ability to list nodes by type and with status from N1QL (MB-15438)</li>
+          <li>Ability to list system keyspaces from system:keyspaces (MB-18293)</li>
+          <li>Extra fields in<codeph> system:active_requests </codeph>/<codeph> completed_requests
+            </codeph>(e.g. MB-15902, MB-17399)</li>
+          <li>Extra counters to keep track of specific requests (e.g. cancelled, MB-20157)</li>
+          <li>Extend killing request to CREATE INDEX (MB-19882)</li>
+        </ul></p><b>Language Impact</b><p>
+        <ul id="ul_jqp_qgw_q1b">
+          <li>None - only new system keyspaces created.</li>
+        </ul>
+      </p><p><b>Implementation</b></p><p>Cluster Monitoring<ul id="ul_kh4_5n1_q1b">
+          <li>For single N1QL node systems or standalone services (such as nodes running outside of
+            a cluster), system keyspaces <codeph>active_requests</codeph>,
+              <codeph>completed_requests</codeph> and <codeph>prepareds</codeph> will see no change
+            in behavior.</li>
+          <li>System keyspaces <codeph>active_requests</codeph>, <codeph>completed_requests</codeph>
+            and <codeph>prepareds</codeph> will include a node name in the output document.</li>
+          <li>New admin <codeph>completed_requests</codeph> endpoint to return a single completed
+            request is required (already exists for <codeph>active_requests</codeph>and
+              <codeph>prepareds</codeph>) and will be used for fetch operations.</li>
+          <li>New admin endpoints to list <codeph>RequestId</codeph> for
+              <codeph>active_requests</codeph> and <codeph>completed_requests</codeph> as well as
+            names for <codeph>prepareds</codeph> are required since they will be used for per node
+            scan operations.</li>
+          <li>System keyspaces will sport a secondary index on the node name.<ul id="ul_ezn_5hw_q1b">
+              <li>The node name, if present in the WHERE clause, will be pushed down.</li>
+              <li>Where the node name matches the local node, the local operation will be used.</li>
+              <li>Only nodes specified in the WHERE clause, if any, will be accessed.</li>
+              <li>Otherwise all nodes will be scanned.</li>
+              <li>Once a primary or secondary scan has produced a list of candidate entries, fetches
+                will be done either locally or using the single entry endpoint as provided
+                above.</li>
+            </ul></li>
+          <li>In order to access remote nodes, we need:<ul id="ul_aqx_23w_q1b">
+              <li>A node map from <codeph>ns_server</codeph> (this is already available,
+                clearly)</li>
+              <li>The ability to access N1QL endpoints directly from the datastore / system
+                layer.</li>
+            </ul></li>
+          <li>Fetch and delete will require a node name as part of the key.</li>
+        </ul>Alternative Designs for Cluster Monitoring</p><p>The advantages of the scheme above is
+        that it is simple and consistent with the existing infrastructure, and avoids pitfalls like
+        clients switching to different nodes in the cluster for each subsequent request (and
+        therefore unexpectedly not finding entries), however, it lends itself to inconsistent
+        performance: where the monitoring information accessed is local, latency will be low, where
+        remote access is required, latency will be higher.</p><p>This is of particular concern for
+        Query WorkBench and Query Monitoring, which is limited to accessing the local query node
+        (presumably for browser sandboxing issues), and therefore has to go through two hops (from
+        WorkBench to local query, and from local query to remote query).</p><p>Query WorkBench would
+        probably be better off querying individual nodes directly and aggregating (thereby
+        standardising to a single hop), although this may not be a possibility.</p><p>An alternative
+        design involves having two namespaces:<ul id="ul_tl1_w4w_q1b">
+          <li>system - which would only access local data (as it does now)</li>
+          <li>cluster - which would behave as described above.</li>
+        </ul></p><p>The advantage here would be that the system keyspaces would have consistent
+        latencies and cluster keyspaces would be expected to be slower; however this makes for a
+        more complicated setup and may be prone to confusion, such as mistakenly using system rather
+        than cluster and not finding expected entries.</p><p>New System Keyspaces<ul
+          id="ul_t3f_mpw_q1b">
+          <li><codeph>System:nodes</codeph> will show the datastore topology information. This is
+            separate from the N1QL clustering view of the world, in that N1QL clustering shows a map
+            of the N1QL cluster, as provided by the cluster manager, while
+              <codeph>system:nodes</codeph> will show a view of the nodes and services that make up
+            the actual datastore, which may or may not include N1QL nodes.</li>
+          <li>The dichotomy is important in that N1QL could be clustered by one entity (e.g.
+            Zookeeper) and be connected to a clustered datastore (e.g. Couchbase) such that each
+            does not have visibility of the other.</li>
+          <li>Should N1QL be extended to be able to concurrently connect to multiple datastores,
+            each datastore will report its own topology, so that <codeph>system:nodes</codeph>
+            offers a complete view of all the storage nodes, whatever those may be.</li>
+          <li>Ideally, <codeph>system:nodes</codeph> will provide a way to report services
+            advertised by each node as well as services that are actually running.</li>
+          <li>This will be datastore dependent.</li>
+          <li>N1QL clustering will still be reported by the <codeph>/admin</codeph> endpoints.</li>
+          <li><codeph>System:keyspaces</codeph> can be augmented to list system keyspaces with a
+            static map. The small disadvantage of this is that it has to be maintained as new system
+            keyspaces are added.</li>
+        </ul>Extra Diagnostic Information in System Keyspaces<ul id="ul_phr_3qw_q1b">
+          <li><codeph>System:active_requests </codeph>and<codeph> system:completed_requests
+            </codeph>to report scan consistency.</li>
+          <li><codeph>System:prepareds </codeph>to list min and max execution and service times, as
+            well as average times.</li>
+        </ul>Killing Index Build Requests on the Indexer<ul id="ul_dzg_cww_q1b">
+          <li>It should be possible to terminate index build requests on the indexer side by
+            deleting the index being built.</li>
+          <li>This will probably entail creating a cleanup method in the execution layer, which
+            would be a NOOP in most cases and would do an index delete on create index
+            requests.</li>
+          <li>The cleanup method would only be called on timeouts and requests delete.</li>
+        </ul>Down Nodes / Earlier Versions<ul id="ul_uml_nww_q1b">
+          <li>Nodes that cannot be accessed (either because of earlier versions lacking required
+            endpoints or because they are not available) are ignored.</li>
+          <li>Suitable warnings for each unreportable node will be returned on the output
+            document.</li>
+        </ul></p></section>
+    <section id="vitals">
+      <title>Vitals</title>
+      <p>The <cmdname>Vitals</cmdname> API provides data about the running state and health of the
+        query engine, such as number of logical cores, active threads, queued threads,CPU
+        utilization, memory usage, network utilization, garbage collection percentage, and so on.
+        This information can be very useful to assess the current workload and performance
+        characteristics of a query engine, and hence load-balance the requests being sent to various
+        query engines. </p>
       <dl>
         <dlentry>
           <dt>Get System Vitals</dt>
-          <dd><codeblock outputclass="language-json">curl -u Administrator:password http://localhost:8093/admin/vitals</codeblock>
+          <dd>
+            <codeblock outputclass="language-json">curl -u Administrator:password http://localhost:8093/admin/vitals</codeblock>
             <codeblock outputclass="language-json">{
     "uptime":"30h0m10.801209195s",
     "local.time":"2016-02-18 17:39:41.612724694 -0800 PST",
@@ -436,11 +555,13 @@ cbq> SELECT * FROM `travel-sample` WHERE type = "airline" LIMIT 1;
     "request_time.95percentile":"1.274152266s",
     "request_time.99percentile":"1.588775188s",
     "request.prepared.percent":0
-}         </codeblock></dd>
+}         </codeblock>
+          </dd>
         </dlentry>
       </dl>
     </section>
-    <section id="sys-active-req"><title>system:active_requests</title>
+    <section id="sys-active-req">
+      <title>system:active_requests</title>
       <p>This catalog lists all currently executing active requests or queries. </p>
       <dl>
         <dlentry>
@@ -690,12 +811,17 @@ cbq> SELECT * FROM `travel-sample` WHERE type = "airline" LIMIT 1;
         </dlentry>
         <dlentry>
           <dt>Terminate an Active Request</dt>
-          <dd><p>The DELETE command can be used to terminate an active request, for instance, a non-responding or a long-running query.</p><codeblock outputclass="language-json">DELETE http://localhost:8093/admin/active_requests/<varname>request_ID</varname></codeblock>
-            <codeblock outputclass="language-json" >DELETE FROM system:active_requests [ WHERE <varname>expression</varname> ]   </codeblock></dd>
+          <dd>
+            <p>The DELETE command can be used to terminate an active request, for instance, a
+              non-responding or a long-running query.</p>
+            <codeblock outputclass="language-json">DELETE http://localhost:8093/admin/active_requests/<varname>request_ID</varname></codeblock>
+            <codeblock outputclass="language-json">DELETE FROM system:active_requests [ WHERE <varname>expression</varname> ]   </codeblock>
+          </dd>
         </dlentry>
       </dl>
     </section>
-    <section id="sys-prepared"><title>system:prepareds</title>
+    <section id="sys-prepared">
+      <title>system:prepareds</title>
       <p>This catalog provides data about the known prepared statements and their state in a query
         engine’s prepared statement cache. For each prepared statement, this catalog provides
         information such as name, statement, query plan, last use time, number of uses, and so on. </p>
@@ -1103,18 +1229,23 @@ SELECT *, meta().plan FROM system:prepareds;
         </dlentry>
         <dlentry>
           <dt>Delete Prepared Statement</dt>
-          <dd><p>The DELETE command can be used to delete a specific <varname>p1</varname> prepared
+          <dd>
+            <p>The DELETE command can be used to delete a specific <varname>p1</varname> prepared
               statement:<codeblock outputclass="language-json">DELETE http://localhost:8093/admin/prepareds/p1<varname>prepared-statement-name</varname></codeblock><codeblock outputclass="language-json">DELETE FROM system:prepareds 
-WHERE name = "p1";</codeblock></p> <p>To delete all the known prepared statements, use <codeblock outputclass="language-json">DELETE http://localhost:8093/admin/prepareds</codeblock></p></dd>
+WHERE name = "p1";</codeblock></p>
+            <p>To delete all the known prepared statements, use
+              <codeblock outputclass="language-json">DELETE http://localhost:8093/admin/prepareds</codeblock></p>
+          </dd>
         </dlentry>
       </dl>
     </section>
-    <section id="sys-completed-req"><title>system:completed_requests</title>
+    <section id="sys-completed-req">
+      <title>system:completed_requests</title>
       <p>This catalog maintains a list of the most recent completed requests that have run longer
         than a predefined threshold of time. For each completed request, this catalog maintains
         information such as requestId, statement text, prepared name (if prepared statement),
         request time, service time, and so on. This information provides a general insight into the
-        health and performance of the query engine and the cluster.  Note that most field names and
+        health and performance of the query engine and the cluster. Note that most field names and
         meanings match exactly those of system:active_requests.</p>
       <note> Couchbase Server version 5.0 has an extra feature which affects<codeph>
           completed_requests: request profiling </codeph>in the following ways:<ul
@@ -1131,8 +1262,10 @@ WHERE name = "p1";</codeblock></p> <p>To delete all the known prepared statement
       <dl>
         <dlentry>
           <dt>Get Completed Requests</dt>
-          <dd><p>To get profiling information about the query plan, use:
-            <codeblock outputclass="language-json">curl -u Administrator:password http://localhost:8093/admin/completed_requests</codeblock><codeblock outputclass="language-json">SELECT *, meta().plan FROM system:completed_requests;</codeblock></p> <codeblock outputclass="language-json">Select *, meta().plan from system:completed_requests LIMIT 1;
+          <dd>
+            <p>To get profiling information about the query plan, use:
+              <codeblock outputclass="language-json">curl -u Administrator:password http://localhost:8093/admin/completed_requests</codeblock><codeblock outputclass="language-json">SELECT *, meta().plan FROM system:completed_requests;</codeblock></p>
+            <codeblock outputclass="language-json">Select *, meta().plan from system:completed_requests LIMIT 1;
 [
   {
     "completed_requests": {
@@ -1281,7 +1414,8 @@ WHERE name = "p1";</codeblock></p> <p>To delete all the known prepared statement
       ]
     }
   }
-]</codeblock></dd>
+]</codeblock>
+          </dd>
         </dlentry>
         <dlentry>
           <dt>Purging the Completed Requests</dt>
@@ -1299,23 +1433,25 @@ requests WHERE requests.time LIKE "2015-09-09%";<varname>requests</varname>
             default value is 1000ms. Specify <userinput>0</userinput> to log all requests and
               <userinput>-1</userinput> to not log any requests to the keyspace. <p>To specify a
               different value, use:
-                <codeblock outputclass="language-json">cbq-engine -completed-threshold=500</codeblock></p></li>
+              <codeblock outputclass="language-json">cbq-engine -completed-threshold=500</codeblock></p></li>
           <li><parmname>completed-limit</parmname>: Sets the number of most recent requests to be
             tracked in the <codeph>system:completed_requests</codeph> catalog. The default value is
             4000. Specify <userinput>0</userinput> to not track any requests and
               <userinput>-1</userinput> to set no limit. <p>To specify a different value, use:
-                <codeblock outputclass="language-json">cbq-engine -completed-limit=1000</codeblock></p></li>
+              <codeblock outputclass="language-json">cbq-engine -completed-limit=1000</codeblock></p></li>
         </ul>You can also set these parameters through the Admin API settings endpoint:
         <codeblock outputclass="language-json">curl -X POST 'http://localhost:8093/admin/settings'  -u Administrator:password -d '{ ... }'</codeblock>
         The JSON parameter accepts two new fields: <parmname>completed-threshold</parmname> and
           <parmname>completed-limit</parmname>.</p>
-    </section><section id="examples">
+    </section>
+    <section id="examples">
       <title>Examples</title>
-      <p><dl>
-        <dlentry>
-          <dt id="example-1">Example 1</dt>
-          <dd>
-            <codeblock outputclass="language-json">cbq> \set -profile "timings";
+      <p>
+        <dl>
+          <dlentry>
+            <dt id="example-1">Example 1</dt>
+            <dd>
+              <codeblock outputclass="language-json">cbq> \set -profile "timings";
 cbq> SELECT * FROM `travel-sample` WHERE type = "airline" LIMIT 1;
 {
     "requestID": "874a6c27-b514-42c7-b057-caf07067db65",
@@ -1635,12 +1771,13 @@ cbq> SELECT * FROM `travel-sample` WHERE type = "airline" LIMIT 1;
 }
 </codeblock>
             </dd>
-        </dlentry><dlentry>
-          <dt id="example-2">Example 2</dt>
-          <dd> Query 1 - First, we set <codeph>profile = “timings”</codeph> and run a long query
+          </dlentry>
+          <dlentry>
+            <dt id="example-2">Example 2</dt>
+            <dd> Query 1 - First, we set <codeph>profile = “timings”</codeph> and run a long query
               which takes at least 1000ms (the default value of the completed-threshold query
               setting) to get registered in <codeph>system:completed_requests</codeph> keyspace:
-            <codeblock outputclass="language-json">cbq> \set -profile "timings";
+                <codeblock outputclass="language-json">cbq> \set -profile "timings";
 cbq> SELECT * FROM `travel-sample` ORDER BY name;</codeblock><p>Query
                 2 - Now, we change the profile setting to “phases” and rerun another long
                 query:<codeblock outputclass="language-json">cbq> \set -profile "phases";
@@ -1913,8 +2050,9 @@ cbq> SELECT * FROM `travel-sample` ORDER BY title;</codeblock></p><p>Query
                   </li>
                 </ul></p>
             </dd>
-        </dlentry>
-      </dl></p>
+          </dlentry>
+        </dl>
+      </p>
     </section>
     <section id="section_wwl_tsm_n1b">
       <title>system:my_user_info</title>
