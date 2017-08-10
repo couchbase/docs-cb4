@@ -6,7 +6,8 @@
     <p>With the growing threat to security from rogue users and/or machines, password-based
       authentication is no longer a reliable method of authenticating users. Couchbase now supports
       the use of x.509 certificates to authenticate clients which ensures that only approved users
-      (or machines or endpoints) are authenticated.</p>
+      (or machines or endpoints) are authenticated. Note that this authentication mechanism is
+      available only for the data service. </p>
     <p>Certificate based authentication provides an additional layer of security. It relies on a
       certificate authority, CA, to validate identities and issue certificates. The certificate
       includes information such as the name of the entity it identifies, an expiration date, the
@@ -38,17 +39,23 @@
           <li>x.509 certificate is the official standard for public key certificates and SSL/TLS
             relies on this standard. You must use valid x.509 certificates generated and signed by
             the same root certificate authority (CA). </li>
-          <li>An x.509 certificate needs to be installed on Couchbase Server (root CA public key,
+          <!--<li>An x.509 certificate needs to be installed on Couchbase Server (root CA public key,
             Server Public and Private key). See <xref
               href="security-x509certsintro.dita#topic_cfk_mhn_xv"/> for details.</li>
-          <li>The Couchbase client needs to have a valid certificate signed by the same root CA. </li>
+          <li>The Couchbase client needs to have a valid certificate signed by the same root CA. </li>-->
           <li>The x.509 certificates must be in PEM format. </li>
         </ul>
+        <note>Your prior knowledge of TLS/SSL, PKI certificates including X.509 certificates, and
+          Certificate Authorities (CAs) is assumed for this topic and describing them is beyond the
+          scope of this document.</note>
       </p>
     </section>
     <section>
       <title>Enabling x.509 Certificate Based Authentication on the Server</title>
       <p>You can enable certificate based authentication on the server using REST API or CLI. </p>
+      <p>This authentication mechanism is available only for the data service and can be used with
+        SDK/clients as well. For query and other services, use the other supported authentication
+        mechanisms.</p>
       <p><b>Using REST API</b></p>
       <p>
         <ol>
@@ -65,55 +72,74 @@ curl -X POST  --data-binary "prefix=" http://Administrator:password@localhost:80
       <p><b>Using CLI</b></p>
       <p>Use the following <cmdname>couchbase-cli</cmdname> command:
         <codeblock>couchbase-cli ssl-manage &lt;options></codeblock></p>
-    <table frame="all" rowsep="1" colsep="1" id="table_t3d_5yh_p1b">
-      <tgroup cols="3">
-        <colspec colname="c1" colnum="1" colwidth="1*"/>
-        <colspec colname="newCol2" colnum="2" colwidth="1*"/>
-        <colspec colname="c2" colnum="3" colwidth="2.45*"/>
-        <thead>
-          <row>
-            <entry>Options</entry>
-            <entry>Value</entry>
-            <entry>Description</entry>
-          </row>
-        </thead>
-        <tbody>
-          <row>
-            <entry> --set-client-auth-state</entry>
-            <entry>disable | enable | mandatory</entry>
-            <entry>Enable or disable the SSL client certificate authentication.</entry>
-          </row>
-          <row>
-            <entry>--set-client-auth-path</entry>
-            <entry>subject.cn | san.uri | san.dnsname | san.name</entry>
-            <entry>Set SSL client certificate type value.</entry>
-          </row>
-          <row>
-            <entry>--set-client-auth-prefix</entry>
-            <entry>set_client_auth_prefix</entry>
-            <entry>Set SSL client certificate prefix value.</entry>
-          </row>
-          <row>
-            <entry>--set-client-auth-delimiter</entry>
-            <entry>set_client_auth_delimiter</entry>
-            <entry>Set SSL client certificate delimiter value.</entry>
-          </row>
-          <row>
-            <entry>--client-auth</entry>
-            <entry/>
-            <entry>Show SSL client certificate authentication value.</entry>
-          </row>
-        </tbody>
-      </tgroup>
-    </table>
-    <p>After setting up the server side for client authentication, you should also assign the users
-      to some roles on the server side. </p>
+      <table frame="all" rowsep="1" colsep="1" id="table_t3d_5yh_p1b">
+        <tgroup cols="3">
+          <colspec colname="c1" colnum="1" colwidth="1*"/>
+          <colspec colname="newCol2" colnum="2" colwidth="1*"/>
+          <colspec colname="c2" colnum="3" colwidth="2.45*"/>
+          <thead>
+            <row>
+              <entry>Options</entry>
+              <entry>Value</entry>
+              <entry>Description</entry>
+            </row>
+          </thead>
+          <tbody>
+            <row>
+              <entry> --set-client-auth-state</entry>
+              <entry>disable | enable | mandatory</entry>
+              <entry>Enable or disable the SSL client certificate authentication.<ul
+                  id="ul_ffw_zjq_v1b">
+                  <li><parmname>disable</parmname>: Disables client based certificate
+                    authentication. This is the default value.</li>
+                  <li><parmname>enable</parmname>:  When enabled, if the client presents a
+                    certificate, then that certificate is used to authenticate. If authentication
+                    fails, then access is denied. However, if the client does not present a
+                    certificate, the certificate based authentication will be bypassed.</li>
+                  <li><parmname>mandatory</parmname>: The client must present a valid certificate in
+                    order to gain access to Couchbase buckets. If using XDCR, <b>do not</b> use the
+                      <parmname>mandatory</parmname> state for X.509 Certificate
+                    Authentication.</li>
+                </ul></entry>
+            </row>
+            <row>
+              <entry>--set-client-auth-path</entry>
+              <entry>subject.cn | san.uri | san.dnsname | san.name</entry>
+              <entry>Set SSL client certificate type value.</entry>
+            </row>
+            <row>
+              <entry>--set-client-auth-prefix</entry>
+              <entry>set_client_auth_prefix</entry>
+              <entry>Set SSL client certificate prefix value.</entry>
+            </row>
+            <row>
+              <entry>--set-client-auth-delimiter</entry>
+              <entry>set_client_auth_delimiter</entry>
+              <entry>Set SSL client certificate delimiter value.</entry>
+            </row>
+            <row>
+              <entry>--client-auth</entry>
+              <entry/>
+              <entry>Show SSL client certificate authentication value.</entry>
+            </row>
+          </tbody>
+        </tgroup>
+      </table>
+      <p>After setting up the server side for client authentication, you should also assign the
+        users to some roles on the server side. To do so:  <ol>
+          <li>Create a user with authentication source (domain) 'Couchbase'. </li>
+          <li>Ensure that this user is an internally managed user with a strong password. While the
+            password is not used as part of the certificate based authentication, it is required if
+            the user is trying to access the resources through the web console.</li>
+        </ol></p>
+      <p>For information on assigning roles to users, see <xref
+          href="security-rbac-for-admins-and-apps.dita#topic_auth_for_admins"/>.</p>
     </section>
+   
     <section><title>Limitations</title>
       <p>Note the following limitations to the feature in the current release: <ul>
         <li>X.509 Certificate Based Authentication will only work for data service.</li>
         <li>For Couchbase Server 5.0 Beta 2, X.509 Certificate-based Authentication support is only available in the Java Client.</li>
-        <li>If using XDCR, do not use the "mandatory" mode for X.509 Certificate Authentication.</li>
       </ul>  
       </p>
     </section>
