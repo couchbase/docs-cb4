@@ -19,7 +19,7 @@
             <p>
                 A high-level summary of extended attributes can be found in
                 <xref href="./sdk-xattr-overview.dita" scope="local" format="dita">Extended
-                Attributes</xref>. Extended attributes are handled by means of
+                    Attributes</xref>. Extended attributes are handled by means of
                 extensions to the <i>Subdocument API</i>.
             </p>
             
@@ -32,7 +32,7 @@
             
             <p>
                 The following code demonstrates how 
-                extended attributes can be used. It assumes that Couchbase Server is
+                extended attributes be used. It assumes that Couchbase Server is
                 established on <codeph>localhost</codeph>; that the Full Administrator username and
                 password are <codeph>Administrator</codeph> and <codeph>password</codeph> respectively;
                 and that the <codeph>travel-sample</codeph> bucket is 
@@ -40,11 +40,58 @@
                 <xref href="../../settings/install-sample-buckets.dita" scope="local" format="dita">Install Sample Buckets</xref>.
             </p>
             
-<codeblock outputclass="language-go"></codeblock>
+            <codeblock outputclass="language-go">package main
+                
+import (
+    "github.com/couchbase/gocb"
+    "fmt"
+)
 
+func main() {
+    cluster, _ := gocb.Connect("couchbase://localhost")
+    cluster.Authenticate(gocb.PasswordAuthenticator{
+        Username: "Administrator",main.go
+        Password: "password",
+    })
+
+    bucket, _ := cluster.OpenBucket("travel-sample", "")
+
+    // Add key-value pairs to hotel_10138, representing traveller-Ids and associated discount percentages
+    bucket.MutateIn("hotel_10138", 0, 0).
+        UpsertEx("discounts.jsmith123", "20", gocb.SubdocFlagXattr|gocb.SubdocFlagCreatePath).
+        UpsertEx("discounts.pjones356", "30", gocb.SubdocFlagXattr|gocb.SubdocFlagCreatePath).
+    // The following lines, "insert" and "remove", simply demonstrate insertion and
+    // removal of the same path and value
+        InsertEx("discounts.jbrown789", "25", gocb.SubdocFlagXattr|gocb.SubdocFlagCreatePath).
+        RemoveEx("discounts.jbrown789",  gocb.SubdocFlagXattr).
+        Execute()
+
+    // Add key - value pairs to hotel_10142, again representing traveller - Ids and associated discount percentages
+    bucket.MutateIn("hotel_10142", 0, 0).
+        UpsertEx("discounts.jsmith123", "15", gocb.SubdocFlagXattr|gocb.SubdocFlagCreatePath).
+        UpsertEx("discounts.pjones356", "10", gocb.SubdocFlagXattr|gocb.SubdocFlagCreatePath).
+        Execute()
+
+    q := gocb.NewN1qlQuery("SELECT id, META().id AS docID FROM `travel-sample`")
+    rows, _ := bucket.ExecuteN1qlQuery(q, nil)
+
+    var row struct {
+        DocID string `json:"docID"`
+    }
+    for rows.Next(&amp;row) {
+        res, err := bucket.LookupIn(row.DocID).GetEx("discounts.jsmith123", gocb.SubdocFlagXattr).Execute()
+        if err == nil {
+            var discount string
+            res.ContentByIndex(0, &amp;discount)
+            fmt.Printf("%s - %s\n", discount, row.DocID)
+        }
+    }
+}
+</codeblock>
+            
             
         </section>
         
     </body>
-        
+    
 </topic>
