@@ -9,16 +9,15 @@
             have WHERE clause predicates on any of the index-key fields) without requiring to create
             various composite indexes for different combinations of fields.  Adaptive Index is a
             functional array index created using the N1QL function PAIRS(). </p>
-        <p>Basically, the idea is to be able to simply load data and start querying (a) using a
-            single secondary index, and (b) not worrying about creating appropriate secondary
-            indexes for each query.  Note that without Adaptive Indexes:<ul id="ul_cvp_vcm_5z">
-                <li>Only primary index can help run any ad hoc query.  But using primary index can
-                    be expensive for queries with predicates on any of the non-key fields of the
-                    document.</li>
-                <li>Each query will need a compatible secondary index that can qualify for the
-          predicates in the WHERE clause. See section <xref href="#untitled1/section_w31_bnm_5z"
-            format="dita"/> for details.</li>
-            </ul></p>
+        <p>Basically, the idea is to be able to simply load data and start querying (1) using a
+      single secondary index, and (2) not worrying about creating appropriate secondary indexes for
+      each query. Note that without Adaptive Indexes:<ul id="ul_cvp_vcm_5z">
+        <li>Only primary index can help run any ad hoc query. But using primary index can be
+          expensive for queries with predicates on any of the non-key fields of the document.</li>
+        <li>Each query will need a compatible secondary index that can qualify for the predicates in
+          the WHERE clause. See section <xref href="#untitled1/section_w31_bnm_5z" format="dita"/>
+          for details.</li>
+      </ul></p>
         <p>For instance, consider a user profile or hotel reservation search use case. A person's
       profile may need to be searched based on any of the personal attributes such as first name,
       last name, age, city, address, job, title, company, etc. Similarly, a hotel room availability
@@ -27,35 +26,39 @@
       effectively (see section <xref href="#untitled1/section_w31_bnm_5z" format="dita">Contrast
         with Composite Indexes</xref> to understand some of the concerns). Adaptive indexes can help
       effectively and efficiently run such ad hoc search queries.</p>
-        <p>Syntax:<codeblock>CREATE INDEX <varname>index_name</varname>
-ON <varname>keyspace_ref</varname>((ALL | DISTINCT) PAIRS(SELF | <varname>index_key_object</varname>) )
+    <section id="section_hz5_vvn_z1b">
+      <title>Syntax</title>
+    </section>
+        <p><codeblock>CREATE INDEX <varname>index_name</varname>
+ON <varname>keyspace_ref</varname>((ALL | DISTINCT) 
+PAIRS(SELF | <varname>index_key_object</varname>) )
 <varname>&lt;WHERE clause></varname>
 <varname>&lt;WITH clause></varname></codeblock>When
-            the <codeph>SELF</codeph> keyword is used, the adaptive index is created with all fields
-            in the documents of the
-            keyspace.<codeblock>index_key_object ::== {["<varname>name1</varname>" :] <varname>expr1</varname>, ["<varname>name2</varname>" :] <varname>expr2</varname>, ...}</codeblock>This
-            is an object of name-value pairs of the document fields that should be indexed.<ul
-                id="ul_wpr_gfm_5z">
-                <li><varname>expr1</varname>, <varname>expr2</varname>, etc. are the N1QL
-                    expressions that are allowed in CREATE INDEX.  These must be expressions over
-                    any document fields.  The names <varname>name1</varname>,
-                        <varname>name2</varname>, etc. are the corresponding field names.</li>
-                <li>In a simplified form, the names in the object can be omitted, in which case the
-                    corresponding names will be same as expressions, and the expressions must be
-                    field names in the document that are being indexed.</li>
-            </ul></p>
+      the <codeph>SELF</codeph> keyword is used, the adaptive index is created with all fields in
+      the documents of the
+      keyspace.<codeblock>index_key_object ::== {["<varname>name1</varname>" :] <varname>expr1</varname>, ["<varname>name2</varname>" :] <varname>expr2</varname>, ...}</codeblock>This
+      is an object of name-value pairs of the document fields that should be indexed.<ul
+        id="ul_wpr_gfm_5z">
+        <li><varname>expr1</varname>, <varname>expr2</varname>, etc. are the N1QL expressions that
+          are allowed in CREATE INDEX. These must be expressions over any document fields. The names
+            <varname>name1</varname>, <varname>name2</varname>, etc. are the corresponding field
+          names.</li>
+        <li>In a simplified form, the names in the object can be omitted, in which case the
+          corresponding names will be same as expressions, and the expressions must be field names
+          in the document that are being indexed.</li>
+      </ul></p>
         <p>For example, consider the <codeph>travel-sample</codeph> data that is shipped with the
       product and the following indexes. Sample buckets can be installed as explained <xref
         href="../../settings/install-sample-buckets.dita#topic_jqr_1rn_vs"
       >here</xref>.<codeblock outputclass="language-json">C1: CREATE INDEX `def_airportname` ON `travel-sample`(`airportname`) WHERE type = "airport"
-C2: CREATE INDEX `def_city` ON `travel-sample`(`city`) WHERE type = "airport"
-C3: CREATE INDEX `def_faa` ON `travel-sample`(`faa`) WHERE type = "airport"</codeblock></p>
-        <p>Here, three different indexes need to be created to help different queries who WHERE
+C2: CREATE INDEX `def_city`        ON `travel-sample`(`city`)        WHERE type = "airport"
+C3: CREATE INDEX `def_faa`         ON `travel-sample`(`faa`)         WHERE type = "airport"</codeblock></p>
+        <p>Here, three different indexes need to be created to help different queries whose WHERE
       clause predicates may refer to different fields. For instance, the following queries Q1, Q2,
       and Q3 will use the indexes created in C1, C2, and C3,
-      respectively:<codeblock outputclass="language-json">Q1: SELECT * FROM `travel-sample` WHERE airportname LIKE  "San Francisco%" AND type = "airport";
-Q2: SELECT * FROM `travel-sample` WHERE city = "San Francisco" AND type = "airport";
-Q3: SELECT * FROM `travel-sample` WHERE faa = "SFO" AND type = "airport";</codeblock></p>
+      respectively:<codeblock outputclass="language-json">Q1: SELECT * FROM `travel-sample` WHERE airportname LIKE  "San Francisco%";
+Q2: SELECT * FROM `travel-sample` WHERE city = "San Francisco";
+Q3: SELECT * FROM `travel-sample` WHERE faa = "SFO";</codeblock></p>
         <p>However, the following single adaptive index can serve all three of the above
             queries:<codeblock outputclass="language-json">C4: CREATE INDEX `ai_airport_day_faa` 
     ON `travel-sample`(DISTINCT PAIRS({airportname, city, faa})) 
@@ -107,6 +110,8 @@ Result:
             "using": "gsi"
           }
 ...
+
+
 
 Q5A: EXPLAIN SELECT * 
      FROM `travel-sample` 
@@ -195,23 +200,31 @@ Result:
                             href="indexing-arrays.dita#topic_hv4_sbr_w5">Array Indexing</xref>
                         technology and are bound to the limitations of array indexes.</li>
                     <li>Indexed entries of the Adaptive Index are typically larger in size compared
-                        to the simple index on respective fields because the indexed items are
-                        elements of the PAIRS() array, which are basically name-value pairs of the
-                        document fields.  So, it may be relatively slower when compared with
-                        equivalent simple index.  For example, in the following equivalent queries,
-                        C7/Q7 may perform better than C8/Q8. Note how the index key values are
-                        represented in the
-                        spans:<codeblock outputclass="language-json">C7: CREATE INDEX `def_city` ON `travel-sample`(`city`);
+            to the simple index on respective fields because the indexed items are elements of the
+            PAIRS() array, which are basically name-value pairs of the document fields. So, it may
+            be relatively slower when compared with equivalent simple index. For example, in the
+            following equivalent queries, C7/Q7 may perform better than C8/Q8. Note how the index
+            key values are represented in the spans:<table frame="none" rowsep="0" colsep="0"
+              id="table_rg5_h14_z1b">
+              <tgroup cols="2" align="left">
+                <colspec colname="c1" colnum="1" colwidth="1*"/>
+                <colspec colname="c2" colnum="2" colwidth="1*"/>
+                <tbody>
+                  <row>
+                    <entry>
+                      <codeblock>C7: CREATE INDEX `def_city` ON `travel-sample`(`city`);
 
 Q7: EXPLAIN SELECT city FROM `travel-sample` 
-USE INDEX (def_city)
-WHERE city = "San Francisco";
+    USE INDEX (def_city)
+    WHERE city = "San Francisco";
+
+Results:
 {
   "plan": {
     "#operator": "Sequence",
     "~children": [
       {
-        "#operator": "IndexScan2",
+<b>        "#operator": "IndexScan2",
         "covers": [
           "cover ((`travel-sample`.`city`))",
           "cover ((meta(`travel-sample`).`id`))"
@@ -222,7 +235,7 @@ WHERE city = "San Francisco";
           "entry_keys": [
             0
           ]
-        },
+        },</b>
         "keyspace": "travel-sample",
         "namespace": "default",
         "spans": [
@@ -239,27 +252,33 @@ WHERE city = "San Francisco";
         ],
         "using": "gsi"
       }
-…
-
-C8: CREATE INDEX `ai_city` ON `travel-sample`(pairs({city}));
+...</codeblock>
+                    </entry>
+                    <entry>
+                      <codeblock>C8: CREATE INDEX `ai_city` ON `travel-sample`(pairs({city}));
 
 Q8: EXPLAIN SELECT city FROM `travel-sample` 
-USE INDEX (ai_city)
-WHERE city = "San Francisco";
+    USE INDEX (ai_city)
+    WHERE city = "San Francisco";
 
+Results:
 {
   "plan": {
     "#operator": "Sequence",
     "~children": [
       {
-        "#operator": "DistinctScan",
+<b>        "#operator": "DistinctScan",
         "scan": {
           "#operator": "IndexScan2",
           "index": "ai_city",
           "index_id": "4c3192fc7e5b0f91",
           "index_projection": {
             "primary_key": true
-          },
+          },</b>
+
+
+
+
           "keyspace": "travel-sample",
           "namespace": "default",
           "spans": [
@@ -276,7 +295,12 @@ WHERE city = "San Francisco";
           ],
           "using": "gsi"
         }
-...</codeblock></li>
+...</codeblock>
+                    </entry>
+                  </row>
+                </tbody>
+              </tgroup>
+            </table></li>
                     <li>Adaptive index requires more storage and memory, especially in case of
                         Memory Optimized Indexes.<ol id="ol_sxn_hcn_5z">
                             <li>The size of the index and the number of indexed items in an Adaptive
@@ -288,9 +312,9 @@ WHERE city = "San Francisco";
                                 each level of nesting. </li>
                             <li>Similarly, if the documents have array fields, then each of array
                                 elements are explored and indexed. </li>
-                            <li>For example, the following query shows that a single route document
-                in <codeph>travel-sample</codeph> generates 103 index items, and all route documents
-                produce ~2.3 million
+                            <li>For example, the following queries show that a single route document
+                in <codeph>travel-sample</codeph> generates 103 index items and that all route
+                documents produce ~2.3 million
                 items.<codeblock outputclass="language-json">SELECT array_length(PAIRS(self)) FROM `travel-sample` 
 WHERE type = "route" LIMIT 1;
 
@@ -335,10 +359,9 @@ WHERE type = "hotel";</codeblock></li>
                     <li>Adaptive Index cannot be used as covered indexes for any queries. See
                         example Q8 above.</li>
                     <li>Adaptive Indexes can be created only on document field identifiers, not on
-                        functional expressions on the fields. For example, the following query uses
-                        the index <varname>def_city</varname>, instead of the specified adaptive
-                        index
-                            <varname>ai_city2</varname>:<codeblock outputclass="language-json">CREATE INDEX `ai_city2` ON `travel-sample`(pairs({"city" : lower(city)}));
+            functional expressions on the fields. For example, the following query uses the index
+              <varname>def_city</varname>, instead of the specified adaptive index
+              <varname>ai_city2</varname>:<codeblock outputclass="language-json">CREATE INDEX `ai_city2` ON `travel-sample`(pairs({"city" : lower(city)}));
 
 EXPLAIN SELECT city FROM `travel-sample` 
 USE INDEX (ai_city2)
@@ -355,12 +378,12 @@ Result:
           "cover ((`travel-sample`.`city`))",
           "cover ((meta(`travel-sample`).`id`))"
         ],
-        "index": "def_city",
+        "index": "def_city",                  / Doesn't use ai_city2
         "index_id": "931a0fae2fe4ef8",
 ...</codeblock><note>This
-                            query uses the <varname>def_city</varname> index instead of our
-                            specified <varname>ai_city2</varname> index because it’s a functional
-                            index expression on the field city.</note></li>
+              query uses the <varname>def_city</varname> index instead of our specified
+                <varname>ai_city2</varname> index because it’s a functional index expression on the
+              field city.</note></li>
                     <li>Index Joins can’t use adaptive index because Index Join can’t use array
                         index, and adaptive index is basically an array index.</li>
                     <li>Adaptive Indexes do not work with NOT LIKE predicates with a leading
@@ -383,24 +406,23 @@ Result:
           "cover ((`travel-sample`.`city`))",
           "cover ((meta(`travel-sample`).`id`))"
         ],
-        "index": "def_city",
+        "index": "def_city",               / Doesn't use ai_city
         "index_id": "931a0fae2fe4ef8",
-…
-EXPLAIN SELECT city FROM `travel-sample` 
+...</codeblock><codeblock outputclass="language-json">EXPLAIN SELECT city FROM `travel-sample` 
 USE INDEX (ai_city)
 WHERE city  LIKE "%Francisco";
 
-Query Result:
+Result:
 {
-  "plan": {
-    "#operator": "Sequence",
-    "~children": [
-      {
-        "#operator": "DistinctScan",
-        "scan": {
-          "#operator": "IndexScan2",
-          "index": "ai_city",
-          "index_id": "4c3192fc7e5b0f91",
+"plan": {
+"#operator": "Sequence",
+"~children": [
+{
+"#operator": "DistinctScan",
+"scan": {
+"#operator": "IndexScan2",
+"index": "ai_city",                       / Uses ai_city
+"index_id": "4c3192fc7e5b0f91",
 ...</codeblock></li>
                 </ol></p>
         </section>
