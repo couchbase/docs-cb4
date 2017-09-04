@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="java_sdk_xattr_example">
+    
+    <title>
+        Sample Code
+    </title>
+    
+    <shortdesc>
+        The Java SDK supports creation and handling of <i>extended attributes</i>.  
+    </shortdesc>
+    
+    <body>
+        <section>
+            <title>
+                Subdocument Operations and Extended Attributes
+            </title>
+            
+            <p>
+                A high-level summary of extended attributes can be found in
+                <xref href="./sdk-xattr-overview.dita" scope="local" format="dita">Extended
+                Attributes</xref>. Extended attributes are handled by means of
+                extensions to the <i>Subdocument API</i>.
+            </p>
+            
+        </section>
+        
+        <section>
+            <title>
+                Java Extended Attributes Example
+            </title>
+            
+            <p>
+                The following code demonstrates how 
+                extended attributes can be used. It assumes that Couchbase Server is
+                established on <codeph>localhost</codeph>; that the Full Administrator username and
+                password are <codeph>Administrator</codeph> and <codeph>password</codeph> respectively;
+                and that the <codeph>travel-sample</codeph> bucket is 
+                installed. For information on installing the <codeph>travel-sample</codeph> bucket, see
+                <xref href="../../settings/install-sample-buckets.dita" scope="local" format="dita">Install Sample Buckets</xref>.
+            </p>
+            
+<codeblock outputclass="language-java">import java.util.Arrays;
+import com.couchbase.client.core.message.kv.subdoc.multi.Lookup;
+import com.couchbase.client.java.Bucket;
+import com.couchbase.client.java.Cluster;
+import com.couchbase.client.java.CouchbaseCluster;
+import com.couchbase.client.java.cluster.UserRole;
+import com.couchbase.client.java.cluster.UserSettings;
+import com.couchbase.client.java.query.N1qlQuery;
+import com.couchbase.client.java.query.N1qlQueryResult;
+import com.couchbase.client.java.query.N1qlQueryRow;
+import com.couchbase.client.java.subdoc.*;
+
+public class CouchbaseExtendedAttributesDemo
+{
+    public static void main(String [] args)
+    {
+        // Access the cluster that is running on the local host, authenticating with
+        // the username and password of the Full Administrator. This
+        // provides all privileges.
+        //
+        Cluster cluster = CouchbaseCluster.create("localhost");
+
+        System.out.print("Authenticating as administrator." + "\n");
+        cluster.authenticate("Administrator", "password");
+
+        // Open the travel-sample bucket.
+        //
+        Bucket travelSample = cluster.openBucket("travel-sample");
+
+        // Add key-value pairs to hotel_10138, representing traveller-Ids and associated 
+        // discount percentages.
+        //
+        travelSample.mutateIn("hotel_10138")
+
+            .upsert("discounts.jsmith123", "20", new SubdocOptionsBuilder()
+                .createParents(true).xattr(true))
+
+            .upsert("discounts.pjones356", "30", new SubdocOptionsBuilder()
+                .createParents(true).xattr(true))
+
+            // The following lines, "insert" and "remove", simply demonstrate insertion and
+            // removal of the same path and value.
+            //
+            .insert("discounts.jbrown789", "25", new SubdocOptionsBuilder()
+                .createParents(true).xattr(true))
+
+            .remove("discounts.jbrown789", new SubdocOptionsBuilder().xattr(true))
+
+            .execute();
+
+        // Add key-value pairs to hotel_10142, again representing traveller-Ids and 
+        // associated discount percentages.
+        //
+        travelSample.mutateIn("hotel_10142")
+
+            .upsert("discounts.jsmith123", "15", new SubdocOptionsBuilder()
+                .createParents(true).xattr(true))
+
+            .upsert("discounts.pjones356", "10", new SubdocOptionsBuilder()
+                .createParents(true).xattr(true))
+
+            .execute();
+
+        // Create a user and assign roles. This user will search for their
+        // available discounts.
+        //
+        System.out.print("Upserting new user." + "\n");
+
+        cluster.clusterManager().upsertUser("jsmith123", UserSettings.build()
+
+            .password("jsmith123pwd")
+            .name("John Smith")
+            .roles(Arrays.asList(
+
+                // Roles required for the reading of data from
+                // the bucket.
+                //
+                new UserRole("data_reader", "travel-sample"),
+                new UserRole("query_select", "travel-sample"),
+
+                // Roles required for the writing of data into
+                // the bucket.
+                //
+                new UserRole("data_writer", "travel-sample"),
+                new UserRole("query_insert", "travel-sample"),
+                new UserRole("query_delete", "travel-sample"),
+
+                // Role required for the creation of indexes
+                // on the bucket.
+                //
+                new UserRole("query_manage_index", "travel-sample")
+        )));
+
+        // As administrator, disconnect from cluster.
+        //
+        System.out.println("Administrator disconnecting.");
+        cluster.disconnect();
+
+        // Re-access the cluster as the created user.
+        //
+        System.out.print("User now connecting and authenticating."  + "\n");
+        Cluster userCluster = CouchbaseCluster.create("localhost");
+
+        String theusername = "jsmith123";
+        String thepassword = "jsmith123pwd";
+
+        userCluster.authenticate(theusername, thepassword);
+
+        System.out.print("Opening travel-sample bucket as user."  + "\n");
+        Bucket travelSampleForUser = userCluster.openBucket("travel-sample");
+
+        // Perform a N1QL Query to return document IDs from the bucket. These IDs will be
+        // used to reference each document in turn, and check for extended attributues
+        // corresponding to discounts.
+        //
+        System.out.println("Searching for discounts, as user.");
+        N1qlQueryResult result = travelSampleForUser.query(
+            N1qlQuery.simple("SELECT id, meta(`travel-sample`).id " +
+                "AS docID FROM `travel-sample`")
+        );
+
+        // Get the docID of each document returned, and use the ID to determine whether
+        // the extended attribute exists.
+        //
+        String theId = "";
+        String resultsReturned = "";
+        String searchPath = "discounts." + theusername;
+
+        for (N1qlQueryRow row : result)
+        {
+            // Get the docID of the current document.
+            //
+            theId = row.value().getString("docID");
+
+            // Determine whether a hotel-discount has been applied to this user.
+            //
+            DocumentFragment&lt;Lookup&gt; whetherDiscountExistsForUser = 
+                travelSampleForUser.lookupIn(theId) .exists(searchPath,
+                    new SubdocOptionsBuilder().xattr(true)).execute();
+
+            // If so, get the discount-percentage.
+            //
+            if (whetherDiscountExistsForUser.content(searchPath, Boolean.class))
+            {
+                DocumentFragment&lt;Lookup&gt; percentageValueOfDiscount = 
+                    travelSampleForUser.lookupIn(theId).get(searchPath,
+                        new SubdocOptionsBuilder().xattr(true)).execute();
+
+                // If the percentage-value is greater than 15, include the document in the
+                // results to be returned.
+                //
+                if (Integer.parseInt(percentageValueOfDiscount.content(searchPath,
+                        String.class)) > 15)
+                {
+                    resultsReturned = resultsReturned + '\n' + travelSampleForUser.get(theId);
+                }
+            }
+        }
+
+        // Display the results, which features only hotels offering more than a 15% discount
+        // to the current user.
+        //
+        System.out.println("Results returned are: " + resultsReturned);
+
+        // Disconnect user from the cluster.
+        //
+        userCluster.disconnect();
+    }
+}</codeblock>
+
+            
+        </section>
+        
+    </body>
+        
+</topic>
