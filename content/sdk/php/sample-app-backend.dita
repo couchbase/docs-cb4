@@ -70,18 +70,14 @@
         </p>
       </li>
       
-      
       <li>
         
         Clone the source for the application, and checkout the 5.0 version:
         
         <p>
-         
           <codeph>git clone https://github.com/couchbaselabs/try-cb-php.git</codeph>
-          
         </p>
-        
-        
+
         <p>
           <codeph>cd try-cb-php/</codeph>
         </p>
@@ -89,6 +85,7 @@
         <p>
         <codeph>git checkout server-5.0</codeph>
         </p>
+        
       </li>
       
       <li>
@@ -146,66 +143,62 @@ DB_PASSWORD=travel-sample</codeblock>
     </section>
     
     <section>
-      
-      <title>
-        Walking Through the API
-      </title>
-      
+
+       <title>
+          Connecting to the Cluster and Getting a Bucket
+       </title>
+        
       <p>
-        The following sections lead you through the primary functions of the sample application.
-        This shows you how to use the various features and services of Couchbase including:
-        <b>connecting</b> to a cluster and bucket, <b>key/value</b> interactions,
-        document <b>query through N1QL</b> and <b>full text searches</b>.
-      </p>
-      
-    </section>
-    
-    
-    <section>
-      <title>
-        Configure and Bootstrap the SDK
-      </title>
-      
-      <p>
-        <b>Where</b>: 
-        <xref href="https://github.com/couchbaselabs/try-cb-php/blob/master/config/database.php"
-        format="html" scope="external"><codeph>try-cb-php/config/database.php</codeph></xref>
-      </p>
-      
-      <p>
-          <b>Goals</b>:
-          Connecting to a <codeph>Cluster</codeph>, getting a reference to a
-          <codeph>Bucket</codeph> and learning to reuse it.
-      </p>
-      
-      <p>
-        <b>Relevant Documentation Topics</b>: 
-        <xref href="managing-connections.dita"/>
-      </p>
-      
-      
-      <p>
-        <b>Connecting to the Cluster</b>
+        Initially, the application must connect to the Couchbase cluster. The set-up information for this activity is provided in
         <xref href="https://github.com/couchbaselabs/try-cb-php/blob/master/config/database.php" format="html" scope="external" >try-cb-php/config/database.php</xref>.
+        This file includes definitions of the IP address of the cluster, and the credentials used by the applications for server-access:
       </p>
       
+      <codeblock outputclass="php">'couchbase' => [
+'driver'        => 'couchbase',
+'host'          => 'couchbase://' . env('COUCHBASE_SERVER', '127.0.0.1'),
+'user'          => env('COUCHBASE_USER', 'Administrator'),
+'password'      => env('COUCHBASE_PASS', 'password'),
+],</codeblock>
+      
+     
       <p>
-        <b>Getting a Bucket</b>
-        <xref href="https://github.com/couchbaselabs/try-cb-php/blob/95152187b98e97cc0f3f70885d41b8c6bc9f54a5/app/Http/Controllers/CouchbaseController.php" format="html" scope="external" >try-cb-php/app/Http/Controllers/CouchbaseController.php</xref>.
+        On connection to the cluster, a specific bucket must be opened.
+        The bucket used by the application is <codeph>travel-sample</codeph>. Once the bucket is opened, queries can
+        be performed on the data it contains. The code for cluster-connection and bucket-access is provided in
+        <xref href="https://github.com/couchbaselabs/try-cb-php/blob/95152187b98e97cc0f3f70885d41b8c6bc9f54a5/app/Http/Controllers/CouchbaseController.php" format="html" scope="external" >try-cb-php/app/Http/Controllers/CouchbaseController.php</xref>:
       </p>
-    
-    </section>
+      
+      <codeblock outputclass="php">$this->db = DB::connection('couchbase')->openBucket('travel-sample');</codeblock>
+
+     </section>
     
     <section>
       
       <title>
-        Manage Users using Key/Value API
+        Manage Users
       </title>
       
       <p>
-        <b>Manage a User</b>
+        The application creates and authenticates users, and allows them to make bookings. The code is provided in
         <xref href="https://github.com/couchbaselabs/try-cb-php/blob/3d9975861b417ce53e051d57fa10388963d47798/app/Http/Controllers/UserController.php" format="html" scope="external" >try-cb-php/app/Http/Controllers/UserController.php</xref>.
+        Users are created and stored as follows:
       </p>
+      
+      <codeblock outputclass="php">public function create(Request $request)
+{
+  $credentials = [
+    'name' => $request->user,
+    'password' => $request->password,
+  ];
+  $user = new User($credentials);
+  try {
+    $this->db->insert("user::".$request->user, $user);
+    return response()->json(["data" => ["token" => $this->buildToken($user)]]);
+  } catch (\Couchbase\Exception $ex) {
+      return response()->json(["failure" => 'Failed to create user'], 409);
+  }
+}</codeblock>
       
     </section>
     
@@ -213,42 +206,52 @@ DB_PASSWORD=travel-sample</codeblock>
     <section>
       
       <title>
-        A First N1QL Query: Finding Airports
+        Simple N1QL Queries: Finding Airports
       </title>
       
       <p>
-        <b>N1QL Query 1</b>
+        The application queries Couchbase Server by means of the <b>N1QL</b> language. Simple N1QL queries, for finding airports,
+        are demonstrated in
         <xref href="https://github.com/couchbaselabs/try-cb-php/blob/3d9975861b417ce53e051d57fa10388963d47798/app/Http/Controllers/AirportController.php" format="html" scope="external" >try-cb-php/app/Http/Controllers/AirportController.php</xref>.
+        The following code-excerpt shows how a maximum of five results are returned, where the airport-name corresponds to that provided by means of a parameter
+        whose value is user-specified:
       </p>
       
-      <p>
-        <b>N1QL Query 2</b>
-        <xref href="https://github.com/couchbaselabs/try-cb-php/blob/3d9975861b417ce53e051d57fa10388963d47798/app/Http/Controllers/FlightPathsController.php" format="html" scope="external" >try-cb-php/app/Http/Controllers/FlightPathsController.php</xref>.
-      </p>
-      
-      
+      <codeblock outputclass="php">$query = \CouchbaseN1qlQuery::fromString('SELECT airportname FROM `travel-sample` WHERE faa like $faa limit 5');
+$query->namedParams(['faa' => $searchStr]);</codeblock>
+     
     </section>
-    
     
     <section>
       
       <title>
-        More Complex Queries: Finding Routes
+        Complex N1QL Queries: Finding Routes
       </title>
       
       <p>
-        <b>Finding Routes</b>
+        More complex N1QL queries are used to return flight paths between airports: the code is provided
+        in
         <xref href="https://github.com/couchbaselabs/try-cb-php/blob/3d9975861b417ce53e051d57fa10388963d47798/app/Http/Controllers/FlightPathsController.php" format="html" scope="external" >try-cb-php/app/Http/Controllers/FlightPathsController.php</xref>.
+        The following example returns airports each of which is both an origin and a destination:
       </p>
       
-      
-      
+      <codeblock outputclass="php">public function find(Request $request, $from, $to)
+{
+  $qs1 = \CouchbaseN1qlQuery::fromString('
+    SELECT faa AS fromAirport  FROM `travel-sample`
+    WHERE airportname = $from UNION
+    SELECT faa AS toAirport FROM `travel-sample`
+    WHERE airportname = $to
+  ');
+  $qs1->namedParams(['from' => $from, 'to' => $to]);
+  $result = $this->db->query($qs1);</codeblock>
+
     </section>
     
     <section>
       
       <title>
-        Indexing the Data: N1QL and GSL
+        Indexing Data: N1QL and GSL
       </title>
       
     </section>
@@ -258,16 +261,25 @@ DB_PASSWORD=travel-sample</codeblock>
       <title>
         Full Text Search: Finding Hotels
       </title>
-      
-      
+          
       <p>
-        <b>FTS: Hotel</b>
+        The Couchbase <b>Full Text Search</b> facility is used by the application, to return hotels. The code is provided in
         <xref href="https://github.com/couchbaselabs/try-cb-php/blob/master/app/Http/Controllers/HotelController.php" format="html" scope="external" >try-cb-php/app/Http/Controllers/HotelController.php</xref>.
+        The following excerpt shows how a user-specified location is attemptedly matched with text-values provided in multiple location-fields in
+        documents within the <codeph>travel-sample</codeph> bucket:
       </p>
       
+      <codeblock outputclass="php">$queryBody = SearchQuery::conjuncts(SearchQuery::term("hotel")->field("type"));
+if (!empty($location) &amp;&amp; $location != "*") {
+  $queryBody->every(SearchQuery::disjuncts(
+    SearchQuery::match($location)->field("country"),
+    SearchQuery::match($location)->field("city"),
+    SearchQuery::match($location)->field("state"),
+    SearchQuery::match($location)->field("address")
+  ));
+}</codeblock>
+      
     </section>
-    
-    
     
     </body>
   
