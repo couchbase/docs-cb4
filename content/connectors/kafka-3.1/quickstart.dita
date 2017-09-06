@@ -25,17 +25,19 @@
         </section>
 
         <section>
-            <title>Sample</title>
+            <title>Publishing Couchbase Documents to Kafka Using the Source Connector</title>
             <p>To see basic functionality of the connector, we'll copy a single bucket from a local Couchbase instance.
             Start by loading one of the sample buckets, or pick your own. In this simple example we will use
             <codeph>travel-sample</codeph> from the server distribution.</p>
-            <p>We create a configuration file that will load data from this database. This file is included with the connector 
+            <p>We create a configuration file that will load data from this database. This file is included with the connector
                 in <filepath>config/quickstart-couchbase.properties</filepath> and contains the following settings:</p>
             <codeblock outputclass="language-properties"><![CDATA[name=test-couchbase
 connector.class=com.couchbase.connect.kafka.CouchbaseSourceConnector
 tasks.max=2
 connection.cluster_address=127.0.0.1
 connection.bucket=default
+connection.username=default
+connection.password=secret
 connection.timeout.ms=2000
 # connection.ssl.enabled=true
 # connection.ssl.keystore.location=/tmp/keystore
@@ -43,8 +45,16 @@ connection.timeout.ms=2000
 topic.name=test-default
 use_snapshots=false
 ]]></codeblock>
-            <p>For our case, we will only modify <codeph>connection.bucket</codeph> to <codeph>travel-sample</codeph>
-            (or the bucket loaded on the first step).</p>
+            <p>For this exercise, change the value of <codeph>connection.bucket</codeph> to <codeph>travel-sample</codeph>
+            (or whichever bucket you want to stream from). For <codeph>connection.username</codeph>
+            and <codeph>connection.password</codeph>, supply the credentials of a Couchbase user with read access
+            to the bucket. If you have not yet created such a user, see <xref href="../../security/security-rbac-for-admins-and-apps.dita#topic_auth_for_admins" format="dita"/>.
+            <note>
+              For Couchbase Server versions prior to 5.0, leave the username blank. Set the password property
+              to the bucket password, or leave it blank if the bucket does not have a password. The sample buckets
+              do not have passwords.
+            </note>
+            </p>
             <p>The first three settings are common for all connectors. The
             <codeph>connection.cluster_address</codeph> specifies the comma-separated list of cluster nodes, which
             should be used to bootstrap the connector. The <codeph>use_snapshots</codeph> setting indicates how we want to
@@ -52,7 +62,7 @@ use_snapshots=false
             the Kafka topic immediately, while setting this property to <codeph>true</codeph> will tell the connector task
             to accumulate events in local memory until the whole snapshot is received. The <codeph>topic.name</codeph>
             contains the name of the Kafka topic, where all the events will be stored. For simplicity, we don't
-            configure secure connections in this sample, it will be shown later.</p>
+            configure secure connections in this sample; it will be shown later.</p>
             <p>Run the connector in a standalone Kafka Connect worker in another terminal (this uses
             <filepath>config/connect-standalone.properties</filepath> from the connector distribution and assumes that
             Kafka and the Schema Registry are running locally on the default ports):</p>
@@ -68,10 +78,10 @@ use_snapshots=false
 {"event":"mutation","partition":104,"key":"landmark_5574","cas":1479128707104768,"bySeqno":3,"revSeqno":1,"expiration":{...
 ...
 ]]></codeblock>
-            <p>The output will display about 31,000 lines, each containing mutation (assuming sample bucket hasn't been modified after creation). 
-                The shape of the payload is controlled by the <codeph>dcp.message.converter.class</codeph> property of the connector config. 
-                By default it set to <codeph>com.couchbase.connect.kafka.converter.SchemaConverter</codeph>, which formats events into structure 
-                with meta information on the top level and optional value as bytestring in <codeph>content</codeph> property. 
+            <p>The output will display about 31,000 lines, each containing mutation (assuming sample bucket hasn't been modified after creation).
+                The shape of the payload is controlled by the <codeph>dcp.message.converter.class</codeph> property of the connector config.
+                By default it set to <codeph>com.couchbase.connect.kafka.converter.SchemaConverter</codeph>, which formats events into structure
+                with meta information on the top level and optional value as bytestring in <codeph>content</codeph> property.
                 The Avro schema for this converter is shown below:</p>
             <codeblock outputclass="language-json"><![CDATA[{
   "type": "record",
@@ -149,23 +159,33 @@ use_snapshots=false
 {"event":"mutation","partition":127,"key":"test","cas":1480340157956096,"bySeqno":30,"revSeqno":2,...]]></codeblock>
             <p>Removing the document <codeph>test</codeph> will generate a similar event:</p>
             <codeblock outputclass="language-text"><![CDATA[{"event":"deletion","partition":127,"key":"test","cas":1480340391526400,"bySeqno":32,"revSeqno":3,...]]></codeblock>
-            <p>Of course, all the features of Kafka Connect, including offset management and fault tolerance, work with the source connector. You can restart and kill the processes 
+            <p>Of course, all the features of Kafka Connect, including offset management and fault tolerance, work with the source connector. You can restart and kill the processes
                 and they will pick up where they left off, copying only new data (taking into account the <codeph>use_snapshots</codeph> setting).</p>
         </section>
         <section>
-            <title>Writing Data with Sink Connector</title>
-            <p>Since release 3.1, the library implements Sink Connector, which allows to publish data from Kafka topics into Couchbase Server</p>
-            <p>To show how it works, lets write data from the <codeph>test-default</codeph> topic we have just created
+            <title>Importing Kafka Messages into Couchbase Using the Sink Connector</title>
+            <p>Since release 3.1, the library implements Sink Connector, which allows to import data from Kafka topics into Couchbase Server.</p>
+            <p>To show how it works, let's write data from the <codeph>test-default</codeph> topic we have just created
             into new empty bucket. We assume that a bucket named <codeph>receiver</codeph> exists on the server. Our configuration will look like this:</p>
     <codeblock outputclass="language-text"><![CDATA[name=test-sink-couchbase
 connector.class=com.couchbase.connect.kafka.CouchbaseSinkConnector
 tasks.max=1
 topics=test-default
 connection.cluster_address=127.0.0.1
-connection.bucket=receiver]]></codeblock>
-            <p>Now if you run this job, it will report some diagnostic information about processing data to standard
-            output, and soon <codeph>receiver</codeph> bucket documents number will match the source
-            <codeph>travel-sample</codeph>:
+connection.bucket=receiver
+connection.username=receiver
+connection.password=secret]]></codeblock>
+            <p>For the username and password properties, supply the credentials of a Couchbase user with write access
+             to the bucket. If you have not yet created such a user, see
+             <xref href="../../security/security-rbac-for-admins-and-apps.dita#topic_auth_for_admins" format="dita"/>.
+             <note>
+               For Couchbase Server versions prior to 5.0, leave the username blank. Set the password property
+               to the bucket password, or leave it blank if the bucket does not have a password.
+             </note>
+             </p><p>
+            Now if you run this job, it will report some diagnostic information about processing data to standard
+            output, and soon the number of documents in the <codeph>receiver</codeph> bucket will match the number of
+            messages in the topic:
             <codeblock outputclass="language-bash"><![CDATA[$ ./bin/connect-standalone config/connect-standalone.properties \
         config/quickstart-couchbase-sink.properties]]></codeblock>
             </p>
