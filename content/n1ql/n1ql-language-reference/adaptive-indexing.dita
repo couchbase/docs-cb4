@@ -47,7 +47,14 @@ ON <varname>keyspace_ref</varname>( (ALL | DISTINCT) PAIRS(SELF | <varname>index
           names.</li>
         <li>In a simplified form, the names in the object can be omitted, in which case the
           corresponding names will be same as expressions, and the expressions must be field names
-          in the document that are being indexed.</li>
+          in the document that are being indexed.<note>When using PAIRS(arg) with an OBJECT
+            construction, you need to keep in mind:<ul id="ul_szk_ych_bbb">
+              <li>{a, c.a} – when evaluated, both will inherit the same name of "a" causing one
+                value to overwrite the other. Both values will not be indexed. A better way to
+                handle this is to explicitly name one with an alias, such as {a, "ca":c.a}</li>
+              <li>{abs(a)} – name of the object field is null and will raiser an error. A better way
+                to handle this is to explicitly use an alias, such as {abs_a":abs(a)}</li>
+            </ul></note></li>
       </ul></p>
         <p>For example, consider the <codeph>travel-sample</codeph> data that is shipped with the
       product and the following indexes. Sample buckets can be installed as explained <xref
@@ -193,28 +200,51 @@ Result:
             will result in 20 factorial (2.43x10<sup>18</sup>) indexes in order to consider all
             combinations of sort orders of the 20 attributes.</p></li>
             </ol></section>
+    <section id="section_m12_552_dbb">
+      <title>Performance Implications</title>
+      <p>While Adaptive Indexes are very useful, there are performance implications you need to keep
+        in mind:<ol id="ol_mjg_1v2_dbb">
+          <li><b>If a query is not covered by a regular index, then an unnested index will not have
+              any elimination of redundant indexes</b>; and it will instead do an IntersectScan on
+            all the indexes, which can impact
+            performance.<codeblock>CREATE INDEX rix1 ON default(a);                      / rix1
+CREATE INDEX  ix1 ON default(DISTINCT PAIRS(self));   / whole document
+SELECT * FROM `travel-sample` WHERE TYPE="hotel";     / IntersectScan of rix1 AND ix1</codeblock>Here's
+            another example with a partial Adaptive Index that uses IntersectScan on the index
+            conditions:<codeblock>CREATE INDEX  pix1 ON default(DISTINCT PAIRS(self)) WHERE b = 200;
+CREATE INDEX rpix1 ON default(a) WHERE b = 200;
+CREATE INDEX  rix2 ON default(b);
+
+SELECT * FROM `travel-sample` WHERE type="hotel" AND email IS NOT NULL;</codeblock>The
+            above query requires only a regular index, so it uses index "rpix1" and ignores index
+            "rix2". When the adaptive index "pix1" has only the clause b=200 and is used with the
+            above query, then index "pix1" will still use IntersectScan. Here, we have only a single
+            adaptive index instead of a reduction in the number of indexes. To fix this, we may need
+            to remove the index condition from the predicate while spanning generations.</li>
+        </ol></p>
+    </section>
         <section id="section_u4c_gzm_5z">
-            <title>Performance Implications and Limitations</title>
-            <p>It is important to understand that adaptive indexes are not a panacea.  There are
-                performance implications and trade-offs compared to traditional composite
-                    indexes:<ol id="ol_y3h_jzm_5z">
-                    <li><b>Adaptive Indexes bound to the limitations of Array Indexes</b> because
-            they are built over <xref href="indexing-arrays.dita#topic_hv4_sbr_w5">Array
-              Indexing</xref> technology.</li>
-                    <li><b>Indexed entries of the Adaptive Index are typically larger in size
-              compared to the simple index</b> on respective fields because the indexed items are
-            elements of the PAIRS() array, which are basically name-value pairs of the document
-            fields. So, it may be relatively slower when compared with equivalent simple index. For
-            example, in the following equivalent queries, C7/Q7 may perform better than C8/Q8. Note
-            how the index key values are represented in the
+            <title>Functional Limitations</title>
+            <p>It is important to understand that adaptive indexes are not a panacea and that they
+        have trade-offs compared to traditional composite indexes:<ol id="ol_y3h_jzm_5z">
+          <li><b>Adaptive Indexes are bound to the limitations of Array Indexes</b> because they are
+            built over <xref href="indexing-arrays.dita#topic_hv4_sbr_w5">Array Indexing</xref>
+            technology.  Index Joins can’t use Adaptive Indexes because Index Joins can’t use array
+            indexes, and Adaptive Index is basically an array index.</li>
+          <li><b>Indexed entries of the Adaptive Index are typically larger in size compared to the
+              simple index</b> on respective fields because the indexed items are elements of the
+            PAIRS() array, which are basically name-value pairs of the document fields. So, it may
+            be relatively slower when compared with equivalent simple index. For example, in the
+            following equivalent queries, C7/Q7 may perform better than C8/Q8. Note how the index
+            key values are represented in the
               spans:<codeblock><b>C7: CREATE INDEX `def_city` ON `travel-sample`(`city`);</b>
 Q7: EXPLAIN SELECT city FROM `travel-sample` USE INDEX (def_city) WHERE city = "San Francisco";
 
 <b>C8: CREATE INDEX `ai_city` ON `travel-sample`(pairs({city}));</b>
 Q8: EXPLAIN SELECT city FROM `travel-sample` USE INDEX (ai_city) WHERE city = "San Francisco";</codeblock><image
-              href="images/adaptive-indexing_C7Q7-C8Q8.png" id="image_nns_nsy_cbb"/></li>
-                    <li><b>Adaptive index requires more storage and memory</b>, especially in case
-            of Memory Optimized Indexes.<ol id="ol_sxn_hcn_5z">
+              href="images/adaptive-indexing_Q7-Q8_Results.png" id="image_bkl_dr2_dbb"/></li>
+          <li><b>Adaptive index requires more storage and memory</b>, especially in case of Memory
+            Optimized Indexes.<ol id="ol_sxn_hcn_5z">
               <li>The size of the index and the number of indexed items in an Adaptive Index grow
                 rapidly with the number of fields in the documents, as well as, with the number of
                 different values for various fields in the documents or keyspace.</li>
@@ -251,17 +281,17 @@ WHERE type = "route" LIMIT 1;
               <li>Use partial adaptive indexes with a WHERE clause that will filter the number of
                 documents that will be indexed. For examples, refer to C5, Q5, and Q5A above.</li>
             </ul></li>
-                    <li><b>A generic adaptive index (on <codeph>SELF</codeph>) will be qualified for
-              all queries on the keyspace</b>. So, when using with other GSI indexes, this will
-            result in more IntersectScan operations for queries that qualify other non-adaptive
-            indexes. This may impact query performance and overall load on query and indexer nodes.
-            To alleviate the negative effects, you may want to specify the <codeph>USE
-              INDEX</codeph> clause in <codeph>SELECT</codeph> queries whenever possible.</li>
-                    <li><b>Adaptive Indexes cannot be used as Covered Indexes</b> for any queries.
-            See example Q8 above.</li>
-                    <li><b>Adaptive Indexes can be created only on document field identifiers</b>,
-            not on functional expressions on the fields. For example, the following query uses the
-            index <varname>def_city</varname>, instead of the specified adaptive index
+          <li><b>A generic adaptive index (on <codeph>SELF</codeph>) will be qualified for all
+              queries on the keyspace</b>. So, when using with other GSI indexes, this will result
+            in more IntersectScan operations for queries that qualify other non-adaptive indexes.
+            This may impact query performance and overall load on query and indexer nodes. To
+            alleviate the negative effects, you may want to specify the <codeph>USE INDEX</codeph>
+            clause in <codeph>SELECT</codeph> queries whenever possible.</li>
+          <li><b>Adaptive Indexes cannot be used as Covered Indexes</b> for any queries. See example
+            Q8 above.</li>
+          <li><b>Adaptive Indexes can be created only on document field identifiers</b>, not on
+            functional expressions on the fields. For example, the following query uses the index
+              <varname>def_city</varname>, instead of the specified adaptive index
               <varname>ai_city2</varname>:<codeblock outputclass="language-json">CREATE INDEX `ai_city2` ON `travel-sample`(pairs({"city" : lower(city)}));
 
 EXPLAIN SELECT city FROM `travel-sample` 
@@ -285,12 +315,10 @@ Result:
               query uses the <varname>def_city</varname> index instead of our specified
                 <varname>ai_city2</varname> index because it’s a functional index expression on the
               field city.</note></li>
-                    <li><b>Index Joins can’t use Adaptive Index</b> because Index Join can’t use
-            array index, and adaptive index is basically an array index.</li>
-                    <li><b>Adaptive Indexes do not work with NOT LIKE predicates with a leading
-              wildcard</b> (see <xref href="https://issues.couchbase.com/browse/MB-23981"
-              format="html" scope="external">MB-23981</xref>). For example, the following query uses
-            the index <varname>def_city</varname>, instead of the specified adaptive index
+          <li><b>Adaptive Indexes do not work with NOT LIKE predicates with a leading wildcard</b>
+            (see <xref href="https://issues.couchbase.com/browse/MB-23981" format="html"
+              scope="external">MB-23981</xref>). For example, the following query uses the index
+              <varname>def_city</varname>, instead of the specified adaptive index
               <varname>ai_city</varname>. However, it works fine for LIKE predicates with a leading
             wildcard.<codeblock outputclass="language-json">SELECT city FROM `travel-sample` 
 USE INDEX (ai_city)
@@ -325,46 +353,29 @@ Result:
 "index": "ai_city",                       / Uses ai_city
 "index_id": "4c3192fc7e5b0f91",
 ...</codeblock></li>
-          <li><b>Adaptive indexes can't use Covered Scans</b>.  For example, <codeph>SELECT
-              META(d).id FROM default d WHERE d.a = 100; </codeph> has a single key predicate that
-            projects META().id over both available parts of the index, yet it can't use the Covering
-            Index on PAIRS().  The information that indexer gives are [key,value] pairs. This
-            information is incomplete and has many False Positives. For the above example, the
-            PAIRS() output of<codeph> `a`, `d.a` </codeph>will have the same key and shows that
-            there can be False Positives without fetching the document.</li>
-          <li><b>False Positives and not using Covering Index can trigger unnecessary fetch of
-              documents</b> which could impact performance and scalability.</li>
-          <li><b>If a query is not covered by a regular index, then an unnested index will not have
-              any elimination of redundant indexes</b>; and it will instead do an IntersectScan on
-            all the indexes, which can impact
-            performance.<codeblock>CREATE INDEX rix1 ON default(a);                      / rix1
-CREATE INDEX  ix1 ON default(DISTINCT PAIRS(self));   / whole document
-SELECT d.* FROM default d WHERE a = 100;              / IntersectScan of rix1 AND ix1</codeblock></li>
-          <li><b>Partial Adaptive Index still does IntersectScan on the index conditions</b>. For
-            example:<codeblock>CREATE INDEX  pix1 ON default(DISTINCT PAIRS(self)) WHERE b = 200;
-CREATE INDEX rpix1 ON default(a) WHERE b = 200;
-CREATE INDEX  rix2 ON default(b);
+          <li><b>Adaptive indexes can't use Covered Scans</b>. An Adaptive Index can't be a Covered
+            Index because it is an adaptive index, as seen in the following
+            example:<codeblock outputclass="language-json">CREATE INDEX `ai_city2` ON `travel-sample`(pairs({"city" : city}));
 
-SELECT * FROM default d WHERE d.a = 100 AND d.b = 200;</codeblock>The
-            above query requires only a regular index, so it uses index "rpix1" and ignores index
-            "rix2". When the adaptive index "pix1" has only the clause b=200 and is used with the
-            above query, then index "pix1" will still use IntersectScan. Here, we have only a single
-            adaptive index instead of a reduction in the number of indexes. To fix this, we may need
-            to remove the index condition from the predicate while spanning generations.</li>
-          <li><b>PAIRS(arg) with an OBJECT construction</b> needs to keep in mind:<ul
-              id="ul_szk_ych_bbb">
-              <li>{a, c.a} – when evaluated, both will inherit the same name of "a" causing one
-                value to overwrite the other. Both values will not be indexed. A better way to
-                handle this is to explicitly name one with an alias, such as {a, "ca":c.a}</li>
-              <li>{abs(a)} – name of the object field is null and will raiser an error. A better way
-                to handle this is to explicitly use an alias, such as {abs_a":abs(a)}</li>
-            </ul></li>
-          <li><b>No functional key for PAIRS()</b>.</li>
-          <li><b>Index JOINS can't use index if it contains an ARRAY indexing key</b> due to
-            duplicates. Regular index can apply DISTINCT, but there will not be any benefit because
-            of Array Index Scan's slowness. PAIRS() index can't even use it because of false
-            positives.</li>
-                </ol></p>
+EXPLAIN SELECT city FROM `travel-sample` 
+USE INDEX (ai_city2)
+WHERE city = "san francisco";
+
+Result:
+{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+        "#operator": "IndexScan2",
+        "covers": [
+          "cover ((`travel-sample`.`city`))",
+          "cover ((meta(`travel-sample`).`id`))"
+        ],
+        "index": "def_city",                  / Doesn't use ai_city2
+        "index_id": "931a0fae2fe4ef8",
+...</codeblock></li>
+        </ol></p>
         </section>
         <p/>
     </body>
