@@ -207,20 +207,31 @@ Result:
           <li><b>If a query is not covered by a regular index, then an unnested index will not have
               any elimination of redundant indexes</b>; and it will instead do an IntersectScan on
             all the indexes, which can impact
-            performance.<codeblock>CREATE INDEX rix1 ON default(a);                      / rix1
-CREATE INDEX  ix1 ON default(DISTINCT PAIRS(self));   / whole document
-SELECT * FROM `travel-sample` WHERE TYPE="hotel";     / IntersectScan of rix1 AND ix1</codeblock>Here's
+            performance.<codeblock>CREATE INDEX idx_name ON `travel-sample`(name);                   / idx_name
+CREATE INDEX idx_self ON `travel-sample`(DISTINCT PAIRS(self));   / whole document
+SELECT * FROM `travel-sample` WHERE TYPE="hotel";                 / IntersectScan of idx_name AND idx_self
+
+EXPLAIN Results:
+{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+<b>        "#operator": "IntersectScan",</b>
+        "scans": [</codeblock>Here's
             another example with a partial Adaptive Index that uses IntersectScan on the index
-            conditions:<codeblock>CREATE INDEX  pix1 ON default(DISTINCT PAIRS(self)) WHERE b = 200;
-CREATE INDEX rpix1 ON default(a) WHERE b = 200;
-CREATE INDEX  rix2 ON default(b);
+            conditions:<codeblock>CREATE INDEX idx_adpt ON `travel-sample`(DISTINCT PAIRS(self)) WHERE city="Paris";
+CREATE INDEX idx_reg1 ON `travel-sample`(name) WHERE city="Paris";
+CREATE INDEX idx_reg2 ON `travel-sample`(city);
 
 SELECT * FROM `travel-sample` WHERE type="hotel" AND email IS NOT NULL;</codeblock>The
-            above query requires only a regular index, so it uses index "rpix1" and ignores index
-            "rix2". When the adaptive index "pix1" has only the clause b=200 and is used with the
-            above query, then index "pix1" will still use IntersectScan. Here, we have only a single
-            adaptive index instead of a reduction in the number of indexes. To fix this, we may need
-            to remove the index condition from the predicate while spanning generations.</li>
+            above query requires only a regular index, so it uses index <codeph>idx_reg1</codeph>
+            and ignores index <codeph>idx_reg2</codeph>. When the adaptive index
+              <codeph>idx_adpt</codeph> has only the clause <codeph>city="Paris"</codeph> and is
+            used with the above query, then index <codeph>idx_adpt</codeph> will still use
+            IntersectScan. Here, we have only a single adaptive index instead of a reduction in the
+            number of indexes. To fix this, we may need to remove the index condition from the
+            predicate while spanning generations.</li>
         </ol></p>
     </section>
         <section id="section_u4c_gzm_5z">
