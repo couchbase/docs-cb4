@@ -42,12 +42,12 @@
             <row>
               <entry>id > 10</entry>
               <entry>10</entry>
-              <entry> No upper bound</entry>
+              <entry>No upper bound</entry>
               <entry>0 (NEITHER)</entry>
             </row>
             <row>
               <entry>id &lt;= 10</entry>
-              <entry>null</entry>
+              <entry>NULL</entry>
               <entry>10</entry>
               <entry>2 (HIGH) </entry>
             </row>
@@ -57,45 +57,53 @@
     <p>Consider the explain plan for the following query. You can see the spans in the IndexScan
       section of the explain plan.
       <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = 10;
-{
-    "requestID": "4f64d56a-0db6-4d1e-8868-36bfe11146cf",
-    "signature": "json",
-    "results": [
+
+Results:
+[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
         {
-            "plan": {
-                "#operator": "Sequence",
-                "~children": [
-                    {
-                        "#operator": "IndexScan",
-                        "covers": [
-                            "cover ((`travel-sample`.`id`))",
-                            "cover ((meta(`travel-sample`).`id`))"
-                        ],
-                        "index": "idx_id",
-                        "index_id": "8ad897f8afb165ef",
-                        "keyspace": "travel-sample",
-                        "namespace": "default",
-                        <b>"spans": [
-                            {
-                                "Range": {
-                                    "High": [
-                                        "10"
-                                    ],
-                                    "Inclusion": 3,
-                                    "Low": [
-                                        "10"
-                                    ]
-                                }
-                            }
-                        ]</b>,
-                        "using": "gsi"
-                    }
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((`travel-sample`.`id`) = 10)"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
                 ]
-               ...
-            }
+              },
+              {
+                "#operator": "FinalProject"
+              }
+            ]
+          }
         }
-    ]
-}    </codeblock></p>
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id = 10;"
+  }
+]</codeblock></p>
     <p>Index scan requests in N1QL are based on a range where each range has a start value, an end value, and specifies whether to include the start or the end value. <ul>
       <li>A "High" field in the range indicates the end value. If "High" is missing from the range, then there is no upper bound. </li>
       <li>A “Low” field in the range indicates the start value. If "Low" is missing from the range, the scan starts with a NULL. NULL is the lowest value as MISSING values are not indexed. </li>
@@ -174,23 +182,55 @@
                 <entry>id=10</entry>
                 <entry>10</entry>
                 <entry>10</entry>
-                <entry>3(BOTH)</entry>
+                <entry>3 (BOTH)</entry>
               </row>
             </tbody>
           </tgroup>
-        </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = 10;</codeblock><codeblock spectitle="Result snippet">      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "10"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "10"
-                   ]
+        </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = 10;</codeblock><codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((`travel-sample`.`id`) = 10)"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]    </codeblock></p></section>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id = 10;"
+  }
+]</codeblock></p></section>
     <section id="ex2-one-sided-range"><title>Example 2: Inclusive One-Sided Range Predicate</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE id >= 10;</codeblock> <p>This example pushes the predicate <codeph>id >= 10</codeph> to index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_my">
@@ -210,25 +250,58 @@
           <tbody>
             <row>
               <entry>id >=  10</entry>
-              <entry> 10</entry>
+              <entry>10</entry>
               <entry>Unbounded </entry>
-              <entry>1(LOW) </entry>
+              <entry>1 (LOW) </entry>
             </row>
           </tbody>
         </tgroup>
       </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >= 10;</codeblock>
-      <codeblock spectitle="Result snippet">
-
-          "spans": [
-            {
-              "Range": {
-                "Inclusion": 1,
-                "Low": [
-                  "10"
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(10 &lt;= (`travel-sample`.`id`))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
                 ]
+              },
+              {
+                "#operator": "FinalProject"
               }
-            }
-          ]</codeblock>
+            ]
+          }
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id >= 10;"
+  }
+]</codeblock>
     </section>
     <section id="ex3-exclusive-one-sided-range"><title>Example 3: Exclusive One-Sided Range Predicate</title><codeblock>SELECT meta().id FROM `travel-sample` WHERE id > 10;</codeblock>
       <p>This example pushes the predicate <codeph>id >= 10</codeph> to index scan.</p><table
@@ -249,25 +322,58 @@
           <tbody>
             <row>
               <entry>id > 10</entry>
-              <entry> 10 </entry>
+              <entry>10 </entry>
               <entry> Unbounded </entry>
               <entry>0 (NEITHER) </entry>
             </row>
           </tbody>
         </tgroup>
       </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id > 10;</codeblock>
-      <codeblock spectitle="Result snippet">
-
-      "spans": [
-          {
-              "Range": {
-                   "Inclusion": 0,
-                   "Low": [
-                       "10"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(10 &lt; (`travel-sample`.`id`))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]</codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id > 10;"
+  }
+]</codeblock>
     </section>
     <section id="ex4-inclusive-one-sided-range"><title>Example 4: Inclusive One-Sided Range Predicate</title><codeblock>SELECT meta().id FROM `travel-sample` WHERE id &lt;= 10;</codeblock>
       <p>This example pushes the predicate <codeph>id &lt;= 10</codeph> to index scan.</p><table
@@ -290,26 +396,56 @@
               <entry>id &lt;= 10 </entry>
               <entry>NULL </entry>
               <entry>10 </entry>
-              <entry>2(HIGH) </entry>
+              <entry>2 (HIGH) </entry>
             </row>
           </tbody>
         </tgroup>
       </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;= 10;</codeblock>
-      <codeblock spectitle="Result snippet">
-
-     "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "10"
-                   ],
-                   "Inclusion": 2,
-                   "Low": [
-                       "null"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((`travel-sample`.`id`) &lt;= 10)"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]     </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id &lt;= 10;"
+  }
+]</codeblock>
     </section>
     <section id="ex5-exclusive-one-sided-range"><title>Example 5: Exclusive One-Sided Range Predicate</title><codeblock>SELECT meta().id FROM `travel-sample` WHERE id &lt; 10;</codeblock>
       <p>This example pushes the predicate <codeph>id &lt; 10</codeph> to index scan.</p><table
@@ -332,26 +468,56 @@
               <entry>id &lt; 10</entry>
               <entry> NULL</entry>
               <entry>10 </entry>
-              <entry>0(NEITHER) </entry>
+              <entry>0 (NEITHER) </entry>
             </row>
           </tbody>
         </tgroup>
       </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt; 10;</codeblock>
-      <codeblock spectitle="Result snippet">
-
-      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "10"
-                   ],
-                   "Inclusion": 0,
-                   "Low": [
-                       "null"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((`travel-sample`.`id`) &lt; 10)"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]       </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id &lt; 10;"
+  }
+]   </codeblock>
     </section>
     <section id="ex6-and"><title>Example 6: AND Predicate</title><codeblock>SELECT meta().id FROM `travel-sample` WHERE id >= 10 AND id &lt; 25;</codeblock>
       <p>This example pushes the predicate <codeph>id >= 10 AND id &lt; 25</codeph> to index
@@ -373,28 +539,58 @@
           <tbody>
             <row>
               <entry>id >= 10 AND id &lt; 25</entry>
-              <entry> 10</entry>
-              <entry> 25</entry>
-              <entry> 1(LOW)</entry>
+              <entry>10</entry>
+              <entry>25</entry>
+              <entry>1 (LOW)</entry>
             </row>
           </tbody>
         </tgroup>
         </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >=10 AND id &lt; 25;</codeblock>
-      <codeblock spectitle="Result snippet">
-
-      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "25"
-                   ],
-                   "Inclusion": 1,
-                   "Low": [
-                       "10"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((10 &lt;= (`travel-sample`.`id`)) and ((`travel-sample`.`id`) &lt; 25))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]     </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id >=10 AND id &lt; 25;"
+  }
+]</codeblock>
     </section>
     <section id="ex7-multiple-and"><title>Example 7: Multiple AND Predicates</title><codeblock>SELECT meta().id FROM `travel-sample` WHERE id >= 10 AND id &lt; 25 AND id &lt;= 20;</codeblock>
       <p>This example pushes the predicates <codeph>id >= 10 AND id &lt; 25 AND id &lt;= 20</codeph>
@@ -416,29 +612,58 @@
           <tbody>
             <row>
               <entry>id >= 10 AND id &lt; 25 AND id &lt;= 20</entry>
-              <entry> 10</entry>
+              <entry>10</entry>
               <entry> 20</entry>
-              <entry>3(BOTH) </entry>
+              <entry>3 (BOTH) </entry>
             </row>
           </tbody>
         </tgroup>
         </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >=10 AND id &lt; 25 AND id &lt;= 20;</codeblock>
-      <codeblock spectitle="Result snippet">
-
-      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "20"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "10"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(((10 &lt;= (`travel-sample`.`id`)) and ((`travel-sample`.`id`) &lt; 25)) and ((`travel-sample`.`id`) &lt;= 20))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
+        }
       ]
-      </codeblock>
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id >=10 AND id &lt; 25 AND id &lt;= 20;"
+  }
+]</codeblock>
       <p>Observe that the optimizer created the span without the <codeph>id &lt; 25</codeph>
         predicate because the other AND predicate <codeph>id &lt;=20</codeph> makes the former
         predicate redundant. <table frame="all" rowsep="1" colsep="1" id="table_dgm_lky_mx">
@@ -460,31 +685,31 @@
                 <entry>id >= 10</entry>
                 <entry>10</entry>
                 <entry>Unbounded</entry>
-                <entry>1(LOW)</entry>
+                <entry>1 (LOW)</entry>
               </row>
               <row>
                 <entry>id &lt; 25</entry>
                 <entry>NULL</entry>
                 <entry>25</entry>
-                <entry>0(NEITHER)</entry>
+                <entry>0 (NEITHER)</entry>
               </row>
               <row>
                 <entry>id >= 10 AND id &lt; 25</entry>
                 <entry>10</entry>
                 <entry>25</entry>
-                <entry>1(LOW)</entry>
+                <entry>1 (LOW)</entry>
               </row>
               <row>
                 <entry>id &lt;= 20</entry>
                 <entry>NULL</entry>
                 <entry>20</entry>
-                <entry>2(HIGH)</entry>
+                <entry>2 (HIGH)</entry>
               </row>
               <row>
                 <entry>id >= 10 AND id &lt; 25 AND id &lt;= 20</entry>
                 <entry>10</entry>
                 <entry>20</entry>
-                <entry>3(BOTH)</entry>
+                <entry>3 (BOTH)</entry>
               </row>
             </tbody>
           </tgroup>
@@ -517,9 +742,9 @@
           <tbody>
             <row>
               <entry>id > 10 AND id &lt; 5</entry>
-              <entry> NULL</entry>
+              <entry>NULL</entry>
               <entry>NULL </entry>
-              <entry>0(NEITHER) </entry>
+              <entry>0 (NEITHER) </entry>
             </row>
           </tbody>
         </tgroup>
@@ -528,19 +753,51 @@
         start value is higher than the end value and will not produce results. Hence, the span is
         converted to EMPTY SPAN.</p>
       <codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >10 AND id &lt; 5;</codeblock>
-      <codeblock spectitle="Result snippet">
-
-    "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "null"
-                   ],
-                   "Inclusion": 0
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((10 &lt; (`travel-sample`.`id`)) and ((`travel-sample`.`id`) &lt; 5))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ] 
-    </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id >10 AND id &lt; 5;"
+  }
+]</codeblock>
     </section>
     <section id="ex9-between"><title>Example 9: BETWEEN Predicate</title><codeblock>SELECT meta().id FROM `travel-sample` WHERE id BETWEEN 10 AND 25;</codeblock>
       <p>In this example, the predicate <codeph>id BETWEEN 10 AND 25</codeph> (that is, id >= 10 AND
@@ -562,29 +819,58 @@
           <tbody>
             <row>
               <entry>id BETWEEN 10 AND 25</entry>
-              <entry> 10</entry>
+              <entry>10</entry>
               <entry>25 </entry>
-              <entry>3(BOTH) </entry>
+              <entry>3 (BOTH) </entry>
             </row>
           </tbody>
         </tgroup>
         </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id BETWEEN 10 AND 25;</codeblock>
-      <codeblock spectitle="Result snippet">
-
-      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "25"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "10"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((`travel-sample`.`id`) between 10 and 25)"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
+        }
       ]
-     </codeblock>
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id BETWEEN 10 AND 25;"
+  }
+]</codeblock>
     </section>
     <section id="ex10-simple-or"><title>Example 10: Simple OR Predicate</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE id = 10 OR id = 20;</codeblock>
@@ -608,45 +894,64 @@
           <tbody>
             <row>
               <entry>id  = 10</entry>
-              <entry> 10</entry>
+              <entry>10</entry>
               <entry>10 </entry>
-              <entry>3(BOTH) </entry>
+              <entry>3 (BOTH) </entry>
             </row>
             <row>
               <entry>id = 20</entry>
               <entry>20</entry>
               <entry>20</entry>
-              <entry>3(BOTH)</entry>
+              <entry>3 (BOTH)</entry>
             </row>
           </tbody>
         </tgroup>
         </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = 10 OR id = 20;</codeblock>
-      <codeblock spectitle="Result snippet">
-      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "10"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "10"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(((`travel-sample`.`id`) = 10) or ((`travel-sample`.`id`) = 20))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
-          },
-          {
-              "Range": {
-                  "High": [
-                       "20"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "20"
-                   ]
-              }
+            ]
           }
-      ]  
-</codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id = 10 OR id = 20;"
+  }
+]</codeblock>
     </section>
     <section id="ex11-simple-in"><title>Example 11: Simple IN Predicate</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE id IN [10, 20];</codeblock>
@@ -672,46 +977,64 @@
           <tbody>
             <row>
               <entry>id = 10</entry>
-              <entry> 10</entry>
+              <entry>10</entry>
               <entry>10 </entry>
-              <entry>3(BOTH) </entry>
+              <entry>3 (BOTH) </entry>
             </row>
             <row>
               <entry>id = 20</entry>
               <entry>20</entry>
               <entry>20</entry>
-              <entry>3(BOTH)</entry>
+              <entry>3 (BOTH)</entry>
             </row>
           </tbody>
         </tgroup>
           </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id IN [10, 20];</codeblock>
-      <codeblock spectitle="Result snippet">
-
-      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "10"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "10"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((`travel-sample`.`id`) in [10, 20])"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
-          },
-          {
-              "Range": {
-                  "High": [
-                       "20"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "20"
-                   ]
-              }
+            ]
           }
+        }
       ]
-     </codeblock>
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id IN [10, 20];"
+  }
+]</codeblock>
     </section>
     <section id="ex12-or-between-and"><title>Example 12: OR, BETWEEN, AND Predicates</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE (id BETWEEN 10 AND 25) OR (id > 50 AND id &lt;= 60);</codeblock>
@@ -734,46 +1057,64 @@
           <tbody>
             <row>
               <entry>id BETWEEN 10 AND 25 </entry>
-              <entry> 10</entry>
+              <entry>10</entry>
               <entry>25 </entry>
-              <entry>3(BOTH) </entry>
+              <entry>3 (BOTH) </entry>
             </row>
             <row>
               <entry>id > 50 AND id &lt;= 60</entry>
               <entry>50</entry>
               <entry>60</entry>
-              <entry>2(HIGH)</entry>
+              <entry>2 (HIGH)</entry>
             </row>
           </tbody>
         </tgroup>
           </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE (id BETWEEN 10 AND 25) OR (id > 50 AND id &lt;= 60);</codeblock>
-      <codeblock spectitle="Result snippet">
-
-      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "25"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "10"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(((`travel-sample`.`id`) between 10 and 25) or ((50 &lt; (`travel-sample`.`id`)) and ((`travel-sample`.`id`) &lt;= 60)))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
-          },
-          {
-              "Range": {
-                  "High": [
-                       "60"
-                   ],
-                   "Inclusion": 2,
-                   "Low": [
-                       "50"
-                   ]
-              }
+            ]
           }
-      ] 
-     </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE (id BETWEEN 10 AND 25) OR (id > 50 AND id &lt;= 60);"
+  }
+]</codeblock>
     </section>
     <section id="ex13-not"><title>Example 13: NOT Predicate</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE id &lt;> 10;</codeblock>
@@ -798,38 +1139,62 @@
               <entry>id &lt; 10</entry>
               <entry>NULL</entry>
               <entry>10 </entry>
-              <entry>0(NEITHER) </entry>
+              <entry>0 (NEITHER) </entry>
             </row>
             <row>
               <entry>id > 10</entry>
               <entry>10</entry>
               <entry>Unbounded</entry>
-              <entry>0(NEITHER)</entry>
+              <entry>0 (NEITHER)</entry>
             </row>
           </tbody>
         </tgroup>
       </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;> 10;</codeblock>
-      <codeblock spectitle="Result snippet">      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "10"
-                   ],
-                   "Inclusion": 0,
-                   "Low": [
-                       "null"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(not ((`travel-sample`.`id`) = 10))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
-          },
-          {
-              "Range": {
-                   "Inclusion": 0,
-                   "Low": [
-                       "10"
-                   ]
-              }
+            ]
           }
-      ]      </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id &lt;> 10;"
+  }
+]</codeblock>
     </section>
     <section id="ex14-not-and"><title>Example 14: NOT, AND Predicates</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE NOT (id >= 10 AND id &lt; 25);</codeblock>
@@ -852,42 +1217,64 @@
           <tbody>
             <row>
               <entry>id  &lt; 10</entry>
-              <entry> NULL</entry>
+              <entry>NULL</entry>
               <entry>10 </entry>
-              <entry>0(NEITHER) </entry>
+              <entry>0 (NEITHER) </entry>
             </row>
             <row>
               <entry>id >= 25</entry>
               <entry>25</entry>
               <entry>Unbounded</entry>
-              <entry>1(LOW)</entry>
+              <entry>1 (LOW)</entry>
             </row>
           </tbody>
         </tgroup>
           </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE NOT (id >= 10 AND id &lt; 25);</codeblock>
-      <codeblock spectitle="Result snippet">
-"spans": [
-          {
-              "Range": {
-                  "High": [
-                       "10"
-                   ],
-                   "Inclusion": 0,
-                   "Low": [
-                       "null"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(not ((10 &lt;= (`travel-sample`.`id`)) and ((`travel-sample`.`id`) &lt; 25)))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
-          },
-          {
-              "Range": {
-                   "Inclusion": 1,
-                   "Low": [
-                       "25"
-                   ]
-              }
+            ]
           }
-      ]     
-</codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE NOT (id >= 10 AND id &lt; 25);"
+  }
+]</codeblock>
     </section>
     <section id="ex15-equality-string"><title>Example 15: EQUALITY Predicate on String Type</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE name = "AMerican Airlines";</codeblock> <p>This example pushes the predicate <codeph>name >= "American Airlines"</codeph> to index
@@ -911,26 +1298,56 @@
               <entry>name = "American Airlines"</entry>
               <entry> "American Airlines"</entry>
               <entry>"American Airlines" </entry>
-              <entry>3(BOTH) </entry>
+              <entry>3 (BOTH) </entry>
             </row>
           </tbody>
         </tgroup>
         </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE name = "American Airlines";</codeblock>
-      <codeblock spectitle="Result snippet">        
-      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "\"American Airlines\""
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "\"American Airlines\""
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((`travel-sample`.`name`) = \"American Airlines\")"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]    
-  </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE name = \"American Airlines\";"
+  }
+]</codeblock>
     </section>
     <section id="ex16-range-string"><title>Example 16: Range Predicate on String Type</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE name >= "American Airlines" AND name &lt;= "United Airlines";</codeblock>
@@ -955,7 +1372,7 @@
               <entry>name >= "American Airlines" AND name &lt;= "United Airlines"</entry>
               <entry> "American Airlines"</entry>
               <entry> "United Airlines"</entry>
-              <entry>3(BOTH) </entry>
+              <entry>3 (BOTH) </entry>
             </row>
           </tbody>
         </tgroup>
@@ -963,19 +1380,51 @@
       <codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` 
   WHERE name >= "American Airlines" 
     AND name &lt;= "United Airlines";      </codeblock>
-      <codeblock spectitle="Result snippet">"spans": [
-          {
-              "Range": {
-                  "High": [
-                       "\"United Airlines\""
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "\"American Airlines\""
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((\"American Airlines\" &lt;= (`travel-sample`.`name`)) and ((`travel-sample`.`name`) &lt;= \"United Airlines\"))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]      </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` \n  WHERE name >= \"American Airlines\" \n    AND name &lt;= \"United Airlines\";"
+  }
+]</codeblock>
     </section>
     <section id="ex17-like-1"><title>Example 17: LIKE Predicate </title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE name LIKE "American%";</codeblock>
@@ -999,25 +1448,57 @@
               <entry>name LIKE "American%"</entry>
               <entry>"American"</entry>
               <entry>"Americao"</entry>
-              <entry>1(LOW)</entry>
+              <entry>1 (LOW)</entry>
             </row>
           </tbody>
         </tgroup>
       </table>
       <codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE name LIKE "American%";      </codeblock>
-      <codeblock spectitle="Result snippet">      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "\"Americao\""
-                   ],
-                   "Inclusion": 1,
-                   "Low": [
-                       "\"American\""
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((`travel-sample`.`name`) like \"American%\")"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]      </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE name LIKE \"American%\";"
+  }
+]</codeblock>
     </section>
     <section id="ex18-like-2"><title>Example 18: LIKE Predicate</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE name LIKE "%American%";</codeblock>
@@ -1041,25 +1522,57 @@
               <entry>name LIKE "%American%"</entry>
               <entry>""</entry>
               <entry>"[]"</entry>
-              <entry>1(LOW)</entry>
+              <entry>1 (LOW)</entry>
             </row>
           </tbody>
         </tgroup>
       </table>
       <codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE name LIKE "%American%";      </codeblock>
-      <codeblock spectitle="Result snippet">      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "[]"
-                   ],
-                   "Inclusion": 1,
-                   "Low": [
-                       "\"\""
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((`travel-sample`.`name`) like \"%American%\")"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]      </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE name LIKE \"%American%\";"
+  }
+]</codeblock>
     </section>
     <section id="ex19-and-composite-index-1"><title>Example 19: AND Predicate with Composite Index</title>
       <codeblock>SELECT meta().id FROM `travel-sample` 
@@ -1087,19 +1600,19 @@ WHERE sourceairport = "SFO"
               <entry>sourceairport = "SFO"</entry>
               <entry> "SFO"</entry>
               <entry>"SFO" </entry>
-              <entry> 3(BOTH)</entry>
+              <entry>3 (BOTH)</entry>
             </row>
             <row>
               <entry>destinationairport = "JFK"</entry>
               <entry>"JFK"</entry>
               <entry>"JFK"</entry>
-              <entry>3(BOTH)</entry>
+              <entry>3 (BOTH)</entry>
             </row>
             <row>
               <entry>stops BETWEEN 0 AND 2</entry>
               <entry>0</entry>
               <entry>2</entry>
-              <entry>3(BOTH)</entry>
+              <entry>3 (BOTH)</entry>
             </row>
           </tbody>
         </tgroup>
@@ -1126,7 +1639,7 @@ WHERE sourceairport = "SFO"
                   2</entry>
                 <entry>["SFO","JFK",0]</entry>
                 <entry>["SFO","JFK",2]</entry>
-                <entry>3(BOTH)</entry>
+                <entry>3 (BOTH)</entry>
               </row>
             </tbody>
           </tgroup>
@@ -1135,24 +1648,67 @@ WHERE sourceairport = "SFO"
 WHERE sourceairport = "SFO" 
   AND destinationairport = "JFK" 
   AND stops BETWEEN 0 AND 2;      </codeblock>
-      <codeblock spectitle="Result snippet">      "spans": [
-          {
-              "Range": {
-                   "High": [
-                      "\"SFO\"",
-                      "\"JFK\"",
-                      "2"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                      "\"SFO\"",
-                      "\"JFK\"",
-                      "0"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "IndexScan2",
+          "index": "def_sourceairport",
+          "index_id": "90c8827b04252e8d",
+          "index_projection": {
+            "primary_key": true
+          },
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "spans": [
+            {
+              "exact": true,
+              "range": [
+                {
+                  "high": "\"SFO\"",
+                  "inclusion": 3,
+                  "low": "\"SFO\""
+                }
+              ]
+            }
+          ],
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((((`travel-sample`.`sourceairport`) = \"SFO\") and ((`travel-sample`.`destinationairport`) = \"JFK\")) and ((`travel-sample`.`stops`) between 0 and 2))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
+        }
       ]
-      </codeblock>
+    },
+    "text": "SELECT meta().id FROM `travel-sample` \nWHERE sourceairport = \"SFO\" \n  AND destinationairport = \"JFK\" \n  AND stops BETWEEN 0 AND 2;"
+  }
+]</codeblock>
     </section>
     <section id="ex20-and-composite-index-2"><title>Example 20: AND Predicate with Composite Index</title>
       <codeblock>SELECT meta().id from `travel-sample` 
@@ -1178,21 +1734,21 @@ WHERE sourceairport IN ["SFO", "SJC"]
           <tbody>
             <row>
               <entry>sourceairport IN ["SFO", "SJC"]</entry>
-              <entry> "SFO"<p>"SJC"</p></entry>
-              <entry> "SFO"<p>"SJC"</p></entry>
-              <entry> 3(BOTH)<p>3(BOTH)</p></entry>
+              <entry>"SFO"<p>"SJC"</p></entry>
+              <entry>"SFO"<p>"SJC"</p></entry>
+              <entry>3 (BOTH)<p>3 (BOTH)</p></entry>
             </row>
             <row>
               <entry>destinationairport = "JFK"</entry>
               <entry>"JFK"</entry>
               <entry>"JFK"</entry>
-              <entry>3(BOTH)</entry>
+              <entry>3 (BOTH)</entry>
             </row>
             <row>
               <entry>stops</entry>
               <entry>0</entry>
               <entry>0</entry>
-              <entry>3(BOTH)</entry>
+              <entry>3 (BOTH)</entry>
             </row>
           </tbody>
         </tgroup>
@@ -1218,9 +1774,9 @@ WHERE sourceairport IN ["SFO", "SJC"]
             <row>
               <entry>sourceairport IN ["SFO", "SJC"] AND destinationairport = "JFK" AND stops =
                 0</entry>
-              <entry> ["SFO","JFK",0]<p>["SJC","JFK", 0]</p></entry>
-              <entry> ["SFO","JFK",0]<p>["SJC","JFK", 0]</p></entry>
-              <entry> 3(BOTH)<p>3(BOTH)</p></entry>
+              <entry>["SFO","JFK",0]<p>["SJC","JFK", 0]</p></entry>
+              <entry>["SFO","JFK",0]<p>["SJC","JFK", 0]</p></entry>
+              <entry>3 (BOTH)<p>3 (BOTH)</p></entry>
             </row>
           </tbody>
         </tgroup>
@@ -1229,37 +1785,77 @@ WHERE sourceairport IN ["SFO", "SJC"]
 WHERE sourceairport IN ["SFO", "SJC"] 
   AND destinationairport = "JFK" 
   AND stops = 0;      </codeblock>
-      <codeblock spectitle="Result snippet">      "spans": [
-          {
-              "Range": {
-                   "High": [
-                      "\"SFO\"",
-                      "\"JFK\"",
-                      "0"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                      "\"SFO\"",
-                      "\"JFK\"",
-                      "0"
-                   ]
-              }
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "IndexScan2",
+          "index": "def_sourceairport",
+          "index_id": "90c8827b04252e8d",
+          "index_projection": {
+            "primary_key": true
           },
-              "Range": {
-                   "High": [
-                      "\"SJC\"",
-                      "\"JFK\"",
-                      "0"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                      "\"SJC\"",
-                      "\"JFK\"",
-                      "0"
-                   ]
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "spans": [
+            {
+              "exact": true,
+              "range": [
+                {
+                  "high": "\"SFO\"",
+                  "inclusion": 3,
+                  "low": "\"SFO\""
+                }
+              ]
+            },
+            {
+              "exact": true,
+              "range": [
+                {
+                  "high": "\"SJC\"",
+                  "inclusion": 3,
+                  "low": "\"SJC\""
+                }
+              ]
+            }
+          ],
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((((`travel-sample`.`sourceairport`) in [\"SFO\", \"SJC\"]) and ((`travel-sample`.`destinationairport`) = \"JFK\")) and ((`travel-sample`.`stops`) = 0))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]      </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` \nWHERE sourceairport IN [\"SFO\", \"SJC\"] \n  AND destinationairport = \"JFK\" \n  AND stops = 0;"
+  }
+]</codeblock>
     </section>
     <section id="ex21-composite-and-trailing-keys-missing"><title>Example 21: Composite AND Predicate with Trailing Keys Missing in Predicate</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE sourceairport = "SFO" AND destinationairport = "JFK";</codeblock>
@@ -1283,13 +1879,13 @@ WHERE sourceairport IN ["SFO", "SJC"]
               <entry>sourceairport = "SFO" </entry>
               <entry>"SFO" </entry>
               <entry>"SFO" </entry>
-              <entry>3(BOTH) </entry>
+              <entry>3 (BOTH) </entry>
             </row>
             <row>
               <entry>destinationairport = "JFK"</entry>
               <entry> "JFK"</entry>
               <entry> "JFK"</entry>
-              <entry> 3(BOTH) </entry>
+              <entry>3 (BOTH) </entry>
             </row>
           </tbody>
         </tgroup>
@@ -1316,13 +1912,13 @@ WHERE sourceairport IN ["SFO", "SJC"]
                 <entry>sourceairport = "SFO" </entry>
                 <entry>"SFO" </entry>
                 <entry>"SFO" </entry>
-                <entry>3(BOTH) </entry>
+                <entry>3 (BOTH) </entry>
               </row>
               <row>
                 <entry>destinationairport = "JFK"</entry>
                 <entry> "JFK"</entry>
-                <entry> successor(JFK)</entry>
-                <entry> 1(LOW)</entry>
+                <entry> successor (JFK)</entry>
+                <entry>1 (LOW)</entry>
               </row>
             </tbody>
           </tgroup>
@@ -1346,8 +1942,8 @@ WHERE sourceairport IN ["SFO", "SJC"]
             <row>
               <entry>sourceairport = "SFO" AND destinationairport = "JFK" </entry>
               <entry>["SFO","JFK"] </entry>
-              <entry>["SFO", successor("JFK")] </entry>
-              <entry>1(LOW)</entry>
+              <entry>["SFO", successor ("JFK")] </entry>
+              <entry>1 (LOW)</entry>
             </row>
           </tbody>
         </tgroup>
@@ -1355,21 +1951,67 @@ WHERE sourceairport IN ["SFO", "SJC"]
       <codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` 
 WHERE sourceairport = "SFO" 
   AND destinationairport = "JFK";</codeblock>
-      <codeblock spectitle="Result snippet">     "spans": [
-          {
-              "Range": {
-                   "High": [
-                      "\"SFO\"",
-                      "successor(\"JFK\")"
-                   ],
-                   "Inclusion": 1,
-                   "Low": [
-                      "\"SFO\"",
-                      "\"JFK\""
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "IndexScan2",
+          "index": "def_sourceairport",
+          "index_id": "90c8827b04252e8d",
+          "index_projection": {
+            "primary_key": true
+          },
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "spans": [
+            {
+              "exact": true,
+              "range": [
+                {
+                  "high": "\"SFO\"",
+                  "inclusion": 3,
+                  "low": "\"SFO\""
+                }
+              ]
+            }
+          ],
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(((`travel-sample`.`sourceairport`) = \"SFO\") and ((`travel-sample`.`destinationairport`) = \"JFK\"))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]      </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` \nWHERE sourceairport = \"SFO\" \n  AND destinationairport = \"JFK\";"
+  }
+]</codeblock>
     </section>
     <section id="ex22-composite-and-unbounded-high-trailing"><title>Example 22: Composite AND Predicate with Unbounded High of Trailing Key </title>
       <codeblock>SELECT meta().id FROM `travel-sample` 
@@ -1394,21 +2036,21 @@ WHERE sourceairport = "SFO"
           <tbody>
             <row>
               <entry>sourceairport = "SFO" </entry>
-              <entry> "SFO"</entry>
-              <entry> "SFO"</entry>
-              <entry>3(BOTH)</entry>
+              <entry>"SFO"</entry>
+              <entry>"SFO"</entry>
+              <entry>3 (BOTH)</entry>
             </row>
             <row>
               <entry>destinationairport = "JFK"</entry>
               <entry>"JFK"</entry>
               <entry>"JFK"</entry>
-              <entry>3(BOTH)</entry>
+              <entry>3 (BOTH)</entry>
             </row>
             <row>
               <entry>stops >= 0</entry>
               <entry>0</entry>
               <entry>Unbounded</entry>
-              <entry>1(LOW)</entry>
+              <entry>1 (LOW)</entry>
             </row>
           </tbody>
         </tgroup>
@@ -1433,21 +2075,21 @@ WHERE sourceairport = "SFO"
             <tbody>
               <row>
                 <entry>sourceairport = "SFO" </entry>
-                <entry> "SFO"</entry>
-                <entry> "SFO"</entry>
-                <entry>3(BOTH)</entry>
+                <entry>"SFO"</entry>
+                <entry>"SFO"</entry>
+                <entry>3 (BOTH)</entry>
               </row>
               <row>
                 <entry>destinationairport = "JFK"</entry>
                 <entry>"JFK"</entry>
                 <entry>successor("JFK")</entry>
-                <entry>1(LOW)</entry>
+                <entry>1 (LOW)</entry>
               </row>
               <row>
                 <entry>stops >= 0</entry>
                 <entry>0</entry>
                 <entry>Unbounded</entry>
-                <entry>1(LOW)</entry>
+                <entry>1 (LOW)</entry>
               </row>
             </tbody>
           </tgroup>
@@ -1472,7 +2114,7 @@ WHERE sourceairport = "SFO"
                 <entry>sourceairport = "SFO" AND destinationairport = "JFK" AND stops >= 0</entry>
                 <entry>["SFO","JFK",0]</entry>
                 <entry>["SFO",successor("JFK")] </entry>
-                <entry>1(LOW)</entry>
+                <entry>1 (LOW)</entry>
               </row>
             </tbody>
           </tgroup>
@@ -1481,22 +2123,67 @@ WHERE sourceairport = "SFO"
 WHERE sourceairport = "SFO" 
   AND destinationairport = "JFK" 
   AND stops >= 0;       </codeblock>
-      <codeblock spectitle="Result snippet">     "spans": [
-          {
-              "Range": {
-                   "High": [
-                      "\"SFO\"",
-                      "successor(\"JFK\")"
-                   ],
-                   "Inclusion": 1,
-                   "Low": [
-                      "\"SFO\"",
-                      "\"JFK\"",
-                      "0"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "IndexScan2",
+          "index": "def_sourceairport",
+          "index_id": "90c8827b04252e8d",
+          "index_projection": {
+            "primary_key": true
+          },
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "spans": [
+            {
+              "exact": true,
+              "range": [
+                {
+                  "high": "\"SFO\"",
+                  "inclusion": 3,
+                  "low": "\"SFO\""
+                }
+              ]
+            }
+          ],
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((((`travel-sample`.`sourceairport`) = \"SFO\") and ((`travel-sample`.`destinationairport`) = \"JFK\")) and (0 &lt;= (`travel-sample`.`stops`)))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]      </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` \nWHERE sourceairport = \"SFO\" \n  AND destinationairport = \"JFK\" \n  AND stops >= 0;"
+  }
+]</codeblock>
     </section>
     <section id="ex23-equality-query-params"><title>Example 23: EQUALITY Predicate with Query Parameters</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE id = $1;</codeblock>
@@ -1520,25 +2207,55 @@ WHERE sourceairport = "SFO"
               <entry>id = $1</entry>
               <entry> $1</entry>
               <entry>$1 </entry>
-              <entry>3(BOTH) </entry>
+              <entry>3 (BOTH) </entry>
             </row>
           </tbody>
         </tgroup>
       </table>
       <codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = $1;      </codeblock>
-      <codeblock spectitle="Result snippet">    "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "$1"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "$1"
-                   ]
-              }
-          }
-      ]      </codeblock>
+      <codeblock spectitle="Results">{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+        "#operator": "PrimaryScan",
+        "index": "def_primary",
+        "keyspace": "travel-sample",
+        "namespace": "default",
+        "using": "gsi"
+      },
+      {
+        "#operator": "Fetch",
+        "keyspace": "travel-sample",
+        "namespace": "default"
+      },
+      {
+        "#operator": "Parallel",
+        "~child": {
+          "#operator": "Sequence",
+          "~children": [
+            {
+              "#operator": "Filter",
+              "condition": "((`travel-sample`.`id`) = $1)"
+            },
+            {
+              "#operator": "InitialProject",
+              "result_terms": [
+                {
+                  "expr": "(meta(`travel-sample`).`id`)"
+                }
+              ]
+            },
+            {
+              "#operator": "FinalProject"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "text": "SELECT meta().id FROM `travel-sample` WHERE id = $1;"
+}</codeblock>
     </section>
     <section id="ex24-and-query-params"><title>Example 24: AND Predicate with Query Parameters</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE id >= $1 AND id &lt; $2;</codeblock>
@@ -1562,25 +2279,57 @@ WHERE sourceairport = "SFO"
               <entry>id >= $1 AND id &lt; $2</entry>
               <entry> $1</entry>
               <entry> $2</entry>
-              <entry> 1(LOW)</entry>
+              <entry>1 (LOW)</entry>
             </row>
           </tbody>
         </tgroup>
       </table>
       <codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >= $1 AND id &lt; $2;     </codeblock>
-      <codeblock spectitle="Result snippet">     "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "$2"
-                   ],
-                   "Inclusion": 1,
-                   "Low": [
-                       "$1"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(($1 &lt;= (`travel-sample`.`id`)) and ((`travel-sample`.`id`) &lt; $2))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]      </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id >= $1 AND id &lt; $2;"
+  }
+]</codeblock>
     </section>
     <section id="ex25-or-query-params"><title>Example 25: OR Predicate with Query Parameters</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE id = $1 OR id &lt; $2;</codeblock>
@@ -1605,40 +2354,63 @@ WHERE sourceairport = "SFO"
               <entry>id = $1</entry>
               <entry> $1</entry>
               <entry>$1 </entry>
-              <entry>3(BOTH) </entry>
+              <entry>3 (BOTH) </entry>
             </row>
             <row>
               <entry>id &lt; $2</entry>
               <entry>NULL</entry>
               <entry>$2</entry>
-              <entry>0(NEITHER)</entry>
+              <entry>0 (NEITHER)</entry>
             </row>
           </tbody>
         </tgroup>
       </table>
       <codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = $1 OR id &lt; $2;      </codeblock>
-      <codeblock spectitle="Result snippet">      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "$1"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "$1"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(((`travel-sample`.`id`) = $1) or ((`travel-sample`.`id`) &lt; $2))"
               },
-              "Range": {
-                  "High": [
-                       "$2"
-                   ],
-                   "Inclusion": 0,
-                   "Low": [
-                       "null"
-                   ]
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]      </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id = $1 OR id &lt; $2;"
+  }
+]</codeblock>
     </section>
     <section id="ex26-in-query-params"><title>Example 26: IN Predicate with Query Parameters</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE id IN [ $1, 10, $2] ;</codeblock>
@@ -1662,44 +2434,58 @@ WHERE sourceairport = "SFO"
             <row>
               <entry>id IN [$1, 10, $2]</entry>
               <entry>$1<p>10</p><p>$2</p></entry>
-              <entry> $1<p>10</p><p>$2</p></entry>
-              <entry> 3(BOTH)<p>3(BOTH)</p><p>3(BOTH)</p></entry>
+              <entry>$1<p>10</p><p>$2</p></entry>
+              <entry>3 (BOTH)<p>3 (BOTH)</p><p>3 (BOTH)</p></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
       <codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id IN [$1, 10, $2];      </codeblock>
-      <codeblock spectitle="Result snippet">    "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "$1"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "$1"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((`travel-sample`.`id`) in [$1, 10, $2])"
               },
-              "Range": {
-                  "High": [
-                       "10"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "10"
-                   ]
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
               },
-              "Range": {
-                  "High": [
-                       "$2"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "$2"
-                   ]
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]  </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id IN [$1, 10, $2];"
+  }
+]</codeblock>
     </section>
     <section id="ex27-any-1"><title>Example 27: ANY Predicate</title>
       <codeblock>SELECT meta().id FROM `travel-sample` 
@@ -1726,7 +2512,7 @@ END;  </codeblock>
               <entry>v.day = 0</entry>
               <entry> 0</entry>
               <entry>0 </entry>
-              <entry>3(BOTH) </entry>
+              <entry>3 (BOTH) </entry>
             </row>
           </tbody>
         </tgroup>
@@ -1735,19 +2521,67 @@ END;  </codeblock>
 WHERE type = "route" 
   AND ANY v IN schedule SATISFIES v.day = 0 
 END;  </codeblock>
-      <codeblock spectitle="Result snippet">      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "0"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "0"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "IndexScan2",
+          "index": "def_type",
+          "index_id": "f72cb8dababdc546",
+          "index_projection": {
+            "primary_key": true
+          },
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "spans": [
+            {
+              "exact": true,
+              "range": [
+                {
+                  "high": "\"route\"",
+                  "inclusion": 3,
+                  "low": "\"route\""
+                }
+              ]
+            }
+          ],
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(((`travel-sample`.`type`) = \"route\") and any `v` in (`travel-sample`.`schedule`) satisfies ((`v`.`day`) = 0) end)"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]      </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` \nWHERE type = \"route\" \n  AND ANY v IN schedule SATISFIES v.day = 0 \nEND;"
+  }
+]</codeblock>
     </section>
     <section id="ex28-any-2"><title>Example 28: ANY Predicate</title>
       <codeblock>SELECT meta().id FROM `travel-sample` 
@@ -1775,7 +2609,7 @@ END;</codeblock>
               <entry>v.day IN [1,2,3]</entry>
               <entry>1<p>2</p><p>3</p></entry>
               <entry>1<p>2</p><p>3</p></entry>
-              <entry> 3(BOTH)<p>3(BOTH)</p><p>3(BOTH)</p></entry>
+              <entry>3 (BOTH)<p>3 (BOTH)</p><p>3 (BOTH)</p></entry>
             </row>
           </tbody>
         </tgroup>
@@ -1784,37 +2618,67 @@ END;</codeblock>
 WHERE type = "route" 
   AND ANY v IN schedule SATISFIES v.day IN [1,2,3] 
 END;  </codeblock>
-      <codeblock spectitle="Result snippet">      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "1"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "1"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "IndexScan2",
+          "index": "def_type",
+          "index_id": "f72cb8dababdc546",
+          "index_projection": {
+            "primary_key": true
+          },
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "spans": [
+            {
+              "exact": true,
+              "range": [
+                {
+                  "high": "\"route\"",
+                  "inclusion": 3,
+                  "low": "\"route\""
+                }
+              ]
+            }
+          ],
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(((`travel-sample`.`type`) = \"route\") and any `v` in (`travel-sample`.`schedule`) satisfies ((`v`.`day`) in [1, 2, 3]) end)"
               },
-              "Range": {
-                  "High": [
-                       "2"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "2"
-                   ]
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
               },
-              "Range": {
-                  "High": [
-                       "3"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "3"
-                   ]
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]      </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` \nWHERE type = \"route\" \n  AND ANY v IN schedule SATISFIES v.day IN [1,2,3] \nEND;"
+  }
+]</codeblock>
     </section>
     <section id="ex29-equality-on-expr"><title>Example 29: EQUALITY Predicate on Expression
         </title><codeblock>SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;</codeblock><p>This
@@ -1836,21 +2700,57 @@ END;  </codeblock>
           <tbody>
             <row>
               <entry>id </entry>
-              <entry> NULL</entry>
+              <entry>NULL</entry>
               <entry>Unbounded </entry>
-              <entry>0(NEITHER) </entry>
+              <entry>0 (NEITHER) </entry>
             </row>
           </tbody>
         </tgroup>
-      </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;      </codeblock><codeblock spectitle="Result snippet">     "spans": [
-          {
-                   "Inclusion": 0,
-                   "Low": [
-                       "null"
-                   ]
+      </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;      </codeblock><codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(abs((`travel-sample`.`id`)) = 10)"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]      </codeblock><p>The
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;"
+  }
+]</codeblock><p>The
         span indicates that the index service is performing a complete index scan. If the index does
         not cover the query, the query service fetches the document from the data node and then
         applies the predicate. For better performance, create a new index as follows:
@@ -1875,23 +2775,55 @@ END;  </codeblock>
               <entry>abs(id) = 10</entry>
               <entry>10</entry>
               <entry>10</entry>
-              <entry>3(BOTH)</entry>
+              <entry>3 (BOTH)</entry>
             </row>
           </tbody>
         </tgroup>
-      </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;      </codeblock><codeblock spectitle="Result snippet">      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "10"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "10"
-                   ]
+      </table><codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;      </codeblock><codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(abs((`travel-sample`.`id`)) = 10)"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]      </codeblock></section>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;"
+  }
+]</codeblock></section>
     <section id="ex30-overlap"><title>Example 30: Overlapping Predicates </title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE id &lt;= 100 OR (id BETWEEN 50 AND 150);</codeblock>
       <p>This example pushes the predicate <codeph>id &lt;= 100 OR (id BETWEEN 50 AND 150)</codeph>
@@ -1913,60 +2845,114 @@ END;  </codeblock>
           <tbody>
             <row>
               <entry>id &lt;= 100</entry>
-              <entry> NULL</entry>
+              <entry>NULL</entry>
               <entry>100 </entry>
-              <entry>2(HIGH) </entry>
+              <entry>2 (HIGH) </entry>
             </row>
             <row>
               <entry>id BETWEEN 50 AND 150</entry>
               <entry>50</entry>
               <entry>150</entry>
-              <entry>3(BOTH)</entry>
+              <entry>3 (BOTH)</entry>
             </row>
           </tbody>
         </tgroup>
       </table>
       <codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;= 100 OR (id BETWEEN 50 AND 150);      </codeblock>
-      <codeblock spectitle="Result snippet">     "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "100"
-                   ],
-                   "Inclusion": 2,
-                   "Low": [
-                       "null"
-                   ]
+      <codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(((`travel-sample`.`id`) &lt;= 100) or ((`travel-sample`.`id`) between 50 and 150))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
-          },
-          {
-              "Range": {
-                  "High": [
-                       "150"
-                   ],
-                   "Inclusion": 3,
-                   "Low": [
-                       "50"
-                   ]
-              }
+            ]
           }
-      ]      </codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id &lt;= 100 OR (id BETWEEN 50 AND 150);"
+  }
+]</codeblock>
       <p>The spans indicate that two range scans are being performed, and the ranges are overlapping
         with the values 50-100 being scanned twice. To eliminate duplicates N1QL does distinct
-        operations on meta().id. When possible, rewriting the query may help eliminate duplicates.
-        <codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;= 150;</codeblock><codeblock spectitle="Result snippet">      "spans": [
-          {
-              "Range": {
-                  "High": [
-                       "150"
-                   ],
-                   "Inclusion": 2,
-                   "Low": [
-                       "null"
-                   ]
+        operations on <codeph>meta().id</codeph>. When possible, rewriting the query may help
+        eliminate duplicates.
+        <codeblock spectitle="Explain plan">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;= 150;</codeblock><codeblock spectitle="Results">[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((`travel-sample`.`id`) &lt;= 150)"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(meta(`travel-sample`).`id`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
+            ]
           }
-      ]</codeblock>
+        }
+      ]
+    },
+    "text": "SELECT meta().id FROM `travel-sample` WHERE id &lt;= 150;"
+  }
+]</codeblock>
       </p>
     </section>
   </body>
