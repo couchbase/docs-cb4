@@ -26,146 +26,107 @@
    present in the index <parmname>idxstate</parmname> and thus avoids the additional step to fetch
    the data. In this case, the index <parmname>idxstate</parmname> is called a covering index and
    the query is a covered query.
-   <codeblock>cbq> EXPLAIN SELECT state from `beer-sample` WHERE state = "CA";
-    {
-    "requestID": "a2a734dc-7ddc-4bc0-8144-4f6b80f0bbc5",
-    "signature": "json",
-    "results": [
-    {
+   <codeblock>EXPLAIN SELECT state from `beer-sample` WHERE state = "CA";
+
+Results:
+{
+  "plan": {
     "#operator": "Sequence",
     "~children": [
-    <b>{
-    "#operator": "IndexScan",
-    "covers": [
-    "cover((meta(`beer-sample`).`id`))",
-    "cover((`beer-sample`.`state`))"
-    ],
-    "index": "idxstate",
-    "keyspace": "beer-sample",
-    "namespace": "default",</b>
-    "spans": [
-    {
-    "Range": {
-    "High": [
-    "\"CA\""
-    ],
-    "Inclusion": 3,
-    "Low": [
-    "\"CA\""
+      {
+        "#operator": "PrimaryScan",
+        "index": "beer_primary",
+        "keyspace": "beer-sample",
+        "namespace": "default",
+        "using": "gsi"
+      },
+      {
+        "#operator": "Fetch",
+        "keyspace": "beer-sample",
+        "namespace": "default"
+      },
+      {
+        "#operator": "Parallel",
+        "~child": {
+          "#operator": "Sequence",
+          "~children": [
+            {
+              "#operator": "Filter",
+              "condition": "((`beer-sample`.`state`) = \"CA\")"
+            },
+            {
+              "#operator": "InitialProject",
+              "result_terms": [
+                {
+                  "expr": "(`beer-sample`.`state`)"
+                }
+              ]
+            },
+            {
+              "#operator": "FinalProject"
+            }
+          ]
+        }
+      }
     ]
-    }
-    }
-    ],
-    "using": "gsi"
-    },
-    {
-    "#operator": "Parallel",
-    "~child": {
-    "#operator": "Sequence",
-    "~children": [
-    {
-    "#operator": "Filter",
-    "condition": "(cover((`beer-sample`.`state`)) = \"CA\")"
-    },
-    {
-    "#operator": "InitialProject",
-    "result_terms": [
-    {
-    "expr": "cover((`beer-sample`.`state`))"
-    }
-    ]
-    },
-    {
-    "#operator": "FinalProject"
-    }
-    ]
-    }
-    }
-    ]
-    }
-    ],
-    "status": "success",
-    "metrics": {
-    "elapsedTime": "12.239172ms",
-    "executionTime": "12.175594ms",
-    "resultCount": 1,
-    "resultSize": 1916
-    }
-    }</codeblock></p>
+  },
+  "text": "SELECT state from `beer-sample` WHERE state = \"CA\";"
+}</codeblock></p>
   <p>If you modify the query to select the <parmname>state</parmname> and <parmname>city</parmname>
    from the `beer-sample` bucket using the same index, <parmname>idxstate</parmname>, the index does
    not contain all the information to satisfy the query and hence a key-value fetch is performed to
    retrieve the data.
-    <codeblock>cbq> EXPLAIN SELECT state,city from `beer-sample` WHERE state = "CA";
-   {
-   "requestID": "d9d440cc-c5ef-4de7-9247-0203fa3cd208",
-   "signature": "json",
-   "results": [
-   {
-   "#operator": "Sequence",
-   "~children": [
-   {
-   <b>"#operator": "IndexScan",
-   "index": "idxstate",
-   "keyspace": "beer-sample",
-   "namespace": "default",</b>
-   "spans": [
-   {
-   "Range": {
-   "High": [
-   "\"CA\""
-   ],
-   "Inclusion": 3,
-   "Low": [
-   "\"CA\""
-   ]
-   }
-   }
-   ],
-   "using": "gsi"
-   },
-   {
-   "#operator": "Parallel",
-   "~child": {
-   "#operator": "Sequence",
-   "~children": [
-   {
-   <b>"#operator": "Fetch",
-   "keyspace": "beer-sample",
-   "namespace": "default"</b>
-   },
-   {
-   "#operator": "Filter",
-   "condition": "((`beer-sample`.`state`) = \"CA\")"
-   },
-   {
-   "#operator": "InitialProject",
-   "result_terms": [
-   {
-   "expr": "(`beer-sample`.`state`)"
-   },
-   {
-   "expr": "(`beer-sample`.`city`)"
-   }
-   ]
-   },
-   {
-   "#operator": "FinalProject"
-   }
-   ]
-   }
-   }
-   ]
-   }
-   ],
-   "status": "success",
-   "metrics": {
-   "elapsedTime": "4.97585ms",
-   "executionTime": "4.917805ms",
-   "resultCount": 1,
-   "resultSize": 2108
-   }
-   } </codeblock><note>To
+    <codeblock>EXPLAIN SELECT state,city from `beer-sample` WHERE state = "CA";
+
+Results:
+[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {<b>
+          "#operator": "PrimaryScan",
+          "index": "beer_primary",
+          "keyspace": "beer-sample",
+          "namespace": "default",</b>
+          "using": "gsi"
+        },
+        {<b>
+          "#operator": "Fetch",
+          "keyspace": "beer-sample",
+          "namespace": "default"</b>
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((`beer-sample`.`state`) = \"CA\")"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(`beer-sample`.`state`)"
+                  },
+                  {
+                    "expr": "(`beer-sample`.`city`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "text": "SELECT state,city from `beer-sample` WHERE state = \"CA\";"
+  }
+]</codeblock><note>To
     use a covering index for the modified query, you must define an index with the
      <parmname>state</parmname> and <parmname>city</parmname> attributes before executing the query.
     <codeblock>CREATE INDEX idxstatecity on `beer-sample` (state, city) USING GSI;</codeblock></note></p>
@@ -174,18 +135,20 @@
   <p><b>Expressions and Aggregates</b>
    <codeblock>EXPLAIN SELECT max(country) from `beer-sample` WHERE state = 'CA';</codeblock><codeblock>EXPLAIN SELECT country || state from `beer-sample` USE INDEX (idxstatecountry)  where state = 'CA'; </codeblock></p>
   <p><b>UNION/INTERSECT/EXCEPT</b>
-   <codeblock>select country from `beer-sample` where state = 'CA'
+   <codeblock>SELECT country FROM `beer-sample` WHERE state = 'CA'
     UNION ALL
-    select country from `beer-sample` where state = 'Texas';</codeblock></p>
-  <p><b>Derived tables or sub-queries</b><codeblock>Select *
-   from (
-   SELECT country from `beer-sample` WHERE state = 'CA'
+    SELECT country FROM `beer-sample` WHERE state = 'Texas';</codeblock></p>
+  <p><b>Derived tables or
+   sub-queries</b><codeblock>SELECT *
+   FROM (
+   SELECT country FROM `beer-sample` WHERE state = 'CA'
    UNION ALL
-   select country from `beer-sample` WHERE state = 'Texas'
-   ) as newtab;
+   SELECT country FROM `beer-sample` WHERE state = 'Texas'
+   ) AS newtab;
   </codeblock></p>
-  <p><b>SELECT in INSERT statements</b><codeblock>INSERT into `travel-sample`(KEY k, value state) 
-   SELECT country as k, state from `beer-sample` b WHERE state = 'CA';</codeblock></p>
+  <p><b>SELECT in INSERT
+   statements</b><codeblock>INSERT INTO `travel-sample`(KEY k, value state) 
+   SELECT country AS k, state FROM `beer-sample` b WHERE state = 'CA';</codeblock></p>
   <p><b>Arrays in WHERE clauses</b>
   </p>
   <p>First, create a new index, <userinput>idxarray</userinput>.
