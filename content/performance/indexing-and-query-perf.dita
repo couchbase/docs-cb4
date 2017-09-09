@@ -172,25 +172,54 @@ Example:
       <p>If you provide the search string in lowercase, the index helps query engine efficiently
         search for already lowercased values in the index.
         <codeblock>EXPLAIN SELECT * FROM `travel-sample` WHERE LOWER(name) = "john";
-{
-    "#operator": "IndexScan",
-    "index": "travel_cxname",
-    "index_id": "2f39d3b7aac6bbfe",
-    "keyspace": "travel-sample",
-    "namespace": "default",
-    "spans": [
-    {
-        "Range": {
-            "High": [
-            "\"john\""
-            ],
-            "Inclusion": 3,
-            "Low": [
-            "\"john\""
+
+Results:
+[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(lower((`travel-sample`.`name`)) = \"john\")"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "self",
+                    "star": true
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
+              }
             ]
+          }
         }
-    }
-    ],</codeblock></p>
+      ]
+    },
+    "text": "SELECT * FROM `travel-sample` WHERE LOWER(name) = \"john\";"
+  }
+]</codeblock></p>
       <p>You can also use complex expressions in the functional index. For example:
         <codeblock>CREATE INDEX travel_cx1 ON `travel-sample`(LOWER(name), length*width, round(salary));</codeblock></p>
     </section>
@@ -233,29 +262,53 @@ Example:
         above.<codeblock>EXPLAIN SELECT * FROM `travel-sample` 
 WHERE ANY v IN SCHEDULE SATISFIES v.day = 2 END;
 
-{
-    "#operator": "DistinctScan",
-    "scan": {
-        "#operator": "IndexScan",
-        "index": "travel_sched",
-        "index_id": "db7018bff5f10f17",
-        "keyspace": "travel-sample",
-        "namespace": "default",
-        "spans": [
+Results:
+[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
         {
-            "Range": {
-                "High": [
-                "2"
-                ],
-                "Inclusion": 3,
-                "Low": [
-                "2"
+          "#operator": "PrimaryScan",
+          "index": "def_primary",
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "any `v` in (`travel-sample`.`SCHEDULE`) satisfies ((`v`.`day`) = 2) end"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "self",
+                    "star": true
+                  }
                 ]
-                }
-            }
-        ],
-        "using": "gsi"
-    }</codeblock></p>
+              },
+              {
+                "#operator": "FinalProject"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "text": "SELECT * FROM `travel-sample` \nWHERE ANY v IN SCHEDULE SATISFIES v.day = 2 END;"
+  }
+]</codeblock></p>
       <p>Because the key is a generalized expression, it provides the flexibility to apply
         additional logic and processing on the data before indexing. For example, you can create
         functional indexing on elements of each array. As you're referencing individual fields of
