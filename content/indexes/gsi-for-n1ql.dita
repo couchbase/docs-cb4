@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
 <concept id="concept_bb5_khb_ys">
- <title>Global Secondary Indexes</title>
- <shortdesc>Global Secondary Indexes (GSI) support a variety of OLTP like use-cases for N1QL
-  including basic, ad-hoc, and short-running reporting queries that require filtering. For example,
-  if you have a WHERE clause in a N1QL statement that selects a subset of your data on which the
-  secondary index is defined, you can see a significant speedup in the N1QL query performance by
-  using GSI.</shortdesc>
+ <title>Global Secondary Indexes for N1QL</title>
+ <shortdesc>Global Secondary Index (GSI) supports a variety of OLTP like use-cases for N1QL including basic, ad-hoc, and short-running reporting queries that require filtering.  For example, if you have a WHERE clause in a N1QL statement that selects a subset of your data on which the secondary index is defined, you can see a significant speedup in the N1QL query performance by using GSI.</shortdesc>
  <conbody>
   <p>Global secondary indexes are deployed independently into a separate index service within the
    Couchbase Server cluster, away from the data service that processes key based operations. GSIs
@@ -22,29 +18,265 @@
      add new indexes and evolve the application performance without stealing cycles from the
      incoming workload.</li>
    </ul></p>
-  <section>
-   <title>Creating Global Secondary Indexes</title>
+  <section><title>Creating Global Secondary Indexes</title>
    <p>You can define a primary or secondary index using GSIs in N1QL using the CREATE INDEX
     statement and the USING GSI clause. For more information on the syntax and examples, see <xref
-     href="../n1ql/n1ql-language-reference/createindex.dita"/> statement.</p>
-  </section>
-  <section>
-   <title>Placement of Global Secondary Indexes</title>
-   <p>GSIs reside on the index nodes in the cluster. Each index service node can host multiple
-    indexes and a single index can be hosted on multiple index nodes. Every index has an index
-    key(s) (used for lookup). When the index type is not primary index, index can have an index
-    filter with the WHERE clause.</p>
-   <codeblock>CREATE INDEX index_name ON ( index_key1, ..., index_keyN) 
+     href="../n1ql/n1ql-language-reference/createindex.dita"/> statement.</p></section>
+   <section><title>Placement of Global Secondary Indexes</title>
+   <p>GSIs reside on the index nodes in the cluster. Each index service node can host multiple indexes. Every index has an index key(s) (used for lookup). When the index type is not primary index, index can have an index filter with the WHERE clause.</p> <codeblock>CREATE INDEX index_name ON ( index_key1, ..., index_keyN) 
     WHERE index_filter 
     WITH { "nodes": [ "node1:8091" ] } 
     USING GSI | VIEW;</codeblock>
-   <p>Based on the index filter, the index can be partitioned across multiple index service nodes
-    and placed on given nodes using the WITH clause and "nodes" argument in CREATE INDEX
-    statement.</p>
-   <p>Administrators can place each index partition in a separate node to distribute index
-    maintenance and index scan load. Index metadata stored on the index node knows about the
-    distribution of the index. GSI does not use scatter-gather. Instead, based on the index
-    metadata, it only touches the nodes that have the relevant data.</p>
+   <p>Based on the index filter, the index can be partitioned across multiple index service nodes and placed on a given node using the WITH clause and "nodes" argument in CREATE INDEX statement.</p>
+   <p>Administrators can place each index partition in a separate node to distribute index maintenance and index scan load. Index metadata stored on the index node knows about the distribution of the index. GSI does not use scatter-gather. Instead, based on the index metadata, it only touches the nodes that have the relevant data.</p>
+  </section>
+  <section><title>Index Performance</title>
+   <p>GSIs provide a lower latency scan compared to view indexes due to its architecture. GSI, as
+    its name suggests is a global index that is independently placed within the cluster as opposed
+    to Views, which are local indexes placed aligned to the data distribution. <fig
+     id="fig_jzj_ms1_vv">
+     <title>Query Execution with Global Indexes</title>
+     <image placement="break" href="images/query-exe-with-global-indexes.png" width="370"
+      id="image_kzj_ms1_vv" align="left"/>
+    </fig></p>
+   <p>GSI comes with two storage settings: <ul>
+    <li>Memory optimized global secondary indexes</li>
+    <li>Standard global secondary indexes. Standard GSIs come with two write modes: <ul>
+     <li>Append-only write mode</li>
+     <li>Circular write mode</li>
+    </ul></li>
+   </ul></p>
+   <p>The default storage setting for GSI is standard GSI. Memory optimized GSI setting can be selected at the time of the initial cluster setup. Write mode can be selected when the storage setting for GSI is standard. You can change the write mode at any time while the cluster is running, however the setting change require a restart of the index service which can cause a short period of unavailability.</p>
+   <p>Global secondary indexes can be placed on a single node. However as the  number of index scans, mutations, the total items indexed, and the total index size increases, it will be necessary to scale the index. You can scale the index in 2 ways: <ul>
+    <li>Load balancing with GSI. You can create multiple copies of the same index to allow scans to be routed to multiple nodes by placing the copies of the same index in separate index service nodes.</li>
+    <li>Partitioning with GSI. You can split the index into multiple partitions, to distribute indexed items, index scan requests, and limit the mutations and size the single index has to handle.</li>
+   </ul>In either approach, you also need to scale the index service to allocate more computational resources to indexes.</p>
+   <dl>
+    <dlentry>
+     <dt>Load Balancing with GSI</dt>
+     <dd>Some of your indexes may become hot as they are utilized more often by N1QL queries
+      required for your application logic. You can create multiple copies of the same index across
+      multiple index service nodes under different index names. N1QL automatically load balances
+      across multiple copies of the same index both for load balancing and availability of queries.
+       <p>To load-balance GSIs, you must manually specify the nodes on which indexes should be built
+       on.</p><p> For example, create two indexes <varname>productName_index1</varname> and
+        <varname>productName_index2</varname>, using the following commands:
+       <codeblock>CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
+       WHERE type="product" USING GSI WITH {"nodes":["node1:8091"]};
+      
+CREATE INDEX productName_index2 ON bucket_name(productName, ProductID) 
+       WHERE type="product" USING GSI WITH {"nodes":["node2:8091"]}; </codeblock>
+       The indexing load will be distributed equally between the indexes
+        <varname>productName_index1</varname> and <varname>productName_index2</varname>. </p></dd>
+    </dlentry>
+    <dlentry>
+     <dt>Partitioning with GSI</dt>
+     <dd>Some of your indexes may no longer fit a single node as the number of mutations, index
+      size, and item count increases. You can partition a single index using a WHERE clause with
+      CREATE INDEX and by placing partitions across multiple index service nodes under different
+      index names. <p>To load-balance GSIs, you must manually specify the nodes on which index
+       partitions should be built on. </p><p>You can also create indexes by partitioning your
+       indexes as shown in the following example using ranges:
+       <codeblock>CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
+       WHERE type="product" AND productName BETWEEN "A" AND "K" USING GSI 
+       WITH {"nodes":["node1:8091"]};
+       
+CREATE INDEX productName_index2 ON bucket_name(productName, ProductID) 
+       WHERE type="product" AND productName BETWEEN "K" AND "Z" USING GSI 
+       WITH {"nodes":["node2:8091"]};</codeblock></p></dd>
+    </dlentry>
+    <dlentry>
+     <dt>Scaling the Index Service</dt>
+     <dd>Couchbase Server scales indexes independent of data and queries. With multidimensional scaling, you can allocate separate hardware resources for separate services, and avoid resource contention by performing queries, maintaining indexes, and writing data to different nodes. If your application needs more indexing resources, you can either scale out your infrastructure to add more index nodes, or scale up the index services to handle more workload.</dd>
+    </dlentry></dl>
+  </section>
+  <section><title>Query and Index Consistency</title>
+   <p>In Couchbase Server, mutations to data in the data service is done with full consistency. All
+    mutations to a given key are done using the same vBucket on a node and are immediately available
+    to anyone reading the latest value for the given key. However, indexes are maintained in an
+    eventually consistent manner. This is true for all indexers (GSI, View, and Spatial). At query
+    time, you can specify a query consistency flag for each N1QL query request, similar to the view
+    API. The query consistency flag can be one of the following: <ul>
+     <li><parmname>Not_bounded</parmname>: This scan consistency flag executes the query immediately
+      without requiring any consistency for the query. If the index maintenance is running behind,
+      query may return out-of-date results. Not_bounded scan consistency has the same
+      characteristics as <codeph>stale=ok</codeph> in the view API.</li>
+     <li><parmname>At_plus</parmname>: This scan consistency flag executes the query but require the
+      indexes to be updated to the logical timestamp of the last update performed by the
+      application. For example, an application issuing the query may have done its last update 10 ms
+      ago. The logical timestamp of the update is retrieved with the mutation ACK response and is
+      passed to the query request. This behavior achieves consistency, at least or later than the
+      moment of the logical timestamp. If the index maintenance is running behind the logical
+      timestamp, the query waits for the index to catch up to the last updates logical timestamp.
+       <draft-comment>At_plus scan consistency flag is not yet implemented by the View
+       API.</draft-comment> At_plus scan consistency flag automatically degrades to the same
+      characteristics as <codeph>stale=false</codeph> in the view API.</li>
+     <li><parmname>Request_plus</parmname>: This scan_consistency flag executes the query but
+      require the indexes to be updated to the logical timestamp of the query request. For example,
+      an application issuing the query may have done its last update 10 ms ago. An application
+      issuing the query with request_plus scan consistency flag takes the logical timestamp of the
+      query request. This behavior achieves consistency, at least or later than the moment of the
+      request timestamp. If the index maintenance is running behind the request timestamp, the query
+      waits for the index to catch up to the request timestamp. At_plus scan consistency flag can
+      yield faster response times if the application can relax its consistency requirements to
+      read-your-own-write, as opposed to a stricter request time consistency. Request_plus scan
+      consistency value has the same characteristics as <codeph>stale=false</codeph> in the view
+      API.</li>
+    </ul>For N1QL, the default consistency setting is <codeph>not_bounded</codeph>.</p>
+  </section>
+  <section><title>Index Replication and High Availability with N1QL</title>
+   <p>GSIs are not automatically replicated however you can create "replicas" yourself and achieve full high availability.</p>
+   <p>To create a replica of a GSI, you can create an identical index definition with unique index names under 2 or more nodes. Queries will load balance across the indexes and if one of the indexes become unavailable, all requests are automatically rerouted to the available remaining index without application or admin intervention. You can create more than 2 copies of the index for better redundancy and load balancing.</p><codeblock>CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
+    WHERE type="product" 
+    USING GSI 
+    WITH {"nodes":["node1:8091"]};
+    
+CREATE INDEX productName_index2 ON bucket_name(productName, ProductID) 
+    WHERE type="product" 
+    USING GSI 
+    WITH {"nodes":["node2:8091"]};</codeblock>
+  </section>
+  <section id="std-gsi"><title>Standard Global Secondary Indexes</title>
+   <p>Standard global secondary indexes is the default storage setting for Couchbase Server clusters. Standard global secondary indexes (also called global secondary indexes, indexes, or GSI) can index larger data sets as long as there is disk space available for storing the index.</p>
+   <p>Standard Global Secondary Indexes uses ForestDB for indexes that can utilize both memory and persistent storage for index maintenance and index scans. ForestDB is Couchbase’s state-of-the-art storage engine with a modified data structure to increase read and write performance from storage. </p>
+   <p><b>Enabling Standard Global Secondary Indexes</b></p>
+   <p>By default, Couchbase Server uses standard global secondary indexes storage setting with the circular write mode for all indexes. </p>
+   <p>Standard and memory optimized storage settings apply to all indexes in the cluster and cannot be mixed within a single cluster. </p>
+   <p>At the time of the cluster’s initial setup, storage setting can be switched between standard and memory optimized GSI storage settings. Changing the storage setting for GSI requires removing all index service nodes.</p>
+   <p><b>Standard Global Secondary Index Performance</b></p>
+   <p>Different from the memory optimized storage setting for GSI, the performance of standard GSIs depend heavily on the IO subsystem performance. Standard GSIs come with 2 write modes: <ul>
+    <li>Append-only Write Mode: Append only write mode is similar to the writes to storage in the data service. In append-only write mode, all changes are written to the end of the index file (or appended to the index file). Append only writes invalidate existing pages within the index file and require frequent full compaction.</li>
+    <li>Circular Write Mode:  Circular write mode optimizes the IO throughput (IOPS and MB/sec)
+      required to maintain the index on storage by reusing stale blocks in the file. Stale blocks
+      are areas of the file that contain data which is no longer relevant to the index, as a more
+      recent version of the same data has been written in another block. Compaction needs to run
+      less frequently under circular write mode as the storage engine avoids appending new data to
+      the end of the file. <p>In circular write mode, data is appended to the end of the file until
+       the relative index fragmentation (<codeph>stale data size</codeph> / <codeph>total file
+        size</codeph>) exceeds 65%. Block reuse is then triggered which means that new data is
+       written into stale blocks where possible, rather than appended to the end of the
+       file.</p><p>In addition to reusing stale blocks, full compaction is run once a day on each of
+       the days specified as part of the circular mode time interval setting. This full compaction
+        <b>does not</b> make use of the fragmentation percent setting unlike append-only write mode.
+       Between full compaction runs, the index fragmentation displayed in the UI will not decrease
+       and will likely display 65% most of the time, this particular metric is not relevant for
+       indexes using circular write mode.</p></li> </ul>By default, Couchbase Server uses the circular write mode for standards GSIs. Append only write mode is provided for backward compatibility with previous versions.</p>
+   <p>When placing indexes, it is important to note the disk IO "bandwidth" remaining on the node
+    as well as CPU, RAM and other resources. You can monitor the resource usage for the index
+    nodes through Web Console and pick the nodes that can house your next index. <fig
+     id="fig_kwl_kx1_vv">
+     <title>Monitor Resource Usage for Indexes</title>
+     <image placement="break" href="images/monitor-index-resource-usage.png" width="570"
+      id="image_lwl_kx1_vv"/>
+    </fig></p>
+   <p>There are also per-index statistics that can help identify the item counts,disk and data
+    size, and more individual statistics for an index. <fig id="fig_pzm_qx1_vv"> <title>Per-index Statistics</title>
+     <image placement="break" href="images/per-index-stats.png" width="400"
+      id="image_qzm_qx1_vv"/>
+    </fig></p><p>Aside from the performance characteristics, the mechanics of creating, placing, load balancing, partitioning and HA behavior is identical in both standard and memory optimized global secondary indexes.</p>
+  </section>
+  <section id="memopt-gsi"><title>Memory-Optimized Global Indexes</title>
+   <p>Memory optimized global secondary indexes is an additional storage setting for Couchbase Server clusters. Memory optimized global secondary indexes (also called memory optimized indexes or MOI) can perform index maintenance and index scan faster at in-memory speeds.</p>
+   <p><b>Enabling Memory-Optimized Global Indexes</b></p>
+   <p>By default, Couchbase Server uses standard global secondary indexes storage setting with the
+    circular write mode for all indexes. In this release, standard vs memory optimized storage
+    settings apply to all indexes in the cluster and cannot be mixed within a single cluster. At the
+    time of the cluster’s initial setup, storage setting can be switched to memory optimized GSI
+    setting. <note>Changing the storage setting from standard GSI to memory optimized GSI or visa
+     versa cannot be done online in a single cluster. Changing the storage setting for GSI requires
+     removing all index service nodes in the cluster.</note><note>Regardless of the GSI storage
+     setting, standard GSI vs memory optimized GSI, it is still possible to create indexes using GSI
+     or view during CREATE INDEX statement with the USING clause.</note>
+   </p>
+   <p><b>Memory Optimized Global Secondary Index Performance</b></p>
+   <p>There are several performance advantages to using memory optimized global secondary indexes: MOIs use a skiplist, a memory efficient index structure for a lock-free index maintenance and index scans. Lock-free architecture increases the concurrency of index maintenance and index scans. This enhances the index maintenance rate by more than an order of magnitude under high mutation rates. Skiplist based indexes take up less space in memory. Memory optimized indexes can also provide a much more predictable latency with queries as they never reach into disk for index scans. </p>
+   <p>MOIs use ForestDB for storing a snapshot of the index on disk; however writes to storage are done purely for crash recovery and are not in the critical path of latency of index maintenance or index scans. The snapshots on disk is used to avoid rebuilding the index if a node experiences failure. Building the index from the snapshot on disk minimizes the impact of index node failures on the data service nodes.</p>
+   <p>In short, MOIs completely run at in-memory speeds and perform an order of magnitude faster in several cases compared to standard global secondary indexes.</p>
+   <p>With memory optimized global secondary indexes, it is important to monitor memory usage over time. Memory optimized indexes have to reside in memory. Indexes on a given node will stop processing further mutations, if the node runs out of index RAM quota. The index maintenance is paused until RAM Quota becomes available on the node. There are two important metrics you need to monitor to detect the issues: <ul>
+    <li>MAX Index RAM Used %: Reports the max ram quota used in percent (%) through the cluster and on each node both realtime and with a history over minutes, hours, days, weeks and more. </li>
+    <li>Remaining Index RAM: Reports the free index RAM quota for the cluster as a total and on each node both realtime and with a history over minutes, hours, days weeks and more. </li></ul></p>
+   <p>If a node is approaching high percent usage of Index RAM Quota, it is time to take action: <ul>
+    <li>You can either increase the RAM quota for the index service on the node to give indexes more RAM. </li>
+    <li>You can also place some of the indexes on the node in other nodes with more RAM
+     available.</li></ul></p><p>Optionally, you can also perform the following steps if a node is approaching high percent usage
+    of Index RAM Quota:<ul id="ul_gvj_1zf_2y">
+     <li>Drop few indexes from the index node which is in the Paused state.</li>
+     <li>Flush the bucket on which indexes of the Paused node are created.</li>
+    </ul></p>
+   <p>It is also important to understand other resource utilization beyond RAM. You can monitor
+    the resource usage for the index nodes through Web Console and pick the nodes that can house
+    your next index. <fig id="fig_ccd_b1b_vv">
+     <title>Monitor Resource Usage for Index Nodes</title>
+     <image placement="break" href="../indexes/images/moi-index-resource-usage.png" width="570"
+      id="image_dcd_b1b_vv"/>
+    </fig></p>
+   <p>There are also per-index statistics that can help identify the item counts, disk/snapshot
+    and data size and more individual statistics for an index for memory optimized indexes.<fig
+     id="fig_xzy_wz1_vv">
+     <title>Per-index Statistics</title>
+     <image placement="break" href="../indexes/images/moi-per-index-stats.png" width="400"
+      id="image_yzy_wz1_vv"/>
+    </fig></p>
+   <p>Aside from the performance characteristics, the mechanics of creating, placing, load balancing, partitioning and HA behavior is identical in both standard and memory optimized global secondary indexes. </p>
+   <p><b>Handling Out-of-Memory Conditions</b></p>
+   <p>Memory-optimized global indexes reside in memory. When a node running the index service runs
+    out of configured Index RAM Quota on the node, indexes on the node can no longer process
+    additional changes. The index service logs an error in the Couchbase Server log indicating the
+    condition. You can also observe how much memory is available on each node running the index
+    service using the index statistic Max Index RAM Used % under "Server Resources" stat section 
+    of bucket statistics.</p>
+   <p>Memory-optimized indexes on a node that has run out of memory continue to stay in the ONLINE
+    state. However, the round-robin logic routes traffic away from this index node. If an index is
+    in OFFLINE, DEFERRED, or BUILDING state, the index is not transitioned to the ONLINE state. </p>
+   <p>When the node is restarted, the indexes stay in the BUILDING state until the last persisted
+    snapshot is read from disk into memory. The additional catchup is done in ONLINE state. Queries
+    with <codeph>stale=false</codeph> or RYOW semantics fail if the timestamp specified exceeds the
+    last timestamp processed by the specific index on the node. However, queries with
+    <codeph>stale=ok</codeph> continue to execute normally.</p>
+   <p>To recover from an out-of-memory situation, use one or more of the following fixes: <ul
+    id="ul_aps_f5g_sw">
+    <li>Increase the Index RAM Quota sufficiently enough to give indexes the additional memory to
+     process requests.</li>
+    <li>Drop other indexes on the node to free up memory. On nodes with multiple indexes, drop the
+     unimportant indexes to free memory. </li>
+    <li>Drop buckets with indexes. Dropping a bucket automatically drops all the dependent indexes
+     and has the same effect as dropping all indexes on a bucket.</li>
+    <li>Flush buckets with indexes. Flushing a bucket deletes all data in a bucket. Even if there
+     are pending updates that are not processed, flushing a bucket causes all indexes to drop their
+     data. <note type="important">Deleting data selectively from buckets does not help, as
+      mutations are processed in sequence and indexes can not process mutations in an out-of-memory
+      condition.</note></li>
+   </ul></p>
+  </section>
+  
+  <section><title>Changing the Global Secondary Index Storage Mode (Standard vs Memory Optimized)</title>
+   <p>Storage mode for GSI is a cluster level setting. Currently, the storage mode option sets the
+    storage mode for all indexes on the cluster across all buckets. The storage mode option cannot
+    be changed dynamically either. To change from standard GSI to memory optimized GSI or vice
+    versa, you need to remove all the index service nodes in the cluster. Here is a step by step
+    guide to change the storage mode option: <ol>
+     <li>Identify the nodes that are running the index service. You can do this by simply looking at
+      the "Server Nodes" page on the Web Console. The Services column displays the nodes that have
+      the index service enabled.</li>
+     <li>Click <uicontrol>Remove</uicontrol> on each of the nodes that has the index service enabled
+      and push rebalance to remove the nodes from the cluster. <note>If you are running a single
+       node, the only way to change GSI storage mode setting is to uninstall and install the server
+       again. </note> As you remove all the index service nodes, all the indexes in the system are
+      dropped and the N1QL queries will fail. To maintain availability, you can set up a new cluster
+      with the desired storage mode option for GSI and use cross datacenter replication to replicate
+      the data to the new cluster. If you don't have a space cluster, you can also create all the
+      indexes using the View indexer. See the <xref
+       href="../n1ql/n1ql-language-reference/createindex.dita">CREATE INDEX</xref> statement and the
+      USING VIEW clause for details). However, the View indexer for N1QL provides different
+      performance characteristics as it is a local index and not a global index like GSI. For better
+      availability when changing the storage mode from MOI to GSI, we recommended that you use the
+      XDCR approach as opposed to views in production systems.</li>
+     <li>Once all the index service nodes are removed, visit the Settings tab and Cluster settings
+      page and change the Index Storage Mode to the desired new mode. You can also set this option
+      during the addition of the first node that has the index service enabled.</li>
+     <li>Add new nodes and confirm the new global secondary index storage mode. At this point, all
+      new GSIs will use the new storage mode setting from the cluster.</li>
+    </ol></p>
   </section>
  </conbody>
 </concept>
