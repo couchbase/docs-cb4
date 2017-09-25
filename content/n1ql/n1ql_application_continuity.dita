@@ -1,0 +1,499 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="n1ql_application_continuity">
+    <title>N1QL Application Continuity</title><shortdesc>In Couchbase Server 5.0, N1QL introduced multiple performance enhancements enabled by a
+        new internal API between the Query and Index services, which guarantees the accuracy of
+        query results between multiple versions of services while nodes are being upgraded.</shortdesc>
+    <body>
+        <note>Before doing any upgrade, you must have all the required RBAC roles of every Data,
+            Index, and Query service involved in the upgrade. For details about RBAC permissions,
+            see <xref
+                href="../security/concepts-rba-for-apps.dita#rbac_for_users_roles_and_privileges"
+            />.</note>
+        <note>This page refers to the new 5.0 API as "API-2" and the pre-5.0 API as "API-1".</note>
+        <p>API-1 and API-2 is used only between Index nodes and Query nodes since the Data nodes
+            don't use any API and are unaffected by the Index and Query versions.</p>
+        <p>While Index 4.x supports API-1 only, Index 5.0 supports both API-1 and API-2, so there is
+            no impact.<note>As Index nodes and Query nodes are being upgraded, even after all the
+                Query nodes are upgraded, they will continue using API-1 until all the Index nodes
+                are upgraded.</note></p>
+        <p>While upgrading larger Couchbase cluster deployments, the cluster may be in a state of
+            running different Couchbase versions of each service; so N1QL Application Continuity
+            supports various upgrade scenarios, such as:<ul id="ul_nx3_pgq_hbb">
+                <li><b>Scenario 1 (D → I → Q)</b>: Upgrade in the order of 1) Data nodes, 2) Index
+                    nodes, 3) Query nodes.</li>
+                <li><b>Scenario 2 (D → Q → I)</b>: Upgrade in the order of 1) Data nodes, 2) Query
+                    nodes, 3) Index nodes.</li>
+                <li><b>Scenario 3 (I → Q → D)</b>: Upgrade in the order of 1) Index nodes, 2) Query
+                    nodes, 3) Data nodes.</li>
+                <li><b>Scenario 4 (I + Q + D)</b>: Upgrade with Index+Query or Index+Query+Data on
+                    one node.</li>
+            </ul></p>
+        <p>Consider the following example cluster of 4.5 nodes that applies to all 4.x
+                versions:<image href="images/application-continuity_Scenario1_Step0.png"
+                id="image_p53_ykq_hbb"/></p>
+        <section id="section_zwv_fjq_hbb">
+            <title>Scenario 1 (D → I → Q)</title>
+            <p>If you want to use the most common and straight-forward order of upgrading, use the
+                following order: <table frame="none" rowsep="0" colsep="0" id="table_v3k_kjq_hbb">
+                    <tgroup cols="2" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="7.61*"/>
+                        <tbody>
+                            <row>
+                                <entry>
+                                    <p/>
+                                    <p/>
+                                    <p>
+                                        <dl>
+                                            <dlentry>
+                                                <dt>1) Data nodes</dt>
+                                                <dd/>
+                                            </dlentry>
+                                        </dl>
+                                    </p>
+                                    <p>
+                                        <dl>
+                                            <dlentry>
+                                                <dt>2) Index nodes</dt>
+                                                <dd/>
+                                            </dlentry>
+                                        </dl>
+                                    </p>
+                                    <p>
+                                        <dl>
+                                            <dlentry>
+                                                <dt>3) Query nodes</dt>
+                                                <dd/>
+                                            </dlentry>
+                                        </dl>
+                                    </p>
+                                </entry>
+                                <entry><image
+                                        href="images/application-continuity_Scenario1_overview.png"
+                                        id="image_o3p_blq_hbb"/></entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table><b>Step 1: Upgrade the Data Service nodes from 4.x to 5.0</b><ul
+                    id="ul_zyk_pjq_hbb">
+                    <li>Follow the current rolling upgrade procedure for all data nodes,
+                        one-by-one.</li>
+                    <li>The applications directly fetching the data will continue without
+                        interruption.</li>
+                    <li>Index will continue to get DCP stream and will keep the index up to
+                        date.</li>
+                    <li>Query will use the index and data services as they did before 5.0.</li>
+                    <li>Applications that use query and index continue uninterrupted.<image
+                            href="images/application-continuity_Scenario1_Step1_circled.png"
+                            id="image_z2w_2tq_hbb"/></li>
+                </ul><b>Step 2: Upgrade the Index Service nodes from 4.x to 5.0</b><ul
+                    id="ul_hnf_1kq_hbb">
+                    <li>As you upgrade each index, the indexing client within the Query node will
+                        continue to use API-1 to interact with the Index nodes. </li>
+                    <li>Index will continue to get updates from data via DCP and keep the indexes up
+                        to date.<image
+                            href="images/application-continuity_Scenario1_Step2_circled.png"
+                            id="image_gts_ftq_hbb"/></li>
+                </ul><b>Step 3: Upgrade one of the Query Service nodes from 4.x to 5.0</b><ul
+                    id="ul_zxt_jsq_hbb">
+                    <li>Upgrade the query nodes one-by-one. </li>
+                    <li>As each query node comes online, the indexer client will return API-2, and
+                        the query service will use API-2.</li>
+                    <li>You can have more than 1 query service node.</li>
+                    <li>At this point, older (4.x) Query nodes will be using API-1 and new (5.0)
+                        Query nodes will be using API-2.</li>
+                    <li>This is because Index nodes support API-1 and API-2 simultaneously.</li>
+                    <li>The indexer client within all Query 5.0 nodes will return API-2.</li>
+                </ul><note>If a CREATE INDEX with DESC key modifier is submitted to a Query 4.x
+                    node, you may get a syntax error.</note><image
+                    href="images/application-continuity_Scenario1_Step3_circled.png"
+                    id="image_ffx_wtq_hbb"/><b>Step 4: Upgrade the remaining Query Service nodes
+                    from 4.x to 5.0</b><ul id="ul_byp_5sq_hbb">
+                    <li>You can submit new syntaxes (e.g. create index with DESC key) to query nodes
+                        version 5.0 only.</li>
+                    <li>These indices will succeed but will not be visible to query nodes 4.x.
+                        They’ll be visible to these nodes only after they upgrade to 5.0.</li>
+                    <li>The 5.0 replica feature is implemented in Index 5.0. If a CREATE INDEX is
+                        submitted with new options in the WITH clause to Query 4.x, it’ll be passed
+                        on to the Index service which can accept or raise an error.</li>
+                    <li>These new features may not be used for query service until all the nodes are
+                        upgraded to 5.0.<image
+                            href="images/application-continuity_Scenario1_StepDone_circled.png"
+                            id="image_x3q_htq_hbb"/></li>
+                </ul></p>
+        </section>
+        <section id="section_hmd_btq_hbb">
+            <title>Scenario 2 (D → Q → I)</title>
+            <p>If you want to upgrade the Query node before the Index node, use the following
+                    order:<table frame="none" rowsep="0" colsep="0" id="table_itl_b4x_hbb">
+                    <tgroup cols="2" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="7.61*"/>
+                        <tbody>
+                            <row>
+                                <entry>
+                                    <p/>
+                                    <p/>
+                                    <p>
+                                        <dl>
+                                            <dlentry>
+                                                <dt>1) Data nodes</dt>
+                                                <dd/>
+                                            </dlentry>
+                                        </dl>
+                                    </p>
+                                    <p>
+                                        <dl>
+                                            <dlentry>
+                                                <dt>2) Query nodes</dt>
+                                                <dd/>
+                                            </dlentry>
+                                        </dl>
+                                    </p>
+                                    <p>
+                                        <dl>
+                                            <dlentry>
+                                                <dt>3) Index nodes</dt>
+                                                <dd/>
+                                            </dlentry>
+                                        </dl>
+                                    </p>
+                                </entry>
+                                <entry><image
+                                        href="images/application-continuity_Scenario2_overview.png"
+                                        id="image_qhs_24x_hbb"/></entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table></p>
+            <p><b>Step 1: Upgrade the Data Service nodes from 4.x to 5.0</b><ul id="ul_ym5_g4x_hbb">
+                    <li>Follow the current rolling upgrade procedure for all data nodes,
+                        one-by-one.</li>
+                    <li>The applications directly fetching the data will continue without
+                        interruption.</li>
+                    <li>Index nodes will continue to get DCP stream and will keep the index up to
+                        date.</li>
+                    <li>Query nodes will use the index and data services as usual.</li>
+                    <li>Applications that use query and index continue uninterrupted.</li>
+                </ul><image href="images/application-continuity_Scenario2_Step1_circled.png"
+                    id="image_pz3_q4x_hbb"/></p>
+            <p><b>Step 2: Upgrade the Query Service nodes from 4.x to 5.0</b><ul id="ul_ur1_s4x_hbb">
+                    <li>Upgrade the query nodes one-by-one.</li>
+                    <li>You can have more than 1 Query service node.</li>
+                    <li>At this point, both older (4.x) Query nodes and new (5.0) nodes will be
+                        using API-1.</li>
+                    <li>The indexer client within all Query nodes (Query 5.0) will continue to
+                        return the index API version as API-1.</li>
+                </ul><image href="images/application-continuity_Scenario2_Step2_circled.png"
+                    id="image_prz_2px_hbb"/></p>
+            <p><b>Step 3: Upgrade one of the Index Service nodes from 4.x to 5.0</b><ul
+                    id="ul_wwl_hpx_hbb">
+                    <li>Upgrade the index nodes one-by-one.</li>
+                    <li>As the index nodes are upgraded, the index client within the query will
+                        continue to return API-1.</li>
+                    <li>The newly upgraded Indexer nodes will return API-1 behavior until <ul
+                            id="ul_e2b_mpx_hbb">
+                            <li>All indexer nodes are upgraded,</li>
+                            <li>There are no failed-over indexer nodes,</li>
+                            <li>And the cluster is not under a network partition</li>
+                        </ul></li>
+                    <li>The query will dynamically exploit the new indexing features as more nodes
+                        are upgraded.</li>
+                    <li>Indexer API (mainly concerned with CREATE INDEX) are capable of using API-2
+                        (Indexer2).</li>
+                </ul><note>If a CREATE INDEX with DESC key modifier is submitted to a Query 4.x
+                    node, you may get a syntax error.</note><image
+                    href="images/application-continuity_Scenario2_Step3_circled.png"
+                    id="image_dnt_fxx_hbb"/></p>
+            <p><b>Step 4: Upgrade the remaining Index Service nodes from 4.x to 5.0</b><ul
+                    id="ul_brw_hxx_hbb">
+                    <li>When the GSI client changes and returns the Index API (affecting query
+                        optimization and pushdown) version from API1 to API2, the query nodes will
+                        start using the API-2 for subsequent query optimizations.</li>
+                    <li>Previously prepared queries will continue to use the OLD API-1 until they’re
+                        re-optimized.</li>
+                    <li>Essentially, for index processing, query nodes will start using API-2 as
+                        soon as the indexer returns API-2 (Index2 interface). This is the most
+                        critical feature.</li>
+                </ul><image href="images/application-continuity_Scenario2_StepDone_circled.png"
+                    id="image_uz5_mxx_hbb"/></p>
+            <p/>
+        </section>
+        <section id="section_ejn_qxx_hbb"><title>Scenario 3 (I → Q → D)</title><p>If you want to
+                upgrade the Index and Query nodes first, use the following order:</p><p>
+                <table frame="none" rowsep="0" colsep="0" id="table_n1q_yxx_hbb">
+                    <tgroup cols="2" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="7.61*"/>
+                        <tbody>
+                            <row>
+                                <entry>
+                                    <p/>
+                                    <p/>
+                                    <p>
+                                        <dl>
+                                            <dlentry>
+                                                <dt>1) Index nodes</dt>
+                                                <dd/>
+                                            </dlentry>
+                                        </dl>
+                                    </p>
+                                    <p>
+                                        <dl>
+                                            <dlentry>
+                                                <dt>2) Query nodes</dt>
+                                                <dd/>
+                                            </dlentry>
+                                        </dl>
+                                    </p>
+                                    <p>
+                                        <dl>
+                                            <dlentry>
+                                                <dt>3) Data nodes</dt>
+                                                <dd/>
+                                            </dlentry>
+                                        </dl>
+                                    </p>
+                                </entry>
+                                <entry><image
+                                        href="images/application-continuity_Scenario3_overview.png"
+                                        id="image_k5q_1yx_hbb"/></entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table>
+            </p><p><b>Step 1: Upgrade the Index Service nodes from 4.x to 5.0</b><ul
+                    id="ul_yfj_cyx_hbb">
+                    <li>Index 4.x supports API-1 for interaction between index and query.</li>
+                    <li>Index 5.0 uses both API-1 and API-2, so there is no impact.</li>
+                    <li>As you upgrade each index, the indexing client within query will continue to
+                        think the indexing service is still API-1 and query service uses API-1 to
+                        interact with index.</li>
+                    <li>Index will continue to get updates from data via DCP and keep the indexes up
+                        to date.</li>
+                </ul><image href="images/application-continuity_Scenario3_Step1_circled.png"
+                    id="image_ll3_jyx_hbb"/></p><p><b>Step 2: Upgrade the Query Service nodes from
+                    4.x to 5.0</b><ul id="ul_jjt_kyx_hbb">
+                    <li>Upgrade the query nodes one-by-one.</li>
+                    <li>As each query node comes online, the indexer client will return API-2, and
+                        the query service will use API-2.</li>
+                    <li>You can have more than 1 query service node.</li>
+                    <li>At this point, older (4.x) query nodes will be using API-1 and new (5.0)
+                        nodes will be using API-2.</li>
+                    <li>This means, Indexes will support API-1 and API-2 simultaneously.</li>
+                    <li>The indexer client within all query nodes (Query 5.0) will continue to
+                        return the index api version to be API-2.</li>
+                    <li>You can submit new syntaxes (e.g. create index with DESC key) to query nodes
+                        version 5.0 only.</li>
+                    <li>These indices will succeed but will not be visible to query nodes 4.x.
+                        They’ll be visible to these nodes only after they upgrade to 5.0.</li>
+                    <li>These new features may not be used for query service until all the nodes are
+                        upgraded to 5.0.</li>
+                </ul><note>If a CREATE INDEX with DESC key modifier is submitted to a Query 4.x
+                    node, you may get a syntax error.</note><note>The 5.0 replica feature is
+                    implemented in Index 5.0. If a CREATE INDEX is submitted with new options in the
+                    WITH clause to Query 4.x, it’ll be passed on to index service which might cause
+                    an error.</note></p><image
+                href="images/application-continuity_Scenario3_Step2_circled.png"
+                id="image_v2q_tzx_hbb"/><p><b>Step 3: Upgrade the Data Service nodes from 4.x to
+                    5.0</b><ul id="ul_h2w_wzx_hbb">
+                    <li>Follow the current rolling upgrade procedure for all data nodes,
+                        one-by-one.</li>
+                    <li>The applications directly fetching the data will continue without
+                        interruption.</li>
+                    <li>Index will continue to get DCP stream and will keep the index up to
+                        date.</li>
+                    <li>Query will use the index and data services as usual.</li>
+                    <li>Applications that use query and index continue uninterrupted.</li>
+                </ul></p><image href="images/application-continuity_Scenario3_StepDone_circled.png"
+                id="image_nhv_c1y_hbb"/><p/></section>
+        <section id="section_lmb_f1y_hbb">
+            <title>Scenario 4 (I+Q+D)</title>
+            <p>If your Index+Query services are on the same node, or if your Index+Query+Data
+                services are on the same node, use the following order:</p>
+            <p/>
+            <p>
+                <table frame="none" rowsep="0" colsep="0" id="table_imz_31y_hbb">
+                    <tgroup cols="2" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="4.9*"/>
+                        <tbody>
+                            <row>
+                                <entry>
+                                    <p>
+                                        <dl>
+                                            <dlentry>
+                                                <dt/>
+                                                <dd/>
+                                            </dlentry>
+                                        </dl>
+                                    </p>
+                                    <p>
+                                        <dl>
+                                            <dlentry>
+                                                <dt/>
+                                                <dd/>
+                                            </dlentry>
+                                        </dl>
+                                    </p>
+                                    <p>1.</p>
+                                    <p><b>Node 1's Data Service, then Index Service, then Query
+                                            Service</b></p>
+                                    <p>2.</p>
+                                    <p><b>Node 2's Data Service, then Index Service, then Query
+                                            Service</b></p>
+                                    <p>3.</p>
+                                    <p><b>Node 3's Data Service, then Index Service, then Query
+                                            Service</b></p>
+                                    <p/>
+                                </entry>
+                                <entry><image
+                                        href="images/application-continuity_Scenario4_overview.png"
+                                        id="image_qx3_x1y_hbb"/></entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table>
+            </p>
+            <p><b>Step 1: </b>
+                <b>Upgrade Node 1's Data Service, then Index Service, then Query
+                    Service</b><note>The Index node will not rebalance during the upgrade until
+                    after the full cluster is upgraded.</note><note>The user will have duplicate
+                    (equivalent) indexes on the other nodes.</note><note>You will have to create the
+                    indices manually on the available indexer service.</note><ul id="ul_cxt_1hy_hbb">
+                    <li>Upgrade the Data service. Afterwards, the data will automatically
+                        rebalance.</li>
+                    <li>Upgrade the Index service. The Index will continue to return Index API-1 and
+                        use Spans. (4.x feature)</li>
+                    <li>Upgrade the Query service. The query service will start using the indices in
+                        all three index nodes. For query processing, the Query service will use
+                        API-1 (returned by Index API).</li>
+                </ul><image href="images/application-continuity_Scenario4_Step1_circled.png"
+                    id="image_ny3_fhy_hbb"/></p>
+            <p><b>Step 2: </b>
+                <b>Upgrade Node 2's Data Service, then Index Service, then Query Service</b><ul
+                    id="ul_z3s_3hy_hbb">
+                    <li>Upgrade the 2nd node to 5.0, just like Step 1.</li>
+                    <li>Data: Once the second data service is upgraded, the data will get
+                        rebalanced.</li>
+                    <li>Index: The second index will get upgraded. Index will continue to return
+                        Index API-1, so the spans and features of 4.x will be used.</li>
+                    <li>Query: The query service will start using the indices in all three index
+                        nodes. For query processing, query will use API-1 (returned by Index
+                        API).</li>
+                </ul><image href="images/application-continuity_Scenario4_Step2_circled.png"
+                    id="image_dp3_c3y_hbb"/></p>
+            <p><b>Step 3: </b>
+                <b>Upgrade Node 3's Data Service, then Index Service, then Query Service</b><ul
+                    id="ul_dg2_h3y_hbb">
+                    <li>Upgrade the 3rd node to 5.0, just like Step 1 and Step 2.</li>
+                    <li>Data: Once the second data service is upgraded, the data will get
+                        rebalanced.</li>
+                    <li>Index: The third index service will get upgraded. Once the index upgrade is
+                        complete, the index clients within query nodes will start to return
+                        index-API2 as well as all the query nodes.</li>
+                    <li>Query: The query service will start using the indices in all three index
+                        nodes. For query processing, query services will use API-1 (returned by
+                        Index API).</li>
+                </ul><image href="images/application-continuity_Scenario4_Step3_circled.png"
+                    id="image_bfd_n3y_hbb"/></p>
+            <p/>
+        </section>
+        <section id="section_ujs_l3y_hbb">
+            <title>Summary</title>
+            <p>In summary, this new Application Continuity feature ensures seamless interactions
+                between N1QL queries and applications regardless of which 4.x or 5.0 version of the
+                Query Services and Index Services are running, however, keep the following
+                performance impact in mind:<table frame="none" rowsep="0" colsep="0"
+                    id="table_ix1_q3y_hbb">
+                    <tgroup cols="2" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="2*"/>
+                        <tbody>
+                            <row>
+                                <entry><b><?oxy_custom_start type="oxy_content_highlight" color="153,255,255"?>Ver
+                                        5.0 Query with 5.0 Index<?oxy_custom_end?></b></entry>
+                                <entry>
+                                    <ul id="ul_qj2_cjy_hbb">
+                                        <li>Will take full advantage of the latest features and
+                                            performance enhancements.</li>
+                                    </ul>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry><b><?oxy_custom_start type="oxy_content_highlight" color="255,198,140"?>Ver
+                                        4.x Query with 4.x Index</b><p><b>Ver 4.x Query with 5.0
+                                            Index</b></p><p><b>Ver 5.0 Query with 4.x
+                                            Index<?oxy_custom_end?></b></p></entry>
+                                <entry>
+                                    <ul id="ul_l31_djy_hbb">
+                                        <li>Slight behavior changes may be observed, such as a
+                                            client connected to 5.0 query service may get different
+                                            error messages compared to 4.x.</li>
+                                        <li>Will not fail and will still execute seamlessly with the
+                                            previous behavior to ensure 100%
+                                            backward-compatibility.</li>
+                                    </ul>
+                                </entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table></p>
+            <p>The N1QL clients are able to use the 5.0 feature and performance enhancements only
+                when the issued queries are processed by 5.0 Query Services or Index services. </p>
+        </section>
+        <section id="section_fck_qjy_hbb">
+            <title>EXPLAIN Examples</title>
+            <p>The above explanation is evident in any EXPLAIN output of a query containing a WHERE
+                clause.</p>
+            <p><b>Example 1a</b>: Running
+                    <b><?oxy_custom_start type="oxy_content_highlight" color="255,198,140"?>4.6
+                    Query Service with 5.0 Index Service<?oxy_custom_end?></b> uses the standard
+                    <codeph>IndexScan</codeph>
+                operator.<codeblock>SELECT name FROM `travel-sample` WHERE type="hotel" ORDER BY name;</codeblock>Then
+                the EXPLAIN output would
+                begin:<codeblock>{
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "Sequence",
+          "~children": [
+            {
+<b>              "#operator": "IndexScan",</b>
+              "index": "def_type",
+              "index_id": "690c26a475406147",
+              "keyspace": "travel-sample",
+              "namespace": "default",
+              "spans": [
+                {
+
+...</codeblock>However,
+                when both the query service and index service versions are 5.0, the
+                higher-performance indexer<codeph> IndexScan2 </codeph>is used instead of <codeph>
+                    IndexScan</codeph>.</p>
+            <p><b>Example 1b</b>: Running
+                    <b><?oxy_custom_start type="oxy_content_highlight" color="153,255,255"?>5.0
+                    Query Service with 5.0 Index Service<?oxy_custom_end?></b> uses the
+                    faster<codeph> IndexScan2
+                </codeph>operator.<codeblock>SELECT name FROM `travel-sample` WHERE type="hotel" ORDER BY name;</codeblock>Then
+                the EXPLAIN output would
+                begin:<codeblock>{
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "Sequence",
+          "~children": [
+            {
+<b>              "#operator": "IndexScan2",</b>
+              "index": "def_type",
+              "index_id": "c3d31f22e3b5c798",
+<b>              "index_projection": {</b>
+                "primary_key": true
+              },
+...</codeblock></p>
+        </section>
+    </body>
+</topic>
