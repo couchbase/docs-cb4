@@ -305,7 +305,8 @@
                 <entry><codeph>chain.pem</codeph></entry>
                 <entry>Concatenated chain file (chain file). This file contains the node public key
                   and the intermediate public keys that signed first the node key (pkey.pem) and
-                  then each other. <p>This file does not contain the CA public key. </p></entry>
+                  then each other. This file does not contain the CA public key.
+                </entry>
               </row>
               <row>
                 <entry morerows="1">Client-side files</entry>
@@ -377,17 +378,46 @@
       
       <p>
         The following steps show how to configure X.509 certificates on Ubuntu 16. Proceed as follows, using
-        the <codeph>sudo</codeph> command where appropriate:
+        the <codeph>sudo</codeph> command where appropriate.
       </p>
       
       <ol>
         <li>
+          <p>
+            Create a top-level directory named SSLCA in your current working
+            directory, and within SSLCA, create the following:
+            
+            <ul>
+              <li>
+                A subdirectory named <codeph>root</codeph>, in which
+                the root certificate is to be managed.
+              </li>
+              
+              <li>
+                A subdirectory for each intermediate
+                certificate to be managed. In this example, a single
+                certificate is managed, in a subdirectory 
+                named <codeph>int</codeph>.
+              </li>
+              
+              <li>
+                A subdirectory for each node certificate
+                to be managed. In this example, a single node certificate
+                is managed, in a subdirectory named <codeph>node</codeph>.
+              </li>
+            </ul>
+          </p>
+        </li>
+        
+        
+        <li>
           Generate the root private key file (<codeph>ca.key</codeph>) and the public key file 
           (<codeph>ca.pem</codeph>):
           
-          <codeblock outputclass="language-bash">$ export ROOT_CA=ca
+          <codeblock outputclass="language-bash">$ cd SSLA/root
+$ export ROOT_CA=ca
 $ openssl genrsa -out ${ROOT_CA}.key 2048
-$ openssl req -new -x509 -days 3650 -sha256 -key ${ROOT_CA}.key -out ${ROOT_CA}.pem \
+$openssl req -new -x509 -days 3650 -sha256 -key ${ROOT_CA}.key -out ${ROOT_CA}.pem \
 > -subj '/C=UA/O=MyCompany/CN=MyCompanyRootCA'</codeblock>
           
           <p>
@@ -401,12 +431,14 @@ $ openssl req -new -x509 -days 3650 -sha256 -key ${ROOT_CA}.key -out ${ROOT_CA}.
           the intermediate certificate signing-request
           (<codeph>int.csr</codeph>); and thirdly, the intermediate public key (<codeph>int.pem</codeph>):
         
-        <codeblock outputclass="language-bash">$ export INTERMEDIATE=int
+          <codeblock outputclass="language-bash">$ cd ../int
+$ export INTERMEDIATE=int
 $ openssl genrsa -out ${INTERMEDIATE}.key 2048
 $ openssl req -new -key ${INTERMEDIATE}.key -out ${INTERMEDIATE}.csr \
 > -subj '/C=UA/O=MyCompany/CN=MyCompanyIntermediateCA'
-$ openssl x509 -req -in ${INTERMEDIATE}.csr -CA ${ROOT_CA}.pem -CAkey ${ROOT_CA}.key \
-> -CAcreateserial -CAserial rootCA.srl -out ${INTERMEDIATE}.pem -days 365</codeblock>
+$openssl x509 -req -in ${INTERMEDIATE}.csr -CA ../root/${ROOT_CA}.pem \
+> -CAkey ../root/${ROOT_CA}.key -CAcreateserial -CAserial ../root/rootCA.srl \
+> -out ${INTERMEDIATE}.pem -days 365</codeblock>
         
         <p>
           
@@ -463,12 +495,13 @@ $ openssl x509 -req -in ${INTERMEDIATE}.csr -CA ${ROOT_CA}.pem -CAkey ${ROOT_CA}
             with variable-values modified as appropriate.
           </p>
           
-          <codeblock outputclass="language-bash">$ export NODE=pkey
+          <codeblock outputclass="language-bash">$ cd ../node
+$ export NODE=pkey
 $ export USERNAME=travel-sample
 $ openssl genrsa -out ${NODE}.key 2048  
 $ openssl req -new -key ${NODE}.key -out ${NODE}.csr -subj "/C=UA/O=MyCompany/CN=${USERNAME}"
-$ openssl x509 -req -in ${NODE}.csr -CA ${INTERMEDIATE}.pem -CAkey ${INTERMEDIATE}.key \
-> -CAcreateserial -CAserial intermediateCA.srl -out ${NODE}.pem -days 365</codeblock> 
+$ openssl x509 -req -in ${NODE}.csr -CA ../int/${INTERMEDIATE}.pem \
+> -CAkey ../int/${INTERMEDIATE}.key -CAcreateserial -CAserial ../int/intermediateCA.srl -out ${NODE}.pem -days 365</codeblock> 
           
         </li>
         
@@ -477,7 +510,8 @@ $ openssl x509 -req -in ${NODE}.csr -CA ${INTERMEDIATE}.pem -CAkey ${INTERMEDIAT
           certificates. This allows the client application to verify
           the intermediate certificate against the root certificate. 
           
-          <codeblock outputclass="language-bash">$ export CHAIN=chain
+          <codeblock outputclass="language-bash">$ cd ..
+$ export CHAIN=chain
 $ cat ${NODE}.pem ${INTERMEDIATE}.pem > ${CHAIN}.pem</codeblock>
           
           <p>
@@ -511,7 +545,7 @@ $ cat ${NODE}.pem ${INTERMEDIATE}.pem > ${CHAIN}.pem</codeblock>
           <codeblock outputclass="language-bash">$ mkdir /opt/couchbase/var/lib/couchbase/inbox/
 $ cp ./chain.pem /opt/couchbase/var/lib/couchbase/inbox/chain.pem
 $ chmod a+x /opt/couchbase/var/lib/couchbase/inbox/chain.pem
-$ cp ./pkey.key /opt/couchbase/var/lib/couchbase/inbox/pkey.key
+$ cp ./node/pkey.key /opt/couchbase/var/lib/couchbase/inbox/pkey.key
 $ chmod a+x /opt/couchbase/var/lib/couchbase/inbox/pkey.key</codeblock>
         </li>
         
@@ -520,7 +554,7 @@ $ chmod a+x /opt/couchbase/var/lib/couchbase/inbox/pkey.key</codeblock>
           the REST API, as follows, specifying the username <codeph>Administrator</codeph>, the password
           <codeph>password</codeph>, and the IP address <codeph>10.143.173.101</codeph>.
           
-          <codeblock outputclass="language-bash">$ curl -X POST --data-binary "@./${ROOT_CA}.pem" http://Administrator:password@10.143.173.101:8091/controller/uploadClusterCA
+          <codeblock outputclass="language-bash">$ curl -X POST --data-binary "@./root/${ROOT_CA}.pem" http://Administrator:password@10.143.173.101:8091/controller/uploadClusterCA
 $ curl -X POST http://Administrator:password@10.143.173.101:8091/node/controller/reloadCertificate </codeblock>
         
         <p>
