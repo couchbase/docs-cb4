@@ -19,14 +19,14 @@
   <p>You can see the query execution plan using the EXPLAIN statement. When a query uses a covering
       index, the <b>EXPLAIN</b> statement shows that a covering index is used for data access, thus
       avoiding the overhead associated with key-value document fetches. Consider a simple index,
-        <userinput>idx_city</userinput>, on the attribute <parmname>city</parmname> in the
-        <codeph>travel-sample</codeph> bucket:
-      <codeblock>CREATE INDEX idx_city on `travel-sample` (city) USING GSI;</codeblock> If we select
-        <parmname>city</parmname> from the `travel-sample` bucket, all the data that is to be
-      returned is present in the index <parmname>idx_city</parmname> and thus avoids the additional
-      step to fetch the data. In this case, the index <parmname>idx_city</parmname> is called a
+        <userinput>idxstate</userinput>, on the attribute <parmname>state</parmname> in the
+        <codeph>beer-sample</codeph> bucket:
+      <codeblock>CREATE INDEX idxstate on `beer-sample` (state) USING GSI;</codeblock> If we select
+        <parmname>state</parmname> from the `beer-sample` bucket, all the data that is to be
+      returned is present in the index <parmname>idxstate</parmname> and thus avoids the additional
+      step to fetch the data. In this case, the index <parmname>idxstate</parmname> is called a
       covering index and the query is a covered query.
-      <codeblock>EXPLAIN SELECT city FROM `travel-sample` WHERE city = "Paris";
+      <codeblock>EXPLAIN SELECT state FROM `beer-sample` WHERE state = "CA";
 
 Results:
 {
@@ -34,143 +34,126 @@ Results:
     "#operator": "Sequence",
     "~children": [
       {
-        "#operator": "IndexScan2",
-        "covers": [
-          "cover ((`travel-sample`.`city`))",
-          "cover ((meta(`travel-sample`).`id`))"
-        ],
-        "index": "def_city",
-        "index_id": "cc931d457b4b7718",
-        "index_projection": {
-          "entry_keys": [
-            0
-          ]
-        },
-        "keyspace": "travel-sample",
+        "#operator": "PrimaryScan",
+        "index": "beer_primary",
+        "keyspace": "beer-sample",
         "namespace": "default",
-        "spans": [
-          {
-            "exact": true,
-            "range": [
+        "using": "gsi"
+      },
+      {
+        "#operator": "Fetch",
+        "keyspace": "beer-sample",
+        "namespace": "default"
+      },
+      {
+        "#operator": "Parallel",
+        "~child": {
+          "#operator": "Sequence",
+          "~children": [
+            {
+              "#operator": "Filter",
+              "condition": "((`beer-sample`.`state`) = \"CA\")"
+            },
+            {
+              "#operator": "InitialProject",
+              "result_terms": [
+                {
+                  "expr": "(`beer-sample`.`state`)"
+                }
+              ]
+            },
+            {
+              "#operator": "FinalProject"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "text": "SELECT state from `beer-sample` WHERE state = \"CA\";"
+}</codeblock></p>
+  <p>If you modify the query to select the <parmname>state</parmname> and <parmname>city</parmname>
+   from the `beer-sample` bucket using the same index, <parmname>idxstate</parmname>, the index does
+   not contain all the information to satisfy the query and hence a key-value fetch is performed to
+   retrieve the data.
+    <codeblock>EXPLAIN SELECT state,city from `beer-sample` WHERE state = "CA";
+
+Results:
+[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {<b>
+          "#operator": "PrimaryScan",
+          "index": "beer_primary",
+          "keyspace": "beer-sample",
+          "namespace": "default",</b>
+          "using": "gsi"
+        },
+        {<b>
+          "#operator": "Fetch",
+          "keyspace": "beer-sample",
+          "namespace": "default"</b>
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
               {
-                "high": "\"Paris\"",
-                "inclusion": 3,
-                "low": "\"Paris\""
+                "#operator": "Filter",
+                "condition": "((`beer-sample`.`state`) = \"CA\")"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "(`beer-sample`.`state`)"
+                  },
+                  {
+                    "expr": "(`beer-sample`.`city`)"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
               }
             ]
           }
-        ],
-        "using": "gsi"
-      },
-      {
-        "#operator": "Parallel",
-        "~child": {
-          "#operator": "Sequence",
-          "~children": [
-            {
-              "#operator": "Filter",
-              "condition": "(cover ((`travel-sample`.`city`)) = \"Paris\")"
-            },
-            {
-              "#operator": "InitialProject",
-              "result_terms": [
-                {
-                  "expr": "cover ((`travel-sample`.`city`))"
-                }
-              ]
-            },
-            {
-              "#operator": "FinalProject"
-            }
-          ]
         }
-      }
-    ]
-  },
-  "text": "SELECT city FROM `travel-sample` WHERE city = \"Paris\";"
-}</codeblock></p>
-  <p>If you modify the query to select the <parmname>country</parmname> and
-        <parmname>city</parmname> from the <codeph>`travel-sample`</codeph> bucket using the same
-      index, <parmname>idx_city</parmname>, the index does not contain all the information to
-      satisfy the query and hence a key-value fetch is performed to retrieve the data.
-        <codeblock>EXPLAIN SELECT country,city from `travel-sample` WHERE country = "France";
-
-Results:
-{
-  "plan": {
-    "#operator": "Sequence",
-    "~children": [
-      {
- <b>       "#operator": "PrimaryScan",
-        "index": "def_primary",
-        "keyspace": "travel-sample",
-        "namespace": "default",</b>
-        "using": "gsi"
-      },
-      {<b>
-        "#operator": "Fetch",
-        "keyspace": "travel-sample",
-        "namespace": "default"</b>
-      },
-      {
-        "#operator": "Parallel",
-        "~child": {
-          "#operator": "Sequence",
-          "~children": [
-            {
-              "#operator": "Filter",
-              "condition": "((`travel-sample`.`country`) = \"France\")"
-            },
-            {
-              "#operator": "InitialProject",
-              "result_terms": [
-                {
-                  "expr": "(`travel-sample`.`country`)"
-                },
-                {
-                  "expr": "(`travel-sample`.`city`)"
-                }
-              ]
-            },
-            {
-              "#operator": "FinalProject"
-            }
-          ]
-        }
-      }
-    ]
-  },
-  "text": "SELECT country,city from `travel-sample` WHERE country = \"France\";"
-}</codeblock><note>To
-        use a covering index for the modified query, you must define an index with the
-          <parmname>country</parmname> and <parmname>city</parmname> attributes before executing the
-        query.
-        <codeblock>CREATE INDEX idx_countrycity on `travel-sample` (country, city) USING GSI;</codeblock></note></p>
+      ]
+    },
+    "text": "SELECT state,city from `beer-sample` WHERE state = \"CA\";"
+  }
+]</codeblock><note>To
+    use a covering index for the modified query, you must define an index with the
+     <parmname>state</parmname> and <parmname>city</parmname> attributes before executing the query.
+    <codeblock>CREATE INDEX idxstatecity on `beer-sample` (state, city) USING GSI;</codeblock></note></p>
   <p>Covering indexes are only applicable to secondary index scans and can be used with views and global secondary indexes (GSI). Queries with expressions and aggregates benefit from covering indexes. </p>
 <p>The following queries can benefit from covering indexes. Try these statements using <apiname>cbq</apiname> to see the query execution plan. </p>
   <p><b>Expressions and Aggregates</b>
-      <codeblock>EXPLAIN SELECT max(country) FROM `travel-sample` WHERE city = "Paris";</codeblock><codeblock>EXPLAIN SELECT country || city FROM `travel-sample` USE INDEX (idx_countrycity) WHERE country = "France"; </codeblock></p>
+   <codeblock>EXPLAIN SELECT max(country) from `beer-sample` WHERE state = 'CA';</codeblock><codeblock>EXPLAIN SELECT country || state from `beer-sample` USE INDEX (idxstatecountry)  where state = 'CA'; </codeblock></p>
   <p><b>UNION/INTERSECT/EXCEPT</b>
-      <codeblock>SELECT country FROM `travel-sample` WHERE city = 'Paris'
+   <codeblock>SELECT country FROM `beer-sample` WHERE state = 'CA'
     UNION ALL
-    SELECT country FROM `travel-sample` WHERE city = 'San Francisco';</codeblock></p>
+    SELECT country FROM `beer-sample` WHERE state = 'Texas';</codeblock></p>
   <p><b>Derived tables or
-      sub-queries</b><codeblock>SELECT *
+   sub-queries</b><codeblock>SELECT *
    FROM (
-   SELECT country FROM `travel-sample` WHERE city = 'Paris'
+   SELECT country FROM `beer-sample` WHERE state = 'CA'
    UNION ALL
-   SELECT country FROM `travel-sample` WHERE city = 'San Francisco'
+   SELECT country FROM `beer-sample` WHERE state = 'Texas'
    ) AS newtab;
   </codeblock></p>
   <p><b>SELECT in INSERT
-      statements</b><codeblock>INSERT INTO `travel-sample`(KEY country, VALUE city) 
-   SELECT country, city FROM `travel-sample` WHERE city = 'San Francisco';</codeblock></p>
+   statements</b><codeblock>INSERT INTO `travel-sample`(KEY k, value state) 
+   SELECT country AS k, state FROM `beer-sample` b WHERE state = 'CA';</codeblock></p>
   <p><b>Arrays in WHERE clauses</b>
   </p>
-  <p>First, create a new index, <userinput>idx_array</userinput>. <codeblock>CREATE INDEX idx_array on `travel-sample`(a, b);</codeblock>
-      <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>Then, run the following
-      query:
-      <codeblock>SELECT b from `travel-sample` WHERE a = [1, 2, 3, 4];<?oxy_custom_end?></codeblock></p>
+  <p>First, create a new index, <userinput>idxarray</userinput>.
+   <codeblock>CREATE INDEX idxarray on `beer-sample`(a, b);</codeblock> Then, run the following
+   query: <codeblock>SELECT b from `beer-sample` WHERE a = [1, 2, 3, 4];</codeblock></p>
   <p><b>Prepared statements</b> also benefit from using covering indexes.</p>
  </conbody>
 </concept>
