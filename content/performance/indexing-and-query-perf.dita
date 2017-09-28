@@ -175,100 +175,76 @@ Example Results:
         need to search, say for the city "Villeneuve-sur-lot," you want to search for all uppercase
         and lowercase possibilities of it. In order to do so, first create an index using an
         expression or a function as the key. For
-        example:<codeblock>CREATE INDEX travel_city ON `travel-sample`(LOWER(city));</codeblock></p>
+        example:<codeblock>CREATE INDEX travel_cxname ON `travel-sample`(LOWER(name));</codeblock></p>
       <p>If you provide the search string in lowercase, the index helps the query engine more
         efficiently search for already lowercase values in the index.
-        <codeblock>EXPLAIN SELECT * FROM `travel-sample` WHERE type = "airport" and LOWER(city) = "paris";
+        <codeblock>EXPLAIN SELECT * FROM `travel-sample` WHERE LOWER(name) = "john";
 
 Results:
-{
-  "plan": {
-    "#operator": "Sequence",
-    "~children": [
-      {
-        "#operator": "IntersectScan",
-        "scans": [
-          {
-            "#operator": "IndexScan2",
-            "index": "def_type",
-            "index_id": "444ebc70b971b603",
-            "index_projection": {
-              "primary_key": true
-            },
-            "keyspace": "travel-sample",
-            "namespace": "default",
-            "spans": [
-              {
-                "exact": true,
-                "range": [
-                  {
-                    "high": "\"airport\"",
-                    "inclusion": 3,
-                    "low": "\"airport\""
-                  }
-                ]
-              }
-            ],
-            "using": "gsi"
+[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "IndexScan2",
+          "index": "travel_cxname",
+          "index_id": "59af53f0ec534d08",
+          "index_projection": {
+            "primary_key": true
           },
-          {
-            "#operator": "IndexScan2",
-            "index": "def_city",
-            "index_id": "cc931d457b4b7718",
-            "index_projection": {
-              "primary_key": true
-            },
-            "keyspace": "travel-sample",
-            "namespace": "default",
-            "spans": [
-              {
-                "range": [
-                  {
-                    "inclusion": 0,
-                    "low": "null"
-                  }
-                ]
-              }
-            ],
-            "using": "gsi"
-          }
-        ]
-      },
-      {
-        "#operator": "Fetch",
-        "keyspace": "travel-sample",
-        "namespace": "default"
-      },
-      {
-        "#operator": "Parallel",
-        "~child": {
-          "#operator": "Sequence",
-          "~children": [
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "spans": [
             {
-              "#operator": "Filter",
-              "condition": "(((`travel-sample`.`type`) = \"airport\") and (lower((`travel-sample`.`city`)) = \"paris\"))"
-            },
-            {
-              "#operator": "InitialProject",
-              "result_terms": [
+              "exact": true,
+              "range": [
                 {
-                  "expr": "self",
-                  "star": true
+                  "high": "\"john\"",
+                  "inclusion": 3,
+                  "low": "\"john\""
                 }
               ]
-            },
-            {
-              "#operator": "FinalProject"
             }
-          ]
+          ],
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(lower((`travel-sample`.`name`)) = \"john\")"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "self",
+                    "star": true
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
+              }
+            ]
+          }
         }
-      }
-    ]
-  },
-  "text": "SELECT * FROM `travel-sample` WHERE type = \"airport\" and LOWER(city) = \"paris\";"
-}</codeblock></p>
+      ]
+    },
+    "text": "SELECT * FROM `travel-sample` WHERE LOWER(name) = \"john\";"
+  }
+]</codeblock></p>
       <p>You can also use complex expressions in the functional index. For example:
-        <codeblock>CREATE INDEX travel_cx1 ON `travel-sample`(LOWER(city), distance/stops, round(price));</codeblock></p>
+        <codeblock>CREATE INDEX travel_cx1 ON `travel-sample`(LOWER(name), length*width, round(salary));</codeblock></p>
     </section>
     <section id="array-index"><title>Array Index</title>
       <p>JSON is hierarchical. At the top level, it can have scalar fields, objects, or arrays. Each
@@ -308,7 +284,7 @@ Results:
         </ul></p>
       <p>The following query uses the array index created
         above.<codeblock>EXPLAIN SELECT * FROM `travel-sample` 
-WHERE type="route" AND ANY v IN SCHEDULE SATISFIES v.day = 2 END;
+WHERE ANY v IN schedule SATISFIES v.day = 2 END;
 
 Results:
 [
@@ -317,27 +293,30 @@ Results:
       "#operator": "Sequence",
       "~children": [
         {
-          "#operator": "IndexScan2",
-          "index": "def_type",
-          "index_id": "444ebc70b971b603",
-          "index_projection": {
-            "primary_key": true
-          },
-          "keyspace": "travel-sample",
-          "namespace": "default",
-          "spans": [
-            {
-              "exact": true,
-              "range": [
-                {
-                  "high": "\"route\"",
-                  "inclusion": 3,
-                  "low": "\"route\""
-                }
-              ]
-            }
-          ],
-          "using": "gsi"
+          "#operator": "DistinctScan",
+          "scan": {
+            "#operator": "IndexScan2",<b>
+            "index": "travel_sched",</b>             / Index created above
+            "index_id": "f026dca7f2419e39",
+            "index_projection": {
+              "primary_key": true
+            },
+            "keyspace": "travel-sample",
+            "namespace": "default",
+            "spans": [
+              {
+                "exact": true,
+                "range": [
+                  {
+                    "high": "2",
+                    "inclusion": 3,
+                    "low": "2"
+                  }
+                ]
+              }
+            ],
+            "using": "gsi"
+          }
         },
         {
           "#operator": "Fetch",
@@ -351,7 +330,7 @@ Results:
             "~children": [
               {
                 "#operator": "Filter",
-                "condition": "(((`travel-sample`.`type`) = \"route\") and any `v` in (`travel-sample`.`SCHEDULE`) satisfies ((`v`.`day`) = 2) end)"
+                "condition": "any `v` in (`travel-sample`.`schedule`) satisfies ((`v`.`day`) = 2) end"
               },
               {
                 "#operator": "InitialProject",
@@ -370,7 +349,7 @@ Results:
         }
       ]
     },
-    "text": "SELECT * FROM `travel-sample` \nWHERE type=\"route\" AND ANY v IN SCHEDULE SATISFIES v.day = 2 END;"
+    "text": "SELECT * FROM `travel-sample` \nWHERE ANY v IN schedule SATISFIES v.day = 2 END;"
   }
 ]</codeblock></p>
       <p>Because the key is a generalized expression, it provides the flexibility to apply

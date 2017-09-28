@@ -22,138 +22,15 @@
         <p>You can see the query execution plan using the EXPLAIN statement. When a query uses a
       covering index, the EXPLAIN statement shows that a covering index is used for data access,
       thus avoiding the overhead associated with key-value document fetches. Consider a simple
-      index, <userinput>idxstate</userinput>, on the attribute <parmname>state</parmname> in the
-        <codeph>beer-sample</codeph> bucket:
-      <codeblock>CREATE INDEX idx_country on `travel-sample` (country) USING GSI;</codeblock> If we
-      select <parmname>country</parmname> from the <codeph>`travel-sample`</codeph> bucket, the
-      actual values of the field <parmname>country</parmname> that are to be returned are present in
-      the index <parmname>idx_country</parmname>, and avoids an additional step to fetch the data.
-      In this case, the index <parmname>idx_country</parmname> is called a covering index and the
-      query is a covered query.
-      <codeblock>EXPLAIN SELECT count(country) FROM `travel-sample` WHERE type="hotel" AND country = "France";
-
-Results:
-{
-  "plan": {
-    "#operator": "Sequence",
-    "~children": [
-      {
-        "#operator": "IntersectScan",
-        "scans": [
-          {
-            "#operator": "IndexScan2",
-            "index": "def_type",
-            "index_id": "444ebc70b971b603",
-            "index_projection": {
-              "primary_key": true
-            },
-            "keyspace": "travel-sample",
-            "namespace": "default",
-            "spans": [
-              {
-                "exact": true,
-                "range": [
-                  {
-                    "high": "\"hotel\"",
-                    "inclusion": 3,
-                    "low": "\"hotel\""
-                  }
-                ]
-              }
-            ],
-            "using": "gsi"
-          },
-          {
-            "#operator": "IndexScan2",
-            "index": "idx_countrycity",
-            "index_id": "3822e9e09dfef4e3",
-            "index_projection": {
-              "primary_key": true
-            },
-            "keyspace": "travel-sample",
-            "namespace": "default",
-            "spans": [
-              {
-                "exact": true,
-                "range": [
-                  {
-                    "high": "\"France\"",
-                    "inclusion": 3,
-                    "low": "\"France\""
-                  }
-                ]
-              }
-            ],
-            "using": "gsi"
-          }
-        ]
-      },
-      {
-        "#operator": "Fetch",
-        "keyspace": "travel-sample",
-        "namespace": "default"
-      },
-      {
-        "#operator": "Parallel",
-        "~child": {
-          "#operator": "Sequence",
-          "~children": [
-            {
-              "#operator": "Filter",
-              "condition": "(((`travel-sample`.`type`) = \"hotel\") and ((`travel-sample`.`country`) = \"France\"))"
-            },
-            {
-              "#operator": "InitialGroup",
-              "aggregates": [
-                "count((`travel-sample`.`country`))"
-              ],
-              "group_keys": []
-            }
-          ]
-        }
-      },
-      {
-        "#operator": "IntermediateGroup",
-        "aggregates": [
-          "count((`travel-sample`.`country`))"
-        ],
-        "group_keys": []
-      },
-      {
-        "#operator": "FinalGroup",
-        "aggregates": [
-          "count((`travel-sample`.`country`))"
-        ],
-        "group_keys": []
-      },
-      {
-        "#operator": "Parallel",
-        "~child": {
-          "#operator": "Sequence",
-          "~children": [
-            {
-              "#operator": "InitialProject",
-              "result_terms": [
-                {
-                  "expr": "count((`travel-sample`.`country`))"
-                }
-              ]
-            },
-            {
-              "#operator": "FinalProject"
-            }
-          ]
-        }
-      }
-    ]
-  },
-  "text": "SELECT count(country) FROM `travel-sample` WHERE type=\"hotel\" AND country = \"France\";"
-}</codeblock></p>
-        <p>If you modify the query to select the <parmname>country</parmname> and
-        <parmname>city</parmname> from the <codeph>`travel-sample`</codeph> bucket using the same
-      index, <parmname>idx_country</parmname>, the index does not contain the values of all the
-      fields to satisfy the query and hence a key-value fetch is performed to retrieve this data.
-      <codeblock>EXPLAIN SELECT country,city FROM `travel-sample` WHERE type="hotel" AND country = "France";
+      index, <userinput>idx_state</userinput>, on the attribute <parmname>state</parmname> in the
+        <codeph>travel-sample</codeph> keyspace:
+      <codeblock>CREATE INDEX idx_state on `travel-sample` (state,type) USING GSI;</codeblock> If we
+      select <parmname>state</parmname> from the <codeph>`travel-sample`</codeph> keyspace, the
+      actual values of the field <parmname>state</parmname> that are to be returned are present in
+      the index <parmname>idx_state</parmname>, and avoids an additional step to fetch the data. In
+      this case, the index <parmname>idx_state</parmname> is called a covering index and the query
+      is a covered query.
+      <codeblock>EXPLAIN SELECT state FROM `travel-sample` WHERE type="hotel" AND state = "CA";
 
 Results:
 [
@@ -162,55 +39,111 @@ Results:
       "#operator": "Sequence",
       "~children": [
         {
-          "#operator": "IntersectScan",
-          "scans": [
+          "#operator": "IndexScan2",        
+<b>          "covers": [</b>                                 / details of using Covered Index
+            "cover ((`travel-sample`.`state`))",
+            "cover ((`travel-sample`.`type`))",
+            "cover ((meta(`travel-sample`).`id`))"
+          ],
+<b>          "index": "idx_state",</b>                       / Using the Index we created
+          "index_id": "286838921fc14273",
+          "index_projection": {
+            "entry_keys": [
+              0,
+              1
+            ]
+          },
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "spans": [
             {
-              "#operator": "IndexScan2",
-              "index": "def_type",
-              "index_id": "444ebc70b971b603",
-              "index_projection": {
-                "primary_key": true
-              },
-              "keyspace": "travel-sample",
-              "namespace": "default",
-              "spans": [
+              "exact": true,
+              "range": [
                 {
-                  "exact": true,
-                  "range": [
-                    {
-                      "high": "\"hotel\"",
-                      "inclusion": 3,
-                      "low": "\"hotel\""
-                    }
-                  ]
-                }
-              ],
-              "using": "gsi"
-            },
-            {
-              "#operator": "IndexScan2",
-              "index": "idx_country",
-              "index_id": "5ef2d5fe806932f0",
-              "index_projection": {
-                "primary_key": true
-              },
-              "keyspace": "travel-sample",
-              "namespace": "default",
-              "spans": [
+                  "high": "\"CA\"",
+                  "inclusion": 3,
+                  "low": "\"CA\""
+                },
                 {
-                  "exact": true,
-                  "range": [
-                    {
-                      "high": "\"France\"",
-                      "inclusion": 3,
-                      "low": "\"France\""
-                    }
-                  ]
+                  "high": "\"hotel\"",
+                  "inclusion": 3,
+                  "low": "\"hotel\""
                 }
-              ],
-              "using": "gsi"
+              ]
             }
-          ]
+          ],
+          "using": "gsi"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "((cover ((`travel-sample`.`type`)) = \"hotel\") and (cover ((`travel-sample`.`state`)) = \"CA\"))"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+<b>                    "expr": "cover ((`travel-sample`.`state`))"</b>    / using Covered Index
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "text": "SELECT state FROM `travel-sample` WHERE type=\"hotel\" AND state = \"CA\";"
+  }
+]</codeblock></p>
+        <p>If you modify the query to select the <parmname>state</parmname> and
+        <parmname>city</parmname> from the <codeph>`travel-sample`</codeph> bucket using the same
+      index, <parmname>idx_state</parmname>, the index does not contain the values of the
+        <parmname>city</parmname> field to satisfy the query and hence a key-value fetch is
+      performed to retrieve this data.
+      <codeblock>EXPLAIN SELECT state,city FROM `travel-sample` WHERE type="hotel" AND state = "CA";
+
+Results:
+[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "IndexScan2",
+                                                       / not using Covered Index
+
+<b>          "index": "idx_state",</b>                      / using the Index we created
+          "index_id": "286838921fc14273",
+          "index_projection": {
+            "primary_key": true
+          },
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "spans": [
+            {
+              "exact": true,
+              "range": [
+                {
+                  "high": "\"CA\"",
+                  "inclusion": 3,
+                  "low": "\"CA\""
+                },
+                {
+                  "high": "\"hotel\"",
+                  "inclusion": 3,
+                  "low": "\"hotel\""
+                }
+              ]
+            }
+          ],
+          "using": "gsi"
         },
         {
           "#operator": "Fetch",
@@ -224,16 +157,16 @@ Results:
             "~children": [
               {
                 "#operator": "Filter",
-                "condition": "(((`travel-sample`.`type`) = \"hotel\") and ((`travel-sample`.`country`) = \"France\"))"
+                "condition": "(((`travel-sample`.`type`) = \"hotel\") and ((`travel-sample`.`state`) = \"CA\"))"
               },
               {
                 "#operator": "InitialProject",
                 "result_terms": [
-                  {
-                    "expr": "(`travel-sample`.`country`)"
+                  {<b>
+                    "expr": "(`travel-sample`.`state`)"     </b>/ not using Covered Index<b>
                   },
                   {
-                    "expr": "(`travel-sample`.`city`)"
+                    "expr": "(`travel-sample`.`city`)"</b>
                   }
                 ]
               },
@@ -245,7 +178,7 @@ Results:
         }
       ]
     },
-    "text": "SELECT country,city FROM `travel-sample` WHERE type=\"hotel\" AND country = \"France\";"
+    "text": "SELECT state,city FROM `travel-sample` WHERE type=\"hotel\" AND state = \"CA\";"
   }
 ]</codeblock>To
       use a covering index for the modified query, you must define an index with the
@@ -256,8 +189,8 @@ Results:
             <note type="attention"><codeph>MISSING</codeph> items are not indexed by indexers. To
         take advantage of covering indexes and for the index to qualify, a query needs to exclude
         documents where the index key expression evaluates to <codeph>MISSING</codeph>. For example,
-        index index1 defined below covers the following query.
-        <codeblock>CREATE INDEX index1 ON bucket(attribute1) WHERE attribute2 = "value"; </codeblock><codeblock>SELECT attribute1 FROM bucket WHERE attribute2="value AND attribute1 IS NOT MISSING;</codeblock></note>
+        index <codeph>index1</codeph> defined below covers the following query.
+        <codeblock>CREATE INDEX index1 ON bucket(<varname>attribute1</varname>) WHERE <varname>attribute2</varname> = "value"; </codeblock><codeblock>SELECT <varname>attribute1</varname> FROM bucket WHERE <varname>attribute2</varname> = "value" AND <varname>attribute1</varname> IS NOT MISSING;</codeblock></note>
         </p>
         <p>Covering indexes are applicable to secondary index scans and can be used with view and
             global secondary indexes (GSI). Queries with expressions and aggregates benefit from
@@ -267,7 +200,7 @@ Results:
         <p>The following queries can benefit from covering indexes. Try these statements using
                 <apiname>cbq</apiname> to see the query execution plan. </p>
         <p><b>Expressions and Aggregates</b>
-      <codeblock>EXPLAIN SELECT max(country) FROM `travel-sample` WHERE city = "Paris";</codeblock><codeblock>EXPLAIN SELECT country || city FROM `travel-sample` USE INDEX (idx_country_city) WHERE city = "Paris"; </codeblock></p>
+      <codeblock>EXPLAIN SELECT MAX(country) FROM `travel-sample` WHERE city = "Paris";</codeblock><codeblock>EXPLAIN SELECT country || city FROM `travel-sample` USE INDEX (idx_country_city) WHERE city = "Paris"; </codeblock></p>
         <p><b>UNION/INTERSECT/EXCEPT</b>
       <codeblock>SELECT country FROM `travel-sample` WHERE city = "Paris"
     UNION ALL
@@ -283,10 +216,10 @@ Results:
       statements</b><codeblock>INSERT INTO `travel-sample`(KEY k, VALUE city) 
    SELECT country, city FROM `travel-sample` WHERE city = "Paris";</codeblock></p>
         <p><b>Arrays in WHERE clauses</b></p>
-        <p>First, create a new index, <userinput>idxarray</userinput>.
+        <p>First, create a new index, <userinput>idx_array</userinput>.
       <codeblock><?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>CREATE INDEX idx_array ON `travel-sample`(a, b);<?oxy_custom_end?></codeblock>
       Then, run the following query:
-      <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?><codeblock>SELECT b FROM `beer-sample` WHERE a = [1, 2, 3, 4];<?oxy_custom_end?></codeblock></p>
+      <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?><codeblock>SELECT b FROM `travel-sample` WHERE a = [1, 2, 3, 4];<?oxy_custom_end?></codeblock></p>
         <p><?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?><b>Collection
         Operators: FIRST, ARRAY, ANY, EVERY, and ANY AND EVERY</b><?oxy_custom_end?></p>
         <p>Since the <codeph>default</codeph> bucket is empty by default, let's first insert the
