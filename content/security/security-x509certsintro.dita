@@ -377,48 +377,101 @@
       </title>
       
       <p>
-        The following steps show how to configure X.509 certificates on Ubuntu 16. Proceed as follows, using
+        The following steps show how to configure X.509 certificates on Ubuntu 16: a root certificate is
+        created with a single intermediate certificate and a single node certificate; and a chain-certificate
+        is created from the intermediate and node certificates. The chain certificate and node private key
+        are then made active for the current Couchbase Server-node. 
+      </p>
+      
+      <p>
+        Proceed as follows, using
         the <codeph>sudo</codeph> command where appropriate.
       </p>
       
       <ol>
         <li>
-            Create a top-level directory named SSLCA in your current working
-            directory, and within SSLCA, create the following:
+            Create environment variables for the naming of a directory-structure, within which
+            will reside the certificates you create for root, intermediate, and node.
             
-            <ul>
-              <li>
-                A subdirectory named <codeph>root</codeph>, in which
-                the root certificate is to be managed.
-              </li>
-              
-              <li>
-                A subdirectory for each intermediate
-                certificate to be managed. In this example, a single
-                certificate is managed, in a subdirectory 
-                named <codeph>int</codeph>.
-              </li>
-              
-              <li>
-                A subdirectory for each node certificate
-                to be managed. In this example, a single node certificate
-                is managed, in a subdirectory named <codeph>node</codeph>.
-              </li>
-            </ul>
+          <codeblock outputclass="language-bash">export TOPDIR=SSLA
+export ROOT_DIR=rootdir
+export NODE_DIR=nodedir
+export INT_DIR=intdir</codeblock>
+          
+          <p>
+            Note that in cases where multiple intermediate certificates are to be included in the
+            certificate-chain, multiple intermediate directories are required &#8212; one for each intermediate
+            certificate.
+          </p>
           
         </li>
         
+        <li>
+          Create environment variables for each of the certificate-files to be created.
+          
+          <codeblock outputclass="language-bash">export ROOT_CA=ca
+export INTERMEDIATE=int
+export NODE=pkey
+export CHAIN=chain</codeblock>
+          
+          <p>
+            Note that in cases where multiple intermediate certificates are to be included in the
+            certificate-chain, additional environment-variable definitions &#8212; one for each of the
+            additional intermediate certificates &#8212; are required.
+          </p>
+        </li>
+        
+        <li>
+          Create environment variables for the administrator-credentials to be used for certificate-management,
+          the IP address at which the Couchbase Server-node is located, and the username required for role-based
+          access to a particular resource. 
+          
+          <codeblock outputclass="language-bash">export ADMINCRED=Administrator:password
+export ip=10.143.173.101
+export USERNAME=travel-sample</codeblock>     
+          <p>
+            Note that in this example, the 
+            username is specified as <codeph>travel-sample</codeph>,
+            which is typically associated with the <b>Bucket Full Access</b> role, on the bucket <i>travel-sample</i>. 
+            For access to be fully tested, ensure that the <codeph>travel-sample</codeph> user has indeed been
+            defined on the current Couchbase Server-node, and is associated with the <b>Bucket Full Access</b> role. (See
+            <xref href="./security-authorization.dita" scope="local" format="dita">Authorization</xref> for more 
+            information on RBAC.)
+            
+          </p>
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Create a directory-structure in which, within a top-level directory named <codeph>SSLA</codeph>, three
+          subdirectories reside &#8212; <codeph>rootdir</codeph>, <codeph>intdir</codeph>, 
+          and <codeph>nodedir</codeph> &#8212;
+          respectively to hold the certificates you create for root, intermediate, and node.
+
+        <codeblock outputclass="language-bash">mkdir ${TOPDIR}
+cd ${TOPDIR}
+mkdir ${ROOT_DIR}
+mkdir ${INT_DIR}
+mkdir ${NODE_DIR}</codeblock>
+          
+          <p>
+            
+          </p>
+          
+        </li>
         
         <li>
           Generate the root private key file (<codeph>ca.key</codeph>) and the public key file 
           (<codeph>ca.pem</codeph>):
           
-          <codeblock outputclass="language-bash">$ cd SSLA/root
-$ export ROOT_CA=ca
-$ openssl genrsa -out ${ROOT_CA}.key 2048
-$ openssl req -new -x509 -days 3650 -sha256 -key ${ROOT_CA}.key \ 
-> -out ${ROOT_CA}.pem -subj '/C=UA/O=MyCompany/CN=MyCompanyRootCA'</codeblock>
-          
+          <codeblock outputclass="language-bash">cd ${ROOT_DIR}
+openssl genrsa -out ${ROOT_CA}.key 2048
+openssl req -new -x509 -days 3650 -sha256 -key ${ROOT_CA}.key \
+-out ${ROOT_CA}.pem -subj '/C=UA/O=MyCompany/CN=MyCompanyRootCA'</codeblock>
+
           <p>
             
           </p>
@@ -426,21 +479,15 @@ $ openssl req -new -x509 -days 3650 -sha256 -key ${ROOT_CA}.key \
         </li>
         
         <li>
-          Generate, first, the intermediate private key (<codeph>int.key</codeph>); secondly,
+          Generate, first, the intermediate private key (<codeph>int.key</codeph>); and secondly,
           the intermediate certificate signing-request
-          (<codeph>int.csr</codeph>); and thirdly, the intermediate public key (<codeph>int.pem</codeph>):
-        
-          <p>
-            Note that this step must be repeated for each intermediate certificate
-            required, with variable-values modified as appropriate.
-          </p>
+          (<codeph>int.csr</codeph>):
           
-          <codeblock outputclass="language-bash">$ cd ../int
-$ export INTERMEDIATE=int
-$ openssl genrsa -out ${INTERMEDIATE}.key 2048
-$ openssl req -new -key ${INTERMEDIATE}.key -out ${INTERMEDIATE}.csr \
-> -subj '/C=UA/O=MyCompany/CN=MyCompanyIntermediateCA'</codeblock>
-        
+          <codeblock outputclass="language-bash">cd ../${INT_DIR}
+openssl genrsa -out ${INTERMEDIATE}.key 2048
+openssl req -new -key ${INTERMEDIATE}.key -out ${INTERMEDIATE}.csr \
+-subj '/C=UA/O=MyCompany/CN=MyCompanyIntermediateCA'</codeblock>
+
         <p>
         </p>
           
@@ -450,11 +497,11 @@ $ openssl req -new -key ${INTERMEDIATE}.key -out ${INTERMEDIATE}.csr \
           Create the extension file <codeph>v3_ca.ext</codeph>; in order to add extensions to the
           certificate, and to generate the certificate signing-request:
         
-          <codeblock outputclass="language-bash">$ cat &lt;&lt;EOF&gt;&gt; v3_ca.ext
-> subjectKeyIdentifier = hash
-> authorityKeyIdentifier = keyid:always,issuer:always
-> basicConstraints = CA:true
-> EOF</codeblock>
+          <codeblock outputclass="language-bash">cat &lt;&lt;EOF&gt;&gt; ./v3_ca.ext
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer:always
+basicConstraints = CA:true
+EOF</codeblock>
           
           <p>
           
@@ -469,11 +516,10 @@ $ openssl req -new -key ${INTERMEDIATE}.key -out ${INTERMEDIATE}.csr \
            (<codeph>ca.pem</codeph>). 
          </p>
          
-         <codeblock outputclass="language-bash">$ openssl x509 -req -in ${INTERMEDIATE}.csr -CA ${ROOT_CA}.pem \
-> -CAkey ${ROOT_CA}.key -CAcreateserial -CAserial rootCA.srl \
-> -extfile v3_ca.ext -out ${INTERMEDIATE}.pem -days 365</codeblock>
-         
-         
+         <codeblock outputclass="language-bash">openssl x509 -req -in ${INTERMEDIATE}.csr \
+-CA ../${ROOT_DIR}/${ROOT_CA}.pem -CAkey ../${ROOT_DIR}/${ROOT_CA}.key \
+-CAcreateserial -CAserial ../${ROOT_DIR}/rootCA.srl -extfile ./v3_ca.ext \
+-out ${INTERMEDIATE}.pem -days 365</codeblock>
          <p>
            
          </p>
@@ -481,43 +527,30 @@ $ openssl req -new -key ${INTERMEDIATE}.key -out ${INTERMEDIATE}.csr \
        </li>
         
         <li>
-          Generate, first, the node private key(<codeph>pkey.key</codeph>); secondly, the node certificate
+          Generate, first, the node private key (<codeph>pkey.key</codeph>); secondly, the node certificate
           signing-request (<codeph>pkey.csr</codeph>); and thirdly,
-          the node public-key file (<codeph>pkey.pem</codeph>). Note that 
-          the <codeph>USERNAME</codeph> should be
-          specified as an RBAC username that corresponds to appropriate roles: in the example below, the 
-          username is <codeph>travel-sample</codeph>,
-          which is typically associated with the <b>Bucket Full Access</b> role, on the bucket <i>travel-sample</i>. (See
-          <xref href="./security-authorization.dita" scope="local" format="dita">Authorization</xref> for more information on RBAC.)
+          the node public key (<codeph>pkey.pem</codeph>). 
           
-          <p>
-            Note that this step must be repeated for each node to which access is required, 
-            with variable-values modified as appropriate.
-          </p>
-          
-          <codeblock outputclass="language-bash">$ cd ../node
-$ export NODE=pkey
-$ export USERNAME=travel-sample
-$ openssl genrsa -out ${NODE}.key 2048  
-$ openssl req -new -key ${NODE}.key -out ${NODE}.csr \
-> -subj "/C=UA/O=MyCompany/CN=${USERNAME}"
-$ openssl x509 -req -in ${NODE}.csr -CA ../int/${INTERMEDIATE}.pem \
-> -CAkey ../int/${INTERMEDIATE}.key -CAcreateserial \
-> -CAserial ../int/intermediateCA.srl -out ${NODE}.pem -days 365</codeblock> 
-          
+          <codeblock outputclass="language-bash">cd ../${NODE_DIR}
+openssl genrsa -out ${NODE}.key 2048  
+openssl req -new -key ${NODE}.key -out ${NODE}.csr \
+-subj "/C=UA/O=MyCompany/CN=${USERNAME}"
+openssl x509 -req -in ${NODE}.csr -CA ../${INT_DIR}/${INTERMEDIATE}.pem \
+-CAkey ../${INT_DIR}/${INTERMEDIATE}.key -CAcreateserial \
+-CAserial ../${INT_DIR}/intermediateCA.srl -out ${NODE}.pem -days 365</codeblock> 
+
         </li>
         
         <li>
           Generate the certificate chain-file, by concatenating the node and intermediate
-          certificates. This allows the client application to verify
+          certificates. This allows the client to verify
           the intermediate certificate against the root certificate. 
           
-          <codeblock outputclass="language-bash">$ cd ..
-$ export CHAIN=chain
-$ cat ${NODE}.pem ${INTERMEDIATE}.pem > ${CHAIN}.pem</codeblock>
+          <codeblock outputclass="language-bash">cd ..
+cat ./${NODE_DIR}/${NODE}.pem ./${INT_DIR}/${INTERMEDIATE}.pem > ${CHAIN}.pem</codeblock>
           
           <p>
-            Note that however many intermediate certificates are specified for concatenation
+            Note that if multiple intermediate certificates are specified for concatenation
             in this way, the concatenation-order must correspond to the order of
             signing. Thus, the node certificate, which appears in the first position,
             has been signed by the intermediate certificate, which therefore
@@ -538,110 +571,52 @@ $ cat ${NODE}.pem ${INTERMEDIATE}.pem > ${CHAIN}.pem</codeblock>
         
         <li>
           Manually copy the node private key (<codeph>pkey.key</codeph>) and the chain file (<codeph>chain.pem</codeph>)
-          to the <codeph>inbox</codeph> folder of each node. Repeat the following for each
-          node:
+          to the <codeph>inbox</codeph> folder of the cluster-node:
           
-          <codeblock outputclass="language-bash">$ mkdir /opt/couchbase/var/lib/couchbase/inbox/
-$ cp ./chain.pem /opt/couchbase/var/lib/couchbase/inbox/chain.pem
-$ chmod a+x /opt/couchbase/var/lib/couchbase/inbox/chain.pem
-$ cp ./node/pkey.key /opt/couchbase/var/lib/couchbase/inbox/pkey.key
-$ chmod a+x /opt/couchbase/var/lib/couchbase/inbox/pkey.key</codeblock>
+          <codeblock outputclass="language-bash">mkdir /opt/couchbase/var/lib/couchbase/inbox/
+cp ./${CHAIN}.pem /opt/couchbase/var/lib/couchbase/inbox/${CHAIN}.pem
+chmod a+x /opt/couchbase/var/lib/couchbase/inbox/${CHAIN}.pem
+cp ./${NODE_DIR}/${NODE}.key /opt/couchbase/var/lib/couchbase/inbox/${NODE}.key
+chmod a+x /opt/couchbase/var/lib/couchbase/inbox/${NODE}.key</codeblock>
         </li>
         
         <li>
-          For each node, upload the root certificate, and activate it. This can be accomplished with
-          the REST API, as follows, specifying the username <codeph>Administrator</codeph>, the password
-          <codeph>password</codeph>, and the IP address <codeph>10.143.173.101</codeph>.
+          Upload the root certificate, and activate it:
           
-          <codeblock outputclass="language-bash">$ curl -X POST \
-> --data-binary "@./root/${ROOT_CA}.pem" http://Administrator:password@10.143.173.101:8091/controller/uploadClusterCA
-$ curl -X POST \
-> http://Administrator:password@10.143.173.101:8091/node/controller/reloadCertificate </codeblock>
+          <codeblock outputclass="language-bash">curl -X POST --data-binary "@./${ROOT_DIR}/${ROOT_CA}.pem" \
+http://${ADMINCRED}@${ip}:8091/controller/uploadClusterCA
+curl -X POST http://${ADMINCRED}@${ip}:8091/node/controller/reloadCertificate</codeblock>
         
         <p>
-          Alternatively, the following command-line interfaces can be used:
+          Note that alternatively, the following command-line interfaces can be used:
         </p>
           
-          <codeblock outputclass="language-bash">couchbase-cli ssl-manage -c 10.143.173.101:8091 -u Admnistrator -p password \
-> --upload-cluster-ca=./root/ca.pem
-$ couchbase-cli ssl-manage -c 10.143.173.101:8091 -u Admnistrator -p password \
-> --set-node-certificate</codeblock>
+          <codeblock outputclass="language-bash">couchbase-cli ssl-manage -c ${ip}:8091:8091 -u Admnistrator -p password \
+--upload-cluster-ca=./${ROOT_DIR}/${ROOT_CA}.pem
+couchbase-cli ssl-manage -c ${ip}:8091 -u Admnistrator -p password \
+--set-node-certificate</codeblock>
         </li>
         
         <li>
           For each node, enable the client certificate:
           
-          <codeblock outputclass="language-bash">$ export ADMINCRED=Administrator:password
-$ export ip=10.143.173.101
-$ curl -X POST --data-binary \
-> "state=enable" http://${ADMINCRED}@${ip}:8091/settings/clientCertAuth
-$ curl -X POST --data-binary \
-> "delimiter=" http://${ADMINCRED}@${ip}:8091/settings/clientCertAuth
-$ curl -X POST --data-binary \
-> "path=subject.cn" http://${ADMINCRED}@${ip}:8091/settings/clientCertAuth
-$ curl -X POST --data-binary \
-> "prefix=" http://${ADMINCRED}@${ip}:8091/settings/clientCertAuth</codeblock>
+          <codeblock outputclass="language-bash">curl -X POST --data-binary "state=enable" \
+http://${ADMINCRED}@${ip}:8091/settings/clientCertAuth
+curl -X POST --data-binary "delimiter=" \
+http://${ADMINCRED}@${ip}:8091/settings/clientCertAuth
+curl -X POST --data-binary "path=subject.cn" \
+http://${ADMINCRED}@${ip}:8091/settings/clientCertAuth
+curl -X POST --data-binary "prefix=" \
+http://${ADMINCRED}@${ip}:8091/settings/clientCertAuth</codeblock>
           <p>
-            
+            For further information on certificate-management, see
+            <xref href="../cli/cbcli/couchbase-cli-ssl-manage.dita" scope="local" format="dita">ssl-manage</xref> and
+            <xref href="../rest-api/rest-encryption.dita" scope="local" format="dita">Encryption On-the-Wire API</xref>.   
           </p>
         </li>
         
       </ol>
       
-    </section>
-      
-    
-    <section><title>Setting Up a Cluster CA Certificate</title>
-          
-          <dl>
-            <dlentry>
-              <dt>Using CLI</dt>
-              <dd>
-                <codeblock outputclass="language-bash">$ couchbase-cli ssl-manage -c <b>&lt;node-name></b>:8091 -u<b>[admin]</b> -p<b>[password]</b> \
-> --upload-cluster-ca=<b>&lt;path to pem-encoded root certificate></b></codeblock>
-                <p>For example:
-                  <codeblock outputclass="language-bash">$ couchbase-cli ssl-manage -c <b>MyNode</b>:8091 -u <b>Administrator</b> -p <b>password</b> \
-> --upload-cluster-ca=<b>./root/ca.pem </b> </codeblock></p>
-              </dd>
-            </dlentry>
-          </dl>
-          <dl>
-            <dlentry>
-              <dt>Using REST API</dt>
-              <dd>
-                <codeblock outputclass="language-bash">$ curl -X POST --data-binary "@./root/ca.pem" \
-> http://<b>Administrator</b>:<b>password</b>@127.0.0.1:8091/controller/uploadClusterCA</codeblock>
-              </dd>
-            </dlentry>
-          </dl>
-       
-  
-    <sectiondiv>
-     <p><b>Setting up a Per Node CA Certificate</b></p>
-      <dl>
-        <dlentry>
-          <dt>Using CLI</dt>
-          <dd>
-            <codeblock outputclass="language-bash">$ couchbase-cli ssl-manage -c <b>&lt;node-name></b>:8091 -u[admin] -p[password] --set-node-certificate</codeblock>
-          </dd>
-        </dlentry>
-      </dl> <dl>
-        <dlentry>
-          <dt>Using REST API</dt>
-          <dd>
-            <codeblock outputclass="language-bash">$ curl -X POST \
-> http://Administrator:password@<b>&lt;node-name></b>:8091/node/controller/reloadCertificate</codeblock>
-          </dd>
-        </dlentry>
-      </dl>
-     
-      <dl>
-        <dlentry>
-          <dt>See also:</dt>
-          <dd>CLI: <xref href="../cli/cbcli/couchbase-cli-ssl-manage.dita"/></dd>
-          <dd>REST API: <xref href="../rest-api/rest-uploads-ca.dita#reference_jm5_j2x_hv"/></dd>
-        </dlentry>
-      </dl></sectiondiv>
     </section>
     
     
