@@ -8,15 +8,12 @@
     This section discusses how index spans are generated from query predicates and provides a number
     of examples.</shortdesc>
   <body>
-    <p><?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?><xref
-        href="http://www.couchbase.com/" format="html" scope="external">Couchbase
-      N1QL</xref><?oxy_custom_end?> is a modern query processing engine designed to provide SQL for
-      JSON on distributed data with a flexible data model. Modern databases are deployed on massive
-      clusters. Using JSON provides a flexible data mode.
-        <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?><xref
-        href="http://developer.couchbase.com/documentation/server/4.5/n1ql/n1ql-language-reference/index.html"
-        format="html" scope="external">N1QL supports enhanced SQL for JSON</xref><?oxy_custom_end?>
-      to make query processing easier.</p>
+    <p><xref href="http://www.couchbase.com/" format="html" scope="external">Couchbase N1QL</xref>
+      is a modern query processing engine designed to provide SQL for JSON on distributed data with
+      a flexible data model. Modern databases are deployed on massive clusters. Using JSON provides
+      a flexible data mode, and <xref
+        href="../n1ql/n1ql-language-reference/index.dita#n1ql-lang-ref">N1QL supports enhanced SQL
+        for JSON</xref> to make query processing easier.</p>
     <p>Applications and database drivers submit the N1QL query to one of the available Query nodes
       on a cluster. The Query node analyzes the query, uses metadata on underlying objects to figure
       out the optimal execution plan, which it then executes. During execution, depending on the
@@ -52,6 +49,20 @@
         the query plan and passed to the Indexer. Spans simply express the predicates in terms of
         data ranges. </p>
     </section>
+    <note>
+      <p>The examples on this page illustrate the spans for different predicates and require the
+        following indexes. </p>
+      <p>To run the examples, <xref href="../settings/install-sample-buckets.dita#topic_jqr_1rn_vs"
+          >install the <codeph>travel-sample</codeph> sample bucket</xref> and create these
+        indexes:</p>
+      <codeblock>CREATE INDEX idx_id ON `travel-sample`(`id`);
+
+CREATE INDEX idx_name ON `travel-sample`(`name`);
+
+CREATE INDEX idx_s_d_airport_stops ON `travel-sample`(`sourceairport`, `destinationairport`, `stops`);
+
+CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule END) WHERE type = "route";</codeblock>
+    </note>
     <section id="section_wj4_5gk_jbb">
       <title>Example Translations</title>
       <p>The following table shows some example translations:<table frame="all" rowsep="1"
@@ -101,7 +112,7 @@
       "#operator": "Sequence",                       /
       "~children": [                                 /
         {                                            /
-          "#operator": "IndexScan2",                 /
+<b>          "#operator": "IndexScan2", </b>                /
           "covers": [                                /
             "cover ((`travel-sample`.`id`))",        /
             "cover ((meta(`travel-sample`).`id`))"   /
@@ -122,16 +133,43 @@
               ]
             }
           ],</b>
- ...    </codeblock></p>
+           "using": "gsi"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(cover ((`travel-sample`.`id`)) = 10)"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "cover ((meta(`travel-sample`).`id`))"
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "text": "select meta().id from `travel-sample` where id = 10;"
+  }
+]</codeblock></p>
       <p>In N1QL, Index Scan requests are based on a range where each range has a start value, an
         end value, and specifies whether to include the start or the end value. <ul
           id="ul_uh1_bjk_jbb">
           <li>A "High" field in the range indicates the end value. If "High" is missing, then there
             is no upper bound. </li>
-          <li>A “Low” field in the range indicates the start value. If "Low" is missing,
-            <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>the scan starts with
-            a NULL. NULL is the lowest value as MISSING values are not indexed.
-            <?oxy_custom_end?></li>
+          <li>A “Low” field in the range indicates the start value. If "Low" is missing, the scan
+            starts with <codeph>MISSING</codeph>. </li>
           <li>Inclusion indicates if the values of the High and Low fields are included. <table
               frame="all" rowsep="1" colsep="1" id="table_hxk_cgs_mx">
               <tgroup cols="3">
@@ -170,40 +208,19 @@
               </tgroup>
             </table></li>
         </ul></p>
-      <p><?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>When you analyze an
-        Explain statement, correlate the predicates in the explain to the spans. To make your
-        queries more efficient: <ul id="ul_qn1_llm_nx">
-          <li>Ensure the most optimal index is selected and the spans have the expected range for
-            all the index keys.</li>
-          <li>Use more keys in each span.<?oxy_custom_end?></li>
-        </ul></p>
-      <note>
-        <p>The following examples illustrate the spans for different predicates. </p>
-        <p>To run the examples, <xref
-            href="../settings/install-sample-buckets.dita#topic_jqr_1rn_vs">install the
-              <codeph>travel-sample</codeph> sample bucket</xref> and create the following
-          indexes:</p>
-        <codeblock>CREATE INDEX idx_id ON `travel-sample`(`id`);
-
-CREATE INDEX idx_name ON `travel-sample`(`name`);
-
-CREATE INDEX idx_s_d_airport_stops ON `travel-sample`(`sourceairport`, `destinationairport`, `stops`);
-
-CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule END) WHERE type = "route";</codeblock>
-      </note>
     </section>
     <section id="ex1-equality"><title>Example 1: EQUALITY Predicate</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE id = 10;</codeblock>
-      <p>This example pushes the predicate <codeph>id = 10</codeph> to index scan. <table
+      <p>In this example, the predicate <codeph>id = 10</codeph> is pushed to index scan. <table
           frame="all" rowsep="1" colsep="1" id="table_r2t_frx_mx">
           <tgroup cols="4">
-            <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+            <colspec colname="c1" colnum="1" colwidth="2.0*"/>
             <colspec colname="c2" colnum="2" colwidth="1.0*"/>
             <colspec colname="c3" colnum="3" colwidth="1.0*"/>
             <colspec colname="c4" colnum="4" colwidth="1.0*"/>
             <thead>
               <row>
-                <entry>Span for</entry>
+                <entry>Span Range for</entry>
                 <entry>Low </entry>
                 <entry>High </entry>
                 <entry>Inclusion</entry>
@@ -211,14 +228,14 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
             </thead>
             <tbody>
               <row>
-                <entry>id=10</entry>
-                <entry>10</entry>
-                <entry>10</entry>
-                <entry>3 (BOTH)</entry>
+                <entry><codeph>id = 10</codeph></entry>
+                <entry><codeph>10</codeph></entry>
+                <entry><codeph>10</codeph></entry>
+                <entry><codeph>3 (BOTH)</codeph></entry>
               </row>
             </tbody>
           </tgroup>
-        </table><codeblock spectitle="Explain Statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = 10;</codeblock><codeblock>...                                                /  similar to the Explain Plan Beginning above
+        </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = 10;</codeblock><codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -233,16 +250,16 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           ],
 ...</codeblock></p></section>
     <section id="ex2-one-sided-range"><title>Example 2: Inclusive One-Sided Range Predicate</title>
-      <codeblock>SELECT meta().id FROM `travel-sample` WHERE id >= 10;</codeblock> <p>This example pushes the predicate <codeph>id >= 10</codeph> to index scan.</p><table
+      <codeblock>SELECT meta().id FROM `travel-sample` WHERE id >= 10;</codeblock> <p>In this example, the predicate <codeph>id >= 10</codeph> is pushed to index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_my">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -250,14 +267,14 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>id >=  10</entry>
-              <entry>10</entry>
-              <entry>Unbounded </entry>
-              <entry>1 (LOW) </entry>
+              <entry><codeph>id >= 10</codeph></entry>
+              <entry><codeph>10</codeph></entry>
+              <entry><codeph>Unbounded </codeph></entry>
+              <entry><codeph>1 (LOW) </codeph></entry>
             </row>
           </tbody>
         </tgroup>
-      </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >= 10;</codeblock>
+      </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >= 10;</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
@@ -273,16 +290,16 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
 ...</codeblock>
     </section>
     <section id="ex3-exclusive-one-sided-range"><title>Example 3: Exclusive One-Sided Range Predicate</title><codeblock>SELECT meta().id FROM `travel-sample` WHERE id > 10;</codeblock>
-      <p>This example pushes the predicate <codeph>id >= 10</codeph> to index scan.</p><table
+      <p>In this example, the predicate <codeph>id >= 10</codeph> is pushed to index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_mz">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -290,14 +307,14 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>id > 10</entry>
-              <entry>10 </entry>
-              <entry>Unbounded </entry>
-              <entry>0 (NEITHER) </entry>
+              <entry><codeph>id > 10</codeph></entry>
+              <entry><codeph>10 </codeph></entry>
+              <entry><codeph>Unbounded </codeph></entry>
+              <entry><codeph>0 (NEITHER) </codeph></entry>
             </row>
           </tbody>
         </tgroup>
-      </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id > 10;</codeblock>
+      </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id > 10;</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
@@ -313,16 +330,18 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
 ...</codeblock>
     </section>
     <section id="ex4-inclusive-one-sided-range"><title>Example 4: Inclusive One-Sided Range Predicate</title><codeblock>SELECT meta().id FROM `travel-sample` WHERE id &lt;= 10;</codeblock>
-      <p>This example pushes the predicate <codeph>id &lt;= 10</codeph> to index scan.</p><table
+      <p>In this example, the predicate <codeph>id &lt;= 10</codeph> is pushed to index scan. This
+        query predicate doesn’t contain an explicit start value, so the start value will implicitly
+        be the non-inclusive null value.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_na">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -330,14 +349,14 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>id &lt;= 10 </entry>
-              <entry>NULL </entry>
-              <entry>10 </entry>
-              <entry>2 (HIGH) </entry>
+              <entry><codeph>id &lt;= 10 </codeph></entry>
+              <entry><codeph>NULL </codeph></entry>
+              <entry><codeph>10 </codeph></entry>
+              <entry><codeph>2 (HIGH) </codeph></entry>
             </row>
           </tbody>
         </tgroup>
-      </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;= 10;</codeblock>
+      </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;= 10;</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
@@ -354,16 +373,18 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
 ...</codeblock>
     </section>
     <section id="ex5-exclusive-one-sided-range"><title>Example 5: Exclusive One-Sided Range Predicate</title><codeblock>SELECT meta().id FROM `travel-sample` WHERE id &lt; 10;</codeblock>
-      <p>This example pushes the predicate <codeph>id &lt; 10</codeph> to index scan.</p><table
+      <p>In this example, the predicate <codeph>id &lt; 10</codeph> is pushed to index scan. The
+        query predicate doesn’t contain an explicit start value, so the start value will implicitly
+        be the non-inclusive null value.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nb">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -371,14 +392,14 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>id &lt; 10</entry>
-              <entry>NULL</entry>
-              <entry>10 </entry>
-              <entry>0 (NEITHER) </entry>
+              <entry><codeph>id &lt; 10</codeph></entry>
+              <entry><codeph>NULL</codeph></entry>
+              <entry><codeph>10 </codeph></entry>
+              <entry><codeph>0 (NEITHER) </codeph></entry>
             </row>
           </tbody>
         </tgroup>
-      </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt; 10;</codeblock>
+      </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt; 10;</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
@@ -395,17 +416,17 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
 ...</codeblock>
     </section>
     <section id="ex6-and"><title>Example 6: AND Predicate</title><codeblock>SELECT meta().id FROM `travel-sample` WHERE id >= 10 AND id &lt; 25;</codeblock>
-      <p>This example pushes the predicate <codeph>id >= 10 AND id &lt; 25</codeph> to index
+      <p>In this example, the predicate <codeph>id >= 10 AND id &lt; 25</codeph> is pushed to index
         scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nc">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -413,14 +434,14 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>id >= 10 AND id &lt; 25</entry>
-              <entry> 10</entry>
-              <entry> 25</entry>
-              <entry> 1 (LOW)</entry>
+              <entry><codeph>id >= 10 AND id &lt; 25</codeph></entry>
+              <entry><codeph> 10</codeph></entry>
+              <entry><codeph> 25</codeph></entry>
+              <entry><codeph> 1 (LOW)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
-        </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >=10 AND id &lt; 25;</codeblock>
+        </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >=10 AND id &lt; 25;</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
@@ -437,17 +458,17 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
 ...</codeblock>
     </section>
     <section id="ex7-multiple-and"><title>Example 7: Multiple AND Predicates</title><codeblock>SELECT meta().id FROM `travel-sample` WHERE id >= 10 AND id &lt; 25 AND id &lt;= 20;</codeblock>
-      <p>This example pushes the predicates <codeph>id >= 10 AND id &lt; 25 AND id &lt;= 20</codeph>
-        to the index scan.</p><table
+      <p>In this example, the predicate <codeph>id >= 10 AND id &lt; 25 AND id &lt;= 20</codeph> is
+        pushed to the index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nd">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -462,7 +483,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
             </row>
           </tbody>
         </tgroup>
-        </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >=10 AND id &lt; 25 AND id &lt;= 20;</codeblock>
+        </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >=10 AND id &lt; 25 AND id &lt;= 20;</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
@@ -478,16 +499,18 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           ],
 ...</codeblock>
       <p>Observe that the optimizer created the span without the <codeph>id &lt; 25</codeph>
-        predicate because the other AND predicate <codeph>id &lt;=20</codeph> makes the former
-        predicate redundant. <table frame="all" rowsep="1" colsep="1" id="table_dgm_lky_mx">
+        predicate because the AND predicate <codeph>id &lt;=20</codeph> makes the former predicate
+        redundant. Internally, the optimizer breaks down each predicate and then combines it in a
+        logically consistent manner. FYI: If this is too detailed for now, you can skip over to
+        Example 8.<table frame="all" rowsep="1" colsep="1" id="table_dgm_lky_mx">
           <tgroup cols="4">
-            <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+            <colspec colname="c1" colnum="1" colwidth="2.0*"/>
             <colspec colname="c2" colnum="2" colwidth="1.0*"/>
             <colspec colname="c3" colnum="3" colwidth="1.0*"/>
             <colspec colname="c4" colnum="4" colwidth="1.0*"/>
             <thead>
               <row>
-                <entry>Span for</entry>
+                <entry>Span Range for</entry>
                 <entry>Low</entry>
                 <entry>High</entry>
                 <entry>Inclusion</entry>
@@ -495,58 +518,57 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
             </thead>
             <tbody>
               <row>
-                <entry>id >= 10</entry>
-                <entry>10</entry>
-                <entry>Unbounded</entry>
-                <entry>1 (LOW)</entry>
+                <entry><codeph>id >= 10</codeph></entry>
+                <entry><codeph>10</codeph></entry>
+                <entry><codeph>Unbounded</codeph></entry>
+                <entry><codeph>1 (LOW)</codeph></entry>
               </row>
               <row>
-                <entry>id &lt; 25</entry>
-                <entry>NULL</entry>
-                <entry>25</entry>
-                <entry>0 (NEITHER)</entry>
+                <entry><codeph>id &lt; 25</codeph></entry>
+                <entry><codeph>NULL</codeph></entry>
+                <entry><codeph>25</codeph></entry>
+                <entry><codeph>0 (NEITHER)</codeph></entry>
               </row>
               <row>
-                <entry>id >= 10 AND id &lt; 25</entry>
-                <entry>10</entry>
-                <entry>25</entry>
-                <entry>1 (LOW)</entry>
+                <entry><codeph>id >= 10 AND id &lt; 25</codeph></entry>
+                <entry><codeph>10</codeph></entry>
+                <entry><codeph>25</codeph></entry>
+                <entry><codeph>1 (LOW)</codeph></entry>
               </row>
               <row>
-                <entry>id &lt;= 20</entry>
-                <entry>NULL</entry>
-                <entry>20</entry>
-                <entry>2 (HIGH)</entry>
+                <entry><codeph>id &lt;= 20</codeph></entry>
+                <entry><codeph>NULL</codeph></entry>
+                <entry><codeph>20</codeph></entry>
+                <entry><codeph>2 (HIGH)</codeph></entry>
               </row>
               <row>
-                <entry>id >= 10 AND id &lt; 25 AND id &lt;= 20</entry>
-                <entry>10</entry>
-                <entry>20</entry>
-                <entry>3 (BOTH)</entry>
+                <entry><codeph>id >= 10 AND id &lt; 25 AND id &lt;= 20</codeph></entry>
+                <entry><codeph>10</codeph></entry>
+                <entry><codeph>20</codeph></entry>
+                <entry><codeph>3 (BOTH)</codeph></entry>
               </row>
             </tbody>
           </tgroup>
         </table></p>
-      <p>Internally, the optimizer breaks down each predicate and then combines it in a logically
-        consistent manner. <ol id="ul_xkc_vky_mx">
+      <p>Internally, the following steps occur:<ol id="ul_xkc_vky_mx">
           <li>Combined Low becomes highest of both Low values (NULL is the lowest.)</li>
           <li>Combined High becomes lowest of both High values (Unbounded is the highest.)</li>
-          <li>Combined Inclusion becomes OR of corresponding inclusions of the first two steps.</li>
-          <li>Repeat the steps 1 to 3 for each AND clause.</li>
+          <li>Combined Inclusion becomes OR of corresponding inclusions of Step 1 and Step 2.</li>
+          <li>Repeat Steps 1 to 3 for each AND clause.</li>
         </ol></p>
     </section>
     <section id="ex8-and-makes-empty"><title>Example 8: AND Predicate Makes Empty</title>
-      <codeblock>SELECT meta().id FROM `travel-sample` WHERE id > 10 AND id &lt; 5;</codeblock> <p>This example pushes the predicate <codeph>id > 10 AND id &lt; 5</codeph> to the index
+      <codeblock>SELECT meta().id FROM `travel-sample` WHERE id > 10 AND id &lt; 5;</codeblock> <p>In this example, the predicate <codeph>id > 10 AND id &lt; 5</codeph> is pushed to index
         scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_ne">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -554,18 +576,18 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>id > 10 AND id &lt; 5</entry>
-              <entry>NULL</entry>
-              <entry>NULL </entry>
-              <entry>0 (NEITHER) </entry>
+              <entry><codeph>id > 10 AND id &lt; 5</codeph></entry>
+              <entry><codeph>NULL</codeph></entry>
+              <entry><codeph>NULL </codeph></entry>
+              <entry><codeph>0 (NEITHER) </codeph></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <p>This is a special case where the span is Low: 10, High: 5, Inclusion: 0. In this case, the
-        start value is higher than the end value and will not produce results. Hence, the span is
-        converted to EMPTY SPAN.</p>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id > 10 AND id &lt; 5;</codeblock>
+      <p>This is a special case where the span is Low: 10, High: 5, and Inclusion: 0. In this case,
+        the start value is higher than the end value and will not produce results; so, the span is
+        converted to EMPTY SPAN, which will not do any IndexScan.</p>
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id > 10 AND id &lt; 5;</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
@@ -586,13 +608,13 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
         id &lt;= 25) is pushed to index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nf">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -600,14 +622,14 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>id BETWEEN 10 AND 25</entry>
-              <entry>10</entry>
-              <entry>25 </entry>
-              <entry>3 (BOTH) </entry>
+              <entry><codeph>id BETWEEN 10 AND 25</codeph></entry>
+              <entry><codeph>10</codeph></entry>
+              <entry><codeph>25 </codeph></entry>
+              <entry><codeph>3 (BOTH) </codeph></entry>
             </row>
           </tbody>
         </tgroup>
-        </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id BETWEEN 10 AND 25;</codeblock>
+        </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id BETWEEN 10 AND 25;</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
@@ -630,7 +652,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
         overlaps are not eliminated.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_ng">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
@@ -644,20 +666,20 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>id  = 10</entry>
-              <entry>10</entry>
-              <entry>10 </entry>
-              <entry>3 (BOTH) </entry>
+              <entry><codeph>id = 10</codeph></entry>
+              <entry><codeph>10</codeph></entry>
+              <entry><codeph>10 </codeph></entry>
+              <entry><codeph>3 (BOTH) </codeph></entry>
             </row>
             <row>
-              <entry>id = 20</entry>
-              <entry>20</entry>
-              <entry>20</entry>
-              <entry>3 (BOTH)</entry>
+              <entry><codeph>id = 20</codeph></entry>
+              <entry><codeph>20</codeph></entry>
+              <entry><codeph>20</codeph></entry>
+              <entry><codeph>3 (BOTH)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
-        </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = 10 OR id = 20;</codeblock>
+        </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = 10 OR id = 20;</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
@@ -686,19 +708,19 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
     <section id="ex11-simple-in"><title>Example 11: Simple IN Predicate</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE id IN [10, 20];</codeblock>
       <p>In this example, the predicate is <codeph>id IN [10,20]</codeph> (that is, id = 10 OR id =
-        20). After eliminating the duplicates, each element is pushed as a separate range to the
-        index scan. <note>In version 4.5, up to 8192 IN elements are pushed as separate ranges to
-          the index service. If the number of elements exceed 8192, then the index service performs
-          a full scan on the key.</note></p><table
+        20). After eliminating the duplicates, each element is pushed as a separate range to index
+        scan. <note>In version 4.5, up to 8192 IN elements are pushed as separate ranges to the
+          index service. If the number of elements exceed 8192, then the index service performs a
+          full scan on that key.</note></p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nh">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -706,20 +728,20 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>id = 10</entry>
-              <entry>10</entry>
-              <entry>10 </entry>
-              <entry>3 (BOTH) </entry>
+              <entry><codeph>id = 10</codeph></entry>
+              <entry><codeph>10</codeph></entry>
+              <entry><codeph>10 </codeph></entry>
+              <entry><codeph>3 (BOTH) </codeph></entry>
             </row>
             <row>
-              <entry>id = 20</entry>
-              <entry>20</entry>
-              <entry>20</entry>
-              <entry>3 (BOTH)</entry>
+              <entry><codeph>id = 20</codeph></entry>
+              <entry><codeph>20</codeph></entry>
+              <entry><codeph>20</codeph></entry>
+              <entry><codeph>3 (BOTH)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
-          </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id IN [10, 20];</codeblock>
+          </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id IN [10, 20];</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
@@ -747,17 +769,17 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
     </section>
     <section id="ex12-or-between-and"><title>Example 12: OR, BETWEEN, AND Predicates</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE (id BETWEEN 10 AND 25) OR (id > 50 AND id &lt;= 60);</codeblock>
-      <p>This example pushes the predicate <codeph>(id BETWEEN 10 AND 25) OR (id > 50 AND id &lt;=
-          60)</codeph> to index scan.</p><table
+      <p>In this example, the predicate <codeph>(id BETWEEN 10 AND 25) OR (id > 50 AND id &lt;=
+          60)</codeph> is pushed to index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_ni">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -765,20 +787,20 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>id BETWEEN 10 AND 25 </entry>
-              <entry>10</entry>
-              <entry>25 </entry>
-              <entry>3 (BOTH) </entry>
+              <entry><codeph>id BETWEEN 10 AND 25 </codeph></entry>
+              <entry><codeph>10</codeph></entry>
+              <entry><codeph>25 </codeph></entry>
+              <entry><codeph>3 (BOTH) </codeph></entry>
             </row>
             <row>
-              <entry>id > 50 AND id &lt;= 60</entry>
-              <entry>50</entry>
-              <entry>60</entry>
-              <entry>2 (HIGH)</entry>
+              <entry><codeph>id > 50 AND id &lt;= 60</codeph></entry>
+              <entry><codeph>50</codeph></entry>
+              <entry><codeph>60</codeph></entry>
+              <entry><codeph>2 (HIGH)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
-          </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE (id BETWEEN 10 AND 25) OR (id > 50 AND id &lt;= 60);</codeblock>
+          </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE (id BETWEEN 10 AND 25) OR (id > 50 AND id &lt;= 60);</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
@@ -810,13 +832,13 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           &lt; 10 OR id > 10</codeph> and then pushed to index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nj">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -824,20 +846,20 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>id &lt; 10</entry>
-              <entry>NULL</entry>
-              <entry>10 </entry>
-              <entry>0 (NEITHER) </entry>
+              <entry><codeph>id &lt; 10</codeph></entry>
+              <entry><codeph>NULL</codeph></entry>
+              <entry><codeph>10 </codeph></entry>
+              <entry><codeph>0 (NEITHER) </codeph></entry>
             </row>
             <row>
-              <entry>id > 10</entry>
-              <entry>10</entry>
-              <entry>Unbounded</entry>
-              <entry>0 (NEITHER)</entry>
+              <entry><codeph>id > 10</codeph></entry>
+              <entry><codeph>10</codeph></entry>
+              <entry><codeph>Unbounded</codeph></entry>
+              <entry><codeph>0 (NEITHER)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
-      </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;> 10;</codeblock>
+      </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;> 10;</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
@@ -868,13 +890,13 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           <codeph>id &lt;10 OR id >=25</codeph> and pushed to index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nk">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -882,20 +904,20 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>id  &lt; 10</entry>
-              <entry>NULL</entry>
-              <entry>10 </entry>
-              <entry>0 (NEITHER) </entry>
+              <entry><codeph>id &lt; 10</codeph></entry>
+              <entry><codeph>NULL</codeph></entry>
+              <entry><codeph>10 </codeph></entry>
+              <entry><codeph>0 (NEITHER) </codeph></entry>
             </row>
             <row>
-              <entry>id >= 25</entry>
-              <entry>25</entry>
-              <entry>Unbounded</entry>
-              <entry>1 (LOW)</entry>
+              <entry><codeph>id >= 25</codeph></entry>
+              <entry><codeph>25</codeph></entry>
+              <entry><codeph>Unbounded</codeph></entry>
+              <entry><codeph>1 (LOW)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
-          </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE NOT (id >= 10 AND id &lt; 25);</codeblock>
+          </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE NOT (id >= 10 AND id &lt; 25);</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
@@ -921,17 +943,17 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
 ...</codeblock>
     </section>
     <section id="ex15-equality-string"><title>Example 15: EQUALITY Predicate on String Type</title>
-      <codeblock>SELECT meta().id FROM `travel-sample` WHERE name = "AMerican Airlines";</codeblock> <p>This example pushes the predicate <codeph>name >= "American Airlines"</codeph> to index
+      <codeblock>SELECT meta().id FROM `travel-sample` WHERE name = "American Airlines";</codeblock> <p>In this example, the predicate <codeph>name >= "American Airlines"</codeph> is pushed to index
         scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nl">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -939,14 +961,14 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>name = "American Airlines"</entry>
-              <entry>"American Airlines"</entry>
-              <entry>"American Airlines" </entry>
-              <entry>3 (BOTH) </entry>
+              <entry><codeph>name = "American Airlines"</codeph></entry>
+              <entry><codeph>"American Airlines"</codeph></entry>
+              <entry><codeph>"American Airlines" </codeph></entry>
+              <entry><codeph>3 (BOTH) </codeph></entry>
             </row>
           </tbody>
         </tgroup>
-        </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE name = "American Airlines";</codeblock>
+        </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE name = "American Airlines";</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
          "spans": [
             {
@@ -964,17 +986,17 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
     </section>
     <section id="ex16-range-string"><title>Example 16: Range Predicate on String Type</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE name >= "American Airlines" AND name &lt;= "United Airlines";</codeblock>
-      <p>This example pushes the predicate <codeph>name >= "American Airlines" AND name &lt;=
-          "United Airlines"</codeph> to the index scan.</p><table
+      <p>In this example, the predicate <codeph>name >= "American Airlines" AND name &lt;= "United
+          Airlines"</codeph> is pushed to index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nm">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -982,15 +1004,16 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>name >= "American Airlines" AND name &lt;= "United Airlines"</entry>
-              <entry>"American Airlines"</entry>
-              <entry> "United Airlines"</entry>
-              <entry>3 (BOTH) </entry>
+              <entry><codeph>name >= "American Airlines" AND name &lt;= "United
+                Airlines"</codeph></entry>
+              <entry><codeph>"American Airlines"</codeph></entry>
+              <entry><codeph> "United Airlines"</codeph></entry>
+              <entry><codeph>3 (BOTH) </codeph></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` 
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` 
   WHERE name >= "American Airlines" 
     AND name &lt;= "United Airlines";      </codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
@@ -1010,16 +1033,19 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
     </section>
     <section id="ex17-like-1"><title>Example 17: LIKE Predicate </title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE name LIKE "American%";</codeblock>
-      <p>In this example, the predicate <codeph>name LIKE "American%"</codeph> is transformed to <codeph>name >= "American"</codeph> AND <codeph>name &lt; "Americao"</codeph> (the next N1QL collation order of "American") and then pushed to index scan. In LIKE predicate % means match with any number of any character. </p><table
+      <p>In this example, the predicate <codeph>name LIKE "American%"</codeph> is transformed to
+          <codeph>name >= "American"</codeph> AND <codeph>name &lt; "Americao"</codeph> (i.e.,
+        "Americo" is the next N1QL collation order of "American") and then pushed to index scan. In
+        the LIKE predicate, the % means match with any number of any characters. </p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_no">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -1027,15 +1053,15 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>name LIKE "American%"</entry>
-              <entry>"American"</entry>
-              <entry>"Americao"</entry>
-              <entry>1 (LOW)</entry>
+              <entry><codeph>name LIKE "American%"</codeph></entry>
+              <entry><codeph>"American"</codeph></entry>
+              <entry><codeph>"Americao"</codeph></entry>
+              <entry><codeph>1 (LOW)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE name LIKE "American%";      </codeblock>
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE name LIKE "American%";      </codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
@@ -1053,16 +1079,20 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
     </section>
     <section id="ex18-like-2"><title>Example 18: LIKE Predicate</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE name LIKE "%American%";</codeblock>
-      <p>In this example, the predicate <codeph>name LIKE "%American%"</codeph> is transformed and pushed to index scan. In this LIKE predicate '%' is the leading portion of the string so we can't push any portion of the string to the index service. "" is the lowest string. [] is an empty array and is greater than every string value in the N1QL collation order.</p><table
+      <p>In this example, the predicate <codeph>name LIKE "%American%"</codeph> is transformed and
+        pushed to index scan. In this LIKE predicate '%' is the leading portion of the string, so we
+        can't push any portion of the string to the index service. <codeph>""</codeph> is the lowest
+        string. <codeph>[]</codeph> is an empty array and is greater than every string value in the
+        N1QL collation order.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_np">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -1070,15 +1100,15 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </thead>
           <tbody>
             <row>
-              <entry>name LIKE "%American%"</entry>
-              <entry>""</entry>
-              <entry>"[]"</entry>
-              <entry>1 (LOW)</entry>
+              <entry><codeph>name LIKE "%American%"</codeph></entry>
+              <entry><codeph>""</codeph></entry>
+              <entry><codeph>"[]"</codeph></entry>
+              <entry><codeph>1 (LOW)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE name LIKE "%American%";      </codeblock>
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE name LIKE "%American%";      </codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
@@ -1098,17 +1128,17 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
 WHERE sourceairport = "SFO" 
   AND destinationairport = "JFK" 
   AND stops BETWEEN 0 AND 2;</codeblock>
-      <p>This example pushes the predicate <codeph>sourceairport = "SFO" AND destinationairport =
-          "JFK" AND stops BETWEEN 0 AND 2</codeph> to index scan.</p><table
+      <p>In this example, the predicate <codeph>sourceairport = "SFO" AND destinationairport = "JFK"
+          AND stops BETWEEN 0 AND 2</codeph> is pushed to index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nq">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -1116,54 +1146,27 @@ WHERE sourceairport = "SFO"
           </thead>
           <tbody>
             <row>
-              <entry>sourceairport = "SFO"</entry>
-              <entry>"SFO"</entry>
-              <entry>"SFO" </entry>
-              <entry>3 (BOTH)</entry>
+              <entry><codeph>sourceairport = "SFO"</codeph></entry>
+              <entry><codeph>"SFO"</codeph></entry>
+              <entry><codeph>"SFO" </codeph></entry>
+              <entry><codeph>3 (BOTH)</codeph></entry>
             </row>
             <row>
-              <entry>destinationairport = "JFK"</entry>
-              <entry>"JFK"</entry>
-              <entry>"JFK"</entry>
-              <entry>3 (BOTH)</entry>
+              <entry><codeph>destinationairport = "JFK"</codeph></entry>
+              <entry><codeph>"JFK"</codeph></entry>
+              <entry><codeph>"JFK"</codeph></entry>
+              <entry><codeph>3 (BOTH)</codeph></entry>
             </row>
             <row>
-              <entry>stops BETWEEN 0 AND 2</entry>
-              <entry>0</entry>
-              <entry>2</entry>
-              <entry>3 (BOTH)</entry>
+              <entry><codeph>stops BETWEEN 0 AND 2</codeph></entry>
+              <entry><codeph>0</codeph></entry>
+              <entry><codeph>2</codeph></entry>
+              <entry><codeph>3 (BOTH)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <p>The index selected has keys (sourceairport, destinationairport, stops) and the spans are
-        stitched in that order to create a composite span. <table frame="all" rowsep="1" colsep="1"
-          id="table_znk_vrf_nx">
-          <tgroup cols="4">
-            <colspec colname="c1" colnum="1" colwidth="1.0*"/>
-            <colspec colname="c2" colnum="2" colwidth="1.0*"/>
-            <colspec colname="c3" colnum="3" colwidth="1.0*"/>
-            <colspec colname="c4" colnum="4" colwidth="1.0*"/>
-            <thead>
-              <row>
-                <entry>Span for</entry>
-                <entry>Low</entry>
-                <entry>High</entry>
-                <entry>Inclusion</entry>
-              </row>
-            </thead>
-            <tbody>
-              <row>
-                <entry>sourceairport = "SFO" AND destinationairport = "JFK" AND stops BETWEEN 0 AND
-                  2</entry>
-                <entry>["SFO","JFK",0]</entry>
-                <entry>["SFO","JFK",2]</entry>
-                <entry>3 (BOTH)</entry>
-              </row>
-            </tbody>
-          </tgroup>
-        </table></p>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` 
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` 
 WHERE sourceairport = "SFO" 
   AND destinationairport = "JFK" 
   AND stops BETWEEN 0 AND 2;      </codeblock>
@@ -1197,17 +1200,17 @@ WHERE sourceairport = "SFO"
 WHERE sourceairport IN ["SFO", "SJC"] 
   AND destinationairport = "JFK" 
   AND stops = 0;</codeblock>
-      <p>This example pushes the predicate <codeph>sourceairport IN ["SFO", "SJC"] AND
-          destinationairport = "JFK" AND stops = 0</codeph> to index scan.</p><table
+      <p>In this example, the predicate <codeph>sourceairport IN ["SFO", "SJC"] AND
+          destinationairport = "JFK" AND stops = 0</codeph> is pushed to index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nr">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -1215,55 +1218,27 @@ WHERE sourceairport IN ["SFO", "SJC"]
           </thead>
           <tbody>
             <row>
-              <entry>sourceairport IN ["SFO", "SJC"]</entry>
-              <entry>"SFO"<p>"SJC"</p></entry>
-              <entry>"SFO"<p>"SJC"</p></entry>
-              <entry>3 (BOTH)<p>3 (BOTH)</p></entry>
+              <entry><codeph>sourceairport IN ["SFO", "SJC"]</codeph></entry>
+              <entry><codeph>"SFO"</codeph><p><codeph>"SJC"</codeph></p></entry>
+              <entry><codeph>"SFO"</codeph><p><codeph>"SJC"</codeph></p></entry>
+              <entry><codeph>3 (BOTH)</codeph><p><codeph>3 (BOTH)</codeph></p></entry>
             </row>
             <row>
-              <entry>destinationairport = "JFK"</entry>
-              <entry>"JFK"</entry>
-              <entry>"JFK"</entry>
-              <entry>3 (BOTH)</entry>
+              <entry><codeph>destinationairport = "JFK"</codeph></entry>
+              <entry><codeph>"JFK"</codeph></entry>
+              <entry><codeph>"JFK"</codeph></entry>
+              <entry><codeph>3 (BOTH)</codeph></entry>
             </row>
             <row>
-              <entry>stops</entry>
-              <entry>0</entry>
-              <entry>0</entry>
-              <entry>3 (BOTH)</entry>
+              <entry><codeph>stops</codeph></entry>
+              <entry><codeph>0</codeph></entry>
+              <entry><codeph>0</codeph></entry>
+              <entry><codeph>3 (BOTH)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <p>The index selected has keys (sourceairport, destinationairport, stops) and the spans are
-        stitched in that order to create a composite span as follows:</p>
-      <table
-        frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nr1">
-        <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
-          <colspec colname="c2" colnum="2" colwidth="1.0*"/>
-          <colspec colname="c3" colnum="3" colwidth="1.0*"/>
-          <colspec colname="c4" colnum="4" colwidth="1.0*"/>
-          <thead>
-            <row>
-              <entry>Span for</entry>
-              <entry>Low </entry>
-              <entry>High </entry>
-              <entry>Inclusion</entry>
-            </row>
-          </thead>
-          <tbody>
-            <row>
-              <entry>sourceairport IN ["SFO", "SJC"] AND destinationairport = "JFK" AND stops =
-                0</entry>
-              <entry>["SFO","JFK",0]<p>["SJC","JFK", 0]</p></entry>
-              <entry>["SFO","JFK",0]<p>["SJC","JFK", 0]</p></entry>
-              <entry>3 (BOTH)<p>3 (BOTH)</p></entry>
-            </row>
-          </tbody>
-        </tgroup>
-      </table>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` 
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` 
 WHERE sourceairport IN ["SFO", "SJC"] 
   AND destinationairport = "JFK" 
   AND stops = 0;      </codeblock>
@@ -1314,16 +1289,17 @@ WHERE sourceairport IN ["SFO", "SJC"]
     </section>
     <section id="ex21-composite-and-trailing-keys-missing"><title>Example 21: Composite AND Predicate with Trailing Keys Missing in Predicate</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE sourceairport = "SFO" AND destinationairport = "JFK";</codeblock>
-      <p>This example pushes the predicate <codeph>sourceairport = "SFO" AND destinationairport = "JFK"</codeph> to index scan.</p><table
+      <p>In this example, the predicate <codeph>sourceairport = "SFO" AND destinationairport =
+          "JFK"</codeph> is pushed to index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_ns">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -1331,79 +1307,21 @@ WHERE sourceairport IN ["SFO", "SJC"]
           </thead>
           <tbody>
             <row>
-              <entry>sourceairport = "SFO" </entry>
-              <entry>"SFO" </entry>
-              <entry>"SFO" </entry>
-              <entry>3 (BOTH) </entry>
+              <entry><codeph>sourceairport = "SFO" </codeph></entry>
+              <entry><codeph>"SFO" </codeph></entry>
+              <entry><codeph>"SFO" </codeph></entry>
+              <entry><codeph>3 (BOTH) </codeph></entry>
             </row>
             <row>
-              <entry>destinationairport = "JFK"</entry>
-              <entry>"JFK"</entry>
-              <entry> "JFK"</entry>
-              <entry>3 (BOTH) </entry>
+              <entry><codeph>destinationairport = "JFK"</codeph></entry>
+              <entry><codeph>"JFK"</codeph></entry>
+              <entry><codeph> "JFK"</codeph></entry>
+              <entry><codeph>3 (BOTH) </codeph></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <p>The index selected has keys (sourceairport, destinationairport, stops). As the stop key
-        predicate is missing in the query, the one before span high value is converted to successor
-        and removed inclusive bit. The transformed spans are as follows: <table
-          frame="all" rowsep="1" colsep="1" id="table_r2t_frx_ns1">
-          <tgroup cols="4">
-            <colspec colname="c1" colnum="1" colwidth="1.0*"/>
-            <colspec colname="c2" colnum="2" colwidth="1.0*"/>
-            <colspec colname="c3" colnum="3" colwidth="1.0*"/>
-            <colspec colname="c4" colnum="4" colwidth="1.0*"/>
-            <thead>
-              <row>
-                <entry>Span for</entry>
-                <entry>Low </entry>
-                <entry>High </entry>
-                <entry>Inclusion</entry>
-              </row>
-            </thead>
-            <tbody>
-              <row>
-                <entry>sourceairport = "SFO" </entry>
-                <entry>"SFO" </entry>
-                <entry>"SFO" </entry>
-                <entry>3 (BOTH) </entry>
-              </row>
-              <row>
-                <entry>destinationairport = "JFK"</entry>
-                <entry>"JFK"</entry>
-                <entry>successor (JFK)</entry>
-                <entry>1 (LOW)</entry>
-              </row>
-            </tbody>
-          </tgroup>
-        </table></p>
-      <p>The spans are then stitched in that order to create a composite span as follows. <table
-        frame="all" rowsep="1" colsep="1" id="table_r2t_frx_n2s">
-        <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
-          <colspec colname="c2" colnum="2" colwidth="1.0*"/>
-          <colspec colname="c3" colnum="3" colwidth="1.0*"/>
-          <colspec colname="c4" colnum="4" colwidth="1.0*"/>
-          <thead>
-            <row>
-              <entry>Span for</entry>
-              <entry>Low </entry>
-              <entry>High </entry>
-              <entry>Inclusion</entry>
-            </row>
-          </thead>
-          <tbody>
-            <row>
-              <entry>sourceairport = "SFO" AND destinationairport = "JFK" </entry>
-              <entry>["SFO","JFK"] </entry>
-              <entry>["SFO", successor("JFK")] </entry>
-              <entry>1 (LOW)</entry>
-            </row>
-          </tbody>
-        </tgroup>
-      </table></p>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` 
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` 
 WHERE sourceairport = "SFO" 
   AND destinationairport = "JFK";</codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
@@ -1431,16 +1349,17 @@ WHERE sourceairport = "SFO"
 WHERE sourceairport = "SFO" 
   AND destinationairport = "JFK" 
   AND stops >= 0;</codeblock>
-      <p>This example pushes the predicate <codeph>sourceairport = "SFO" AND destinationairport = "JFK" AND stops >= 0</codeph> to index scan.</p><table
+      <p>In this example, the predicate <codeph>sourceairport = "SFO" AND destinationairport = "JFK"
+          AND stops >= 0</codeph> is pushed to index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nt">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -1448,91 +1367,27 @@ WHERE sourceairport = "SFO"
           </thead>
           <tbody>
             <row>
-              <entry>sourceairport = "SFO" </entry>
-              <entry>"SFO"</entry>
-              <entry>"SFO"</entry>
-              <entry>3 (BOTH)</entry>
+              <entry><codeph>sourceairport = "SFO" </codeph></entry>
+              <entry><codeph>"SFO"</codeph></entry>
+              <entry><codeph>"SFO"</codeph></entry>
+              <entry><codeph>3 (BOTH)</codeph></entry>
             </row>
             <row>
-              <entry>destinationairport = "JFK"</entry>
-              <entry>"JFK"</entry>
-              <entry>"JFK"</entry>
-              <entry>3 (BOTH)</entry>
+              <entry><codeph>destinationairport = "JFK"</codeph></entry>
+              <entry><codeph>"JFK"</codeph></entry>
+              <entry><codeph>"JFK"</codeph></entry>
+              <entry><codeph>3 (BOTH)</codeph></entry>
             </row>
             <row>
-              <entry>stops >= 0</entry>
-              <entry>0</entry>
-              <entry>Unbounded</entry>
-              <entry>1 (LOW)</entry>
+              <entry><codeph>stops >= 0</codeph></entry>
+              <entry><codeph>0</codeph></entry>
+              <entry><codeph>Unbounded</codeph></entry>
+              <entry><codeph>1 (LOW)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <p>The index selected has keys (sourceairport, destinationairport, stops). As the stop key
-        high is unbounded, the high value of the earlier span is converted to successor and the
-        inclusive bit is removed. The transformed spans looks as follows: </p><table
-          frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nt1">
-          <tgroup cols="4">
-            <colspec colname="c1" colnum="1" colwidth="1.0*"/>
-            <colspec colname="c2" colnum="2" colwidth="1.0*"/>
-            <colspec colname="c3" colnum="3" colwidth="1.0*"/>
-            <colspec colname="c4" colnum="4" colwidth="1.0*"/>
-            <thead>
-              <row>
-                <entry>Span for</entry>
-                <entry>Low </entry>
-                <entry>High </entry>
-                <entry>Inclusion</entry>
-              </row>
-            </thead>
-            <tbody>
-              <row>
-                <entry>sourceairport = "SFO" </entry>
-                <entry>"SFO"</entry>
-                <entry>"SFO"</entry>
-                <entry>3 (BOTH)</entry>
-              </row>
-              <row>
-                <entry>destinationairport = "JFK"</entry>
-                <entry>"JFK"</entry>
-                <entry>successor ("JFK")</entry>
-                <entry>1 (LOW)</entry>
-              </row>
-              <row>
-                <entry>stops >= 0</entry>
-                <entry>0</entry>
-                <entry>Unbounded</entry>
-                <entry>1 (LOW)</entry>
-              </row>
-            </tbody>
-          </tgroup>
-        </table>
-      <p>The spans are then stitched in that order to create a composite span as follows: <table
-          frame="all" rowsep="1" colsep="1" id="table_erz_kgm_nx">
-          <tgroup cols="4">
-            <colspec colname="c1" colnum="1" colwidth="1.0*"/>
-            <colspec colname="c2" colnum="2" colwidth="1.0*"/>
-            <colspec colname="c3" colnum="3" colwidth="1.0*"/>
-            <colspec colname="c4" colnum="4" colwidth="1.0*"/>
-            <thead>
-              <row>
-                <entry>Span for</entry>
-                <entry>Low</entry>
-                <entry>High</entry>
-                <entry>Inclusion</entry>
-              </row>
-            </thead>
-            <tbody>
-              <row>
-                <entry>sourceairport = "SFO" AND destinationairport = "JFK" AND stops >= 0</entry>
-                <entry>["SFO","JFK",0]</entry>
-                <entry>["SFO",successor ("JFK")] </entry>
-                <entry>1 (LOW)</entry>
-              </row>
-            </tbody>
-          </tgroup>
-        </table></p>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` 
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` 
 WHERE sourceairport = "SFO" 
   AND destinationairport = "JFK" 
   AND stops >= 0;       </codeblock>
@@ -1565,13 +1420,13 @@ WHERE sourceairport = "SFO"
       <p>This example pushes the predicate <codeph>id = $1</codeph> to index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nu">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -1579,15 +1434,15 @@ WHERE sourceairport = "SFO"
           </thead>
           <tbody>
             <row>
-              <entry>id = $1</entry>
-              <entry> $1</entry>
-              <entry>$1 </entry>
-              <entry>3 (BOTH) </entry>
+              <entry><codeph>id = $1</codeph></entry>
+              <entry><codeph> $1</codeph></entry>
+              <entry><codeph>$1 </codeph></entry>
+              <entry><codeph>3 (BOTH) </codeph></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = $1;      </codeblock>
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = $1;      </codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
@@ -1605,16 +1460,17 @@ WHERE sourceairport = "SFO"
     </section>
     <section id="ex24-and-query-params"><title>Example 24: AND Predicate with Query Parameters</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE id >= $1 AND id &lt; $2;</codeblock>
-      <p>This example pushes the predicate <codeph>id >= $1 AND id &lt; $2</codeph> to the index scan.</p><table
+      <p>In this example, the predicate <codeph>id >= $1 AND id &lt; $2</codeph> is pushed to the
+        index scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nv">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -1622,15 +1478,15 @@ WHERE sourceairport = "SFO"
           </thead>
           <tbody>
             <row>
-              <entry>id >= $1 AND id &lt; $2</entry>
-              <entry> $1</entry>
-              <entry> $2</entry>
-              <entry>1 (LOW)</entry>
+              <entry><codeph>id >= $1 AND id &lt; $2</codeph></entry>
+              <entry><codeph> $1</codeph></entry>
+              <entry><codeph> $2</codeph></entry>
+              <entry><codeph>1 (LOW)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >= $1 AND id &lt; $2;     </codeblock>
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >= $1 AND id &lt; $2;     </codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
@@ -1652,13 +1508,13 @@ WHERE sourceairport = "SFO"
         scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nw">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -1666,21 +1522,21 @@ WHERE sourceairport = "SFO"
           </thead>
           <tbody>
             <row>
-              <entry>id = $1</entry>
-              <entry> $1</entry>
-              <entry>$1 </entry>
-              <entry>3 (BOTH) </entry>
+              <entry><codeph>id = $1</codeph></entry>
+              <entry><codeph> $1</codeph></entry>
+              <entry><codeph>$1 </codeph></entry>
+              <entry><codeph>3 (BOTH) </codeph></entry>
             </row>
             <row>
-              <entry>id &lt; $2</entry>
-              <entry>NULL</entry>
-              <entry>$2</entry>
-              <entry>0 (NEITHER)</entry>
+              <entry><codeph>id &lt; $2</codeph></entry>
+              <entry><codeph>NULL</codeph></entry>
+              <entry><codeph>$2</codeph></entry>
+              <entry><codeph>0 (NEITHER)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = $1 OR id &lt; $2;      </codeblock>
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = $1 OR id &lt; $2;      </codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
@@ -1708,17 +1564,17 @@ WHERE sourceairport = "SFO"
     </section>
     <section id="ex26-in-query-params"><title>Example 26: IN Predicate with Query Parameters</title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE id IN [ $1, 10, $2] ;</codeblock>
-      <p>This example pushes the predicate <codeph>id IN [$1, 10, $2]</codeph> to the index
+      <p>In this example, the predicate <codeph>id IN [$1, 10, $2]</codeph> is pushed to index
         scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nx">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -1726,15 +1582,16 @@ WHERE sourceairport = "SFO"
           </thead>
           <tbody>
             <row>
-              <entry>id IN [$1, 10, $2]</entry>
-              <entry>$1<p>10</p><p>$2</p></entry>
-              <entry>$1<p>10</p><p>$2</p></entry>
-              <entry>3 (BOTH)<p>3 (BOTH)</p><p>3 (BOTH)</p></entry>
+              <entry><codeph>id IN [$1, 10, $2]</codeph></entry>
+              <entry><codeph>$1</codeph><p><codeph>10</codeph></p><p><codeph>$2</codeph></p></entry>
+              <entry><codeph>$1</codeph><p><codeph>10</codeph></p><p><codeph>$2</codeph></p></entry>
+              <entry><codeph>3 (BOTH)</codeph><p><codeph>3 (BOTH)</codeph></p><p><codeph>3
+                    (BOTH)</codeph></p></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id IN [$1, 10, $2];      </codeblock>
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id IN [$1, 10, $2];      </codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
@@ -1773,16 +1630,17 @@ WHERE sourceairport = "SFO"
 WHERE type = "route" 
   AND ANY v IN schedule SATISFIES v.day = 0 
 END;  </codeblock>
-      <p>This example pushes the predicate <codeph>v.day = 0</codeph> to ARRAY index scan.</p><table
+      <p>In this example, the predicate <codeph>v.day = 0</codeph> is pushed to ARRAY index
+        scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_ny">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -1790,15 +1648,15 @@ END;  </codeblock>
           </thead>
           <tbody>
             <row>
-              <entry>v.day = 0</entry>
-              <entry>0</entry>
-              <entry>0 </entry>
-              <entry>3 (BOTH) </entry>
+              <entry><codeph>v.day = 0</codeph></entry>
+              <entry><codeph>0</codeph></entry>
+              <entry><codeph>0 </codeph></entry>
+              <entry><codeph>3 (BOTH) </codeph></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` 
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` 
 WHERE type = "route" 
   AND ANY v IN schedule SATISFIES v.day = 0 
 END;  </codeblock>
@@ -1822,17 +1680,17 @@ END;  </codeblock>
 WHERE type = "route" 
   AND ANY v IN schedule SATISFIES v.day IN [1,2,3] 
 END;</codeblock>
-      <p>This example pushes the predicate <codeph>v.day IN [1,2,3]</codeph> to ARRAY index
+      <p>In this example, the predicate <codeph>v.day IN [1,2,3]</codeph> is pushed to ARRAY index
         scan.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_nz">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -1840,15 +1698,16 @@ END;</codeblock>
           </thead>
           <tbody>
             <row>
-              <entry>v.day IN [1,2,3]</entry>
-              <entry>1<p>2</p><p>3</p></entry>
-              <entry>1<p>2</p><p>3</p></entry>
-              <entry>3 (BOTH)<p>3 (BOTH)</p><p>3 (BOTH)</p></entry>
+              <entry><codeph>v.day IN [1,2,3]</codeph></entry>
+              <entry><codeph>1</codeph><p><codeph>2</codeph></p><p><codeph>3</codeph></p></entry>
+              <entry><codeph>1</codeph><p><codeph>2</codeph></p><p><codeph>3</codeph></p></entry>
+              <entry><codeph>3 (BOTH)</codeph><p><codeph>3 (BOTH)</codeph></p><p><codeph>3
+                    (BOTH)</codeph></p></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` 
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` 
 WHERE type = "route" 
   AND ANY v IN schedule SATISFIES v.day IN [1,2,3] 
 END;  </codeblock>
@@ -1887,18 +1746,20 @@ END;  </codeblock>
             ],
 ...</codeblock>
     </section>
-    <section id="ex29-equality-on-expr"><title>Example 29: EQUALITY Predicate on Expression
-        </title><codeblock>SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;</codeblock><p>This
-        example does not push any predicate to index scan.</p><table frame="all" rowsep="1"
+    <section id="ex29-equality-on-expr"><note>The following examples don't have the right indexes,
+        or the queries need to be modified to produce an optimal plan.</note><title>Example 29:
+        EQUALITY Predicate on Expression
+        </title><codeblock>SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;</codeblock><p>In
+        this example, no predicate is pushed to index scan.</p><table frame="all" rowsep="1"
         colsep="1" id="table_r2t_frx_oa">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -1906,14 +1767,14 @@ END;  </codeblock>
           </thead>
           <tbody>
             <row>
-              <entry>id </entry>
-              <entry>NULL</entry>
-              <entry>Unbounded </entry>
-              <entry>0 (NEITHER) </entry>
+              <entry><codeph>id </codeph></entry>
+              <entry><codeph>NULL</codeph></entry>
+              <entry><codeph>Unbounded </codeph></entry>
+              <entry><codeph>0 (NEITHER) </codeph></entry>
             </row>
           </tbody>
         </tgroup>
-      </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;      </codeblock><codeblock>...                                                /  similar to the Explain Plan Beginning above
+      </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;      </codeblock><codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "range": [
@@ -1929,16 +1790,16 @@ END;  </codeblock>
         not cover the query, the query service fetches the document from the data node and then
         applies the predicate. For better performance, create a new index as follows:
         <codeblock>CREATE INDEX `idx_absid` ON `travel-sample`(abs(`id`));</codeblock></p>When index
-        <codeph>idx_absid</codeph> is used, the query pushes the predicate <codeph>abs(id) =
-        10</codeph> to index scan. <table frame="all" rowsep="1" colsep="1" id="table_yfm_nwm_nx">
+        <codeph>idx_absid</codeph> is used, the predicate <codeph>abs(id) = 10</codeph> is pushed to
+      index scan. <table frame="all" rowsep="1" colsep="1" id="table_yfm_nwm_nx">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low</entry>
               <entry>High</entry>
               <entry>Inclusion</entry>
@@ -1946,20 +1807,22 @@ END;  </codeblock>
           </thead>
           <tbody>
             <row>
-              <entry>abs(id) = 10</entry>
-              <entry>10</entry>
-              <entry>10</entry>
-              <entry>3 (BOTH)</entry>
+              <entry><codeph>abs(id) = 10</codeph></entry>
+              <entry><codeph>10</codeph></entry>
+              <entry><codeph>10</codeph></entry>
+              <entry><codeph>3 (BOTH)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
-      </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;      </codeblock><codeblock>...                                                /  similar to the Explain Plan Beginning above
+      </table><codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` USE INDEX (idx_absid) WHERE abs(id) = 10;      </codeblock><codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
+              "exact": true,
               "range": [
                 {
-                  "inclusion": 0,
-                  "low": "null"
+                  "high": "10",
+                  "inclusion": 3,
+                  "low": "10"
                 }
               ]
             }
@@ -1967,17 +1830,17 @@ END;  </codeblock>
 ...</codeblock></section>
     <section id="ex30-overlap"><title>Example 30: Overlapping Predicates </title>
       <codeblock>SELECT meta().id FROM `travel-sample` WHERE id &lt;= 100 OR (id BETWEEN 50 AND 150);</codeblock>
-      <p>This example pushes the predicate <codeph>id &lt;= 100 OR (id BETWEEN 50 AND 150)</codeph>
-        to index scan as two ranges.</p><table
+      <p>In this example, the predicates <codeph>id &lt;= 100 OR (id BETWEEN 50 AND 150)</codeph>
+        are pushed to index scan as two ranges.</p><table
         frame="all" rowsep="1" colsep="1" id="table_r2t_frx_ob">
         <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+          <colspec colname="c1" colnum="1" colwidth="2.0*"/>
           <colspec colname="c2" colnum="2" colwidth="1.0*"/>
           <colspec colname="c3" colnum="3" colwidth="1.0*"/>
           <colspec colname="c4" colnum="4" colwidth="1.0*"/>
           <thead>
             <row>
-              <entry>Span for</entry>
+              <entry>Span Range for</entry>
               <entry>Low </entry>
               <entry>High </entry>
               <entry>Inclusion</entry>
@@ -1985,21 +1848,21 @@ END;  </codeblock>
           </thead>
           <tbody>
             <row>
-              <entry>id &lt;= 100</entry>
-              <entry>NULL</entry>
-              <entry>100 </entry>
-              <entry>2 (HIGH) </entry>
+              <entry><codeph>id &lt;= 100</codeph></entry>
+              <entry><codeph>NULL</codeph></entry>
+              <entry><codeph>100 </codeph></entry>
+              <entry><codeph>2 (HIGH) </codeph></entry>
             </row>
             <row>
-              <entry>id BETWEEN 50 AND 150</entry>
-              <entry>50</entry>
-              <entry>150</entry>
-              <entry>3 (BOTH)</entry>
+              <entry><codeph>id BETWEEN 50 AND 150</codeph></entry>
+              <entry><codeph>50</codeph></entry>
+              <entry><codeph>150</codeph></entry>
+              <entry><codeph>3 (BOTH)</codeph></entry>
             </row>
           </tbody>
         </tgroup>
       </table>
-      <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;= 100 OR (id BETWEEN 50 AND 150);      </codeblock>
+      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;= 100 OR (id BETWEEN 50 AND 150);      </codeblock>
       <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
@@ -2024,24 +1887,13 @@ END;  </codeblock>
               }
             ],
 ...</codeblock>
-      <p>The spans indicate that two range scans are being performed, and the ranges are overlapping
-        with the values 50-100 being scanned twice. To eliminate duplicates N1QL does distinct
-        operations on meta().id. When possible, rewriting the query may help eliminate duplicates.
-        <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;= 150;</codeblock><codeblock>...                                                /  similar to the Explain Plan Beginning above
-          "spans": [
-            {
-              "exact": true,
-              "range": [
-                {
-                  "high": "150",
-                  "inclusion": 2,
-                  "low": "null"
-                }
-              ]
-            }
-          ],
-...</codeblock>
-      </p>
+      <p/>
+    </section>
+    <section id="section_xf2_rnp_jbb">
+      <title>Summary</title>
+      <p>When you analyze the explain plan, correlate the predicates in the explain to the spans.
+        Ensure the most optimal index is selected and the spans have the expected range for all the
+        index keys. More keys in each span will make the query more efficient.</p>
     </section>
   </body>
 </topic>
