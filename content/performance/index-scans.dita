@@ -1,65 +1,101 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_kkx_msp_mx">
-  <title>Understanding Index Scans</title>
+  <title>Understanding Index Scans in Couchbase N1QL Query</title>
   <shortdesc>During query execution, when the index path is chosen, the query engine requests the
     scan by providing a range of values to return. This range is represented as a <i>span</i> in the
     query plan. Index scans play a major role in optimizing the query plan generation and execution.
     This section discusses how index spans are generated from query predicates and provides a number
     of examples.</shortdesc>
   <body>
-    <p>Filter, join, and project are the fundamental operations when processing database queries.
-      The filtering process takes the initial keyspace and produces an optimal subset of the
-      documents the query is interested in. To produce the smallest possible subset, indexes are
-      used to apply as many predicates as possible. </p>
-    <p>Query predicates indicate the subset of data that we are interested in. During the query
-      planning phase, we select the indexes to be used. Then, for each index, we decide the
-      predicates to be applied by each index. The query predicates are translated into spans in the
-      query plan and passed to the indexer. Spans simply express the predicates in terms of data
-      ranges. </p>
-    <p>The following table shows some example translations:<table frame="all" rowsep="1" colsep="1"
-        id="table_nth_nxp_mx">
-        <tgroup cols="4">
-          <colspec colname="c1" colnum="1" colwidth="1.0*"/>
-          <colspec colname="c2" colnum="2" colwidth="1.0*"/>
-          <colspec colname="c3" colnum="3" colwidth="1.0*"/>
-          <colspec colname="c4" colnum="4" colwidth="1.0*"/>
-          <thead>
-            <row>
-              <entry>Predicate</entry>
-              <entry>Span Low</entry>
-              <entry>Span High</entry>
-              <entry>Span Inclusion</entry>
-            </row>
-          </thead>
-          <tbody>
-            <row>
-              <entry>id = 10</entry>
-              <entry>10</entry>
-              <entry>10</entry>
-              <entry>3 (BOTH)</entry>
-            </row>
-            <row>
-              <entry>id > 10</entry>
-              <entry>10</entry>
-              <entry>No upper bound</entry>
-              <entry>0 (NEITHER)</entry>
-            </row>
-            <row>
-              <entry>id &lt;= 10</entry>
-              <entry>NULL</entry>
-              <entry>10</entry>
-              <entry>2 (HIGH) </entry>
-            </row>
-          </tbody>
-        </tgroup>
-      </table></p>
-    <p>Consider the Explain statement for the following query. You can see the spans in the
-        <codeph>IndexScan2</codeph> section of the Explain statement.
-      <codeblock>EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = 10;
-
-Results:
-[                                                    /  Result Plan Beginning
+    <p><?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?><xref
+        href="http://www.couchbase.com/" format="html" scope="external">Couchbase
+      N1QL</xref><?oxy_custom_end?> is a modern query processing engine designed to provide SQL for
+      JSON on distributed data with a flexible data model. Modern databases are deployed on massive
+      clusters. Using JSON provides a flexible data mode.
+        <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?><xref
+        href="http://developer.couchbase.com/documentation/server/4.5/n1ql/n1ql-language-reference/index.html"
+        format="html" scope="external">N1QL supports enhanced SQL for JSON</xref><?oxy_custom_end?>
+      to make query processing easier.</p>
+    <p>Applications and database drivers submit the N1QL query to one of the available Query nodes
+      on a cluster. The Query node analyzes the query, uses metadata on underlying objects to figure
+      out the optimal execution plan, which it then executes. During execution, depending on the
+      query, using applicable indexes, the Query node works with the Index and Data nodes to
+      retrieve and perform the planned operations. Because Couchbase is a modular clustered
+      database, you scale out data, index, and query services to fit your performance and
+      availability goals.</p>
+    <section id="section_rvj_tbk_jbb"><title>Query Execution: Inside View</title><p><image
+          href="../n1ql/n1ql-language-reference/images/query_execution.png" id="image_esj_k2k_jbb"
+        /></p><p>This figure shows all the possible phases a SELECT query goes through to return the
+        results. Not all queries need to go through every phase, some go through many of these
+        phases multiple times. For example, the Sort phase can be skipped when there is no ORDER BY
+        clause in the query; and the Scan-Fetch-Join phases will execute multiple times for
+        correlated subqueries.</p><b>Inside a Query Node</b><p><image
+          href="../n1ql/n1ql-language-reference/images/query_service.png" id="inside_a_query_node"
+        /></p><p><xref
+          href="http://blog.couchbase.com/sql-for-documents-n1ql-brief-introduction-to-query-planning"
+          format="html" scope="external">This brief introduction to query planning</xref> has
+        details of query planner. When the Index path is chosen, query engine requests the scan by
+        providing the range of values to return. This range is represented as a SPAN in the query
+        plan. The index spans will play major roles in optimal plan generation and execution. Here,
+        we discuss how the Index spans are generated from the query predicates
+      (filters).</p></section>
+    <section id="section_knm_z1k_jbb">
+      <title>Spans Overview</title>
+      <p>FILTER, JOIN, and PROJECT are the fundamental operations of database query processing. The
+        filtering process takes the initial keyspace and produces an optimal subset of the documents
+        the query is interested in. To produce the smallest possible subset, indexes are used to
+        apply as many predicates as possible. </p>
+      <p>Query predicates indicate the subsets of data that we are interested in. During the query
+        planning phase, we select the indexes to be used. Then, for each index, we decide the
+        predicates to be applied by each index. The query predicates are translated into spans in
+        the query plan and passed to the Indexer. Spans simply express the predicates in terms of
+        data ranges. </p>
+    </section>
+    <section id="section_wj4_5gk_jbb">
+      <title>Example Translations</title>
+      <p>The following table shows some example translations:<table frame="all" rowsep="1"
+          colsep="1" id="table_nth_nxp_mx">
+          <tgroup cols="4">
+            <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+            <colspec colname="c2" colnum="2" colwidth="1.0*"/>
+            <colspec colname="c3" colnum="3" colwidth="1.0*"/>
+            <colspec colname="c4" colnum="4" colwidth="1.0*"/>
+            <thead>
+              <row>
+                <entry>Predicate</entry>
+                <entry>Span Low</entry>
+                <entry>Span High</entry>
+                <entry>Span Inclusion</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry>id = 10</entry>
+                <entry>10</entry>
+                <entry>10</entry>
+                <entry>3 (BOTH)</entry>
+              </row>
+              <row>
+                <entry>id > 10</entry>
+                <entry>10</entry>
+                <entry>No upper bound</entry>
+                <entry>0 (NEITHER)</entry>
+              </row>
+              <row>
+                <entry>id &lt;= 10</entry>
+                <entry>NULL</entry>
+                <entry>10</entry>
+                <entry>2 (HIGH) </entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table></p>
+      <p>Consider the plan for the following
+        query:<codeblock>EXPLAIN select meta().id from `travel-sample` where id = 10;</codeblock>
+        You can see the spans in the <codeph>IndexScan2</codeph> section of the Explain for the
+        query:
+        <codeblock>[                                                    /  Explain Plan Beginning
   {                                                  /
     "plan": {                                        /
       "#operator": "Sequence",                       /
@@ -87,63 +123,71 @@ Results:
             }
           ],</b>
  ...    </codeblock></p>
-    <p>Index scan requests in N1QL are based on a range where each range has a start value, an end value, and specifies whether to include the start or the end value. <ul>
-      <li>A "High" field in the range indicates the end value. If "High" is missing from the range, then there is no upper bound. </li>
-      <li>A “Low” field in the range indicates the start value. If "Low" is missing from the range, the scan starts with a NULL. NULL is the lowest value as MISSING values are not indexed. </li>
-      <li>Inclusion indicates if the values of High and Low fields are included. <table frame="all"
-            rowsep="1" colsep="1" id="table_hxk_cgs_mx">
-            <tgroup cols="3">
-              <colspec colname="c1" colnum="1" colwidth="1.0*"/>
-              <colspec colname="c2" colnum="2" colwidth="1.0*"/>
-              <colspec colname="c3" colnum="3" colwidth="2.5*"/>
-              <thead>
-                <row>
-                  <entry>Inclusion Number</entry>
-                  <entry>Meaning</entry>
-                  <entry>Description</entry>
-                </row>
-              </thead>
-              <tbody>
-                <row>
-                  <entry>0</entry>
-                  <entry>NEITHER</entry>
-                  <entry>Neither High nor Low fields are included.</entry>
-                </row>
-                <row>
-                  <entry>1</entry>
-                  <entry>LOW</entry>
-                  <entry>Only Low fields are included.</entry>
-                </row>
-                <row>
-                  <entry>2</entry>
-                  <entry>HIGH</entry>
-                  <entry>Only High fields are included.</entry>
-                </row>
-                <row>
-                  <entry>3</entry>
-                  <entry>BOTH</entry>
-                  <entry>Both High and Low fields are included.</entry>
-                </row>
-              </tbody>
-            </tgroup>
-          </table></li>
-    </ul></p>
-    <p>When you analyze an Explain statement, correlate the predicates in the explain to the spans. To
-      make your queries more efficient: <ul id="ul_qn1_llm_nx">
-        <li>Ensure the most optimal index is selected and the spans have the expected range for all
-          the index keys.</li>
-        <li>Use more keys in each span.</li>
-      </ul></p>
-    <section><title>Examples</title>
+      <p>In N1QL, Index Scan requests are based on a range where each range has a start value, an
+        end value, and specifies whether to include the start or the end value. <ul
+          id="ul_uh1_bjk_jbb">
+          <li>A "High" field in the range indicates the end value. If "High" is missing, then there
+            is no upper bound. </li>
+          <li>A “Low” field in the range indicates the start value. If "Low" is missing,
+            <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>the scan starts with
+            a NULL. NULL is the lowest value as MISSING values are not indexed.
+            <?oxy_custom_end?></li>
+          <li>Inclusion indicates if the values of the High and Low fields are included. <table
+              frame="all" rowsep="1" colsep="1" id="table_hxk_cgs_mx">
+              <tgroup cols="3">
+                <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+                <colspec colname="c2" colnum="2" colwidth="1.0*"/>
+                <colspec colname="c3" colnum="3" colwidth="2.5*"/>
+                <thead>
+                  <row>
+                    <entry>Inclusion Number</entry>
+                    <entry>Meaning</entry>
+                    <entry>Description</entry>
+                  </row>
+                </thead>
+                <tbody>
+                  <row>
+                    <entry>0</entry>
+                    <entry>NEITHER</entry>
+                    <entry>Neither High nor Low fields are included.</entry>
+                  </row>
+                  <row>
+                    <entry>1</entry>
+                    <entry>LOW</entry>
+                    <entry>Only Low fields are included.</entry>
+                  </row>
+                  <row>
+                    <entry>2</entry>
+                    <entry>HIGH</entry>
+                    <entry>Only High fields are included.</entry>
+                  </row>
+                  <row>
+                    <entry>3</entry>
+                    <entry>BOTH</entry>
+                    <entry>Both High and Low fields are included.</entry>
+                  </row>
+                </tbody>
+              </tgroup>
+            </table></li>
+        </ul></p>
+      <p><?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>When you analyze an
+        Explain statement, correlate the predicates in the explain to the spans. To make your
+        queries more efficient: <ul id="ul_qn1_llm_nx">
+          <li>Ensure the most optimal index is selected and the spans have the expected range for
+            all the index keys.</li>
+          <li>Use more keys in each span.<?oxy_custom_end?></li>
+        </ul></p>
       <note>
         <p>The following examples illustrate the spans for different predicates. </p>
-        <p>Before running any of the examples on this page, ensure that you've installed the
-            <codeph>travel-sample</codeph> sample bucket and created the following indexes:</p>
+        <p>To run the examples, <xref
+            href="../settings/install-sample-buckets.dita#topic_jqr_1rn_vs">install the
+              <codeph>travel-sample</codeph> sample bucket</xref> and create the following
+          indexes:</p>
         <codeblock>CREATE INDEX idx_id ON `travel-sample`(`id`);
 
 CREATE INDEX idx_name ON `travel-sample`(`name`);
 
-CREATE INDEX idx_s_d_aiport_stops ON `travel-sample` (`sourceairport`, `destinationairport`, `stops`);
+CREATE INDEX idx_s_d_airport_stops ON `travel-sample`(`sourceairport`, `destinationairport`, `stops`);
 
 CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule END) WHERE type = "route";</codeblock>
       </note>
@@ -174,7 +218,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
               </row>
             </tbody>
           </tgroup>
-        </table><codeblock spectitle="Explain Statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = 10;</codeblock><codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+        </table><codeblock spectitle="Explain Statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = 10;</codeblock><codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -214,7 +258,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </tbody>
         </tgroup>
       </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >= 10;</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -254,7 +298,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </tbody>
         </tgroup>
       </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id > 10;</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -294,7 +338,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </tbody>
         </tgroup>
       </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;= 10;</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -335,7 +379,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </tbody>
         </tgroup>
       </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt; 10;</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -377,7 +421,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </tbody>
         </tgroup>
         </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >=10 AND id &lt; 25;</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -419,7 +463,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </tbody>
         </tgroup>
         </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >=10 AND id &lt; 25 AND id &lt;= 20;</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -522,7 +566,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
         start value is higher than the end value and will not produce results. Hence, the span is
         converted to EMPTY SPAN.</p>
       <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id > 10 AND id &lt; 5;</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -564,7 +608,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </tbody>
         </tgroup>
         </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id BETWEEN 10 AND 25;</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -614,7 +658,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </tbody>
         </tgroup>
         </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = 10 OR id = 20;</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
                 "exact": true,
@@ -676,7 +720,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </tbody>
         </tgroup>
           </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id IN [10, 20];</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -735,7 +779,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </tbody>
         </tgroup>
           </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE (id BETWEEN 10 AND 25) OR (id > 50 AND id &lt;= 60);</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
                 "exact": true,
@@ -794,7 +838,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </tbody>
         </tgroup>
       </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;> 10;</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
                 "exact": true,
@@ -852,7 +896,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </tbody>
         </tgroup>
           </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE NOT (id >= 10 AND id &lt; 25);</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
                 "exact": true,
@@ -903,7 +947,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
           </tbody>
         </tgroup>
         </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE name = "American Airlines";</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
          "spans": [
             {
               "exact": true,
@@ -949,7 +993,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
       <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` 
   WHERE name >= "American Airlines" 
     AND name &lt;= "United Airlines";      </codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -992,7 +1036,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
         </tgroup>
       </table>
       <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE name LIKE "American%";      </codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -1035,7 +1079,7 @@ CREATE INDEX idx_sched ON `travel-sample`(DISTINCT ARRAY v.day FOR v IN schedule
         </tgroup>
       </table>
       <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE name LIKE "%American%";      </codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "range": [
@@ -1123,7 +1167,7 @@ WHERE sourceairport = "SFO"
 WHERE sourceairport = "SFO" 
   AND destinationairport = "JFK" 
   AND stops BETWEEN 0 AND 2;      </codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -1223,7 +1267,7 @@ WHERE sourceairport IN ["SFO", "SJC"]
 WHERE sourceairport IN ["SFO", "SJC"] 
   AND destinationairport = "JFK" 
   AND stops = 0;      </codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -1362,7 +1406,7 @@ WHERE sourceairport IN ["SFO", "SJC"]
       <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` 
 WHERE sourceairport = "SFO" 
   AND destinationairport = "JFK";</codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -1492,7 +1536,7 @@ WHERE sourceairport = "SFO"
 WHERE sourceairport = "SFO" 
   AND destinationairport = "JFK" 
   AND stops >= 0;       </codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -1544,7 +1588,7 @@ WHERE sourceairport = "SFO"
         </tgroup>
       </table>
       <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = $1;      </codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -1587,7 +1631,7 @@ WHERE sourceairport = "SFO"
         </tgroup>
       </table>
       <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id >= $1 AND id &lt; $2;     </codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
@@ -1637,7 +1681,7 @@ WHERE sourceairport = "SFO"
         </tgroup>
       </table>
       <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id = $1 OR id &lt; $2;      </codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
                 "exact": true,
@@ -1691,7 +1735,7 @@ WHERE sourceairport = "SFO"
         </tgroup>
       </table>
       <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id IN [$1, 10, $2];      </codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
                 "range": [
@@ -1758,7 +1802,7 @@ END;  </codeblock>
 WHERE type = "route" 
   AND ANY v IN schedule SATISFIES v.day = 0 
 END;  </codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
                 "exact": true,
@@ -1808,7 +1852,7 @@ END;</codeblock>
 WHERE type = "route" 
   AND ANY v IN schedule SATISFIES v.day IN [1,2,3] 
 END;  </codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
                 "exact": true,
@@ -1869,7 +1913,7 @@ END;  </codeblock>
             </row>
           </tbody>
         </tgroup>
-      </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;      </codeblock><codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;      </codeblock><codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "range": [
@@ -1909,7 +1953,7 @@ END;  </codeblock>
             </row>
           </tbody>
         </tgroup>
-      </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;      </codeblock><codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      </table><codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE abs(id) = 10;      </codeblock><codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "range": [
@@ -1956,7 +2000,7 @@ END;  </codeblock>
         </tgroup>
       </table>
       <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;= 100 OR (id BETWEEN 50 AND 150);      </codeblock>
-      <codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+      <codeblock>...                                                /  similar to the Explain Plan Beginning above
             "spans": [
               {
                 "exact": true,
@@ -1983,7 +2027,7 @@ END;  </codeblock>
       <p>The spans indicate that two range scans are being performed, and the ranges are overlapping
         with the values 50-100 being scanned twice. To eliminate duplicates N1QL does distinct
         operations on meta().id. When possible, rewriting the query may help eliminate duplicates.
-        <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;= 150;</codeblock><codeblock spectitle="Results">...                                                /  similar to the Result Plan Beginning above
+        <codeblock spectitle="Explain statement">EXPLAIN SELECT meta().id FROM `travel-sample` WHERE id &lt;= 150;</codeblock><codeblock>...                                                /  similar to the Explain Plan Beginning above
           "spans": [
             {
               "exact": true,
