@@ -26,8 +26,7 @@ def convert_file(path):
     synopsis_lq = root.find('.//topic/topic[@id="_synopsis"]/body/lq')
     synopsis_lines = root.find('.//topic/topic[@id="_synopsis"]/body/lq/lines/*')
     
-    synopsis_content = etree.tostring(synopsis_lines, encoding="unicode").replace('\n', '')
-    synopsis_content = ' '.join(synopsis_content.split())
+    synopsis_content = etree.tostring(synopsis_lines, encoding="unicode")
 
     syntax_codeblock = etree.XML('<codeblock outputclass="language-bash">{}</codeblock>'.format(synopsis_content))
     synopsis_topic.remove(synopsis_lq)

@@ -1,17 +1,315 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="php-sample-app-backend">
-  <title>PHP Sample App Backend Tutorial</title>
-  <titlealts><navtitle>Sample App Backend</navtitle></titlealts>
+  
+  <title>
+    PHP Sample App Backend Tutorial
+  </title>
+  
+  <titlealts>
+    
+    <navtitle>
+      Sample App Backend
+    </navtitle>
+  
+  </titlealts>
+  
   <shortdesc>
-    The PHP SDK travel sample backend is currently under construction, and is not yet available.
+    The PHP SDK tutorial bridges the gap between simple and advanced concepts, by 
+    walking through a complete web application.
   </shortdesc>
+  
   <body>
+    
     <section>
-      <p>A work in progress is available at <xref
-                    href="https://github.com/couchbaselabs/try-cb-php/" scope="external"
-                    format="html">https://github.com/couchbaselabs/try-cb-php</xref>.
-    This document will be updated as it becomes available.</p>
+      
+      <p>
+        The source code for the tutorial is available on GitHub, at
+        <xref href="https://github.com/couchbaselabs/try-cb-php/" scope="external" format="html">couchbaselabs/try-cb-php</xref>.
+        The primary focus of the tutorial is to explain the
+        function and theory behind the Couchbase PHP client, and how it works together with 
+        Couchbase Server; with special reference to features such as <codeph>N1QL</codeph>, 
+        <codeph>FTS</codeph> and <codeph>sub-document</codeph>. 
+        It makes use of the <codeph>travel-sample</codeph> data set. 
+        The code that generates the web application is provided with the source code,
+        but is not discussed in this tutorial.
+      </p>
+      
     </section>
+    
+    <section>
+      
+      <title>
+        Specific PHP Prerequisites and Set-Up
+      </title>
+      
+
+    
+    <p>
+      Before attempting to install the sample-app backend, install the Couchbase PHP SDK, as
+      explained in
+      <xref href="./start-using-sdk.dita" scope="local" format="dita">Start Using the SDK</xref>
+    </p>
+    
+    <p>
+      Then, proceed as follows:
+    </p>
+    
+    <ul>
+      
+      <li>
+        Make sure your system is running the 5.0 version of Couchbase Server. The server must have
+        the <codeph>travel-sample</codeph> bucket installed, and an index named <codeph>hotel</codeph>
+        defined on <codeph>travel-sample</codeph>. A user with username <codeph>travel-sample</codeph>
+        and password <codeph>travel-sample</codeph> should also be defined, with the 
+        <codeph>Bucket Full Access</codeph>
+        and <codeph>Bucket Admin</codeph> roles assigned for the <codeph>travel-sample</codeph>
+        bucket.
+        
+        <p>
+          For information on installing Couchbase Server, see
+          <xref href="../../install/install-intro.dita" scope="local" format="dita">Installing Couchbase Server</xref>. For
+          information on initializing and configuring, see
+          <xref href="../../install/init-setup.dita" scope="local" format="dita">Initialize the Cluster</xref>. Sample
+          buckets, and your means of installing them, are described in
+          <xref href="../../settings/install-sample-buckets.dita" scope="local" format="dita">Sample Buckets</xref>. The
+          process whereby users, credentials, and roles are defined by means of the Couchbase Web Console is explained in
+          <xref href="../../security/security-rbac-for-admins-and-apps.dita" scope="local" format="dita">Creating and
+          Managing Users with the UI</xref>.
+          
+        </p>
+        
+      </li>
+      
+      <li>
+        
+        Clone the source for the application, and checkout the 5.0 version:
+        
+        <codeblock outputclass="bash">git clone https://github.com/couchbaselabs/try-cb-php.git
+cd try-cb-php
+git checkout server-5.0</codeblock>
+        
+        <p>
+        </p>
+               
+      </li>
+      
+      <li>
+        Make sure <codeph>composer</codeph> is installed, then use it to install the application:
+        
+        <codeblock outputclass="bash">curl -sS https://getcomposer.org/installer | sudo php -- --install-dir=/usr/local/bin --filename=composer
+composer install</codeblock>
+        
+        <p>
+        </p>
+      
+      </li>
+      
+      <li>
+        Create an <codeph>.env</codeph> file as follows:
+        
+        <codeblock outputclass="bash">cp .env.example .env </codeblock>
+        
+        <p>
+          Then, bring up <codeph>.env</codeph> in an editor, and establish username and
+          password values as follows:
+        </p>
+        
+        <p>
+          <codeblock outputclass="bash">DB_USERNAME=travel-sample
+DB_PASSWORD=travel-sample</codeblock>
+        </p>
+        
+        <p>
+        </p>
+        
+      </li>
+      
+      <li>
+        Generate a key, for accessing the application:
+        
+        <p>
+          <codeblock outputclass="bash">php artisan key:generate</codeblock>
+          
+        </p>
+        
+        <p>
+        </p>
+      </li>
+      
+      <li>
+        Run the application:
+        
+        <p>
+          <codeblock outputclass="bash">php artisan serve --port 8080</codeblock>
+        </p>
+        
+        <p>
+        </p>
+        
+      </li>
+    </ul>
+      
+    </section>
+    
+    <section>
+
+       <title>
+          Connecting to the Cluster and Getting a Bucket
+       </title>
+        
+      <p>
+        Initially, the application must connect to the Couchbase cluster. The set-up information for this activity is provided in
+        <xref href="https://github.com/couchbaselabs/try-cb-php/blob/master/config/database.php" format="html" scope="external" >try-cb-php/config/database.php</xref>.
+        This file includes definitions of the IP address of the cluster, and the credentials used by the applications for server-access:
+      </p>
+      
+      <codeblock outputclass="php">'couchbase' => [
+'driver'        => 'couchbase',
+'host'          => 'couchbase://' . env('COUCHBASE_SERVER', '127.0.0.1'),
+'user'          => env('COUCHBASE_USER', 'Administrator'),
+'password'      => env('COUCHBASE_PASS', 'password'),
+],</codeblock>
+      
+      <p>
+        Note that detailed information on connection-management via the Couchbase PHP SDK can be found in
+        <xref href="./managing-connections.dita" scope="local" format="dita">Managing Connections</xref>.
+      </p>
+      
+     
+      <p>
+        On connection to the cluster, a specific bucket must be opened.
+        The bucket used by the application is <codeph>travel-sample</codeph>. Once the bucket is opened, queries can
+        be performed on the data it contains. The code for cluster-connection and bucket-access is provided in
+        <xref href="https://github.com/couchbaselabs/try-cb-php/blob/95152187b98e97cc0f3f70885d41b8c6bc9f54a5/app/Http/Controllers/CouchbaseController.php" format="html" scope="external" >try-cb-php/app/Http/Controllers/CouchbaseController.php</xref>:
+      </p>
+      
+      <codeblock outputclass="php">$this->db = DB::connection('couchbase')->openBucket('travel-sample');</codeblock>
+      
+      <p>
+        Note that a detailed functional description of buckets is provided in
+        <xref href="../../architecture/core-data-access-buckets.dita" scope="local" format="dita">Buckets</xref>.
+      </p>
+
+     </section>
+    
+    <section>
+      
+      <title>
+        Manage Users
+      </title>
+      
+      <p>
+        The application creates and authenticates users, and allows them to make bookings. The code is provided in
+        <xref href="https://github.com/couchbaselabs/try-cb-php/blob/3d9975861b417ce53e051d57fa10388963d47798/app/Http/Controllers/UserController.php" format="html" scope="external" >try-cb-php/app/Http/Controllers/UserController.php</xref>.
+        Users are created and stored as follows:
+      </p>
+      
+      <codeblock outputclass="php">public function create(Request $request)
+{
+  $credentials = [
+    'name' => $request->user,
+    'password' => $request->password,
+  ];
+  $user = new User($credentials);
+  try {
+    $this->db->insert("user::".$request->user, $user);
+    return response()->json(["data" => ["token" => $this->buildToken($user)]]);
+  } catch (\Couchbase\Exception $ex) {
+      return response()->json(["failure" => 'Failed to create user'], 409);
+  }
+}</codeblock>
+      
+      <p>
+        The full range of user-management features supported by the Couchbase PHP SDK is provided in
+        <xref href="./sdk-user-management-overview.dita" scope="local" format="dita">User Management</xref>.
+      </p>
+      
+    </section>
+    
+    
+    <section>
+      
+      <title>
+        Simple N1QL Queries: Finding Airports
+      </title>
+      
+      <p>
+        The application queries Couchbase Server by means of the <b>N1QL</b> language. Simple N1QL queries, for finding airports,
+        are demonstrated in
+        <xref href="https://github.com/couchbaselabs/try-cb-php/blob/3d9975861b417ce53e051d57fa10388963d47798/app/Http/Controllers/AirportController.php" format="html" scope="external" >try-cb-php/app/Http/Controllers/AirportController.php</xref>.
+        The following code-excerpt shows how a maximum of five results are returned, where the airport-name corresponds to that provided by means of a parameter
+        whose value is user-specified:
+      </p>
+      
+      <codeblock outputclass="php">$query = \CouchbaseN1qlQuery::fromString('SELECT airportname FROM `travel-sample` WHERE faa like $faa limit 5');
+$query->namedParams(['faa' => $searchStr]);</codeblock>
+      
+      <p>
+        An introduction to querying with N1QL is provided in
+        <xref href="../n1ql-query.dita" scope="local" format="dita">Querying with N1QL</xref>. Additional information 
+        can be found in
+        <xref href="./n1ql-queries-with-sdk.dita" scope="local" format="dita">N1QL from the SDKs</xref>.
+      </p>
+     
+    </section>
+    
+    <section>
+      
+      <title>
+        Complex N1QL Queries: Finding Routes
+      </title>
+      
+      <p>
+        More complex N1QL queries are used to return flight paths between airports: the code is provided
+        in
+        <xref href="https://github.com/couchbaselabs/try-cb-php/blob/3d9975861b417ce53e051d57fa10388963d47798/app/Http/Controllers/FlightPathsController.php" format="html" scope="external" >try-cb-php/app/Http/Controllers/FlightPathsController.php</xref>.
+        The following example returns airports each of which is both an origin and a destination:
+      </p>
+      
+      <codeblock outputclass="php">public function find(Request $request, $from, $to)
+{
+  $qs1 = \CouchbaseN1qlQuery::fromString('
+    SELECT faa AS fromAirport  FROM `travel-sample`
+    WHERE airportname = $from UNION
+    SELECT faa AS toAirport FROM `travel-sample`
+    WHERE airportname = $to
+  ');
+  $qs1->namedParams(['from' => $from, 'to' => $to]);
+  $result = $this->db->query($qs1);</codeblock>
+
+    </section>
+    
+    <section>
+      
+      <title>
+        Full Text Search: Finding Hotels
+      </title>
+          
+      <p>
+        The Couchbase <b>Full Text Search</b> facility is used by the application, to return hotels. The code is provided in
+        <xref href="https://github.com/couchbaselabs/try-cb-php/blob/master/app/Http/Controllers/HotelController.php" format="html" scope="external" >try-cb-php/app/Http/Controllers/HotelController.php</xref>.
+        The following excerpt shows how a user-specified location is attemptedly matched with text-values provided in multiple location-fields in
+        documents within the <codeph>travel-sample</codeph> bucket:
+      </p>
+      
+      <codeblock outputclass="php">$queryBody = SearchQuery::conjuncts(SearchQuery::term("hotel")->field("type"));
+if (!empty($location) &amp;&amp; $location != "*") {
+  $queryBody->every(SearchQuery::disjuncts(
+    SearchQuery::match($location)->field("country"),
+    SearchQuery::match($location)->field("city"),
+    SearchQuery::match($location)->field("state"),
+    SearchQuery::match($location)->field("address")
+  ));
+}</codeblock>
+      
+      <p>
+        For an introduction to Full Text Search, see 
+        <xref href="../full-text-search-overview.dita" scope="local" format="dita">Full Text Search</xref>.
+      </p>
+      
+    </section>
+    
     </body>
+  
 </topic>
