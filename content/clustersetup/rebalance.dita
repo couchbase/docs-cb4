@@ -1,72 +1,80 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_xsx_1mn_vs">
-  <title>Rebalancing a Cluster</title><shortdesc>Rebalancing represents a process of re-distributing information among the available nodes and 
-    updating the corresponding vBucket map to reflect the new structure.</shortdesc>
+  <title>Rebalancing a Cluster</title><shortdesc>Rebalance is a process of re-distributing data and indexes among the available
+    nodes.</shortdesc>
   <body>
     <p>As you operate your Couchbase Server cluster, you might need to alter the number of nodes in the cluster 
       to cope with changes in application load, RAM, disk I/O and network performance requirements.</p>
       
-      <p>Data is stored and distributed within a cluster through the vBucket structure. 
-      When your Couchbase Server cluster expands or shrinks, the information stored in the vBuckets 
-      is redistributed among the available nodes, and the corresponding vBucket map is updated to reflect the new structure. 
-      This process is called <term>rebalancing</term>.</p>
+      <p>When you add or remove nodes from your Couchbase Server cluster, the data and indexes are
+      redistributed among the available nodes, and the corresponding internal data is updated to
+      reflect the new distribution. This process is called <term>rebalancing</term>.</p>
       
       <p>The rebalancing process can take place while the cluster is running and servicing requests.
       Clients using the cluster read and write to the existing structure while the data is moving in
-      the background among nodes. Once the moving process is completed, the vBucket map is updated
-      and communicated to the smart clients and the proxy service (Moxi).</p>
-    <p>For more information about rebalancing, see <xref
-        href="https://github.com/couchbase/ns_server/blob/master/doc/rebalance-flow.txt"
-        format="html" scope="external">How Rebalance Works</xref>.</p>
-
-
-    <section><title>Rebalance Operation</title>
-      <p>A new inactive vBucket is created on the intended destination node.  The data is copied from the current active vBucket to the new vBucket.  
-        New replica copies are made from the original vBucket if necessary.</p>
-        <p>Rebalancing exchanges the data held on each node across the cluster and has two effects:</p>
-        <ul>
-          <li>Removes the data from the nodes that are removed from the cluster. 
-            By totally removing the storage of data on these nodes, the nodes can be taken out 
-            of the cluster without affecting the cluster operation.</li>
-          <li>Adds the data and enables new nodes so that they can serve information to clients. 
-            By moving active data to the new nodes, these nodes become responsible for the moved 
-            vBuckets and for servicing client requests.</li>
-        </ul>
-        
-        
-        <p>Rebalancing moves both the data stored in RAM and on disk, 1 vBucket at a time by default, 
-        which applies to each Bucket and each node within the cluster. The time taken for the move 
-        depends on the level of cluster activity, network congestion, disk speed and the size of each vBucket.</p>
-        <p>During rebalance, the cluster remains up and continues to service and handle client requests. 
-        Updates and changes to the stored data during the migration process are tracked and will be 
-        updated and migrated with the data that existed when the rebalance was requested.</p>
-       <p>When the vBucket has moved, and the new one is up-to-date, there is an atomic takeover by
-        the node that now owns the vBucket. This is also the moment in time when the cluster map is
-        updated and pushed to each client SDK. If a client SDK attempts an operation in that
-        millisecond after the atomic takeover but before receiving the new cluster map, the SDK will
-        receive an error <codeph>NOT_MY_VBUCKET</codeph> as well as a new copy of the cluster map.
-        The SDK will then reconnect to retry the operation to the new node automatically, with no
-        extra code from the developer. This process happens while each vBucket has moved during a
-        rebalance. </p>
-      <p>The updated vBucket map is communicated to the Couchbase SDK client libraries and the
-        enabled smart clients (such as Moxi) and allows clients to use the updated structure as the
-        rebalance completes. The new structure is used as soon as possible to help spread and even
-        out the load during the rebalance operation. </p>
-      <p>Because the cluster stays up and active throughout the entire rebalancing process, 
-        clients can continue to store and retrieve information and do not need to be aware that 
-        a rebalance operation is taking place.
-      </p>
-      <p>There are four common reasons to perform a rebalance operation:</p>
-  <ul>
-    <li>Adding nodes to expand the cluster size.</li>
-    <li>Removing nodes to reduce the cluster size.</li>
-    <li>Reacting to a failover situation, where you need to bring the cluster back to a healthy
-          state. </li>
-    <li>Temporarily removing one or more nodes to perform a software, operating system, or hardware
-          maintenance.</li>
-  </ul>
-  
-</section>
+      the background among nodes. Once the moving process is completed, the updated distribution is
+      communicated to connected applications (via a smart client) and other relevant consumers.</p>
+    <p>The way that rebalance works differs between services, primarily affecting the Index, Data,
+      and Search services.</p>
+    <section id="section_zzl_hs4_fbb">
+      <title>Rebalancing the Data Service</title>
+      <p>As explained in <xref
+          href="../concepts/distributed-data-management.dita#concept_cz5_szf_vs"/>,  data is
+        logically partitioned between all of the nodes running the Data service in the cluster. When
+        these nodes are rebalanced, the vBuckets are redistributed evenly between all of the Data
+        service nodes in the cluster. In the case of nodes being removed from the cluster, each
+        vBucket from the removed node is replicated to the new active node for that vBucket, which
+        may be different for each vBucket. A special case of this a <i>swap rebalance</i> where the
+        number of nodes coming into the cluster is equal to the number of nodes leaving the cluster,
+        ensuring that data is only moved between these nodes. Once all the data in the vBucket has
+        been transferred, the new vBucket is made 'active' so that all operations are directed to
+        the new node. This process results in uninterrupted data access from the application's
+        perspective while the rebalance is ongoing.</p>
+      <p>Each vBucket is transferred sequentially so if rebalance stops for any reason, it can be
+        restarted and it will continue from the point it reached previously. </p>
+    </section>
+    <section id="section_idl_3s4_fbb">
+      <title>Rebalancing the Index Service</title>
+      <p>The Index service maintains a cluster-wide set of index definitions and metadata which
+        allows it to redistribute indexes and index replicas (if they are used) from ejected nodes
+        to other nodes in the cluster. However, indexes already residing on nodes in the cluster
+        will not be redistributed as part of rebalance, even if it would mean creating a more
+        desirable distribution of indexes. This distribution is based on balancing the CPU and RAM
+        utilization of the nodes, aiming to balance this across all index nodes where possible. When
+        these indexes are moved, the actual index data is not sent directly to the new node, the
+        indexes are instead created and then built from scratch using the data from the Data
+        service.  While the rebalance process does recreate missing replicas and move them if
+        necessary, if there are more replicas of an index than available nodes, the Index service
+        will drop the replicas instead of creating duplicate indexes on a node. If later, more index
+        nodes are added to the cluster, then the Index service will then intelligently be able to
+        bring the number of replicas up to the desired value.</p>
+      <p>The Index service ensures uninterrupted index access within the cluster by not removing
+        index nodes as part of the rebalance operation until the indexes residing on those nodes
+        have finished building on the new nodes. This means that the time that it takes to rebalance
+        the Index service is highly dependent on the overall data set size and size of the indexes
+        on the ejected nodes.</p>
+    </section>
+    <section id="section_hvm_rs4_fbb">
+      <title>Rebalancing the Search Service</title>
+      <p>Similarly to the Data service, the Search service automatically partitions its indexes
+        across all search nodes in the cluster, ensuring that during rebalance the distribution
+        across all nodes is balanced.</p>
+    </section>
+    <section id="section_vw1_kv4_fbb">
+      <title>Rebalancing the Query Service</title>
+      <p>When adding or removing nodes running the Query service during rebalance, the changes are
+        immediately effective. If adding a node, this means that it will be immediately available to
+        serve queries. When removing a node, this means that it will immediately stop serving
+        queries and any ongoing queries running on the node will be terminated, so you may have to
+        handle this within your application.</p>
+    </section>
+    <section id="section_fht_xbp_fbb">
+      <title>Rebalancing Multiple Services</title>
+      <p>Usually Couchbase Server deployments have a single service deployed on each node, see <xref
+          href="../concepts/multidimensional-scaling.dita#concept_ckt_svy_zs"/>. In instances where
+        this is not the case, the rebalance behavior will be the combination of all services
+        deployed on the node.</p>
+    </section>
   </body>
 </topic>

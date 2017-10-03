@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_l2x_pkx_vx">
+  <title>Sorting Query Results</title>
+  <body>
+    <p>Starting Couchbase Server version 4.6, you can sort search results by any indexed field. In
+      previous releases, search results were always sorted by descending score so that highest
+      scoring results are listed first. This is still the default sort order, so if you don’t
+      specify a sort order, you’re unlikely to notice any difference.</p>
+      <p>You control sorting in your query JSON by specifying a <codeph>sort</codeph> field that
+        takes an array of either strings or objects. Strings designate the names fields to sort on,
+        e.g. <codeph>"sort": ["fieldname"]</codeph>. Objects are described below in <xref
+          href="#topic_l2x_pkx_vx/fts-advanced-sort-options" format="dita"/></p>
+      <p>You can prefix any field name with the ‘-’ character, which causes that field to sorted in descending order. Items will first be sorted by the first field. Any items with the same value for that field, are then also sorted by the next field, and so on. All fields in the sort order MUST be indexed.</p>
+      <p>There are two special fields:<ul>
+        <li><codeph>_id</codeph> - refers to the document identifier</li>
+        <li><codeph>_score</codeph> - refers to the relevance score computed by <xref
+              href="http://www.blevesearch.com/" format="html" scope="external">Bleve</xref></li>
+      </ul></p>
+      <p>Here is a more complex example:
+      <codeblock>"sort": ["country", "state", "city","-_score"]</codeblock></p>
+      <p>Results will first be sorted by country. If documents have the same value for country, they
+        will be sorted by state, and then, if country and state are the same, matches will be sorted
+        by city. Finally, if all other fields are equal, results will be sorted by score descending. </p>
+      <p>Here is a full query example that performs a query string query and demonstrates the proper
+        place to add the sort
+        property.<codeblock>{
+  "explain": false,
+  "fields": [
+    "title"
+  ],
+  "highlight": {},
+  "sort": ["country", "-_score","-_id"],
+  "query":{ 
+    "query": "beautiful pool" 
+  }
+}</codeblock></p>
+    <section id="fts-advanced-sort-options"><title>Advanced Sort Options</title> You can exercise
+      finer control over sort behavior using objects in the <codeph>sort</codeph> field. <ul
+        id="ul_xhg_wzz_yx">
+        <li><codeph>by</codeph> Sort results on <codeph>id</codeph>, <codeph>score</codeph>, or a
+            <codeph>field</codeph> in the full text index. </li>
+        <li><codeph>field</codeph> the name of the field to sort on, if you specify <codeph>"by" :
+            "field"</codeph>. It is ignored if you specify <codeph>score</codeph> or
+            <codeph>id</codeph>.</li>
+        <li><codeph>missing</codeph> specifies how you want search results sorted if they have no
+          value in a field used for sorting. Setting this sorts all results with missing values in
+          the sort field either before all other results (<codeph>first</codeph>) or after them
+            (<codeph>last</codeph>). Defaults to <codeph>last</codeph>.</li>
+        <li>
+          <codeph>mode</codeph> A single field in a full-text search index can contain multiple
+          values. This happens when you index an array with multiple elements or when a text
+          analyzer emits multiple tokens for an input. By default, such results are sorted in
+            <codeph>default</codeph> order, which is undefined but deterministic, allowing you to
+          page through results using <codeph>from</codeph> (offset) with reliable ordering. If you
+          need to control sort for multi-value fields, set mode to <codeph>min</codeph> or
+            <codeph>max</codeph> to sort using the minimum or maximum value. </li>
+      </ul><p>The example below demonstrates advanced sort settings. You can try it on the
+        travel-sample bucket if you create a default index that indexes all fields in hotel
+        documents. This query sorts search results based on
+        <codeph>reviews.ratings.Overall</codeph>, a field that is normally multi-valued because it
+        contains an array of different users' ratings. When there are multiple values, the highest
+        "Overall" ratings will be used for sorting. All hotels with no "Overall" ratings will be
+        sorted at the end. </p><p>
+        <codeblock>{
+  "explain": false,
+  "fields": [
+     "*"
+   ],
+   "highlight": {},
+   "query": {
+     "match": "bathrobes",
+     "field": "reviews.content",
+     "analyzer": "standard"
+   },
+   "size" : 10,
+   "sort": [
+      {
+       "by" : "field", 
+       "field" : "reviews.ratings.Overall", 
+       "mode" : "max",
+       "missing" : "last"
+      },
+   ]
+}</codeblock>
+      </p> Finally, note that you can combine simple and advanced sort options freely in the
+        <codeph>sort</codeph> array.<p>
+        <codeblock>{
+   ...
+   "sort": [
+      "country",
+      {
+       "by" : "field", 
+       "field" : "reviews.ratings.Overall", 
+       "mode" : "max",
+       "missing" : "last"
+      },
+      {
+       "by" : "field", 
+       "field" : "reviews.ratings.Location", 
+       "mode" : "max",
+       "missing" : "last"
+      },
+      "-_score"
+   ]
+}</codeblock>
+      </p>
+    </section>
+  </body>
+</topic>

@@ -3,60 +3,179 @@
 <concept id="concept_qqp_xfk_np">
   <title>SELECT clause</title>
   <conbody>
-    <p><i>select-clause:</i></p>
-    <codeblock>SELECT ( [ALL | DISTINCT]  ( result-expression [, result-expression]*) | 
-    (RAW | ELEMENT) expression) </codeblock>
-    <p><i>result-expression:</i></p>
-    <codeblock>[(path .)] * | expression [ ([AS] alias) ]</codeblock>
-    <p><i>path:</i></p>
-    <codeblock>identifier [ <b>[</b> expression <b>]</b> ] [. path]</codeblock>
-    <p><i>alias:</i></p>
-    <codeblock>identifier</codeblock>
-    <p><b>ALL</b></p>
-    <p>SELECT ALL retrieves all of the data specified. ALL will display "all" of the specified
-      columns including all of the duplicates. The ALL keyword is the default if nothing is
-      specified.</p>
-    <p><b>DISTINCT</b></p>
-    <p>The DISTINCT clause removes duplicate result objects from the query's result set. If the
-      DISTINCT clause is not used, the query returns all objects that meet the query conditions in a
-      result set, which might include duplicates.</p>
-    <p>Example</p>
-    <codeblock>SELECT DISTINCT orderlines[0].productId FROM orders    </codeblock>
-    <p>Results</p>
-    <codeblock>{
-  "results": [
-    {
-      "productId": "coffee01"
-    },
-    {
-      "productId": "tea111"
+    <p>Use the SELECT statement to return a <i>ResultSet</i> of matching documents.</p>
+    <p><b>Syntax</b></p>
+    <codeblock>SELECT [ALL|DISTINCT] [RAW|ELEMENT] [<varname>keyspace_name</varname>.] <varname>field_name</varname> [AS <varname>alias_name</varname>]
+ [FROM <varname>keyspace_name</varname> [AS <varname>alias_name</varname>] ]
+[WHERE <varname>where_clause</varname>] [AND <varname>where_clause2</varname>]
+[GROUP BY <varname>group_clause</varname>]
+[UNION|INTERSECT|EXCEPT <varname>union_clause</varname>]
+[ORDER BY <varname>order_clause</varname>]
+[LIMIT <varname>limit_int</varname>]
+[OFFSET <varname>offset_clause</varname>]
+;</codeblock>
+    <p>
+      <dl>
+        <dlentry>
+          <dt>Arguments</dt>
+          <dd>
+            <dl>
+              <dlentry>
+                <dt>ALL | DISTINCT</dt>
+                <dd>[Optional; default is ALL]</dd>
+                <dd>SELECT ALL retrieves all of the data specified and will display all of the
+                  specified columns, including all duplicates.</dd>
+                <dd>SELECT DISTINCT removes duplicate result objects from the query's result
+                    set.<note>Since Couchbase Server 4.5.1, the DISTINCT clause is no longer
+                    blocking in nature since it streams the input and produces the output
+                    in-parallel, while consuming less memory.</note></dd>
+              </dlentry>
+            </dl>
+            <dl>
+              <dlentry>
+                <dt>RAW | ELEMENT</dt>
+                <dd>[Optional; RAW and ELEMENT are synonyms]</dd>
+                <dd>SELECT RAW specifies to make the resulting expression not be qualified; that is,
+                  the standard N1QL output (same as relational engines) returns tuples tagged with
+                  an alias, and the RAW qualifier removes this extra layer. For details, see <xref
+                    href="select_raw.dita#select_raw">SELECT RAW</xref>.</dd>
+              </dlentry>
+              <dlentry>
+                <dt>keyspace_name</dt>
+                <dd>[Optional; default is specified by the FROM clause] The name of the keyspace
+                  (equivalent to a relational database table).</dd>
+                <dd>Multiple keyspaces are separated by a comma.<note>When specifying the keyspace
+                    name in<codeph> SELECT keyspace_name.* </codeph>for all fields, the keyspace
+                    name will not appear in the result set; whereas not specifying the keyspace name
+                      in<codeph> SELECT * FROM keyspace_name </codeph>adds the keyspace name to the
+                    result
+                    set.<codeblock><b>SELECT * FROM `travel-sample` WHERE type="hotel";</b>
+
+[
+  {
+    "travel-sample": {                          / added line with keyspace
+      "address": "Capstone Road, ME7 3JE",
+      "alias": null,
+      "checkin": null,
+...</codeblock><codeblock><b>SELECT `travel-sample`.* FROM `travel-sample` WHERE type="hotel";</b>
+
+[
+  {                                             / no added line with keyspace
+    "address": "Capstone Road, ME7 3JE",
+    "alias": null,
+    "checkin": null,
+...</codeblock><codeblock><b>SELECT meta().id,email,city,phone,`travel-sample`.reviews[0].ratings
+FROM `travel-sample` WHERE type="hotel" LIMIT 5;</b>
+
+[
+  {                                             / no added line with keyspace
+    "city": "Medway",
+    "email": null,
+    "id": "hotel_10025",
+    "phone": "+44 870 770 5964",
+    "ratings": {
+      "Cleanliness": 5,
+      "Location": 4,
+      "Overall": 4,
+      "Rooms": 3,
+      "Service": 5,
+      "Value": 4
     }
-  ]
-}  </codeblock>
-    <p>If the query had run with no DISTINCT clause against orders with this SELECT statement, the
-      result set would have been as follows:</p>
-    <codeblock>SELECT  orderlines[0].productId
-      FROM orders</codeblock>
-    <p>Returns</p>
-    <codeblock> {
-  "results": [
-    {
-      "productId": "coffee01"
-    },
-    {
-      "productId": "coffee01"
-    },
-    {
-      "productId": "tea111"
-    },
-    {
-      "productId": "coffee01"
-    }
-  ]
-}</codeblock>
-    <note>Starting version 4.5.1, the DISTINCT clause is no longer blocking in nature. It streams the input and produces the output in-parallel, all while consuming less memory.</note>
-    <p><b>RAW/ELEMENT</b></p>
-    <p> Specifies a raw expression. </p>
+  },</codeblock></note></dd>
+              </dlentry>
+            </dl>
+            <dl>
+              <dlentry>
+                <dt>field_name</dt>
+                <dd>The name of the field or fields, separated by a comma, to be in the query's
+                  ResultSet, such
+                  as:<codeblock>SELECT id, airline, stops FROM `travel-sample` WHERE type="route";</codeblock></dd>
+                <dd>To use a field within an array, use<codeph> [0] </codeph>after the array name,
+                  followed by a period and the field name, such
+                  as:<codeblock>SELECT schedule[0].day FROM `travel-sample` WHERE type="route";</codeblock></dd>
+              </dlentry>
+            </dl>
+            <dl>
+              <dlentry>
+                <dt>AS alias_name</dt>
+                <dd>A temporary name of a bucket name or field name to make names more readable or
+                  unique, such as:<codeblock>SELECT schedule[0].day AS Weekday</codeblock></dd>
+              </dlentry>
+            </dl>
+            <dl>
+              <dlentry>
+                <dt>FROM keyspace_name</dt>
+                <dd>[Optional] The name of the keyspace (equivalent to a relational database table),
+                  internal N1QL system keyspace, file system storage, or micro service that defines
+                  the source of input documents or objects for the query.</dd>
+                <dd>Multiple keyspaces are separated by a comma and can be aliased, such
+                  as:<codeblock>SELECT * FROM `travel-sample` AS ts, `beer-sample` AS bs;</codeblock>For
+                  details, see <xref href="from.dita#concept_rnt_zfk_np">FROM clause</xref>.</dd>
+              </dlentry>
+            </dl>
+            <dl>
+              <dlentry>
+                <dt>WHERE where_clause AND where_clause2</dt>
+                <dd>[Optional] The clause or set of clauses used to filter the documents.
+                    Use<codeph> AND </codeph>between where clauses, such
+                  as:<codeblock>SELECT * FROM `travel-sample` WHERE type="route" AND airline="UA";</codeblock>For
+                  details, see <xref href="where.dita#concept_zvb_dgk_np">WHERE clause</xref>.</dd>
+              </dlentry>
+            </dl>
+            <dl>
+              <dlentry>
+                <dt>GROUP BY group_clause</dt>
+                <dd>[Optional] The clause to organize a ResultSet by one or more expressions and can
+                  be used in aggregate functions, such
+                  as:<codeblock>SELECT * FROM `travel-sample` GROUP BY type;</codeblock>For details,
+                  see <xref href="groupby.dita#concept_uhg_2gk_np">GROUP BY clause</xref>.</dd>
+              </dlentry>
+            </dl>
+            <dl>
+              <dlentry>
+                <dt>UNION | INTERSECT | EXCEPT union_clause</dt>
+                <dd>[Optional] The clause to combine results from multiple sub-selects, such
+                  as:<codeblock>SELECT name, city FROM `travel-sample` WHERE type="route" AND city="San Francisco"
+UNION SELECT name, city FROM `beer-sample` WHERE type="brewery" AND city="San Francisco";</codeblock>For
+                  details, see <xref href="union.dita#concept_iy2_fgk_np">UNION, INTERSECT, and
+                    EXCEPT</xref>. </dd>
+              </dlentry>
+            </dl>
+            <dl>
+              <dlentry>
+                <dt>ORDER BY order_clause</dt>
+                <dd>[Optional] The field or group of fields to order the ResultSet, such
+                  as:<codeblock>SELECT * FROM `travel-sample` ORDER BY city;</codeblock>For details,
+                  see <xref href="orderby.dita#concept_x1g_ggk_np">ORDER BY clause</xref>.</dd>
+              </dlentry>
+            </dl>
+            <dl>
+              <dlentry>
+                <dt>LIMIT limit_clause</dt>
+                <dd>[Optional] The maximum number of objects to be returned in the ResultSet, such
+                  as:<codeblock>SELECT * FROM `travel-sample` LIMIT 10;</codeblock>For details, see
+                    <xref href="limit.dita#concept_dsd_hgk_np">LIMIT clause</xref>.</dd>
+              </dlentry>
+            </dl>
+            <dl>
+              <dlentry>
+                <dt>OFFSET offset_clause</dt>
+                <dd>[Optional] The number of objects to be skipped before starting a ResultSet, such
+                  as:<codeblock>SELECT * FROM `travel-sample` LIMIT 10 OFFSET 200;</codeblock>For
+                  details, see <xref href="offset.dita#concept_lbx_hgk_np">OFFSET
+                  clause</xref>.</dd>
+              </dlentry>
+            </dl>
+            <dl>
+              <dlentry>
+                <dt>;</dt>
+                <dd>All SELECT statements must end with a semi-colon.</dd>
+              </dlentry>
+            </dl>
+          </dd>
+        </dlentry>
+      </dl>
+    </p>
 
   </conbody>
 </concept>

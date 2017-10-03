@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="timestamp-based-conflict-resolution">
+  <title>Timestamp-based Conflict Resolution</title>
+  <shortdesc>Timestamp-based Conflict Resolution resolves conflicts by selecting the document with
+    the most recent time stamp. In order to be able to perform this effectively it is essential that
+    the time stamps created by each server are closely aligned.</shortdesc>
+  <body>
+    <note type="important">Timestamp based conflict resolution without the use of synchronized clocks is not supported.</note>
+    <section id="section_bty_ffv_qy">
+      <title>Time Synchronization</title>
+      <p>Accurate time synchronization across all nodes in all XDCR clusters is a strong requirement
+        for timestamp-based conflict resolution. Couchbase Server requires an external entity to synchronize the clocks among the
+        nodes in the clusters such as NTP (Network Time Protocol) or other methods. For more
+        information on using NTP to synchronize clocks, see <xref
+          href="../install/synchronize-clocks-using-ntp.dita"/>. </p>
+      <p>Even with time synchronization in place, it is expected that there may be small differences
+        in the clocks between different nodes (time skew). You must also actively monitor this time
+        skew between clusters to ensure that timestamp-based conflict resolution functions
+        correctly. See <xref href="xdcr-monitor-timestamp-conflict-resolution.dita"></xref> for more details. To compensate for these small differences in time and
+        to allow for updates that could theoretically be received on the same clock tick, Couchbase
+        Server records time stamps using a <xref href="#timestamp-based-conflict-resolution/hybrid-logical-clock">Hybrid Logical Clock</xref>. </p>
+      <p>Failing to successfully synchronise clocks across nodes can result in document mutations
+        incorrectly winning conflicts, which could lead to undesirable application behaviour. </p>
+    </section>
+    <section id="use-cases"><title>Use Cases Supported by Timestamp-based Conflict
+        Resolution</title><p>
+        <note type="important">Only the following use cases are supported deployments for
+          Timestamp-based conflict resolution. Other configurations must use <xref
+            href="xdcr-conflict-resolution.dita#conflict-resolution/revision-id-based-conflict-resolution"
+            >Revision ID based conflict resolution</xref>.</note>
+      </p><p><b>High Availability with Cluster Failover</b></p><p>In this example, all database
+        operations go to Datacenter A and are replicated via XDCR to Datacenter B. If the cluster
+        located in Datacenter A fails then the application fails all traffic over to Datacenter B.
+        </p><image placement="break" href="picts/timestamp_clusterfailover.png" width="570"
+        id="image_sqw_vtb_yy"/><p><b>Datacenter Locality</b></p><p>In the geographic locality scenario, two active clusters operate on discrete sets of documents.
+        This ensures no conflicts are generated during normal operation. A bi-directional XDCR
+        relationship is configured to replicate their updates to each other. When one cluster fails,
+        application traffic can be failed over to the remaining active cluster.</p>
+      <p>
+        <image placement="break" href="picts/timestamp_datacenter_locality.png" width="570"
+          id="image_zfm_45b_yy"/>
+      </p>
+    </section>
+    <section>
+      <title>Ensuring Safe Failover</title>
+      <p>Timestamp-based conflict resolution requires that applications only allow traffic to the
+        other Datacenter after the maximum of the following two time periods has elapsed:</p>
+      <ol>
+        <li>The replication latency between A and B. This allows any mutations in-flight to be received by Datacenter B.</li>
+        <li>The absolute time skew between Datacenter A and Datacenter B. This ensures that any
+          writes to Datacenter B occur <b>after </b>the last write to Datacenter A, after the
+          calculated delay, at which point all database operations would go to Datacenter B.</li>
+      </ol>
+      <p>When availability is restored to Datacenter A, applications must observe the same time period before redirecting their traffic. 
+        For both of the use cases described above, using timestamp-based conflict resolution ensures that the most recent version of any document will be preserved.</p>
+      <note type="important">If you are unable to synchronize all clocks across clusters, you must at least know the
+        absolute difference from the clock which each cluster is synchronized to, so that you can
+        add an appropriate delay to your application in failover and failback scenarios.</note>
+    </section>
+    <section>
+      <title>Working Example of Cluster Failover and Failback</title>
+      <image placement="break" href="picts/timestamp_clusterfailover_failback.png" width="570"
+        id="image_sbp_r5b_yy"/>
+      <p>Consider the example in the diagram above:</p>
+      <ol>
+        <li>Datacenter A receives mutations (<i>m1</i>) from App1, App2 and App3.</li>
+        <li>Datacenter A has an outage before the latest mutations (<i>m1</i>) can be replicated to datacenter B.</li>
+        <li>App1, App2 and App3 then failover to Datacenter B and the user sees that there is data loss since the latest mutations (<i>m1</i>) were not replicated. 
+          This is unavoidable.</li>
+        <li>App1, App2 and App3 then submit another set of mutations (<i>m2</i>) to Datacenter B.</li>
+        <li>Once the outage in Datacenter A is resolved, App1, App2 and App3 fail back to Datacenter
+          A <b>after the calculated delay</b>. <note> If the applications did not wait for the safe
+            period to finish before failing back then there is the possibility of further data loss
+            due to clock skews and replication latency.</note></li>
+        <li>At this point, the user still sees their latest mutations (<i>m2</i>) in Datacenter A, there is no further data loss.</li></ol>
+    </section>
+    <section id="hybrid-logical-clock">
+      <title>Hybrid Logical Clock</title>
+      <p>A hybrid logical clock (HLC) is a combination of a physical clock and a logical clock.</p>
+      <p>The physical clock is the time returned by the system, in nanoseconds. The logical clock is a counter, which increments when the physical clock yields a value that 
+        is smaller or equal to the currently stored physical clock value.</p>
+        <p>The CAS of a document is used to store the hybrid logical clock timestamp. It is a 64-bit value, with the most significant 48 bits representing the physical clock 
+          and the least significant 16 bits representing the logical clock. Each mutation has its own hybrid logical clock timestamp.</p>
+        <p>Here are some important properties of a hybrid logical clock:</p>
+      <ul>
+        <li>A hybrid logical clock is monotonic through its use of a logical clock. This ensures that it does not suffer from the potential leap-back of a purely physical clock.</li>
+        <li>A hybrid logical clock captures the ordering of mutations.</li>
+        <li>A hybrid logical clock is close to physical time.</li>
+      </ul>
+    </section>
+  </body>
+  <related-links>
+    <linklist>
+      <desc>For information on how to set the conflict resolution type for a bucket, see</desc>
+      <link href="../clustersetup/create-bucket.dita"/>
+    </linklist>
+    <linklist><desc>For further information about conflict resolution in general, see</desc>
+      <link href="xdcr-conflict-resolution.dita"/></linklist>
+    <linklist>
+      <desc>For information on monitoring various aspects of timestamp-based conflict resolution, see</desc>
+      <link href="xdcr-monitor-timestamp-conflict-resolution.dita"/>
+    </linklist>
+    <linklist>
+      <desc>For information on how to enable the timestamp-based conflict resolution for your
+        existing data, see</desc>
+      <link href="../install/migration.dita"/>
+    </linklist>
+  </related-links>
+</topic>

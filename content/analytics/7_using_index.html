@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta description="Using indexes to speedup queries.">
+    <title>Using Indexes</title>
+  </head>
+  <body>
+    <main role="main"><article role="article" aria-labelledby="ariaid-title1">
+    <div class="body">
+      <h1 id="using-indexes">Using Indexes</h1>
+
+<p>Indexes can speedup both selection queries and join queries if they
+are applied properly. The following two sections describe
+scenarios that indexes are explored inside the system for query processing purpose.</p>
+
+<h2 id="selection-queries"><a id="Selection_queries">Selection Queries</a></h2>
+
+<p>The query optimizer chooses to use a secondary index for query execution
+if both of the following conditions are met:</p>
+
+<ul>
+  <li>
+    <p>The query contains a conjunctive equality or range predicate over one or more fields, or a join predicate
+(see the next section).
+The conjunctive predicate has a form:</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code> QualifiedName Operator Literal ( AND field Operator Literal )+
+</code></pre>
+    </div>
+
+    <p>where <code class="highlighter-rouge">Operator</code> is <code class="highlighter-rouge">=</code>, <code class="highlighter-rouge">&gt;</code>, <code class="highlighter-rouge">&gt;=</code>, <code class="highlighter-rouge">&lt;</code>, <code class="highlighter-rouge">&lt;=</code>, or <code class="highlighter-rouge">BETWEEN</code>;</p>
+  </li>
+  <li>
+    <p>There is an index with a key, such that the corresponding fields in the predicate form a prefix of that key.
+For example, suppose that there is an index on dataset <code class="highlighter-rouge">foo</code> with key fields <code class="highlighter-rouge">c_s</code> and <code class="highlighter-rouge">c_d</code>.</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code> CREATE INDEX idx_s_d ON foo(c_s:STRING, c_d:DOUBLE);
+</code></pre>
+    </div>
+  </li>
+</ul>
+
+<p>The following query uses the index because it has an equality predicate (=) on a field (c_s) that is a prefix of the
+indexed key (c_s, c_d)</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT f.c_x as res
+FROM foo f
+WHERE f.c_s = 'world';
+</code></pre>
+</div>
+
+<p>If multiple indexes are eligible access paths, there can be two cases:</p>
+
+<ul>
+  <li>Two or more indexes are sharing the same prefix and the predicate is on that prefix:
+For example: <code class="highlighter-rouge">indexA</code> is on (c1, c2), <code class="highlighter-rouge">indexB</code> is on (c1, c3) and the predicate is on c1 (c1 = 100).
+In this case, the query optimizer picks the first index in the order of their names, e.g., <code class="highlighter-rouge">indexA</code>;</li>
+  <li>No indexes share the same prefix and the predicate refers to fields from each individual index.
+For example: <code class="highlighter-rouge">indexA</code> in on (c1) and <code class="highlighter-rouge">indexB</code> is on (c2), the predicate is on c1 and c2 (c1 = 100 and c2 = 200).
+In this case, both indexes will be used to retrieve matched primary keys and
+then the key sets will be intersected to further filter retrieved primary keys.</li>
+</ul>
+
+<h2 id="join-queries"><a id="Join_queries">Join Queries</a></h2>
+
+<p>SQL++ support joins from standard SQL in the following forms:</p>
+
+<ul>
+  <li>
+    <p>Inner join:</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code>SELECT * FROM ds_outer, ds_inner WHERE &lt;predicate&gt;;
+SELECT * FROM ds_outer JOIN ds_inner ON &lt;predicate&gt;;
+</code></pre>
+    </div>
+  </li>
+  <li>
+    <p>Left outer join:</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code>SELECT * FROM ds_outer LEFT OUTER JOIN ds_inner ON &lt;predicate&gt;;
+</code></pre>
+    </div>
+  </li>
+</ul>
+
+<p>ds_outer is the <code class="highlighter-rouge">outer</code> branch and ds_inner is the <code class="highlighter-rouge">inner</code> branch
+(in the order in which they appear in the FROM clause).</p>
+
+<p>The query optimizer picks an index for join evaluation if the following conditions are met:</p>
+
+<ul>
+  <li>
+    <p>The join predicate is an equality or range predicate that refers to fields from both branches of the join,
+in the form of:</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code> fn(expr_outer) /*+ indexnl */ op field_inner
+</code></pre>
+    </div>
+
+    <p>where <code class="highlighter-rouge">op</code> is <code class="highlighter-rouge">&lt;</code>, <code class="highlighter-rouge">&lt;=</code>, <code class="highlighter-rouge">=</code>, <code class="highlighter-rouge">&gt;=</code>, <code class="highlighter-rouge">&gt;</code>, or <code class="highlighter-rouge">BETWEEN</code>;</p>
+  </li>
+  <li><code class="highlighter-rouge">field_inner</code> is a field from the inner dataset on which the index is defined;</li>
+  <li>The index join hint, /*+ indexnl */, is provided for the join predicate;</li>
+  <li>fn() is a function that returns the same data type as the type specified in the index for the <code class="highlighter-rouge">field_inner</code>.
+Usually, fn() is one of the following: to_string(), to_double(), or to_bigint().</li>
+</ul>
+
+<p>Note that if the type of <code class="highlighter-rouge">expr_outer</code> is not known at compile time therefore the index join cannot be
+selected if the join predicate is just <code class="highlighter-rouge">expr_outer /*+ indexnl */ op field_inner</code>.</p>
+
+<p>For example, suppose there are two shadow datasets: foo1 and foo2, with an index on foo2:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>CREATE index idx_f2 ON foo2(c_s2:string);
+</code></pre>
+</div>
+
+<p>Then the following query would use this index for join evaluation:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT f1.c_x1 as c1, f2.c_x2 as c2
+FROM foo1 AS f1, foo2 AS f2
+WHERE to_string(f1.c_s1)  /*+ indexnl */ = f2.c_s2
+</code></pre>
+</div>
+
+    </div>
+    </article>
+    </main>
+  </body>
+</html>

@@ -16,7 +16,7 @@
                 <li>Simple queries, which are only strings and do not use placeholders;</li>
                 <li>Parameterized queries, which use numbered or named placeholders.</li>
             </ul>You can create each via the corresponding factory method on
-                <codeph>CouchbaseN1qlQuery</codeph> passing into it the statement as a string.</p>
+                <codeph>CouchbaseN1qlQuery</codeph>, passing in the statement as a string.</p>
 
                 <p>The return value from <apiname>query()</apiname> is an instance of
                 <apiname>stdClass</apiname>. Iterating over the <apiname>rows</apiname> property of
@@ -67,5 +67,108 @@ foreach ($result->rows as $row) {
                             <codeph>false</codeph> then a prepared reference to this query will be
                         stored on the SDK and used for subsequent queries.</li>
             </ul></p></section>
+            <section><title>Cross-bucket queries</title>
+            <p>Since version 2.3.0, the PHP SDK implements the <codeph>\Couchbase\Authenticator</codeph> interface, 
+                which allows you to perform N1QL queries that involve multiple buckets and joins. Such query objects have to change
+            their behaviour using <codeph>crossBucket(true)</codeph> method. The following example demonstrates
+            the workflow:</p>
+            <codeblock outputclass='language-php'><![CDATA[$authenticator = new \Couchbase\ClassicAuthenticator();
+$authenticator->bucket('people', 'secret');
+$authenticator->bucket('orders', '123456');
+
+$cluster = new \Couchbase\Cluster("couchbase://localhost");
+$cluster->authenticate($authenticator);
+
+$bucket = $cluster->openBucket('orders');
+
+$query = \Couchbase\N1qlQuery::fromString(
+    "SELECT * FROM `orders` JOIN `people` ON KEYS `orders`.person_id ORDER BY `orders`.name");
+$query->consistency(\Couchbase\N1qlQuery::REQUEST_PLUS);
+$query->crossBucket(true);
+
+$res = $bucket->query($query);
+// $res inludes rows from orders and people buckets
+            ]]></codeblock>
+            <p>When executed, it will render the result from <codeph>$res</codeph>, which contains documents from both buckets
+            (orders and people):</p>
+            <screen><![CDATA[object(stdClass)#14 (5) {
+  ["rows"]=>
+  array(3) {
+    [0]=>
+    object(stdClass)#6 (2) {
+      ["orders"]=>
+      object(stdClass)#5 (2) {
+        ["name"]=>
+        string(10) "Green Soap"
+        ["person_id"]=>
+        string(4) "john"
+      }
+      ["people"]=>
+      object(stdClass)#7 (2) {
+        ["city"]=>
+        string(8) "New York"
+        ["name"]=>
+        string(8) "John Doe"
+      }
+    }
+    [1]=>
+    object(stdClass)#9 (2) {
+      ["orders"]=>
+      object(stdClass)#8 (2) {
+        ["name"]=>
+        string(8) "Red Soap"
+        ["person_id"]=>
+        string(4) "jane"
+      }
+      ["people"]=>
+      object(stdClass)#10 (2) {
+        ["city"]=>
+        string(5) "Miami"
+        ["name"]=>
+        string(8) "Jane Doe"
+      }
+    }
+    [2]=>
+    object(stdClass)#12 (2) {
+      ["orders"]=>
+      object(stdClass)#11 (2) {
+        ["name"]=>
+        string(7) "Rope 5m"
+        ["person_id"]=>
+        string(4) "john"
+      }
+      ["people"]=>
+      object(stdClass)#13 (2) {
+        ["city"]=>
+        string(8) "New York"
+        ["name"]=>
+        string(8) "John Doe"
+      }
+    }
+  }
+  ["requestId"]=>
+  string(36) "820416d5-6535-4519-be50-a2e9f03d0005"
+  ["status"]=>
+  string(7) "success"
+  ["signature"]=>
+  array(1) {
+    ["*"]=>
+    string(1) "*"
+  }
+  ["metrics"]=>
+  array(5) {
+    ["elapsedTime"]=>
+    string(11) "21.529512ms"
+    ["executionTime"]=>
+    string(11) "21.425838ms"
+    ["resultCount"]=>
+    int(3)
+    ["resultSize"]=>
+    int(691)
+    ["sortCount"]=>
+    int(3)
+  }
+}]]></screen>
+            </section>
     </conbody>
 </concept>

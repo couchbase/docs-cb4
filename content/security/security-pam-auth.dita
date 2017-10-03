@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_s4n_42h_vx">
+  
+  <title>
+    PAM-Based Authentication
+  </title>
+  
+  <shortdesc>
+    <i>Pluggable Authentication Modules</i> (PAM) provide an authentication framework that allows multiple, 
+    low-level authentication schemes to be used by a single API.
+    The <i>Enterprise Edition</i> of Couchbase Server, running on Linux, supports administrator-authentication through
+    PAM's <i>Linux password-module</i>.
+  </shortdesc>
+  
+  <body>
+    
+    <section>
+      
+      <title>
+        PAM Features
+      </title>
+    
+      <p>
+        Used with the <i>Enterprise Edition</i> of Couchbase Server, the PAM <i>Linux password-module</i> 
+        provides: 
+      </p>
+      
+      <ul>
+        <li>
+          <i>External authentication</i>: Administrator-accounts defined on Linux systems, in the
+          <codeph>/etc/shadow</codeph> directory, can be accessed for authentication-purposes by Couchbase Server.
+          
+          <p>
+            <!-- Vertical space -->
+          </p>
+          
+        </li>
+        
+        <li>
+          <i>Password policy-management</i>: Linux password-management can be used across
+          different Couchbase Server-nodes; to synchronize, maintain, and expire administrator-passwords.
+        
+          <p>
+            <!-- Vertical space -->
+          </p>
+        
+        </li>
+        
+      </ul>
+      
+    </section>
+    
+    <section>
+      <title>
+        Version Requirements
+      </title>
+      
+      <p>
+        Use of the PAM Linux password-module requires all cluster-nodes to
+        be Linux-based, running the Enterprise Edition of Couchbase Server, version 4.6 or above. 
+        Additionally, the <codeph>saslauthd</codeph>
+        library version must be 2.1.x or above.
+        
+      </p>
+      
+    </section>
+    
+    
+    <section>
+      <title>
+        Example: Linux Password-Authentication
+      </title>
+
+      <p>
+        The following sequence shows how the PAM Linux password-module can be used with Couchbase Server 5.0
+        and above, to validate usernames and passwords,
+        when administrators log into Couchbase Server.  
+        Supervisor access, via <codeph>sudo</codeph>, is required to perform most of the steps; and an editor
+        is required, to allow you to edit configuration files. 
+        Proceed as follows:
+      </p>
+      
+        <ol>
+          
+        <li>
+          Bring up a terminal, and install the <codeph>saslauthd</codeph> library for your Linux distribution:
+          
+          <p>
+            <b>Centos/RHEL</b>
+          </p>
+          
+          <codeblock outputclass="language-bash">$ yum install cyrus-sasl</codeblock>
+          
+          <p>
+            <b>Ubuntu/Debian</b>
+          </p>
+          
+          <codeblock outputclass="language-bash">$ apt-get install sasl2-bin</codeblock>
+        
+        </li>
+          
+        <li>
+          Ensure that the Couchbase Cluster is running. Then, enable external authentication on the cluster, using the Couchbase CLI
+          <codeph>setting-ldap</codeph> command: specifying server IP-address and port number, username
+          and password: 
+          
+          <codeblock outputclass="language-bash"> $ couchbase-cli setting-ldap -c 10.142.170.101:8091 -u Administrator -p U&amp;y54wT --ldap-enabled 1</codeblock>
+          
+          <p>
+            Note that <codeph>--ldap-enabled 1</codeph> enables external authentication, and <codeph>--ldap-enabled 0</codeph> disables. See 
+            <xref href="../cli/cbcli/couchbase-cli-setting-ldap.dita" scope="local" format="dita">setting-ldap</xref> for further information. When
+            successfully executed, the command provides the following notification: <codeph>SUCCESS: LDAP settings modified</codeph>.
+          </p>
+        </li>
+
+        <li>
+          Add the <codeph>couchbase</codeph> user to the <codeph>sasl</codeph> group,
+          to allow access to <codeph>saslauthd</codeph>:
+          
+          <codeblock outputclass="language-bash">$ usermod -aG sasl couchbase</codeblock>
+          
+        </li>
+          
+        <li>
+          In the <codeph>saslauthd</codeph> configuration file, verify that <codeph>saslauthd</codeph> is
+          set up to use PAM, by using the <codeph>grep</codeph> command, and examining the output:
+          <p>
+            <b>Centos/RHEL</b>
+          </p>
+          
+          <codeblock outputclass="language-bash">$ grep "MECH" /etc/sysconfig/saslauthd 
+MECH=pam</codeblock>
+          
+          <p>
+            If output to the above command does not confirm that <codeph>MECH</codeph> is set to
+            <codeph>pam</codeph>, bring up the configuration file <codeph>/etc/default/saslauthd</codeph> 
+            in an editor, and manually set the <codeph>MECH</codeph> parameter
+            to <codeph>pam</codeph>.
+          </p>
+          
+          <p>
+            <b>Ubuntu/Debian</b>
+          </p>
+          
+          <codeblock outputclass="language-bash">$ grep 'MECHANISMS' /etc/default/saslauthd 
+MECHANISMS="pam"</codeblock>
+          
+          <p>
+            If output to the above command does not confirm that <codeph>MECHANISMS</codeph> is set to
+            <codeph>pam</codeph>, bring up the configuration file <codeph>/etc/default/saslauthd</codeph> 
+            in an editor, and manually set the <codeph>MECHANISMS</codeph> parameter
+            to <codeph>pam</codeph>.
+          </p>
+        
+        </li>
+          
+        <li>
+          Set up PAM to authenticate the Couchbase service, by copying
+          <codeph>/etc/pam.d/passwd</codeph> to <codeph>/etc/pam.d/couchbase</codeph>.
+          
+          <codeblock outputclass="language-bash">$ cp /etc/pam.d/passwd /etc/pam.d/couchbase</codeblock>
+        
+        </li>
+          
+        <li>
+          Create a Linux user on the current system, and give them a password. For example, username
+          <userinput>don</userinput>, and password <userinput>secretpa$$</userinput>. (This user
+          is the administrator who will be authenticated by PAM.)
+          
+          <codeblock outputclass="language-bash">$ useradd don
+$ passwd secretpa$$
+Enter new UNIX password:</codeblock>
+          
+          <p>
+            Enter and then verify your chosen password, as prompted.
+          </p>
+          
+        </li>
+          
+        <li>
+          <p>
+            Access Couchbase Web Console, at <codeph>localhost:8091</codeph>, and log in. Then, access 
+            the <uicontrol>Security</uicontrol>
+            tab, situated on the upper, horizontal control-bar. This brings up the 
+            <uicontrol>Security</uicontrol> view:
+          </p>
+          
+          <image placement="break" href="pict/securityViewInitial.png" width="820" id="security_view_initial"/>
+          
+          <p>
+            <!-- Vertical space -->
+            
+          </p>
+        
+        </li>
+          
+        <li>
+          Left-click on the <uicontrol>Add User</uicontrol> button, situated near the right. This brings up
+          the <uicontrol>Add New User</uicontrol> dialog. Select the <uicontrol>External</uicontrol> radio-button, in 
+          the <uicontrol>Authentication Domain</uicontrol> panel
+          at the upper left. Then, enter the name of the new user you are creating, and specify a suitable role, such
+          as <uicontrol>Cluster Admin</uicontrol>. The panel appears as follows:
+            
+          <p>
+            <image placement="break" href="./pict/manageUserNewSubsequent2.png" width="310" id="manage_user_new_subsequent2"/>
+          </p>
+          
+          <p>
+  
+            Then, left-click on <uicontrol>Save</uicontrol>. The newly defined user now appears
+            in the <uicontrol>Security</uicontrol> view.
+          </p>
+          
+          <p>
+            <!-- Vertical space -->
+          </p>
+          
+        </li>
+           
+        <li>
+          In the terminal, restart the SASL service, to allow PAM authentication to take effect.
+          
+          <codeblock outputclass="language-bash">$ service saslauthd restart</codeblock>
+          
+          <p>
+            <b>Note</b>: When this command is successful, the output
+            confirms that the daemon has been started. If the command fails, and the output includes a line such as
+            <codeph>To enable saslauthd, edit /etc/default/saslauthd and set START=yes</codeph>,
+            bring up the file <codeph>/etc/default/saslauthd</codeph> in an editor, locate the line
+            that reads <codeph>START=no</codeph>, and change it to <codeph>START=yes</codeph>. Then,
+            save the file, exit, and rerun the command. 
+          </p>
+        
+        </li>
+          
+        <li>
+          Restart the Couchbase service, to allow external authentication through PAM to take effect.
+          
+          <codeblock outputclass="language-bash">$ service couchbase-server restart</codeblock>
+        </li>
+          
+        <li>
+          In the browser, access <codeph>localhost:8091</codeph>. When the Couchbase Web
+          Console login-interface appears, enter
+          the username and password you previously created:
+          
+          <p>
+            <image placement="break" href="pict/couchbaseLogin.png" width="360" id="couchbase_login"/>
+          </p>
+          
+          <p>
+            <!-- Vertical space -->
+            
+          </p>
+          
+          <p>
+            Left-click on the <uicontrol>Sign In</uicontrol> button. The user you created is now logged 
+            into Couchbase Server, as an administrator. 
+          </p>
+        </li>
+      </ol>
+      
+    </section>
+  </body>
+</topic>

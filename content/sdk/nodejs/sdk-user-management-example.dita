@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="nodejs_sdk_user_management">
+    
+    <title>
+        Sample Code
+    </title>
+    
+    <shortdesc>
+        The Node.js SDK now lets you create <i>users</i>, assign them <i>roles</i> and 
+        associated <i>privileges</i>, and remove them from the system. 
+    </shortdesc>
+    
+    <body>
+        <section>
+            <title>
+                User-Management APIs
+            </title>
+            
+            <p>
+                Users who have been assigned the <b>Admin</b> role for the cluster are able
+                to create, edit, and remove users. The Node.js SDK provides APIs to support these
+                activities. A high-level summary of the APIs can be found in
+                <xref href="./sdk-user-management-overview.dita" scope="local" format="dita">User-Management</xref>.
+            </p>
+            
+        </section>
+        
+        <section>
+            <title>
+                Node.js User-Management Example
+            </title>
+            
+            <p>
+                The following code-example demonstrates how the user-management APIs can be used. It assumes that Couchbase Server is
+                established on <codeph>localhost</codeph>; that the Full Administrator username and
+                password are <codeph>Administrator</codeph> and <codeph>password</codeph> respectively;
+                and that the <codeph>travel-sample</codeph> bucket is 
+                installed. For information on installing the <codeph>travel-sample</codeph> bucket, see
+                <xref href="../../settings/install-sample-buckets.dita" scope="local" format="dita">Install Sample Buckets</xref>.
+            </p>
+            
+            <codeblock outputclass="language-javascript">'use strict';
+                
+var couchbase = require('couchbase');
+
+// Access the cluster that is running on the local host, authenticating with
+// the username and password of the Full Administrator. This
+// provides all privileges.
+var cluster = new couchbase.Cluster('couchbase://localhost');
+
+console.log('Authenticating as administrator.');
+cluster.authenticate('Administrator', 'password');
+
+// Create a user and assign roles.
+console.log('Upserting new user');
+cluster.manager().upsertUser('cbtestuser', {
+    password: 'cbtestuserpwd',
+    roles: [
+    
+        // Roles required for the reading of data from the bucket.
+        {role: 'data_reader', bucket_name: 'travel-sample'},
+        {role: 'query_select', bucket_name: 'travel-sample'},
+        
+        // Roles required for the writing of data into the bucket.
+        {role: 'data_writer', bucket_name: 'travel-sample'},
+        {role: 'query_insert', bucket_name: 'travel-sample'},
+        {role: 'query_delete', bucket_name: 'travel-sample'},
+        
+        // Role require for the creation of indexes on the bucket.
+        {role: 'query_manage_index', bucket_name: 'travel-sample'}
+    ]
+}, function(err) {
+    if (err) {
+        throw err;
+    }
+
+    // List current users.
+    cluster.manager().getUsers(function(err, users) {
+        if (err) {
+            throw err;
+        }
+
+        for(var i = 0; i &lt; users.length; ++i) {
+            var user = users[i];
+
+            console.log();
+            console.log('USER #' + i + ':');
+            
+            if (users.hasOwnProperty('name')) {
+            console.log('Users name is: ' + user.name);
+            }
+            
+            console.log('Users id is: ' + user.id);
+            console.log('Users domain is: ' + user.domain);
+            console.log();
+        }
+
+        // Access the cluster that is running on the local host, specifying
+        // the username and password already assigned by the administrator
+        cluster.authenticate('cbtestuser', 'cbtestuserpwd');
+        
+        // Open a known, existing bucket (created by the administrator).
+        console.log('Opening travel-sample bucket as user.');
+        var travelSample = cluster.openBucket('travel-sample');
+        
+        // Create a N1QL Primary Index (but ignore if one already exists).
+        travelSample.manager().createPrimaryIndex({
+            ignoreIfExists: true
+        }, function(err) {
+            if (err) {
+                throw err;
+            }
+
+            // Read out a known, existing document within the bucket (created
+            // by the administrator).
+            console.log('Reading out airline_10 document.');
+            travelSample.get('airline_10', function(err, res) {
+                if (err) {
+                    throw err;
+                }
+
+                console.log('Found:');
+                console.log(res);
+
+                // Create a new document
+                console.log('Creating new document as user.');
+                var airline11Object = {
+                    callsign: 'MILE-AIR',
+                    iata: 'Q5',
+                    icao: 'MLA',
+                    id: 11,
+                    name: '40-Mile Air',
+                    type: 'airline'
+                };
+
+                // Upsert the document to the bucket.
+                console.log('Upserting new document as user.');
+                travelSample.upsert('airline_11', airline11Object, function(err) {
+                    if (err) {
+                        throw err;
+                    }
+
+                    console.log('Reading out airline11Document as user.');
+                    travelSample.get('airline_11', function(err, res) {
+                        if (err) {
+                            throw err;
+                        }
+
+                        console.log('Found:');
+                        console.log(res);
+
+                        console.log('Performing query as user.');
+
+                        travelSample.query(couchbase.N1qlQuery.fromString(
+                            'SELECT * FROM `travel-sample` LIMIT 5'), function(err, rows) {
+                                if (err) {
+                                    throw err;
+                                }
+
+                            console.log('Query results are:');
+                            for (var i = 0; i &lt; rows.length; ++i) {
+                                console.log(rows[i]);
+                            }
+
+                            // Access the cluster that is running on the local host,
+                            // authenticating with the username and password of the Full
+                            // Administrator. This provides all privileges.
+                            console.log('Re-authenticating as administrator.');
+                            cluster.authenticate('Administrator', 'password');
+                            
+                            // Remove known user.
+                            console.log('Removing user as administrator.');
+                            var userToBeRemoved = 'cbtestuser';
+                            cluster.manager().removeUser(userToBeRemoved, function(err) {
+                                if (err) {
+                                    console.log('Could not delete user ' + userToBeRemoved);
+                                    throw err;
+                                }
+
+                                console.log('Deleted user ' + userToBeRemoved);
+
+                                process.exit(0);
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    });
+});</codeblock>
+            
+        </section>
+        
+    </body>
+    
+</topic>

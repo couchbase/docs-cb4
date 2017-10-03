@@ -1,0 +1,2186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_nvs_ghr_dz">
+  <title>Monitoring N1QL Queries</title>
+  <shortdesc>Monitoring and profiling N1QL queries, query service engines, and corresponding system
+    resources is very important for smoother operational performance and efficiency of the system.
+    In fact, often it is vital for diagnosing and troubleshooting issues such as query performance,
+    resource bottlenecks, and overloading of various services.</shortdesc>
+  <body>
+    <p>Couchbase Server 4.5 introduced system keyspaces to provide various monitoring details and
+      statistics about individual queries and query service. When running on a cluster with multiple
+      query nodes, stats about all queries on all query nodes are collected in these system
+      keyspaces. </p>
+    <p>For example, this can help identify:<ul id="ul_wwm_zlk_3z">
+        <li>the top 10 slow or fast queries running on a particular query engine or the cluster</li>
+        <li>resource usage statistics of the query service, or resources used for a particular
+          query</li>
+        <li>details about the active, completed, and prepared queries</li>
+        <li>find long running queries that are running for more than 2 minutes</li>
+      </ul>These system keyspaces are like virtual keyspaces that are transient in nature, and are
+      not persisted to disk or permanent storage. Hence, the information in the keyspaces pertains
+      to the current instantiation of the query service. You can access the keyspaces using any of
+      the following: </p>
+    <p>
+      <ul id="ul_xgz_knt_51b">
+        <li>N1QL language (from the cbq shell or Query Workbench)</li>
+        <li>REST API</li>
+        <li>Monitoring SDK<p>
+            <note>All the power of the N1QL query language can be applied on the keyspaces to obtain
+              various insights.</note>
+          </p></li>
+      </ul>
+    </p>
+    <p>The following diagnostics are provided:</p>
+    <p>
+      <table frame="all" rowsep="1" colsep="1" id="table_kzd_znt_51b">
+        <tgroup cols="2" align="left">
+          <colspec colname="c1" colnum="1" colwidth="1*"/>
+          <colspec colname="c2" colnum="2" colwidth="3*"/>
+          <tbody>
+            <row>
+              <entry>System Catalogs</entry>
+              <entry>
+                <ul id="ul_kfc_wpt_51b">
+                  <li><xref href="../n1ql/n1ql-intro/sysinfo.dita#topic_2_4/querying-datastores"
+                      >system:datastores</xref></li>
+                  <li><xref href="../n1ql/n1ql-intro/sysinfo.dita#topic_2_4/querying-namespaces"
+                      >system:namespaces</xref></li>
+                  <li><xref href="../n1ql/n1ql-intro/sysinfo.dita#topic_2_4/querying-keyspaces"
+                      >system:keyspaces</xref></li>
+                  <li><xref href="../n1ql/n1ql-intro/sysinfo.dita#topic_2_4/querying-dual"
+                      >system:dual</xref></li>
+                </ul>
+              </entry>
+            </row>
+            <row>
+              <entry>Monitoring Catalogs</entry>
+              <entry>
+                <ul id="ul_rrk_bqt_51b">
+                  <li><xref href="../n1ql/n1ql-intro/sysinfo.dita#topic_2_4/querying-indexes"
+                      >system:indexes</xref></li>
+                  <li><xref href="#topic_nvs_ghr_dz/sys-prepared" format="dita"
+                      >system:prepareds</xref></li>
+                  <li><xref href="#topic_nvs_ghr_dz/sys-completed-req" format="dita"
+                      >system:completed_requests</xref></li>
+                  <li><xref href="#topic_nvs_ghr_dz/sys-active-req" format="dita"
+                      >system:active_requests</xref></li>
+                  <li><xref href="#topic_nvs_ghr_dz/section_wwl_tsm_n1b" format="dita"
+                      >system:my_user_info</xref></li>
+                </ul>
+              </entry>
+            </row>
+            <row>
+              <entry>Security Catalogs</entry>
+              <entry>
+                <ul id="ul_itg_rpt_51b">
+                  <li><xref href="#topic_nvs_ghr_dz/section_pt1_fxt_n1b" format="dita"
+                      >system:user_info</xref></li>
+                  <li>system:nodes</li>
+                  <li><xref href="#topic_nvs_ghr_dz/section_t5h_wxt_n1b" format="dita"
+                      >system:applicable_roles</xref></li>
+                </ul>
+              </entry>
+            </row>
+            <row>
+              <entry>Other</entry>
+              <entry>
+                <ul id="ul_jss_35t_51b">
+                  <li><xref href="#topic_nvs_ghr_dz/vitals" format="dita"/></li>
+                </ul>
+                <p>
+                  <note>These are only available using REST APIs.</note>
+                </p>
+              </entry>
+            </row>
+          </tbody>
+        </tgroup>
+      </table>
+    </p>
+    <section>
+      <title>Authentication and Client Privileges</title>
+      <p>Client applications must be authenticated with sufficient privileges to access system
+        keyspaces.</p>
+      <p>
+        <ul id="ul_usw_2nk_3z">
+          <li>An Administrator user can access all system keyspaces, and can grant or revoke
+            privileges to and from other users.</li>
+          <li>Other non-Administrator users must have explicitly granted privilege called <b>Query
+              System Catalog</b> to access the restricted system keyspaces. For querying details of
+            system keyspaces, see <xref href="../n1ql/n1ql-intro/sysinfo.dita#topic_2_4"/>.</li>
+          <li>The following system keyspaces are considered <i>open</i>, that is, all users can
+            access them without any special privileges: <ul id="ul_vjw_snk_3z">
+              <li><codeph>system:dual</codeph></li>
+              <li><codeph>system:datastores</codeph></li>
+              <li><codeph>system:namespaces</codeph></li>
+            </ul></li>
+        </ul>
+      </p>
+    </section>
+    <section>
+      <title>Query Monitoring Settings</title>
+      <p>The monitoring settings can be set for each query engine (using the REST API) or for each
+        query statement (using the cbq command line tool). Both settings are actually set via REST
+        endpoints: using the Admin REST API (/admin/settings endpoint) and the Query REST API
+        (/query/service endpoint).</p>
+      <p>The cbq shell and Query Workbench use the Query REST API to set monitoring at the request
+        level. The Query Workbench automatically enables the profiling and timings. It can be
+        disabled using the <uicontrol>Preferences</uicontrol> option. For more information refer to
+        the <xref href="../tools/query-workbench.dita#topic_prr_nyh_t5">Query Workbench</xref>
+        section. </p>
+      <p>Use the following query parameters to enable, disable, and control the monitoring
+        capabilities, and the level of monitoring and profiling details for each query or globally
+        at a query engine level:</p>
+      <p>
+        <ul id="ul_zjs_3s4_hz">
+          <li>profile</li>
+          <li>controls</li>
+        </ul>
+      </p>
+      <p>For more details and examples, refer to the <xref
+          href="../settings/query-settings.dita#topic_wk1_5v3_t5">Query Settings</xref> section.</p>
+      <p>
+        <dl>
+          <dlentry>
+            <dt>Enabling Settings for a Query Engine</dt>
+            <dd>You can enable profile settings for each query engine. These examples use local host
+              IP address and default port numbers. You need to provide correct credentials, IP
+              address, and port details of your setup. </dd>
+            <dd>
+              <ol id="ol_e2t_qs4_hz">
+                <li>Get the current query
+                  settings:<codeblock outputclass="language-json">curl -u Administrator:pword -X GET http://localhost:8093/admin/settings > ./query_settings.json
+
+cat  ./query_settings.json
+
+{"completed-limit":4000,"completed-threshold":1000,"<b>controls</b>":<b>false</b>,"cpuprofile":"","debug":false,"keep-alive-length":16384,"loglevel":"INFO","max-index-api":2,"max-parallelism":1,"memprofile":"","pipeline-batch":16,"pipeline-cap":512,"pretty":true,"<b>profile</b>":"<b>off</b>","request-size-cap":67108864,"scan-cap":512,"servicers":16,"timeout":0}</codeblock></li>
+                <li>Set current query settings profile: <ol id="ol_jnh_cg4_jz">
+                    <li>To set the query settings saved in a file
+                        <filepath>./query_settings.json</filepath>, enter the following query:
+                      <codeblock outputclass="language-json">curl -u Administrator:pword -XPOST  http://127.0.0.1:8093/admin/settings -d@./query_settings.json</codeblock></li>
+                    <li>To explicitly specify the settings, enter the following query:
+                      <codeblock outputclass="language-json">curl -u Administrator:pword  http://127.0.0.1:8093/admin/settings -XPOST -d '{"profile": "phases"}'</codeblock></li>
+                    <li>Verify the settings are changed as specified:
+                      <codeblock outputclass="language-json">curl -u Administrator:pword -X GET http://localhost:8093/admin/settings </codeblock><codeblock outputclass="language-json">{"completed-limit":4000,"completed-threshold":1000,"controls":false,"cpuprofile":"","debug":false,"keep-alive-length":16384,"loglevel":"INFO","max-index-api":2,"max-parallelism":1,"memprofile":"","pipeline-batch":16,"pipeline-cap":512,"pretty":true,"<b>profile</b>":"<b>phases</b>","request-size-cap":67108864,"scan-cap":512,"servicers":16,"timeout":0}
+</codeblock></li>
+                  </ol></li>
+              </ol>
+            </dd>
+          </dlentry>
+        </dl>
+        <dl>
+          <dlentry>
+            <dt>Enabling Settings per Session or per Query</dt>
+            <dd>You can enable monitoring and profiling settings for each query statement. To set
+              query settings using the cbq shell, run the following query:<p>
+                <codeblock outputclass="language-json">cbq> \set -profile "timings";
+cbq> \set;
+ Query Parameters : 
+ Parameter name : profile
+ Value : ["timings"]
+ ...</codeblock>
+              </p> To set query settings using the REST API, run the following query:
+              <codeblock outputclass="language-json">curl -v http://localhost:8093/query/service -d "profile='timings'&amp;statement=SELECT * FROM default LIMIT 1";</codeblock></dd>
+          </dlentry>
+        </dl>
+      </p>
+      <p/>
+    </section>
+    <section id="monitor-profile-details">
+      <title>Monitoring and Profiling Details</title>
+      <p>Couchbase Server 5.0 introduces a collection of detailed query monitoring and profiling
+        information. The profiling and finer query execution timing details can be obtained for any
+        query.</p>
+      <p>
+        <dl>
+          <dlentry>
+            <dt id="profile">Attribute Profile in Query Response</dt>
+            <dd><p/>When profiling is enabled, a query response includes the profile attribute. The
+              attribute details are as follows:<p>
+                <table frame="all" rowsep="1" colsep="1" id="table_gbg_dcp_hz">
+                  <title>Attribute Details</title>
+                  <tgroup cols="3">
+                    <colspec colname="c1" colnum="1" colwidth="1.5*"/>
+                    <colspec colname="newCol2" colnum="2" colwidth="5.5*"/>
+                    <colspec colname="c3" colnum="3" colwidth="4.0*"/>
+                    <thead>
+                      <row>
+                        <entry namest="c1" nameend="newCol2">Attribute</entry>
+                        <entry>Example</entry>
+                      </row>
+                    </thead>
+                    <tbody>
+                      <row>
+                        <entry namest="c1" nameend="newCol2"><codeph>phaseTimes</codeph> -
+                          Cumulative execution times for various phases involved in the query
+                          execution, such as authorise, indexscan, fetch, parse, plan, run
+                              etc.,<note><p dir="ltr">This value will be dynamic, depending on the
+                              documents processed by various phases up to this moment in time.</p>A
+                            new query on <codeph>system:active requests</codeph> will return
+                            different values.</note></entry>
+                        <entry>
+                          <codeblock outputclass="language-json">"phaseTimes": {
+	"authorize": "823.631µs",
+	"fetch": "656.873µs",
+	"indexScan": "29.146543ms",
+	"instantiate": "236.221µs",
+	"parse": "826.382µs",
+	"plan": "11.831101ms",
+	"run": "16.892181ms"
+}</codeblock>
+                        </entry>
+                      </row>
+                      <row>
+                        <entry namest="c1" nameend="newCol2"><codeph>phaseCounts</codeph> - Count of
+                          documents processed at selective phases involved in the query execution,
+                          such as authorise, indexscan, fetch, parse, plan, run etc.,<note><p
+                              dir="ltr">This value will be dynamic, depending on the documents
+                              processed by various phases up to this moment in time.</p>A new query
+                            on <codeph>system:active requests</codeph> will return different
+                            values.</note></entry>
+                        <entry>
+                          <codeblock outputclass="language-json">"phaseCounts": {
+	    "fetch": 16,
+	    "indexScan": 187
+	}</codeblock>
+                        </entry>
+                      </row>
+                      <row>
+                        <entry namest="c1" nameend="newCol2"><codeph>phaseOperators</codeph> -
+                          Indicates the number of each kind of query operators involved in different
+                          phases of the query processing. For instance, this example, one non
+                          covering index path was taken, which involves 1 indxeScan and 1 fetch
+                            operators.<p dir="ltr">A join would have probably involved 2 fetches (1
+                            per keyspace)</p><p dir="ltr">A union select would have twice as many
+                            operator counts (1 per each branch of the union).</p>This is in essence
+                          the count of all the operators in the <codeph>executionTimings</codeph>
+                          field.</entry>
+                        <entry>
+                          <codeblock outputclass="language-json">"phaseOperators": {
+	    "authorize": 1,
+	    "fetch": 1,
+	    "indexScan": 2
+}</codeblock>
+                        </entry>
+                      </row>
+                      <row>
+                        <entry namest="c1" nameend="newCol2"><codeph>executionTimings</codeph> - The
+                          execution details such as kernel and service execution times, number of
+                          documents processed at each query operator in each phase, and number of
+                          phase switches, for various phases involved in the query execution.<p
+                            dir="ltr">The following statistics are collected for each
+                          operator:</p></entry>
+                        <entry morerows="6">
+                          <codeblock outputclass="language-json">"executionTimings": {
+  …
+  [{
+     "#operator": "Fetch",
+     "#stats": {
+         "#itemsIn": 187,
+         "#itemsOut": 16,
+	   "#phaseSwitches": 413,
+	   "execTime": "128.434µs",
+	   "kernTime": "15.027879ms",
+	   "servTime": "1.590934ms",
+	   "state": "services"
+     },
+	"keyspace": "travel-sample",
+	"namespace": "default"
+  },
+  {
+     "#operator": "IntersectScan",
+     "#stats": {
+  	   "#itemsIn": 187,
+	   "#itemsOut": 187,
+	   "#phaseSwitches": 749,
+	   "execTime": "449.944µs",
+	   "kernTime": "14.625524ms"
+     }
+  }, …]</codeblock>
+                        </entry>
+                      </row>
+                      <row>
+                        <entry><codeph>#operator</codeph></entry>
+                        <entry>Name of the operator.</entry>
+                      </row>
+                      <row>
+                        <entry><codeph>#stats</codeph></entry>
+                        <entry>
+                          <p dir="ltr">These values will be dynamic, depending on the documents
+                            processed by various phases up to this moment in time.</p>
+                          <p dir="ltr">A new query on <codeph>system:active_requests</codeph> will
+                            return different values.</p>
+                        </entry>
+                      </row>
+                      <row>
+                        <entry><codeph>#itemsIn</codeph></entry>
+                        <entry>Number of input documents to the operator.</entry>
+                      </row>
+                      <row>
+                        <entry><codeph>#itemsOut</codeph></entry>
+                        <entry>Number of output documents after the operator processing.</entry>
+                      </row>
+                      <row>
+                        <entry>
+                          <p dir="ltr"><codeph>#phaseSwitches</codeph></p>
+                        </entry>
+                        <entry><p dir="ltr">Number of switches between executing, waiting for
+                            services, or waiting for the <codeph>goroutine</codeph> scheduler.</p><p
+                            dir="ltr"><codeph>execTime</codeph> - Time spent executing the operator
+                            code inside N1QL query engine.</p><p dir="ltr"><codeph>kernTime</codeph>
+                            - Time spent waiting to be scheduled for CPU
+                            time.</p><codeph>servTime</codeph> - Time spent waiting for another
+                          service, such as index or data.</entry>
+                      </row>
+                      <row>
+                        <entry namest="c1" nameend="newCol2">
+                          <ul>
+                            <li dir="ltr">
+                              <p dir="ltr">For index scan, it is time spent waiting for
+                                GSI/indexer</p>
+                            </li>
+                            <li dir="ltr">
+                              <p dir="ltr">For fetch, it is time spent waiting on the KV store</p>
+                            </li>
+                          </ul>
+                        </entry>
+                      </row>
+                    </tbody>
+                  </tgroup>
+                </table>
+              </p><p>These statistics (<codeph>kernTime</codeph>, <codeph>servTime</codeph>, and
+                  <codeph>execTime</codeph>) can be very helpful in troubleshooting query
+                performance issues, such as:</p><p>
+                <ul id="ul_q3t_l1v_51b">
+                  <li>A high <codeph>servTime</codeph> for a low number of items processed is an
+                    indication that the indexer or KV store is stressed.</li>
+                  <li>A high <codeph>kernTime</codeph> means there is a downstream issue in the
+                    query plan or the query server having many requests to process (so the scheduled
+                    waiting time will be more for CPU time).</li>
+                </ul>
+              </p><p><b>Example 1 of Attribute Profile</b>: Show the statistics collected when the
+                  <codeph>profile</codeph> is set to <codeph>phases</codeph>:</p><note>The cbq engine must be started with authorization, for example:<p>
+                  <codeph> $> ./cbq  -engine=http://127.0.0.1:8091/ -u Administrator -p
+                    pword</codeph></p></note><p>
+                <codeblock outputclass="language-json">$ ./cbq  -engine=http://localhost:8091/  -u Administrator -p pword
+cbq> \set -profile "phases";
+cbq> SELECT * FROM `travel-sample` WHERE type = "airline" LIMIT 1;
+
+{
+    "requestID": "51da6b92-f978-4083-b3e4-3cccbe91b5ac",
+    "signature": {
+        "*": "*"
+    },
+    "results": [
+        {
+            "travel-sample": {
+                "callsign": "BEMIDJI",
+                "country": "United States",
+                "iata": "CH",
+                "icao": "BMJ",
+                "id": 1442,
+                "name": "Bemidji Airlines",
+                "type": "airline"
+            }
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "13.967097ms",
+        "executionTime": "13.951263ms",
+        "resultCount": 1,
+        "resultSize": 306
+    },
+    "profile": {
+        "phaseTimes": {
+	    "authorize": "744.299µs",
+	    "fetch": "524.3µs",
+	    "indexScan": "9.087106ms",
+	    "instantiate": "52.443µs",
+	    "parse": "271.049µs",
+	    "plan": "7.450287ms",
+	    "run": "6.130069ms"
+	},
+        "phaseCounts": {
+	    "fetch": 16,
+	    "indexScan": 187
+	},
+        "phaseOperators": {
+	    "authorize": 1,
+	    "fetch": 1,
+	    "indexScan": 2
+	}
+    }
+}</codeblock>
+              </p>
+              <b>Example 2 of Attribute Profile</b>: Show the statistics collected when
+                <codeph>profile</codeph> is set to <codeph>timings</codeph>:<p>
+                <codeblock outputclass="language-json">cbq> \set -profile "timings";
+cbq> SELECT * FROM `travel-sample` WHERE type = "airline" LIMIT 1;
+
+{
+…
+"results": [ … ]
+    "profile": {
+        "phaseTimes": {
+	    "authorize": "823.631µs",
+	    "fetch": "656.873µs",
+         ...
+	},
+        "phaseCounts": {
+	    "fetch": 16,
+	    "indexScan": 187
+	},
+        "phaseOperators": {
+	    "authorize": 1,
+	    "fetch": 1,
+	    "indexScan": 2
+	},
+        "executionTimings": {
+	    "#operator": "Sequence",
+	    "#stats": {
+	        "#phaseSwitches": 2,
+	        "execTime": "1.079µs",
+	        "kernTime": "16.889187ms"
+	    },
+	    "~children": [
+	        {
+	            "#operator": "Authorize",
+	            "#stats": {
+	                "#phaseSwitches": 4,
+	                "execTime": "5.423µs",
+	                "kernTime": "16.043784ms",
+	                "servTime": "818.208µs"
+	            },
+			 ...
+	            {
+	                 "#operator": "Fetch",
+	                 "#stats": {
+	                                    "#itemsIn": 187,
+	                                    "#itemsOut": 16,
+	                                    "#phaseSwitches": 413,
+	                                    "execTime": "128.434µs",
+	                                    "kernTime": "15.027879ms",
+	                                    "servTime": "1.590934ms",
+	                                    "state": "services"
+	                  },
+	                  "keyspace": "travel-sample",
+	                  "namespace": "default"
+	            },
+    ...</codeblock>
+              </p> For the complete output, see <xref href="#topic_nvs_ghr_dz/example-1"
+                format="dita">Example 1 of Completed Request</xref>.</dd>
+            <dd/>
+          </dlentry>
+          <dlentry>
+            <dt id="plan">Attribute Meta in System Keyspaces</dt>
+            <dd>This is a new virtual attribute in document metadata introduced in Couchbase Server
+                5.0.<p dir="ltr">The <codeph>meta().plan</codeph> captures the whole query plan, and
+                monitoring stats of various phases and involved query operators. The
+                  <codeph>meta().plan</codeph> must be explicitly called in the SELECT query
+                projection list.</p><p dir="ltr">The <codeph>meta().plan</codeph> attribute is
+                enabled only for individual requests that are running
+                  (<codeph>active_requests</codeph>) or completed
+                  (<codeph>completed_requests</codeph>) when the profile is set to timings
+                  (<codeph>profile ="timings"</codeph>) for each individual request. If at the
+                engine level, the profile is set to off and individual requests have been run with
+                  <codeph>profile ="timings"</codeph>, then the system keyspaces will return the
+                plan only for those requests.</p><p dir="ltr">Since there may be a combination of
+                profile settings for all of the requests reported by the system keyspaces, not all
+                requests returned will have a <codeph>meta().plan</codeph> attachment.</p><note>For
+                the <codeph>system:prepareds</codeph> requests, the <codeph>meta().plan</codeph> is
+                available at all times since the <codeph>PREPARE</codeph> statement is not dependant
+                on the profile setting.</note><p>This attribute is enabled for the following system
+                keyspaces: <ul>
+                  <li><xref href="#topic_nvs_ghr_dz/sys-active-req" format="dita"/></li>
+                  <li><xref href="#topic_nvs_ghr_dz/sys-prepared" format="dita"/></li>
+                  <li><xref href="#topic_nvs_ghr_dz/sys-completed-req" format="dita"/></li>
+                </ul> For a detailed example, see <xref href="#topic_nvs_ghr_dz/example-2"
+                  format="dita">Example 2</xref>.</p></dd>
+          </dlentry>
+        </dl>
+      </p>
+    </section>
+    <section>
+      <title>N1QL Cluster Monitoring</title>
+      <p><b>Description</b></p>
+      <p>Couchbase Server allows you to monitor many aspects of an active cluster, and version 5.0
+        now has more cluster-aware operations, further diagnostics and more system keyspaces
+        features that cover multiple nodes.  New functionalities specifically include:</p>
+      <ul id="ul_ih4_5n1_q1b">
+        <li>Ability to access active / completed / prepared requests across all N1QL nodes from
+          N1QL.</li>
+        <li>Ability to list nodes by type and with status from N1QL.</li>
+        <li>Ability to list system keyspaces from system:keyspaces.</li>
+        <li>Extra fields in<codeph> system:active_requests </codeph>and<codeph>
+            completed_requests</codeph>.</li>
+        <li>Extra counters to keep track of specific requests, such as cancelled requests.</li>
+        <li>Extend killing request to CREATE INDEX.</li>
+      </ul>
+      <p><b>Changes to System Keyspaces</b><ul id="ul_t3f_mpw_q1b">
+          <li><codeph>System:nodes </codeph>show the datastore topology information. This is
+            separate from the N1QL clustering view of the world, in that N1QL clustering shows a map
+            of the N1QL cluster, as provided by the cluster manager, while<codeph> system:nodes
+            </codeph>shows a view of the nodes and services that make up the actual datastore, which
+            may or may not include N1QL nodes.</li>
+          <li>The dichotomy is important in that N1QL could be clustered by one entity (e.g.
+            Zookeeper) and be connected to a clustered datastore (e.g. Couchbase) such that each
+            does not have visibility of the other.</li>
+          <li>Should N1QL be extended to be able to concurrently connect to multiple datastores,
+            each datastore will report its own topology, so that<codeph> system:nodes
+            </codeph>offers a complete view of all the storage nodes, whatever those may be.</li>
+          <li>Ideally,<codeph> system:nodes </codeph>will provide a way to report services
+            advertised by each node as well as services that are actually running.</li>
+          <li>This will be datastore dependent.</li>
+          <li>N1QL clustering will still be reported by the<codeph> /admin </codeph>endpoints.</li>
+          <li><codeph>System:keyspaces</codeph> can be augmented to list system keyspaces with a
+            static map. The small disadvantage of this is that it has to be maintained as new system
+            keyspaces are added.</li>
+          <li><codeph>System:active_requests </codeph>and<codeph> system:completed_requests
+            </codeph>to report scan consistency.</li>
+          <li><codeph>System:prepareds </codeph>to list min and max execution and service times, as
+            well as average times.</li>
+        </ul><b>cbq-engine-cbauth</b></p>
+      <p><i>(Introduced in Couchbase Server 5.0)</i></p>
+      <p>Cbq-engine-cbauth is a new internal user that ns_server uses to allow Query Workbench
+        clients to query across multiple query nodes.</p>
+      <p>Since Query Workbench can connect to the same node only when cbq-engine is running, Query
+        Workbench cannot do any query-clustered operations.</p>
+      <p>To get around this block, once the Query Workbench clients connect to a query node, this
+        internal user (cbq-engine-cbauth) will be used to do any further inter-node user
+        verification.</p>
+    </section>
+    <section id="vitals">
+      <title>Vitals</title>
+      <p>The <cmdname>Vitals</cmdname> API provides data about the running state and health of the
+        query engine, such as number of logical cores, active threads, queued threads,CPU
+        utilization, memory usage, network utilization, garbage collection percentage, and so on.
+        This information can be very useful to assess the current workload and performance
+        characteristics of a query engine, and hence load-balance the requests being sent to various
+        query engines. </p>
+      <dl>
+        <dlentry>
+          <dt>Get System Vitals</dt>
+          <dd>
+            <codeblock outputclass="language-json">curl -u Administrator:pword http://localhost:8093/admin/vitals</codeblock>
+            <codeblock outputclass="language-json">{
+    "uptime":"30h0m10.801209195s",
+    "local.time":"2016-02-18 17:39:41.612724694 -0800 PST",
+    "version":"1.0.0",
+    "total.threads":225,
+    "cores":8,
+    "gc.num":11607200,
+    "gc.pause.time":"1.849506783s",
+    "gc.pause.percent":0,
+    "memory.usage":10019216,
+    "memory.total":5628336088,
+    "memory.system":29055224,
+    "cpu.user.percent":0,
+    "cpu.sys.percent":0,
+    "request.completed.count":111,
+    "request.active.count":0,
+    "request.per.sec.1min":0.0007,
+    "request.per.sec.5min":0.0107,
+    "request.per.sec.15min":0.0091,
+    "request_time.mean":"170.870877ms",
+    "request_time.median":"733.364µs",
+    "request_time.80percentile":"21.85926ms",
+    "request_time.95percentile":"1.274152266s",
+    "request_time.99percentile":"1.588775188s",
+    "request.prepared.percent":0
+}         </codeblock>
+          </dd>
+        </dlentry>
+      </dl>
+    </section>
+    <section id="sys-active-req">
+      <title>system:active_requests</title>
+      <p>This catalog lists all currently executing active requests or queries. </p>
+      <dl>
+        <dlentry>
+          <dt>Get Active Requests</dt>
+          <dd><p>To get profiling information about the query plan, use:
+              <codeblock outputclass="language-json">curl -u Administrator:pword http://localhost:8093/admin/active_requests</codeblock><codeblock outputclass="language-json">SELECT *, meta().plan FROM system:active_requests;</codeblock></p><codeblock outputclass="language-json">SELECT *, meta().plan FROM system:active_requests;
+[
+  {
+    "active_requests": {
+    "clientContextID": "e6e81ad9-09b6-4c98-987a-a80947cbf4cd",
+    "elapsedTime": "22.361384ms",
+    "executionTime": "22.336681ms",
+    "node": "127.0.0.1:8091",
+    "phaseCounts": {
+    "primaryScan": 1
+  },
+  "phaseOperators": {
+    "authorize": 1,
+    "fetch": 1,
+    "primaryScan": 1
+  },
+  "phaseTimes": {
+    "authorize": "582.108µs",
+    "fetch": "20.525µs",
+    "instantiate": "27.358µs",
+    "parse": "346.188µs",
+    "plan": "31.911µs",
+    "primaryScan": "18.043218ms"
+  },
+  "remoteAddr": "127.0.0.1:65430",
+  "requestId": "6b0bff60-7d2c-459b-aafa-942c96c12770",
+  "requestTime": "2017-08-08 09:44:07.401941318 -0700 PDT",
+  "scanConsistency": "unbounded",
+  "state": "running",
+  "statement": "SELECT *, meta().plan FROM system:active_requests;",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36 (Couchbase Query Workbench (5.0.1-4603-enterprise))",
+  "users": "Administrator"
+},
+"plan": {                         // newly added feature
+  "#operator": "Sequence",
+  "#stats": {
+  "#phaseSwitches": 1,
+  "execTime": "1.102µs",
+  "kernTime": "22.539451ms",
+  "state": "kernel"
+},
+"~children": [
+  {
+    "#operator": "Authorize",
+    "#stats": {
+    "#phaseSwitches": 3,
+    "execTime": "3.372µs",
+    "kernTime": "21.961146ms",
+    "servTime": "578.736µs",
+    "state": "kernel"
+  },
+...<b>plan</b>": {
+      "#operator": "Sequence",
+      "#stats": {
+        "#phaseSwitches": 1,
+        "execTime": "13.638µs",
+        "kernTime": "37.408896ms",
+        "state": "kernel"
+      },
+      "~children": [
+        {
+          "#operator": "Authorize",
+          "#stats": {
+            "#phaseSwitches": 3,
+            "execTime": "5.219µs",
+            "kernTime": "35.954967ms",
+            "servTime": "1.460405ms",
+            "state": "kernel"
+          },
+          "privileges": {
+            "List": [
+              {
+                "Priv": 4,
+                "Target": "#system:active_requests"
+              }
+            ]
+          },
+          "~child": {
+            "#operator": "Sequence",
+            "#stats": {
+              "#phaseSwitches": 1,
+              "execTime": "2.273µs",
+              "kernTime": "36.083024ms",
+              "state": "kernel"
+            },
+            "~children": [
+              {
+                "#operator": "PrimaryScan",
+                "#stats": {
+                  "#itemsOut": 1,
+                  "#phaseSwitches": 7,
+                  "execTime": "18.137103ms",
+                  "kernTime": "4.827µs",
+                  "servTime": "16.576598ms"
+                },
+                "index": "#primary",
+                "keyspace": "active_requests",
+                "namespace": "#system",
+                "using": "system"
+              },
+              {
+                "#operator": "Fetch",
+                "#stats": {
+                  "#itemsIn": 1,
+                  "#phaseSwitches": 7,
+                  "execTime": "14.894µs",
+                  "kernTime": "34.727264ms",
+                  "servTime": "1.407022ms",
+                  "state": "services"
+                },
+                "keyspace": "active_requests",
+                "namespace": "#system"
+              },
+              {
+                "#operator": "Sequence",
+                "#stats": {
+                  "#phaseSwitches": 1,
+                  "execTime": "1.913µs",
+                  "kernTime": "36.296279ms",
+                  "state": "kernel"
+                },
+                "~children": [
+                  {
+                    "#operator": "InitialProject",
+                    "#stats": {
+                      "#phaseSwitches": 1,
+                      "execTime": "12.445µs",
+                      "kernTime": "36.282886ms",
+                      "state": "kernel"
+                    },
+                    "result_terms": [
+                      {
+                        "expr": "self",
+                        "star": true
+                      },
+                      {
+                        "expr": "(meta(`active_requests`).`plan`)"
+                      }
+                    ]
+                  },
+                  {
+                    "#operator": "FinalProject",
+                    "#stats": {
+                      "#phaseSwitches": 1,
+                      "execTime": "17.767µs",
+                      "kernTime": "36.332512ms",
+                      "state": "kernel"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "#operator": "Stream",
+          "#stats": {
+            "#phaseSwitches": 1,
+            "execTime": "725ns",
+            "kernTime": "37.932713ms",
+            "state": "kernel"
+          }
+        }
+      ]
+    }
+  }
+]</codeblock>In
+            the above example, note the new <b>plan</b> section. It contains a tree of operators
+            that combine to execute the N1QL query. The root operator is a Sequence, which itself
+            has a collection of child operators like Authorize, PrimaryScan, Fetch, and possibly
+            even more Sequences.<p>
+              <table frame="all" rowsep="1" colsep="1" id="table_dmk_5qp_hz">
+                <tgroup cols="2">
+                  <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+                  <colspec colname="c2" colnum="2" colwidth="4.0*"/>
+                  <thead>
+                    <row>
+                      <entry>Option</entry>
+                      <entry>Description</entry>
+                    </row>
+                  </thead>
+                  <tbody>
+                    <row>
+                      <entry><codeph>clientContextID</codeph></entry>
+                      <entry>The opaque ID or context provided by the client.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>elapsedTime</codeph></entry>
+                      <entry>The time taken from when the request was acknowledged by the service to
+                        when the request was completed. It includes the time taken by the service to
+                        schedule the request.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>errorCount</codeph></entry>
+                      <entry>Total number of errors encountered while executing the query.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>executionTime</codeph></entry>
+                      <entry>The duration of the query from when it started executing to when it
+                        completed.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>node</codeph></entry>
+                      <entry>IP address and port of the query engine node in the Couchbase
+                        Cluster.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>remoteAddr</codeph></entry>
+                      <entry>IP address and port number of the client application, from where the
+                        query is received.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>requestId</codeph></entry>
+                      <entry>Unique request ID internally generated for the query.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>requestTime</codeph></entry>
+                      <entry>Timestamp when the query is received.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>resultCount</codeph></entry>
+                      <entry>Total number of documents returned in the query result.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>resultSize</codeph></entry>
+                      <entry>Total number of bytes returned in the query result.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>scanConsistency</codeph></entry>
+                      <entry>The value of the query setting Scan Consistency used for the
+                        query.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>serviceTime</codeph></entry>
+                      <entry>Total amount of calendar time taken to complete the query.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>state</codeph></entry>
+                      <entry>The state of the query execution, such as completed, in progress,
+                        cancelled.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>statement</codeph></entry>
+                      <entry>The N1QL query statement being executed.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>userAgent</codeph></entry>
+                      <entry>Name of the client application or program that issued the
+                        query.</entry>
+                    </row>
+                    <row>
+                      <entry><codeph>users</codeph></entry>
+                      <entry>Username with whose privileges the query is run.</entry>
+                    </row>
+                  </tbody>
+                </tgroup>
+              </table>
+            </p><p>For the profile related attributes, see <xref href="#topic_nvs_ghr_dz/profile"
+                format="dita">Attribute profile in Query Response.</xref></p></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Terminate an Active Request</dt>
+          <dd>
+            <p>The DELETE command can be used to terminate an active request, for instance, a
+              non-responding or a long-running query.</p>
+            <codeblock outputclass="language-json">DELETE http://localhost:8093/admin/active_requests/<varname>request_ID</varname></codeblock>
+            <codeblock outputclass="language-json">DELETE FROM system:active_requests [ WHERE <varname>expression</varname> ]   </codeblock>
+          </dd>
+        </dlentry>
+      </dl>
+    </section>
+    <section id="sys-prepared">
+      <title>system:prepareds</title>
+      <p>This catalog provides data about the known prepared statements and their state in a query
+        engine’s prepared statement cache. For each prepared statement, this catalog provides
+        information such as name, statement, query plan, last use time, number of uses, and so on. </p>
+      <dl>
+        <dlentry>
+          <dt>Create and Execute Prepared Statements</dt>
+          <dd>
+            <p>Create a prepared statement with the syntax <codeph>PREPARE [ <varname>name</varname>
+                ( FROM | AS ) ] <varname>statement</varname></codeph>.</p>
+            <p><b>Example 1 of Prepare</b>: PrimaryScan PREPARE statement in cbq:
+              <codeblock outputclass="language-json">cbq> PREPARE example1 FROM SELECT * FROM `travel-sample` LIMIT 1 ;
+
+Result:
+{
+  "requestID": "1c67946d-3759-4736-be61-ec6c9e6e522b",
+  "signature": "json",
+  "results": [
+    {
+      "encoded_plan": "H4sIAAAAAAAA/6SSQYsTQRCF/8rwvIX2kJPQnrwIwh4C8SZLtpipTEp7etrq6pC4jL9derIhZBQR99jMN6/ee1XP4NiOHXe7FCjCAw6RBoZHX85rOIyJlWxU+Ge8uT2w5e+FY8tw+NkeJHTKEf7LPfSh2GFU+VGppHKUwD3nKvUg2Wb8M2nPBo+O91SCeVM6cnibaUih/rdROcK/mx6n66T/svJP0EZlID1vW4pwkNjx6eJsly5f4PCNzzlRWytaWg0ySI2yfmnxyr1Eg0PJEvtabhZM7n74R7b28PcBfxJdymxIKQQOeFVdn6KYUNjo+JXb6lw5l2A7Yx3yTPMpVTBz2MMhGym8aeG6qEUwiTel6XH6nXiYi3NXzfVMLZitKdOA+Q6y9JGsKNdsK3isMDkYn2r7STmRclMPuNnrODSZA7fWrC6vp7tWn5p5a836PaZfAQAA//8FwAdzDgMAAA==",
+      "name": "guy1",
+      "operator": {
+        "#operator": "Sequence",
+        "~children": [
+          {
+            "#operator": "Authorize",
+            "privileges": {
+              "List": [
+                {
+                  "Priv": 7,
+                  "Target": "default:travel-sample"
+                }
+              ]
+            },
+            "~child": {
+              "#operator": "Sequence",
+              "~children": [
+                {
+                  "#operator": "Sequence",
+                  "~children": [
+                    {
+                      "#operator": "PrimaryScan",
+                      "index": "def_primary",
+                      "keyspace": "travel-sample",
+                      "limit": "1",
+                      "namespace": "default",
+                      "using": "gsi"
+                    },
+                    {
+                      "#operator": "Fetch",
+                      "keyspace": "travel-sample",
+                      "namespace": "default"
+                    },
+                    {
+                      "#operator": "Parallel",
+                      "~child": {
+                      "#operator": "Sequence",
+                      "~children": [
+                        {
+                          "#operator": "InitialProject",
+                          "result_terms": [
+                            {
+                              "expr": "self",
+                              "star": true
+                            }
+                          ]
+                        },
+                        {
+                          "#operator": "FinalProject"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              { 
+                "#operator": "Limit",
+                "expr": "1"
+              }
+            ]
+          }
+        },
+        {
+          "#operator": "Stream"
+        }
+      ]
+    },
+    "signature": {
+      "*": "*"
+    },
+    "text": "prepare guy1 from select * from `travel-sample` limit 1;"
+  }
+],
+"status": "success",
+"metrics": {
+"elapsedTime": "1.550053ms",
+"executionTime": "1.534731ms",
+"resultCount": 1,
+"resultSize": 3922
+}
+}</codeblock>Then
+              execute the prepared statement in cbq:
+                <codeblock outputclass="language-json">cbq> execute example1;
+{
+    "requestID": "54eca299-3798-47e3-b53e-b53002b56315",
+    "signature": null,
+    "results": [
+        {
+            "travel-sample": {
+                "callsign": "MILE-AIR",
+                "country": "United States",
+                "iata": "Q5",
+                "icao": "MLA",
+                "id": 10,
+                "name": "40-Mile Air",
+                "type": "airline"
+            }
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "7.255525ms",
+        "executionTime": "7.226054ms",
+        "resultCount": 1,
+        "resultSize": 300
+    }
+}</codeblock><b>Example
+                2 of Prepare</b>: SecondaryScan PREPARE statement with WHERE clause, created by
+              cbq:<codeblock outputclass="language-json">cbq> PREPARE example2 FROM SELECT * FROM `travel-sample` LIMIT 1 ;
+
+Result:
+cbq> PREPARE example2 FROM SELECT * FROM `travel-sample` WHERE signature="json" {IMIT 1 ;
+    "requestID": "9d0d35aa-1708-4fa9-ac6c-78abecf5d929",
+    "signature": "json",
+    "results": [
+        {
+            "encoded_plan": "H4sIAAAAAAAA/6STT2vbQBDFv8ryeknMthAoFLbkEIpMDQ4VtqGHJtiLNJEnXa3U2ZVxGtTPXlaOE6xc+ue4zI/33jyNHkG+aEoq162zHgbQ8LYmGNDe1q2j99BoWhIbG4F5xJuXB5b0oyNfEDR+FVt2pZCH+XYKXXVx2wj/TFQrvGNHFYUkNecQB3xlpaIIg5LubOeiiWJ35N6GIQE0cuEdzIf+tj86/VOUP4Jy4drKw7KwHhrsS9ofkq3bwwQa3+khtLZINY2jpvaOs6d1oNEF9hUMqsDo9anhlGKx/XvRsUxuxTpHDv9V0ZRdJIFG0fiSIzfpKM7ONieJNu82gStvYye0OVeX6gb3ofE3OH+VauY5snW5NPdUpCaEQufiOpLUYXCnfZvAQO4OGiFagYnSUfrY42z+Ram/7V8Tc645mTxpXgzUiFlGIVtjuKXnLVJXExhM0GtE2qdjzBdZfrXI1PFHUNPFl2u1zObZp5WaHF6jXtTXz9kiU8+yl8di1Hx2PVupi4/ofwcAAP//rRBGTXMDAAA=",
+            "name": "example4",
+            "operator": {
+                "#operator": "Sequence",
+                "~children": [
+                    {
+                        "#operator": "Authorize",
+                        "privileges": {
+                            "List": [
+                                {
+                                    "Priv": 7,
+                                    "Target": "default:travel-sample"
+                                }
+                            ]
+                        },
+                        "~child": {
+                            "#operator": "Sequence",
+                            "~children": [
+                                {
+                                    "#operator": "Sequence",
+                                    "~children": [
+                                        {
+                                            "#operator": "PrimaryScan",
+                                            "index": "def_primary",
+                                            "keyspace": "travel-sample",
+                                            "namespace": "default",
+                                            "using": "gsi"
+                                        },
+                                        {
+                                            "#operator": "Fetch",
+                                            "keyspace": "travel-sample",
+                                            "namespace": "default"
+                                        },
+                                        {
+                                            "#operator": "Parallel",
+                                            "~child": {
+                                                "#operator": "Sequence",
+                                                "~children": [
+                                                    {
+                                                        "#operator": "Filter",
+                                                        "condition": "((`travel-sample`.`signature`) = \"json\")"
+                                                    },
+                                                    {
+                                                        "#operator": "InitialProject",
+                                                        "result_terms": [
+                                                            {
+                                                                "expr": "self",
+                                                                "star": true
+                                                            }
+                                                        ]
+                                                    },
+                                                    {
+                                                        "#operator": "FinalProject"
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "#operator": "Limit",
+                                    "expr": "1"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "#operator": "Stream"
+                    }
+                ]
+            },
+            "signature": {
+                "*": "*"
+            },
+            "text": "PREPARE example2 FROM SELECT * FROM `travel-sample` WHERE signature=\"json\" LIMIT 1;"
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "3.06242ms",
+        "executionTime": "3.04637ms",
+        "resultCount": 1,
+        "resultSize": 4271
+    }
+}</codeblock></p>
+          </dd>
+        </dlentry>
+        <dlentry>
+          <dt>Get Prepared Statements</dt>
+          <dd><p>To get a list of all known prepared statements, you can use REST or a Query statement:
+              <codeblock outputclass="language-json">curl -u Administrator:pword http://localhost:8093/admin/prepareds</codeblock><codeblock outputclass="language-json">SELECT * FROM system:prepareds<varname>projection-list-expression</varname> FROM system:prepareds 
+              [ WHERE <varname>predicate-expression</varname> ]</codeblock></p><p>To get information about a specific prepared statement <varname>p1</varname>, you can use REST or
+              a Query statement:
+              <codeblock outputclass="language-json">curl -u Administrator:pword http://localhost:8093/admin/prepareds/p1<varname>prepared-statement-name</varname></codeblock></p><b>Example
+              1 of Get
+            Prepared</b><codeblock outputclass="language-json">PREPARE p1 AS SELECT * FROM default WHERE foo = 42;
+
+
+Result:
+{
+  "requestID": "87520590-8932-4be8-8d08-6bf4a0aad0d5",
+  "signature": "json",
+  "results": [
+    {
+      "encoded_plan": "H4sIAAAAAAAA/6RSXWsUMRT9K+H0pV2CUBGEiA++FAQfFtY3Kd0wc2Y2mknizZ26tYy/XbKuLN0+aSEQcjmcj5z7CKYu9+zvSvQJDrBIfiIcyjUscqF4zQL3iIvTAxt+n5k6wuJXtwuxFya4L09BH2bdZQk/G6pIuA+RI2uj+hSqHuCfvYxUOPQc/BzVHW9YrCXcw71dbpe/Gv9lYi1h8vKw6XyCRUg993C4KH/GsPjGh1p8x5OJ4x88n841pBEOYw1Y7FOdG2q3+xe6c4K1Fx8jI14U9yZEpcCiy6kPGnIr9fJye1TdvtoOOW+vzHvz5vXVMw8fU9Dg41ryV3bNuLDOUe+UMtWDFvelASvjAIuqXuBUZraazp2kE9Nyu7RzBtmo0E84VFzDmLzOwhZ7BYcVFgvlvm1HERYvNOXa+GoqIzs1KzNInswxmfmxo9AMOR+yvcPyOwAA//+dg3Nd3AIAAA==",
+      "name": "p1",
+      "operator": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "Authorize",
+            "privileges": {
+              "List": [
+                {
+                  "Priv": 7,
+                  "Target": "default:default"
+                }
+              ]
+            },
+            "~child": {
+              "#operator": "Sequence",
+              "~children": [
+                {
+                  "#operator": "PrimaryScan",
+                  "index": "#primary",
+                  "keyspace": "default",
+                  "namespace": "default",
+                  "using": "gsi"
+                },
+                {
+                  "#operator": "Fetch",
+                  "keyspace": "default",
+                  "namespace": "default"
+                },
+                {
+                  "#operator": "Parallel",
+                  "~child": {
+                    "#operator": "Sequence",
+                    "~children": [
+                      {
+                        "#operator": "Filter",
+                        "condition": "((`default`.`foo`) = 42)"
+                      },
+                      {
+                        "#operator": "InitialProject",
+                        "result_terms": [
+                          {
+                            "expr": "self",
+                            "star": true
+                          }
+                        ]
+                      },
+                      {
+                        "#operator": "FinalProject"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "#operator": "Stream"
+          }
+        ] 
+      },
+      "signature": {
+        "*": "*"
+      },
+      "text": "prepare p1 as select * from default where foo = 42;"
+    }
+  ],
+  "status": "success",
+  "metrics": {
+    "elapsedTime": "34.712303ms",
+    "executionTime": "34.68522ms",
+    "resultCount": 1,
+    "resultSize": 3443
+  }
+}
+
+
+SELECT *, meta().plan FROM system:prepareds;
+{
+  "requestID": "e37ab60b-b616-478f-8cf3-cdc16e39283d",
+  "signature": {
+    "*": "*",
+    "plan": "json"
+  },
+  "results": [
+    {
+      "plan": {
+        "#operator": "Sequence",
+        "~children": [
+          {
+            "#operator": "Authorize",
+            "privileges": {
+              "List": [
+                {
+                  "Priv": 7,
+                  "Target": "default:default"
+                }
+              ]
+            },
+            "~child": {
+              "#operator": "Sequence",
+              "~children": [
+                {
+                  "#operator": "PrimaryScan",
+                  "index": "#primary",
+                  "keyspace": "default",
+                  "namespace": "default",
+                  "using": "gsi"
+                },
+                {
+                  "#operator": "Fetch",
+                  "keyspace": "default",
+                  "namespace": "default"
+                },
+                {
+                  "#operator": "Parallel",
+                  "~child": {
+                    "#operator": "Sequence",
+                    "~children": [
+                      {
+                        "#operator": "Filter",
+                        "condition": "((`default`.`foo`) = 42)"
+                      },
+                      {
+                        "#operator": "InitialProject",
+                        "result_terms": [
+                          {
+                            "expr": "self",
+                            "star": true
+                          }
+                        ]
+                      },
+                      {
+                        "#operator": "FinalProject"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "#operator": "Stream"
+          }
+        ]
+      },
+      "prepareds": {
+        "encoded_plan": "H4sIAAAAAAAA/6RSXWsUMRT9K+H0pV2CUBGEiA++FAQfFtY3Kd0wc2Y2mknizZ26tYy/XbKuLN0+aSEQcjmcj5z7CKYu9+zvSvQJDrBIfiIcyjUscqF4zQL3iIvTAxt+n5k6wuJXtwuxFya4L09BH2bdZQk/G6pIuA+RI2uj+hSqHuCfvYxUOPQc/BzVHW9YrCXcw71dbpe/Gv9lYi1h8vKw6XyCRUg993C4KH/GsPjGh1p8x5OJ4x88n841pBEOYw1Y7FOdG2q3+xe6c4K1Fx8jI14U9yZEpcCiy6kPGnIr9fJye1TdvtoOOW+vzHvz5vXVMw8fU9Dg41ryV3bNuLDOUe+UMtWDFvelASvjAIuqXuBUZraazp2kE9Nyu7RzBtmo0E84VFzDmLzOwhZ7BYcVFgvlvm1HERYvNOXa+GoqIzs1KzNInswxmfmxo9AMOR+yvcPyOwAA//+dg3Nd3AIAAA==",
+        "name": "p1",
+        "node": "127.0.0.1:8091",
+        "statement": "prepare p1 as select * from default where foo = 42;",
+        "uses": 0
+      }
+    }
+  ],
+  "status": "success",
+  "metrics": {
+    "elapsedTime": "122.056934ms",
+    "executionTime": "122.03689ms",
+    "resultCount": 1,
+    "resultSize": 3499
+  }
+}</codeblock></dd>
+        </dlentry>
+        <dlentry>
+          <dt>Delete Prepared Statement</dt>
+          <dd>
+            <p>The DELETE command can be used to delete a specific <varname>p1</varname> prepared
+              statement:<codeblock outputclass="language-json">DELETE http://localhost:8093/admin/prepareds/p1<varname>prepared-statement-name</varname></codeblock><codeblock outputclass="language-json">DELETE FROM system:prepareds 
+WHERE name = "p1";</codeblock></p>
+            <p>To delete all the known prepared statements, use
+              <codeblock outputclass="language-json">DELETE http://localhost:8093/admin/prepareds</codeblock></p>
+          </dd>
+        </dlentry>
+      </dl>
+    </section>
+    <section id="sys-completed-req">
+      <title>system:completed_requests</title>
+      <p>This catalog maintains a list of the most recent completed requests that have run longer
+        than a predefined threshold of time. For each completed request, this catalog maintains
+        information such as requestId, statement text, prepared name (if prepared statement),
+        request time, service time, and so on. This information provides a general insight into the
+        health and performance of the query engine and the cluster. Note that most field names and
+        meanings match exactly those of system:active_requests.</p>
+      <note> Couchbase Server version 5.0 has an extra feature which affects<codeph>
+          completed_requests: request profiling </codeph>in the following ways:<ul
+          id="ul_apr_bmc_11b">
+          <li>When the feature is turned on, we will store the execution plan with timings to
+            completed requests.</li>
+          <li>Profiling information is likely to use 100KB+ per entry.</li>
+          <li>Due to the added overhead of running both profiling and logging, we recommend turning
+            on both of them only when needed. Running only one of them continuously has no
+            noticeable affect on performance.</li>
+          <li>Profiling does not carry any extra cost beyond memory for<codeph>
+              complete_requests</codeph>, so it's fine to run it continuously.</li>
+        </ul></note>
+      <dl>
+        <dlentry>
+          <dt>Get Completed Requests</dt>
+          <dd>
+            <p>To get profiling information about the query plan, use:
+              <codeblock outputclass="language-json">curl -u Administrator:pword http://localhost:8093/admin/completed_requests</codeblock><codeblock outputclass="language-json">SELECT *, meta().plan FROM system:completed_requests;</codeblock></p>
+            <codeblock outputclass="language-json">Select *, meta().plan from system:completed_requests LIMIT 1;
+[
+  {
+    "completed_requests": {
+      "clientContextID": "9b79305d-b67c-4b04-8312-978c9c77f3b8",
+      "elapsedTime": "3.18228764s",
+      "errorCount": 0,
+      "node": "192.168.1.7",
+      "phaseCounts": {
+        "fetch": 23568,
+        "primaryScan": 24139
+      },
+      "phaseOperators": {
+        "fetch": 1,
+        "primaryScan": 1
+      },
+      "phaseTimes": {
+        "authorize": "1.26817ms",
+        "fetch": "758.740363ms",
+        "instantiate": "55.679µs",
+        "parse": "713.903µs",
+        "plan": "489.134µs",
+        "primaryScan": "245.557631ms"
+      },
+      "requestId": "91a651d6-a782-4e43-a249-2f54c55b2553",
+      "resultCount": 19477,
+      "resultSize": 60651657,
+      "scanConsistency": "unbounded",
+      "serviceTime": "3.182261202s",
+      "state": "closed",
+      "statement": "select * from `travel-sample`",
+      "time": "2017-02-27 11:02:59.008480274 -0800 PST"
+    },
+    "plan": {
+      "#operator": "Sequence",
+      "#stats": {
+        "#phaseSwitches": 2,
+        "execTime": "4.613µs",
+        "kernTime": "3.181146983s"
+      },
+      "~children": [
+        {
+          "#operator": "Authorize",
+          "#stats": {
+            "#phaseSwitches": 4,
+            "execTime": "3.717µs",
+            "kernTime": "3.17986639s",
+            "servTime": "1.264453ms"
+          },
+          "privileges": {
+            "List": [
+              {
+                "Priv": 1,
+                "Target": "default:travel-sample"
+              },
+              {
+                "Priv": 7,
+                "Target": "default:travel-sample"
+              }
+            ]
+          },
+          "~child": {
+            "#operator": "Sequence",
+            "#stats": {
+              "#phaseSwitches": 3,
+              "execTime": "2.741µs",
+              "kernTime": "3.179859494s"
+            },
+            "~children": [
+              {
+                "#operator": "PrimaryScan",
+                "#stats": {
+                  "#itemsOut": 24593,
+                  "#phaseSwitches": 98377,
+                  "execTime": "24h49m9.233250854s",
+                  "kernTime": "2.960383961s",
+                  "servTime": "136.104883ms",
+                  "state": "running"
+                },
+                "index": "def_primary",
+                "keyspace": "travel-sample",
+                "namespace": "default",
+                "using": "gsi"
+              },
+              {
+                "#operator": "Fetch",
+                "#stats": {
+                  "#itemsIn": 23569,
+                  "#itemsOut": 22544,
+                  "#phaseSwitches": 92279,
+                  "execTime": "89.328839ms",
+                  "kernTime": "2.417774851s",
+                  "servTime": "700.949543ms"
+                },
+                "keyspace": "travel-sample",
+                "namespace": "default"
+              },
+              {
+                "#operator": "Sequence",
+                "#stats": {
+                  "#phaseSwitches": 5,
+                  "execTime": "8.647µs",
+                  "kernTime": "3.179847023s"
+                },
+                "~children": [
+                  {
+                    "#operator": "InitialProject",
+                    "#stats": {
+                      "#itemsIn": 21521,
+                      "#itemsOut": 21520,
+                      "#phaseSwitches": 86087,
+                      "execTime": "20.284388ms",
+                      "kernTime": "3.159569346s"
+                    },
+                    "result_terms": [
+                      {
+                        "expr": "self",
+                        "star": true
+                      }
+                    ]
+                  },
+                  {
+                    "#operator": "FinalProject",
+                    "#stats": {
+                      "#itemsIn": 20496,
+                      "#itemsOut": 20496,
+                      "#phaseSwitches": 81991,
+                      "execTime": "11.143936ms",
+                      "kernTime": "3.168705526s"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "#operator": "Stream",
+          "#stats": {
+            "#itemsIn": 19478,
+            "#itemsOut": 19477,
+            "#phaseSwitches": 38961,
+            "execTime": "6.789206ms",
+            "kernTime": "3.174331007s"
+          }
+        }
+      ]
+    }
+  }
+]</codeblock>
+          </dd>
+        </dlentry>
+        <dlentry>
+          <dt>Purging the Completed Requests</dt>
+          <dd>To purge the completed requests for a given time period, use
+            <codeblock outputclass="language-json">DELETE FROM system:completed_requests 
+requests WHERE requests.time LIKE "2015-09-09%";<varname>requests</varname> 
+              WHERE requests.Time LIKE "2015-09-09%";</codeblock></dd>
+        </dlentry>
+      </dl>
+      <p><b>Configuring the system:completed_requests keyspace</b></p>
+      <p>You can configure the <codeph>system:completed_requests</codeph> keyspace by specifying the
+        parameters as command line options for the cbq-engine.<ul>
+          <li><parmname>completed-threshold</parmname>: Sets the minimum request duration after
+            which requests are added to the <codeph>system:completed_requests</codeph> catalog. The
+            default value is 1000ms. Specify <userinput>0</userinput> to log all requests and
+              <userinput>-1</userinput> to not log any requests to the keyspace. <p>To specify a different value, use:
+              <codeblock outputclass="language-json">curl http://localhost:port/admin/settings -d '{"completed-threshold":0}' -u <varname>user</varname>:<varname>password</varname></codeblock></p></li>
+          <li><parmname>completed-limit</parmname>: Sets the number of most recent requests to be
+            tracked in the <codeph>system:completed_requests</codeph> catalog. The default value is
+            4000. Specify <userinput>0</userinput> to not track any requests and
+              <userinput>-1</userinput> to set no limit. <p>To specify a different value, use:
+              <codeblock outputclass="language-json">curl http://localhost:port/admin/settings -d '{"completed-limit":1000}' -u <varname>user</varname>:<varname>password</varname></codeblock></p></li>
+        </ul>You can also set these parameters through the Admin API settings endpoint:
+        <codeblock outputclass="language-json">curl -X POST 'http://localhost:8093/admin/settings'  -u Administrator:pword -d '{ ... }'</codeblock>
+        The JSON parameter accepts two new fields: <parmname>completed-threshold</parmname> and
+          <parmname>completed-limit</parmname>.</p>
+      <p><b>Example 1 of Completed Request</b>: Set the profile to timings </p>
+            <codeblock outputclass="language-json">cbq> \set -profile "timings";
+cbq> SELECT * FROM `travel-sample` WHERE type = "airline" LIMIT 1;
+{
+    "requestID": "874a6c27-b514-42c7-b057-caf07067db65",
+    "signature": {
+        "*": "*"
+    },
+    "results": [
+        {
+            "travel-sample": {
+                "callsign": null,
+                "country": "United States",
+                "iata": null,
+                "icao": "XSR",
+                "id": 18257,
+                "name": "Executive AirShare",
+                "type": "airline"
+            }
+        }
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "29.855421ms",
+        "executionTime": "29.838097ms",
+        "resultCount": 1,
+        "resultSize": 304
+    },
+    "profile": {
+        "phaseTimes": {
+	    "authorize": "823.631µs",
+	    "fetch": "656.873µs",
+	    "indexScan": "29.146543ms",
+	    "instantiate": "236.221µs",
+	    "parse": "826.382µs",
+	    "plan": "11.831101ms",
+	    "run": "16.892181ms"
+	},
+        "phaseCounts": {
+	    "fetch": 16,
+	    "indexScan": 187
+	},
+        "phaseOperators": {
+	    "authorize": 1,
+	    "fetch": 1,
+	    "indexScan": 2
+	},
+        "executionTimings": {
+	    "#operator": "Sequence",
+	    "#stats": {
+	        "#phaseSwitches": 2,
+	        "execTime": "1.079µs",
+	        "kernTime": "16.889187ms"
+	    },
+	    "~children": [
+	        {
+	            "#operator": "Authorize",
+	            "#stats": {
+	                "#phaseSwitches": 4,
+	                "execTime": "5.423µs",
+	                "kernTime": "16.043784ms",
+	                "servTime": "818.208µs"
+	            },
+	            "privileges": {
+	                "List": [
+	                    {
+	                        "Target": "default:travel-sample",
+	                        "Priv": 1
+	                    },
+	                    {
+	                        "Target": "default:travel-sample",
+	                        "Priv": 7
+	                    }
+	                ]
+	            },
+	            "~child": {
+	                "#operator": "Sequence",
+	                "#stats": {
+	                    "#phaseSwitches": 3,
+	                    "execTime": "2.694µs",
+	                    "kernTime": "16.036719ms"
+	                },
+	                "~children": [
+	                    {
+	                        "#operator": "Sequence",
+	                        "#stats": {
+	                            "#phaseSwitches": 2,
+	                            "execTime": "1.418µs",
+	                            "kernTime": "16.028217ms"
+	                        },
+	                        "~children": [
+	                            {
+	                                "#operator": "IntersectScan",
+	                                "#stats": {
+	                                    "#itemsIn": 187,
+	                                    "#itemsOut": 187,
+	                                    "#phaseSwitches": 749,
+	                                    "execTime": "449.944µs",
+	                                    "kernTime": "14.625524ms"
+	                                },
+	                                "limit": "1",
+	                                "scans": [
+	                                    {
+	                                        "#operator": "IndexScan",
+	                                        "#stats": {
+	                                            "#phaseSwitches": 3,
+	                                            "execTime": "160.085µs",
+	                                            "kernTime": "14.464239ms"
+	                                        },
+	                                        "index": "def_type",
+	                                        "index_id": "7cc0b964c9b812d2",
+	                                        "keyspace": "travel-sample",
+	                                        "namespace": "default",
+	                                        "spans": [
+	                                            {
+	                                                "Exact": true,
+	                                                "Range": {
+	                                                    "High": [
+	                                                        "\"airline\""
+	                                                    ],
+	                                                    "Inclusion": 3,
+	                                                    "Low": [
+	                                                        "\"airline\""
+	                                                    ]
+	                                                }
+	                                            }
+	                                        ],
+	                                        "using": "gsi",
+	                                        "~children": [
+	                                            {
+	                                                "#operator": "IndexScan",
+	                                                "#stats": {
+	                                                    "#itemsOut": 187,
+	                                                    "#phaseSwitches": 753,
+	                                                    "execTime": "164.676µs",
+	                                                    "kernTime": "64.172µs",
+	                                                    "servTime": "14.228826ms"
+	                                                },
+	                                                "index": "def_type",
+	                                                "index_id": "7cc0b964c9b812d2",
+	                                                "keyspace": "travel-sample",
+	                                                "namespace": "default",
+	                                                "spans": [
+	                                                    {
+	                                                        "Exact": true,
+	                                                        "Range": {
+	                                                            "High": [
+	                                                                "\"airline\""
+	                                                            ],
+	                                                            "Inclusion": 3,
+	                                                            "Low": [
+	                                                                "\"airline\""
+	                                                            ]
+	                                                        }
+	                                                    }
+	                                                ],
+	                                                "using": "gsi"
+	                                            }
+	                                        ]
+	                                    },
+	                                    {
+	                                        "#operator": "DistinctScan",
+	                                        "#stats": {
+	                                            "#phaseSwitches": 4,
+	                                            "execTime": "15.725µs",
+	                                            "kernTime": "20.232µs",
+	                                            "servTime": "14.597529ms"
+	                                        },
+	                                        "scan": {
+	                                            "#operator": "IndexScan",
+	                                            "#stats": {
+	                                                "#phaseSwitches": 3,
+	                                                "execTime": "113.002µs",
+	                                                "kernTime": "14.486802ms"
+	                                            },
+	                                            "index": "univ_idx2",
+	                                            "index_id": "75533bc1a5efe19e",
+	                                            "keyspace": "travel-sample",
+	                                            "namespace": "default",
+	                                            "spans": [
+	                                                {
+	                                                    "Exact": true,
+	                                                    "Range": {
+	                                                        "High": [
+	                                                            "[\"type\", \"airline\"]"
+	                                                        ],
+	                                                        "Inclusion": 3,
+	                                                        "Low": [
+	                                                            "[\"type\", \"airline\"]"
+	                                                        ]
+	                                                    }
+	                                                }
+	                                            ],
+	                                            "using": "gsi",
+	                                            "~children": [
+	                                                {
+	                                                    "#operator": "IndexScan",
+	                                                    "#stats": {
+	                                                        "#phaseSwitches": 4,
+	                                                        "execTime": "18.384µs",
+	                                                        "kernTime": "1.681µs",
+	                                                        "servTime": "14.46157ms"
+	                                                    },
+	                                                    "index": "univ_idx2",
+	                                                    "index_id": "75533bc1a5efe19e",
+	                                                    "keyspace": "travel-sample",
+	                                                    "namespace": "default",
+	                                                    "spans": [
+	                                                        {
+	                                                            "Exact": true,
+	                                                            "Range": {
+	                                                                "High": [
+	                                                                    "[\"type\", \"airline\"]"
+	                                                                ],
+	                                                                "Inclusion": 3,
+	                                                                "Low": [
+	                                                                    "[\"type\", \"airline\"]"
+	                                                                ]
+	                                                            }
+	                                                        }
+	                                                    ],
+	                                                    "using": "gsi"
+	                                                }
+	                                            ]
+	                                        }
+	                                    }
+	                                ]
+	                            },
+	                            {
+	                                "#operator": "Fetch",
+	                                "#stats": {
+	                                    "#itemsIn": 187,
+	                                    "#itemsOut": 16,
+	                                    "#phaseSwitches": 413,
+	                                    "execTime": "128.434µs",
+	                                    "kernTime": "15.027879ms",
+	                                    "servTime": "1.590934ms",
+	                                    "state": "services"
+	                                },
+	                                "keyspace": "travel-sample",
+	                                "namespace": "default"
+	                            },
+	                            {
+	                                "#operator": "Sequence",
+	                                "#stats": {
+	                                    "#phaseSwitches": 5,
+	                                    "execTime": "10.29µs",
+	                                    "kernTime": "16.009655ms"
+	                                },
+	                                "~children": [
+	                                    {
+	                                        "#operator": "Filter",
+	                                        "#stats": {
+	                                            "#itemsIn": 16,
+	                                            "#itemsOut": 16,
+	                                            "#phaseSwitches": 69,
+	                                            "execTime": "284.572µs",
+	                                            "kernTime": "15.693579ms"
+	                                        },
+	                                        "condition": "((`travel-sample`.`type`) = \"airline\")"
+	                                    },
+	                                    {
+	                                        "#operator": "InitialProject",
+	                                        "#stats": {
+	                                            "#itemsIn": 16,
+	                                            "#itemsOut": 16,
+	                                            "#phaseSwitches": 69,
+	                                            "execTime": "7.202µs",
+	                                            "kernTime": "15.984416ms"
+	                                        },
+	                                        "result_terms": [
+	                                            {
+	                                                "expr": "self",
+	                                                "star": true
+	                                            }
+	                                        ]
+	                                    },
+	                                    {
+	                                        "#operator": "FinalProject",
+	                                        "#stats": {
+	                                            "#itemsIn": 16,
+	                                            "#itemsOut": 16,
+	                                            "#phaseSwitches": 71,
+	                                            "execTime": "24.641µs",
+	                                            "kernTime": "15.980887ms"
+	                                        }
+	                                    }
+	                                ]
+	                            }
+	                        ]
+	                    },
+	                    {
+	                        "#operator": "Limit",
+	                        "#stats": {
+	                            "#itemsIn": 2,
+	                            "#itemsOut": 1,
+	                            "#phaseSwitches": 11,
+	                            "execTime": "5.884µs",
+	                            "kernTime": "16.014442ms"
+	                        },
+	                        "expr": "1"
+	                    }
+	                ]
+	            }
+	        },
+	        {
+	            "#operator": "Stream",
+	            "#stats": {
+	                "#itemsIn": 1,
+	                "#itemsOut": 1,
+	                "#phaseSwitches": 9,
+	                "execTime": "1.788µs",
+	                "kernTime": "16.883589ms"
+	            }
+	        }
+	    ]
+	}
+    }
+}
+</codeblock>
+
+          <p>Example 2 of Completed Request</p>
+          <p>Query 1 - First, we set <codeph>profile = "timings"</codeph> and run a long query
+            which takes at least 1000ms (the default value of the<codeph> completed-threshold
+            </codeph>query setting) to get registered in the<codeph>system:completed_requests
+            </codeph>keyspace:</p>
+              <codeblock outputclass="language-json">cbq> \set -profile "timings";
+cbq> SELECT * FROM `travel-sample` ORDER BY name;</codeblock><p>Query
+              2 - Now, we change the profile setting to “phases” and rerun another long
+              query:<codeblock outputclass="language-json">cbq> \set -profile "phases";
+cbq> SELECT * FROM `travel-sample` ORDER BY title;</codeblock></p><p>Query
+              3 - Run a query <codeph>system:completed_requests</codeph> keyspace with
+                <codeph>meta().plan</codeph>. The following example shows:<ul id="ul_amv_vmr_hz">
+                <li dir="ltr">
+                  <p dir="ltr"><codeph>meta().plan</codeph> with all detailed statistics collected
+                    for Query 1.</p>
+                </li>
+                <li dir="ltr">
+                  <p dir="ltr">Only profile attribute with all phases-related statistics for the
+                    Query 2.</p>
+                </li>
+                <li dir="ltr">
+                  <p dir="ltr">The profile attribute with all phases-related statistics for
+                    this query itself (which is querying the<codeph> system:completed_requests
+                    </codeph>keyspace)</p>
+                    <codeblock outputclass="language-json">cbq> SELECT meta().plan, * from system:completed_requests;
+{
+    "requestID": "33ed0271-6f30-48e0-9932-eea97b3d41fa",
+    "signature": {
+        "*": "*",
+        "plan": "json"
+    },
+    "results": [
+        {
+            "completed_requests": {
+                "elapsedTime": "6.404801894s",
+                "errorCount": 0,
+                "node": "10.17.5.233",
+                "phaseCounts": {
+                    "fetch": 31592,
+                    "primaryScan": 31592,
+                    "sort": 31592
+                },
+                "phaseOperators": {
+                    "authorize": 1,
+                    "fetch": 1,
+                    "primaryScan": 1,
+                    "sort": 1
+                },
+                "phaseTimes": {
+                    "authorize": "576.717µs",
+                    "fetch": "605.983982ms",
+                    "instantiate": "625.544µs",
+                    "parse": "262.266µs",
+                    "plan": "254.921µs",
+                    "primaryScan": "64.168512ms",
+                    "run": "6.402307626s",
+                    "sort": "432.85835ms"
+                },
+                "remoteAddr": "192.168.0.109:51540",
+                "requestId": "bd0cfa57-2189-4f22-93d5-ddeca3325c3f",
+                "resultCount": 31592,
+                "resultSize": 107818622,
+                "scanConsistency": "unbounded",
+                "serviceTime": "6.40478582s",
+                "state": "completed",
+                "statement": "select * from `travel-sample` order by name;",
+                "time": "2017-03-10 20:19:02.495406865 -0800 PST",
+                "userAgent": "Go-http-client/1.1",
+                "users": "Administrator"
+            },
+
+            // Query1 results (begin) ––––––––––––––––––––––––––--
+            "plan": {
+                "#operator": "Sequence",
+                "#stats": {
+                    "#phaseSwitches": 2,
+                    "execTime": "849ns",
+                    "kernTime": "6.402305271s"
+                },
+                "~children": [
+                    {
+                        "#operator": "Authorize",
+                        "#stats": {
+                            "#phaseSwitches": 4,
+                            "execTime": "3.452µs",
+                            "kernTime": "6.401387075s",
+                            "servTime": "573.265µs"
+                        },
+                        "privileges": {
+                            "List": [
+                                {
+                                    "Priv": 1,
+                                    "Target": "default:travel-sample"
+                                },
+                                {
+                                    "Priv": 7,
+                                    "Target": "default:travel-sample"
+                                }
+                            ]
+                        },
+                        "~child": {
+                            "#operator": "Sequence",
+                            "#stats": {
+                                "#phaseSwitches": 3,
+                                "execTime": "2.667µs",
+                                "kernTime": "6.401379511s"
+                            },
+                            "~children": [
+                                {
+                                    "#operator": "Sequence",
+                                    "#stats": {
+                                        "#phaseSwitches": 2,
+                                        "execTime": "3.757µs",
+                                        "kernTime": "638.158784ms"
+                                    },
+                                    "~children": [
+                                        {
+                                            "#operator": "PrimaryScan",
+                                            "#stats": {
+                                                "#itemsOut": 31592,
+                                                "#phaseSwitches": 126371,
+                                                "execTime": "43.239957ms",
+                                                "kernTime": "557.221483ms",
+                                                "servTime": "20.928555ms"
+                                            },
+                                            "index": "def_primary",
+                                            "keyspace": "travel-sample",
+                                            "namespace": "default",
+                                            "using": "gsi"
+                                        },
+                                        {
+                                            "#operator": "Fetch",
+                                            "#stats": {
+                                                "#itemsIn": 31592,
+                                                "#itemsOut": 31592,
+                                                "#phaseSwitches": 126499,
+                                                "execTime": "37.4027ms",
+                                                "kernTime": "32.132249ms",
+                                                "servTime": "568.581282ms"
+                                            },
+                                            "keyspace": "travel-sample",
+                                            "namespace": "default"
+                                        },
+                                        {
+                                            "#operator": "Sequence",
+                                            "#stats": {
+                                                "#phaseSwitches": 5,
+                                                "execTime": "2.14µs",
+                                                "kernTime": "638.143448ms"
+                                            },
+                                            "~children": [
+                                                {
+                                                    "#operator": "InitialProject",
+                                                    "#stats": {
+                                                        "#itemsIn": 31592,
+                                                        "#itemsOut": 31592,
+                                                        "#phaseSwitches": 126375,
+                                                        "execTime": "3.887302ms",
+                                                        "kernTime": "634.243391ms"
+                                                    },
+                                                    "result_terms": [
+                                                        {
+                                                            "expr": "self",
+                                                            "star": true
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "#operator": "Order",
+                                    "#stats": {
+                                        "#itemsIn": 31592,
+                                        "#itemsOut": 31592,
+                                        "#phaseSwitches": 126373,
+                                        "execTime": "432.85835ms",
+                                        "kernTime": "5.925425699s"
+                                    },
+                                    "sort_terms": [
+                                        {
+                                            "expr": "(`travel-sample`.`name`)"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "#operator": "FinalProject",
+                                    "#stats": {
+                                        "#itemsIn": 31592,
+                                        "#itemsOut": 31592,
+                                        "#phaseSwitches": 126375,
+                                        "execTime": "16.142571ms",
+                                        "kernTime": "6.385221481s"
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "#operator": "Stream",
+                        "#stats": {
+                            "#itemsIn": 31592,
+                            "#itemsOut": 31592,
+                            "#phaseSwitches": 63191,
+                            "execTime": "4.397577ms",
+                            "kernTime": "6.397903458s"
+                        }
+                    }
+                ]
+            }
+        },
+        // Query1 results (end) ––––––––––––––––––––––––––--
+
+        // Query2 results (begin) ––––––––––––––––––––––––––--
+        {
+            "completed_requests": {
+                "elapsedTime": "6.404801894s",
+                "errorCount": 0,
+                "node": "192.168.0.109",
+                "phaseCounts": {
+                    "fetch": 31592,
+                    "primaryScan": 31592,
+                    "sort": 31592
+                },
+                "phaseOperators": {
+                    "authorize": 1,
+                    "fetch": 1,
+                    "primaryScan": 1,
+                    "sort": 1
+                },
+                "remoteAddr": "192.168.0.109:51540",
+                "requestId": "bd0cfa57-2189-4f22-93d5-ddeca3325c3f",
+                "requestTime": "2017-03-10T20:19:02.495406865-08:00",
+                "resultCount": 31592,
+                "resultSize": 107818622,
+                "scanConsistency": "unbounded",
+                "serviceTime": "6.40478582s",
+                "state": "completed",
+                "statement": "select * from `travel-sample` order by name;",
+                "userAgent": "Go-http-client/1.1",
+                "users": "Administrator"
+            }
+        }
+       // Query2 results (end) ––––––––––––––––––––––––––--
+
+    ],
+    "status": "success",
+    "metrics": {
+        "elapsedTime": "74.124629ms",
+        "executionTime": "74.112155ms",
+        "resultCount": 4,
+        "resultSize": 14608
+    },
+    "profile": {
+        "phaseTimes": {
+	    "authorize": "551.089µs",
+	    "fetch": "34.260218ms",
+	    "instantiate": "20.455µs",
+	    "parse": "297.811µs",
+	    "plan": "36.651µs",
+	    "primaryScan": "35.703598ms",
+	    "run": "70.693651ms"
+	},
+        "phaseCounts": {
+	    "fetch": 4,
+	    "primaryScan": 4
+	},
+        "phaseOperators": {
+	    "authorize": 1,
+	    "fetch": 1,
+	    "primaryScan": 1
+	}
+   }
+ }                  </codeblock>
+                </li>
+              </ul></p>  </section>
+
+    <section id="my-user-info">
+      <title>system:my_user_info</title>
+      <p>This catalog maintains a list of all information of your profile.</p>
+      <p>To see your current information,
+        use:<codeblock outputclass="language-json">SELECT * FROM system:my_user_info;</codeblock>This will result in a list
+        similar
+        to:<codeblock outputclass="language-json">[
+  {
+    "my_user_info": {
+      "domain": "ns_server",
+      "id": "Administrator",
+      "name": "Administrator",
+      "roles": [
+        {
+          "role": "admin"
+        }
+      ]
+    }
+  }
+]</codeblock></p>
+    </section>
+    <section id="user-info">
+      <title>system:user_info</title>
+      <p>This catalog maintains a list of all current users in your bucket and their
+        information.</p>
+      <p>To see the list of all current users,
+        use:<codeblock outputclass="language-json">SELECT * FROM system:user_info;</codeblock>This will result in a list similar
+        to:<codeblock outputclass="language-json">[
+  {
+    "user_info": {
+      "domain": "local",
+      "id": "anil",
+      "name": "Anil",
+      "roles": [
+        {
+          "role": "replication_admin"
+        },
+        {
+          "bucket_name": "travel-sample",
+          "role": "select"
+        },
+        {
+          "bucket_name": "*",
+          "role": "select"
+        }
+      ]
+    }
+  },
+  {
+    "user_info": {
+      "domain": "ns_server",
+      "id": "Administrator",
+      "name": "Administrator",
+      "roles": [
+        {
+          "role": "admin"
+        }
+      ]
+    }
+  }
+]</codeblock></p>
+    </section>
+    <section id="applicable-roles">
+      <title>system:applicable_roles</title>
+      <p>This catalog maintains a list of all applicable roles and grantee of each bucket.</p>
+      <p>To see the list of all current applicable role information,
+        use:<codeblock outputclass="language-json">SELECT * FROM system:applicable_roles;</codeblock>This will result in a list
+        similar
+        to:<codeblock outputclass="language-json">[
+  {
+    "applicable_roles": {
+      "grantee": "anil",
+      "role": "replication_admin"
+    }
+  },
+  {
+    "applicable_roles": {
+      "bucket_name": "travel-sample",
+      "grantee": "anil",
+      "role": "select"
+    }
+  },
+  {
+    "applicable_roles": {
+      "bucket_name": "*",
+      "grantee": "anil",
+      "role": "select"
+    }
+  }
+]</codeblock></p>
+    </section>
+  </body>
+</topic>

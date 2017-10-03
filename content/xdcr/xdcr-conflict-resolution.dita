@@ -1,45 +1,143 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
-<topic id="topic_zfs_h5q_pq">
-  <title>XDCR conflict resolution</title>
-  <shortdesc>Conflict resolution makes XDCR an ideal solution for high availability use cases. </shortdesc>
+<topic id="conflict-resolution">
+  <title>XDCR Conflict Resolution</title>
   <body>
-    <p>Failing over to a secondary cluster under cluster-wide or partial failures is critical for
-      providing a full availability on the database tier. Therefore, XDCR is often used as an
-      availability solution since the RevID-based model (a model based on a revision ID) behaves
-      ideally under failover conditions. </p>
-<p>In addition to the RevID type of conflict resolution, Couchbase Server implements Timestamp. </p>
-      <dl>
-        <dlentry>
-          <dt>Revision ID</dt>
-          <dd>The default resolution type is Revision ID-based. Enable Revision ID at the Couchbase
-          bucket level during the initial setup and then change it if needed at a later time.</dd>
-        </dlentry>
-      </dl>
-
-    
-    <dl>
-      <dlentry>
-        <dt>Timestamp</dt>
-        <dd>When the system detects  identical
-          revision IDs or identical timestamps while resolving conflicts, it allows the larger value
-          to win after comparing them. </dd>
-        <dd>The order for comparing values in the system is as follows: <ol>
-            <li>CAS (Create and Set) Value</li>
-            <li>Document flag</li>
-            <li>Expiration TTL (Time to Live) value</li>
-          </ol>
-        </dd>
-      </dlentry>
-    </dl>
-    
-    
-     
-    
-    
-    
-    
-    
-  
+    <section>
+      <title>Conflicts and Conflict Resolution</title>
+          <p>A conflict is where the same document is modified in two different locations
+            before the document has been synchronized between the locations. To maintain consistency
+            between these two locations, one version has to be chosen as the 'correct' version.
+            Conflict resolution provides a method to consistently and deterministically select which
+            version of the document to use.</p>
+          <p>In the case of XDCR, if the same documents are being mutated on both ends of
+            an XDCR replication (source and destination), then there is a high probability that
+            conflicts could occur. XDCR automatically performs conflict resolution between different
+            document versions on the source and destination clusters to ensure that both clusters
+            remain in sync.</p>
+      <p>Couchbase Server supports two distinct conflict resolution strategies - <xref href="#conflict-resolution/revision-id-based-conflict-resolution"><b>revision
+        ID-based</b> (default)</xref> and <xref href="#conflict-resolution/timestamp-based-conflict-resolution"><b>timestamp-based</b></xref>.</p>
+      <p>
+        <note>Timestamp-based conflict resolution is only available in the Enterprise Edition of
+          Couchbase Server.</note>
+      </p>
+        
+    </section>
+    <section>
+      <title>How Conflict Resolution Works</title>
+      <p>When a document is modified at an XDCR source, it determines if this revision of the
+        document should be applied to the destination. XDCR fetches metadata for the document from
+        the destination cluster before it replicates the document. XDCR compares the destination
+        metadata with the metadata of the updated document on the source cluster to pick the
+        'winner'. The metadata used depends on the source bucket's conflict resolution policy. If
+        XDCR determines a document from a source cluster will 'win' conflict resolution, it
+        replicates that document to the target cluster. </p>
+      <p>Once the document reaches the destination, the destination cluster will also compare
+        metadata to confirm the document from the source cluster is still the 'winner'. If the
+        document from the source cluster is still the 'winner' it will be applied to the destination
+        cluster. The destination cluster will discard the document version which 'loses' conflict
+        resolution. </p>
+      <p>XDCR optimises this process for small documents (default 256 bytes). XDCR skips fetching metadata for these documents from the
+        destination cluster and immediately sends the document to the destination to undergo
+        conflict resolution. </p>
+      <p>Conflict resolution is an automatic process and does not require any manual correction or
+        selection of documents.</p>
+    </section>
+    <section id="revision-id-based-conflict-resolution"><title>Revision-based Conflict Resolution</title>
+      <p>Revision ID-based conflict resolution uses revision ID as the first field to resolve
+        conflicts between two writes across clusters. Revision IDs are maintained per document and
+        are incremented with every update to the document. The revision ID monotonically keeps track
+        of the number of mutations to a document, thus revision ID-based conflict resolution can be
+        best characterized as 'the most updates wins'. XDCR initially compares the revision ID of
+        the source document with the revision ID of the equivalent destination document. The
+        document with more revisions is considered the 'winner'.</p>
+      <p> In the event that both document versions have the same revision ID, the following metadata
+        is compared (in order) to resolve conflicts:</p>
+      <ol><li>CAS value</li>
+        <li>Expiration (TTL) value</li>
+        <li>Document flags</li></ol>
+      <p>For conflict resolution between an incoming mutation from another cluster and a local
+        mutation in the current cluster, if the incoming mutation does not have a higher revision ID
+        than the local mutation, it will be discarded and will not be stored. In the case of
+        bidirectional replication, this process results in the mutation with the highest revision ID
+        taking precedence on both clusters. </p>
+      <p>The key point is that the number of document mutations is the main factor that determines
+        whether XDCR keeps a document version or not. This means that the document that has the most
+        recent mutation may not be necessarily the one that wins conflict resolution using revision
+        ID. </p>
+    </section>
+    <section id="timestamp-based-conflict-resolution">
+      <title>Timestamp-based Conflict Resolution</title>
+      <p>Timestamp-based conflict resolution uses the document timestamp (stored in the CAS) as the
+        first field to resolve conflicts between two writes across clusters. Couchbase Server uses a
+        hybrid logical clock (HLC), a combination of a physical clock and a logical clock, to store
+        the timestamp and keep consistent ordering of mutations. </p>
+      <p>Using timestamp-based conflict resolution, document updates with the most recent timestamp
+        will 'win' conflict resolution. As such timestamp-based conflict resolution can be best
+        characterised as 'last write wins'. XDCR initially compares the timestamp of the source
+        document with the timestamp of the equivalent destination document. The document with a
+        higher timestamp value is considered the 'winner'. </p>
+      <p>In the event that both document versions have the same timestamp value, the following
+        metadata is compared (in order) to resolve conflicts: </p>
+      <p><ol id="ol_s4q_scv_qy">
+          <li>Revision ID</li>
+          <li>Expiration (TTL) value</li>
+          <li>Document flags</li>
+        </ol>For conflict resolution between an incoming mutation from another cluster and a local
+        mutation in the current cluster, if the incoming mutation does not have a higher timestamp
+        value than the local mutation, it will be discarded and will not be stored. In the case of
+        bidirectional replication, this process results in the mutation with the highest timestamp
+        value taking precedence on both clusters. </p>
+      <p>The key point is that the timestamp of the most recent mutation is the main factor that
+        determines whether XDCR keeps a document version or not. This means that the document has
+        received the most mutations may not be necessarily the one that wins conflict resolution
+        using the timestamp. </p>
+      <p>One caveat of using timestamp-based conflict resolution is that it requires the use of
+        synchronized clocks, which places a dependence on a system external to Couchbase Server to
+        ensure correct functioning of the feature, see <xref
+          href="../install/synchronize-clocks-using-ntp.dita"/> for further details.</p>
+      <p>See <xref href="xdcr-timestamp-based-conflict-resolution.dita"></xref> for further details about using timestamp-based conflict resolution including
+        important environmental considerations. </p>
+    </section>
+    <section id="section_whz_ycv_qy"><title>Choosing the Right Conflict Resolution
+        Method</title><p>The conflict resolution policy is configured on a per-bucket basis at
+          bucket creation time, it cannot be changed later. For more information, see 
+          <xref href="../clustersetup/create-bucket.dita"/>. It
+        is therefore important to choose the correct conflict resolution method for your application
+        requirements to avoid unintended side effects. Choosing the correct conflict resolution
+        method requires consideration of the application logic as to which version of the document
+        is the most useful as the data in 'losing' version is discarded. </p><p>To illustrate how application logic affects the choice of conflict resolution method, two simple
+          examples are provided. More detailed use case examples can be found in 
+          <xref href="xdcr-timestamp-based-conflict-resolution.dita#timestamp-based-conflict-resolution/use-cases"></xref>.</p><p><b>Example 1 -
+          Most Updates is Best </b></p><p>Consider a hit counter for a website, stored as a counter document within Couchbase Server which
+        is incremented on every access. In the event of a conflict occurring, you would want the
+        version of the document has been incremented the most, as that will more closely reflect the
+        actual count. Revision ID-based conflict resolution would be preferable in this instance as
+        it ensures that the document which has been mutated the most 'wins'.</p>
+      <p><b>Example 2 - Most Recent Update is Best</b></p>
+      <p>Consider a thermometer device which stores the current temperature in Couchbase Server,
+        writing to the same key repeatedly. In the event of a conflict occurring, you would want to
+        keep the version of the document which was captured most recently, as that is the most
+        accurate 'current' temperature. Timestamp-based conflict resolution ensures that the most
+        recent version of the document would be used.</p></section>
+    <p>
+      <note type="important"><p><b>It is not possible to create XDCR replications between buckets with different conflict
+            resolution policies.</b></p>
+        <p>It is however, possible to create XDCR replications from pre-4.6 Couchbase Server buckets
+          to timestamp-based conflict resolution buckets. To prevent timestamp corruption the
+          destination cluster will reject all incoming XDCR traffic from the non timestamp-based
+          conflict resolution bucket. Revision ID-based buckets do not suffer from this issue and
+          should be used in all cases where you need to use XDCR from pre-4.6 Couchbase Server
+          clusters.</p></note>
+    </p>   
   </body>
+  <related-links>
+    
+    <linklist>
+      <desc>For information on how to set the conflict resolution type for a bucket, see</desc>
+      <link href="../clustersetup/create-bucket.dita"/>
+    </linklist>
+    <linklist><desc>For further information on timestamp-based conflict resolution, see</desc>
+    <link href="xdcr-timestamp-based-conflict-resolution.dita"/></linklist>
+  </related-links>
 </topic>

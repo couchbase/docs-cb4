@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="java_sdk_user_management">
+    
+    <title>
+        Sample Code
+    </title>
+    
+    <shortdesc>
+        The Java SDK now lets you create <i>users</i>, assign them <i>roles</i> and 
+        associated <i>privileges</i>, and remove them from the system.  
+    </shortdesc>
+    
+    <body>
+        <section>
+            <title>
+                User-Management APIs
+            </title>
+            
+            <p>
+                Users who have been assigned the <b>Admin</b> role for the cluster are able
+                to create, edit, and remove users. The Java SDK provides APIs to support these
+                activities. A high-level summary of the APIs can be found in
+                <xref href="./sdk-user-management-overview.dita" scope="local" format="dita">User-Management</xref>.
+            </p>
+            
+        </section>
+        
+        <section>
+            <title>
+                Java User-Management Example
+            </title>
+            
+            <p>
+                The following code-example demonstrates how the user-management APIs can be used. It assumes that Couchbase Server is
+                established on <codeph>localhost</codeph>; that the Full Administrator username and
+                password are <codeph>Administrator</codeph> and <codeph>password</codeph> respectively;
+                and that the <codeph>travel-sample</codeph> bucket is 
+                installed. For information on installing the <codeph>travel-sample</codeph> bucket, see
+                <xref href="../../settings/install-sample-buckets.dita" scope="local" format="dita">Install Sample Buckets</xref>.
+            </p>
+            
+            <codeblock outputclass="language-java">package com.cb.cbusermgmntall;
+                
+import java.lang.reflect.Array;
+import java.util.Arrays;
+import java.util.List;
+
+import com.couchbase.client.java.Bucket;
+import com.couchbase.client.java.Cluster;
+import com.couchbase.client.java.CouchbaseCluster;
+import com.couchbase.client.java.cluster.User;
+import com.couchbase.client.java.cluster.UserRole;
+import com.couchbase.client.java.cluster.UserSettings;
+import com.couchbase.client.java.document.JsonDocument;
+import com.couchbase.client.java.document.json.JsonArray;
+import com.couchbase.client.java.document.json.JsonObject;
+import com.couchbase.client.java.query.N1qlQuery;
+import com.couchbase.client.java.query.N1qlQueryResult;
+import com.couchbase.client.java.query.N1qlQueryRow;
+import com.couchbase.client.java.subdoc.MutateInBuilder;
+import com.couchbase.client.java.subdoc.SubdocOptionsBuilder;
+
+public class main 
+{
+    public static void main(String [] args)
+    {
+        // Access the cluster that is running on the local host, authenticating with
+        // the username and password of the Full Administrator. This
+        // provides all privileges.
+        //
+        Cluster adminCluster = CouchbaseCluster.create("localhost");
+
+        System.out.print("Authenticating as administrator." + "\n");
+        adminCluster.authenticate("Administrator", "password");
+
+        // Create a user and assign roles.
+        //
+        System.out.print("Upserting new user." + "\n");
+        adminCluster.clusterManager().upsertUser("cbtestuser", UserSettings.build()
+
+
+        .password("cbtestuserpwd")
+        .name("Constance Lambert")
+        .roles(Arrays.asList(
+
+            // Roles required for the reading of data from
+            // the bucket.
+            //
+            new UserRole("data_reader", "*"),
+            new UserRole("query_select", "*"),
+    
+            // Roles required for the writing of data into
+            // the bucket.
+            //
+            new UserRole("data_writer", "travel-sample"),
+            new UserRole("query_insert", "travel-sample"),
+            new UserRole("query_delete", "travel-sample"),
+    
+            // Role required for the creation of indexes
+            // on the bucket.
+            //
+            new UserRole("query_manage_index", "travel-sample"))) 
+
+            );
+
+        // List all current users.
+        //
+        System.out.print("Listing current users." + "\n");
+        List&lt;User&gt; listOfUsers = adminCluster.clusterManager().getUsers();
+        
+        UserRole currentRoles[] = null;
+        User currentUser = null;
+
+        for (int j = 0; j &lt; listOfUsers.size(); j++)
+        {
+            currentUser = listOfUsers.get(j);
+            
+            System.out.print("\n" + "\n" + "USER #" + j + ": " + "\n" + "\n");
+            
+            System.out.println("User's name is: " + currentUser.name() + '\n');
+            System.out.println("User's id is: " + currentUser.userId() + '\n');
+            System.out.println("User's domain is: " + currentUser.domain() + '\n');
+            
+            currentRoles = currentUser.roles();
+            int arraySize = Array.getLength(currentRoles);
+            
+            for (int i = 0; i &lt; arraySize; i++)
+            {
+                System.out.println("User has the role: " + currentRoles[i].role() + ", applicable to bucket " +
+                    currentRoles[i].bucket() + '\n');
+            }
+        }
+
+        adminCluster.disconnect();
+
+        // Access the cluster that is running on the local host, specifying
+        // the username and password already assigned by the administrator
+        // (see the program CbBucketCreation).
+        //
+        Cluster userCluster = CouchbaseCluster.create("localhost");
+        System.out.print("Authenticating as user." + "\n");
+        userCluster.authenticate("cbtestuser", "cbtestuserpwd");
+    
+        // Open a known, existing bucket (created by the administrator).
+        //
+        System.out.print("Opening travel-sample bucket as user." + "\n");
+        Bucket travelSample = userCluster.openBucket("travel-sample");
+    
+       // Create a N1QL Primary Index (but ignore if one already exists).
+       //
+       travelSample.bucketManager().createN1qlPrimaryIndex(true, false);
+    
+        // Read out a known, existing document within the bucket (created
+        // by the administrator).
+        //
+        System.out.println("Reading out airline_10 document" + "\n");
+        JsonDocument returnedAirline10doc = travelSample.get("airline_10");
+        System.out.println("Found: " + returnedAirline10doc);
+    
+        // Create a new document.
+        //
+        System.out.print("Creating new document as user." + "\n");
+        JsonObject airline11Object = JsonObject.empty()
+            .put("callsign", "MILE-AIR")
+            .put("iata", "Q5")
+            .put("icao", "MLA")
+            .put("id", 11)
+            .put("name", "40-Mile Air")
+            .put("type", "airline");
+
+        JsonDocument airline11Document = JsonDocument.create("airline_11", airline11Object);
+
+        // Upsert the document to the bucket.
+        //
+        System.out.print("Upserting new document as user." + "\n");
+        travelSample.upsert(airline11Document);
+        
+        System.out.println("Reading out airline11Document as user." + "\n");
+        JsonDocument returnedAirline11Doc = travelSample.get("airline_11");
+        System.out.println("Found: " + returnedAirline11Doc);
+        
+        // Perform a N1QL Query.
+        //
+        System.out.println("Performing query as user.\n");
+        String returnedValues = "Query-results are: \n\t";
+
+        N1qlQueryResult result = travelSample.query(
+            N1qlQuery.simple("SELECT * FROM `travel-sample` LIMIT 5")
+        );
+
+        // Print each row returned by the query.
+        //
+        for (N1qlQueryRow row : result) 
+        {
+            returnedValues = returnedValues + row + '\n' + '\n' + '\t';
+        }
+
+        System.out.println(returnedValues);
+
+        userCluster.disconnect();
+
+        // Re-authenticate as administrator.
+        //
+        System.out.println("Re-authenticating as administrator.\n");
+        adminCluster.authenticate("Administrator", "password");
+        
+        // Remove known user.
+        //
+        System.out.println("Removing user as administrator.\n");
+        String userToBeRemoved = "cbtestuser";
+        boolean WhetherOrNotUserWasRemoved = adminCluster.clusterManager().removeUser(userToBeRemoved);
+        
+        if (!WhetherOrNotUserWasRemoved)
+        {
+            System.out.println("Could not delete user " + userToBeRemoved + "." + "\n");
+        }
+        else
+        {
+            System.out.println("Deleted user " + userToBeRemoved + "." + "\n");    	
+        }  
+    
+        // Disconnect from the cluster.
+        //
+        adminCluster.disconnect();
+    }
+}</codeblock>
+                
+        </section>
+        
+    </body>
+        
+</topic>

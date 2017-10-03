@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_java_datastructures">
+    <title>Data Structures</title>
+    <shortdesc>You can use complex data structures such as maps and lists in Couchbase. These data
+        structures may be manipulated with basic operations without retrieving and storing the
+        entire document.</shortdesc>
+    <body>
+        <p>The data structure API is not available in the C SDK, but the sub-document API (which the
+            data structure feature uses) can be used to attain the same results with the same
+            performance profile. The best way to inter-operate with data structures as provided by
+            other Couchbase SDKs is to use either full-document operations or sub-document
+            operations. The section on <xref href="document-operations.dita#topic_ltm_4n5_2v"
+                >Sub-Document Operations</xref> shows how C applications can manipulate these data
+            structures.</p>
+        <section><title>Data Structure to Sub-document Operations</title>The following table may be
+            used to help you perform data structure operations by using sub-document operations.
+            Note that some data structure operations may consist of one or more sub-document
+                    operations.<p><codeph>LCB_SDCMD_xxx</codeph> constants are assumed to be used in
+                a context similar to the following (refer to the <xref
+                    href="document-operations.dita#topic_ltm_4n5_2v">Sub-Document Operations</xref>
+                page for more
+                details).<codeblock outputclass="language-c" >lcb_SDSPEC spec = { 0 };
+lcb_CMDSUBDOC cmd = { 0 };
+cmd.specs = &amp;spec;
+cmd.nspecs = 1;
+
+LCB_CMD_SET_KEY(&amp;cmd, docid, strlen(docid));
+LCB_SDSPEC_SET_PATH(&amp;spec, path, strlen(path)); // Can be an empty string where applicable
+LCB_SDSPEC_SET_VALUE(&amp;spec, value, strlen(value));
+spec.sdcmd = LCB_SDCMD_DICT_UPSERT;</codeblock></p></section>
+        <table frame="all" rowsep="1" colsep="1" id="table_lsl_zql_gy">
+            <title>Data Structure to Sub-document Mapping</title>
+            <tgroup cols="2">
+                <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+                <colspec colname="c2" colnum="2" colwidth="1.0*"/>
+                <thead>
+                    <row>
+                        <entry>Data Structure Operation</entry>
+                        <entry>Sub-document Equivalent</entry>
+                    </row>
+                </thead>
+                <tbody>
+                    <row>
+                        <entry><codeph>MapGet(docid, mapkey)</codeph></entry>
+                        <entry>
+                            <codeblock outputclass="language-c">spec.sdcmd = LCB_SDCMD_GET;
+LCB_SDSPEC_SET_PATH(&amp;spec, mapkey, mapkey_len);</codeblock>
+                        </entry>
+                    </row>
+                    <row>
+                        <entry><codeph>MapRemove(docid, mapkey)</codeph></entry>
+                        <entry>
+                            <codeblock outputclass="language-c">spec.sdcmd = LCB_SDCMD_DICT_UPSERT;
+LCB_SDSPEC_SET_PATH(&amp;spec, mapkey, mapkey_len);</codeblock>
+                        </entry>
+                    </row>
+                    <row>
+                        <entry><codeph>MapSize(docid)</codeph></entry>
+                        <entry>Your application should fetch the entire document, parse it with a
+                            JSON parser, and derive the size. <draft-comment author="amarantha"
+                                >There will be an atomic operation to perform this on the server in
+                                the future.</draft-comment></entry>
+                    </row>
+                    <row>
+                        <entry><codeph>MapAdd(docid, mapkey, value)</codeph></entry>
+                        <entry>
+                            <codeblock outputclass="language-c">spec.sdcmd = LCB_SDCMD_DICT_ADD;
+LCB_SDSPEC_SET_PATH(&amp;spec, mapkey, mapkey_len);
+LCB_SDSPEC_SET_VALUE(&amp;spec, value, value_len);</codeblock>
+                        </entry>
+                    </row>
+                    <row>
+                        <entry><codeph>ListGet(docid, index)</codeph></entry>
+                        <entry>
+                            <codeblock outputclass="language-c">spec.sdcmd = LCB_SDCMD_GET;
+std::string path = "[" + std::to_string(index) + "]";
+LCB_SDSPEC_SET_PATH(&amp;spec, path.c_str(), path.size());</codeblock>
+                        </entry>
+                    </row>
+                    <row>
+                        <entry><codeph>ListAppend(docid, value)</codeph></entry>
+                        <entry>
+                            <codeblock outputclass="language-c">spec.sdcmd = LCB_SDCMD_ARRAY_ADD_LAST;
+LCB_SDCMD_SET_PATH(&amp;spec, "", 0);
+LCB_SDCMD_SET_VALUE(&amp;spec, value, value_len);</codeblock>
+                        </entry>
+                    </row>
+                    <row>
+                        <entry><codeph>ListPrepend(docid, value)</codeph></entry>
+                        <entry>
+                            <codeblock outputclass="language-c">spec.sdcmd = LCB_SDCMD_ARRAY_ADD_FIRST;
+LCB_SDCMD_SET_PATH(&amp;spec, "", 0);
+LCB_SDCMD_SET_VALUE(&amp;spec, value, value_len);</codeblock>
+                        </entry>
+                    </row>
+                    <row>
+                        <entry><codeph>ListSize(docid)</codeph></entry>
+                        <entry>See notes on <codeph>MapSize</codeph>.</entry>
+                    </row>
+                    <row>
+                        <entry><codeph>SetContains(docid, value)</codeph></entry>
+                        <entry>Not available as a native operation. Your application should fetch
+                            the document and parse it (as a JSON array) and then determine if the
+                            item exists.</entry>
+                    </row>
+                    <row>
+                        <entry><codeph>SetAdd(docid, value)</codeph></entry>
+                        <entry>
+                            <note>This requires that the set contains only JSON primitives (i.e.
+                                numeric, string, boolean, and null values).</note>
+                            <codeblock outputclass="language-c">spec.sdcmd = LCB_SDCMD_ARRAY_ADD_UNIQUE;
+LCB_SDCMD_SET_PATH(&amp;spec, "", 0);
+LCB_SDCMD_SET_VALUE(&amp;spec, value, value_len);</codeblock>
+                        </entry>
+                    </row>
+                    <row>
+                        <entry><codeph>SetSize(docid)</codeph></entry>
+                        <entry>See notes on <codeph>MapSize</codeph></entry>
+                    </row>
+                    <row>
+                        <entry><codeph>SetRemove(docid, value)</codeph></entry>
+                        <entry>Not available as a native operation. Your application should perform
+                            the following:<ol id="ol_fly_vtl_gy">
+                                <li>Fetch the document (make note of the CAS value).</li>
+                                <li>Parse the value as JSON.</li>
+                                <li>Get the index of the item.</li>
+                                <li>Perform another sub-document operation using the
+                                        <apiname>LCB_SDCMD_REMOVE</apiname> command with the index
+                                    (i.e. <codeph>"[" + std::to_string(index) + "]"</codeph>) as the
+                                    path. <b>Ensure to pass the CAS to the remove operation</b>,
+                                    i.e.<codeblock>sdcmd.cas = cas_from_step_1;</codeblock></li>
+                                <li>If the removal results in an <apiname>LCB_KEY_EEXISTS</apiname>
+                                    then it means another client has modified the set since step #1,
+                                    and you must go back to step #1. Otherwise, the removal is
+                                    complete.</li>
+                            </ol></entry>
+                    </row>
+                    <row>
+                        <entry><codeph>QueuePush(docid, value)</codeph></entry>
+                        <entry>This is an alias to <codeph>ListPrepend</codeph></entry>
+                    </row>
+                    <row>
+                        <entry><codeph>QueuePop(docid)</codeph></entry>
+                        <entry>Not available as a native operation because the returned value may be
+                            lost in transit. To perform this operation in your application:<ol
+                                id="ol_tff_35l_gy">
+                                <li>Fetch the <i>last</i> item of the
+                                    list:<codeblock outputclass="language-c">spec.sdcmd = LCB_SDCMD_GET;
+LCB_SDSPEC_SET_PATH(&amp;spec, "[-1]", 4);</codeblock>Take
+                                    note of the CAS when the operation completes.</li>
+                                <li>If the operation results in an
+                                        <apiname>LCB_SUBDOC_PATH_ENOENT</apiname> error then the
+                                    queue is empty.</li>
+                                <li>Remove the item from the
+                                    queue:<codeblock outputclass="language-c">spec.sdcmd = LCB_SDCMD_GET;
+LCB_SDSPEC_SET_PATH(&amp;spec, "[-1]", 4);</codeblock>Ensure
+                                    to pass the CAS as
+                                    well:<codeblock>sdcmd.cas = cas_from_step_1;</codeblock></li>
+                                <li>If the operation fails with
+                                        <apiname>LCB_SUBDOC_PATH_EEXISTS</apiname> then someone else
+                                    has modified the queue (possibly by trying to process the last
+                                    item) as well. Go back to step 1.</li>
+                            </ol><note>If you are using the queue as a job queue, ensure that you do
+                                not process the item until it is fully removed from the queue, as it
+                                is possible another client/application thread will retrieve the same
+                                queue item and try to process it as well.</note></entry>
+                    </row>
+                    <row>
+                        <entry><codeph>QueueSize(docid)</codeph></entry>
+                        <entry>See notes on <codeph>MapSize</codeph></entry>
+                    </row>
+                </tbody>
+            </tgroup>
+        </table>
+    </body>
+</topic>

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="nodejs_sdk_xattr_example">
+    
+    <title>
+        Sample Code
+    </title>
+    
+    <shortdesc>
+        The Node.js SDK supports creation and handling of <i>extended attributes</i>.  
+    </shortdesc>
+    
+    <body>
+        <section>
+            <title>
+                Subdocument Operations and Extended Attributes
+            </title>
+            
+            <p>
+                A high-level summary of extended attributes can be found in
+                <xref href="./sdk-xattr-overview.dita" scope="local" format="dita">Extended
+                    Attributes</xref>. Extended attributes are handled by means of
+                extensions to the <i>Subdocument API</i>.
+            </p>
+            
+        </section>
+        
+        <section>
+            <title>
+                Node.js Extended Attributes Example
+            </title>
+            
+            <p>
+                The following code demonstrates how 
+                extended attributes can be used. It assumes that Couchbase Server is
+                established on <codeph>localhost</codeph>; that the Full Administrator username and
+                password are <codeph>Administrator</codeph> and <codeph>password</codeph> respectively;
+                and that the <codeph>travel-sample</codeph> bucket is 
+                installed. For information on installing the <codeph>travel-sample</codeph> bucket, see
+                <xref href="../../settings/install-sample-buckets.dita" scope="local" format="dita">Install Sample Buckets</xref>.
+            </p>
+            
+            <codeblock outputclass="language-javascript">'use strict';
+                
+var couchbase = require('couchbase');
+
+var cluster = new couchbase.Cluster('couchbase://localhost');
+cluster.authenticate('Administrator', 'password');
+
+var bucket = cluster.openBucket('travel-sample');
+
+bucket.mutateIn('hotel_10138')
+    .upsert('discounts.jsmith123', '20', {xattr: true, createParents: true})
+    .upsert('discounts.pjones356', '30', {xattr: true, createParents: true})
+    .insert('discounts.jbrown789', '25', {xattr: true, createParents: true})
+    .remove('discounts.jbrown789', {xattr: true})
+    .execute(function(err, res) {
+      if (err) {
+        console.log('hotel_10138 update failed', err, res);
+        process.exit(1);
+        }
+
+        bucket.mutateIn('hotel_10142')
+          .upsert('discounts.jsmith123', '15', {xattr: true, createParents: true})
+          .upsert('discounts.pjones356', '10', {xattr: true, createParents: true})
+          .execute(function(err, res) {
+            if (err) {
+              console.log('hotel_10142 update failed', err, res);
+              process.exit(1);
+              }
+
+
+              var qs = 'SELECT id, meta().id AS docID FROM `travel-sample`';
+              var q = couchbase.N1qlQuery.fromString(qs);
+              bucket.query(q).on('row', function(row) {
+                  var docID = row.docID;
+
+                  bucket.lookupIn(docID)
+                      .get('discounts.jsmith123', {xattr: true})
+                      .execute(function(err, res) {
+                        if (!err) {
+                          var discount = res.contentByIndex(0);
+                          console.log(discount + ' - ' + docID);
+                        }
+                      });
+            });
+        });
+    });</codeblock>
+            
+            
+        </section>
+        
+    </body>
+    
+</topic>
