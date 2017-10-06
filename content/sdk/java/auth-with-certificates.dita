@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="authenticating_with_certificates">
+  
+    <title>
+        Using Certificates
+    </title>
+    
+    <shortdesc>
+        A Java SDK-based client can authenticate with Couchbase Server by means of certificates.
+    </shortdesc>
+
+  <body>
+    <section>
+        <title>
+            Certificate-Based Authentication
+        </title>
+        
+            <p>
+                Couchbase Server supports the use of X.509 certificates to authenticate clients. This allows
+                authenticated users to access specific resources by means of the data service (no other service
+                is currently available to clients through this form of authentication). 
+            </p>
+                
+            <p>    
+                The process relies on a certificate
+                authority, for the issuing of certificates that validate identities. A certificate includes
+                information such as the name of the entity it identifies, an expiration date, the name of the authority
+                that issued the certificate, and the digital signature of the authority.
+                A client attempting to access Couchbase Server can present a certificate to the server, allowing
+                the server to check the validity of the certificate. If the certificate is valid, the user
+                under whose identity the client is running,
+                and the roles assigned that user, are verified. If the assigned roles are appropriate for
+                the level of access requested to the specified resource, access is granted.
+            </p>
+        
+            <p>
+                Note that this means that the explicit authentication process otherwise required by Couchbase <i>Role-Based
+                Access Control</i> &#8212; whereby, in Java, username and password are passed by means of the 
+                <codeph>authenticate</codeph> method on the <codeph>Cluster</codeph> object &#8212; is not needed.
+                (See
+                <xref href="./start-using-sdk.dita" scope="local" format="dita">Start Using the SDK</xref> for
+                an example of such standard authentication.)
+            </p>
+        
+            <p>
+                For a more detailed conceptual description of using certificates, see
+                <xref href="../../security/security-certs-auth.dita" scope="local" format="dita">Certificate-Based
+                Authentication</xref>.
+            </p>
+        
+            <p>
+                For sample procedures whereby certificates can be generated and deployed, see
+                <xref href="../../security/security-x509certsintro.dita" scope="local" format="dita">X.509 for TLS</xref>.
+                Note that this page includes the steps whereby a Java keystore is created, to enable
+                certificate-based authentication by a Java client.
+            </p>
+        
+        </section>
+      
+      <section>
+          <title>
+              Authenticating a Java Client by Certificate
+          </title>
+          
+          <p>
+              To authenticate with Couchbase Server by means of a client certificate, a Java application
+              must have access to an appropriate <i>keystore</i>. A
+              procedure for the creation of such a keystore is provided in
+              <xref href="../../security/security-x509certsintro.dita" scope="local" format="dita">X.509 for TLS</xref>.
+              The following Java code assumes that this procedure has been followed. The procedure's resulting
+              keystore assigns the <codeph>travel-sample</codeph> user-identity to the client.
+              The Couchbase Server-node that is accessed is expected to feature
+              a user-definition where the username is indeed <codeph>travel-sample</codeph>, and where the <b>Bucket Full
+              Access</b> role has been granted to that user for the <i>travel-sample</i> bucket. 
+          </p>
+          
+          <codeblock outputclass="language-java">package certificatetest.java;
+              
+import com.couchbase.client.java.Bucket;
+import com.couchbase.client.java.Cluster;
+import com.couchbase.client.java.CouchbaseCluster;
+import com.couchbase.client.java.document.JsonDocument;
+import com.couchbase.client.java.env.CouchbaseEnvironment;
+import com.couchbase.client.java.env.DefaultCouchbaseEnvironment;
+
+public class CertificateTest
+{
+    public static void main(String [] args)
+    {
+        CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+        .builder()
+        .sslEnabled(true)
+        .sslKeystoreFile("/user/ubuntu/my.keystore")
+        .sslKeystorePassword("storepass")
+        .certAuthEnabled(true)
+        .build();
+
+        Cluster userCluster = CouchbaseCluster.create(env, "10.143.173.101");
+
+        Bucket travelSample = userCluster.openBucket("travel-sample");
+
+        JsonDocument returnedAirline10doc = travelSample.get("airline_10");
+        System.out.println("Found: " + returnedAirline10doc);
+    }
+}</codeblock>
+      </section>
+      
+      <p>
+        As this example shows, certificate-based authentication is enabled by means of
+        the <codeph>CouchbaseEnvironment</codeph> class. (See
+        <xref href="./client-settings.dita" scope="local" format="dita">Client Settings</xref>
+        for details). The certificate-related options are as follows:
+      </p>
+        
+        <ul>
+            <li>
+                <codeph>.sslEnabled</codeph>: Enables use of Secure Sockets: the default value
+                is true.
+            </li>
+            
+            <li>
+                <codeph>.sslKeystoreFile</codeph>: Specifies the local pathname of the keystore to be 
+                used by the Java client in authentication: the default value is null. (Alternatively,
+                the keystore can be specified as a Java object, in which case the default
+                value is none.)
+            </li>
+            
+            <li>
+                <codeph>.sslKeystorePassword</codeph>: Specifies the password of the keystore. The
+                default value is null.
+            </li>
+            
+           <li>
+               <codeph>.certAuthEnabled</codeph>: Enables the server's authentication of the client by 
+               means of the certificates within the client's keystore. Can only be used
+               in combination with <codeph>.sslEnabled</codeph> and related methods. The default is false.
+           </li>
+        
+        </ul>
+      
+      <p>
+        The username <codeph>travel-sample</codeph> is specified within the keystore: therefore,
+        neither the username or associated password need be explicitly
+        passed in the Java code (only the bucket-name, <codeph>travel-sample</codeph> is specified,
+        in order to open the bucket).
+      </p>
+      
+      <p>
+          A formatted version of the program-output is as follows:
+      </p>
+      
+      <codeblock outputclass="language-json">Found: JsonDocument
+{
+    id='airline_10', 
+    cas=1506602602177888256, 
+    expiry=0, 
+    content={
+        "country":"United States",
+        "iata":"Q5",
+        "callsign":"MILE-AIR",
+        "name":"40-Mile Air","icao":"MLA",
+        "id":10,
+        "type":"airline"}, 
+    mutationToken=null
+}</codeblock>
+    </body>
+</topic>
