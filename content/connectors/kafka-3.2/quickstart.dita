@@ -5,85 +5,171 @@
     <shortdesc>This section shows how to add the connector to your application.</shortdesc>
     <taskbody>
         <section>
-            <title>Installing the Kafka Connector</title>
-            <p>At a minimum, Java 6 is required, but any newer version is also supported (including Java 8).</p>
-            <p>The connector is shipped as a zip archive and available here for download:
-            <xref href="http://packages.couchbase.com/clients/kafka/3.2.0/kafka-connect-couchbase-3.2.0.zip"
+            <title>Download</title>
+            <p>The connector is shipped as a zip archive, available here for download:
+            <xref href="https://packages.couchbase.com/clients/kafka/3.2.0/kafka-connect-couchbase-3.2.0.zip"
                     format="html" scope="external">kafka-connect-couchbase-3.2.0.zip</xref></p>
-            <p>The location of the archive contents depends on how the <xref
-            href="http://docs.confluent.io/current/installation.html" format="html" scope="external">Confluent
-            Platform</xref> was installed. In general it should be placed so that the
-            <codeph>share/java/kafka-connect-couchbase</codeph> directory of the archive is at the same level as
-            <codeph>kafka-connect-jdbc</codeph>.</p>
-            <p>If you are only using <xref href="https://kafka.apache.org/"
-            format="html" scope="external">Apache Kafka</xref>, the connector should be in the path
-            (e.g. <codeph>kafka_2.11-0.10.1.0/libs</codeph>. The Apache Kafka version of this sample will be almost the
-            same except it cannot use Confluent-specific features provided by the <xref
-            href="http://docs.confluent.io/3.1.1/control-center/docs/index.html" format="html" scope="external">Control
-            Center</xref> or <xref href="http://docs.confluent.io/3.1.1/schema-registry/docs/index.html" format="html"
-            scope="external">Schema Registry</xref> products.</p>
+            <p>If you prefer to build the connectors from source, clone the
+            <xref href="https://github.com/couchbase/kafka-connect-couchbase" format="html" scope="external">GitHub repository</xref>
+            and run <codeph>mvn package</codeph> to generate the connector archive
+            (look for <codeph>kafka-connect-couchbase-&lt;version&gt;.zip</codeph> in the <codeph>target</codeph> directory).</p>
         </section>
 
         <section>
-            <title>Publishing Couchbase Documents to Kafka Using the Source Connector</title>
-            <p>To see basic functionality of the connector, we'll copy a single bucket from a local Couchbase instance.
-            Start by loading one of the sample buckets, or pick your own. In this simple example we will use
-            <codeph>travel-sample</codeph> from the server distribution.</p>
-            <p>We create a configuration file that will load data from this database. This file is included with the connector
-                in <filepath>config/quickstart-couchbase.properties</filepath> and contains the following settings:</p>
-            <codeblock outputclass="language-properties"><![CDATA[name=test-couchbase
-connector.class=com.couchbase.connect.kafka.CouchbaseSourceConnector
-tasks.max=2
-connection.cluster_address=127.0.0.1
-connection.bucket=default
-connection.username=default
-connection.password=secret
-connection.timeout.ms=2000
-# connection.ssl.enabled=true
-# connection.ssl.keystore.location=/tmp/keystore
-# connection.ssl.keystore.password=secret
-topic.name=test-default
-use_snapshots=false
-]]></codeblock>
-            <p>For this exercise, change the value of <codeph>connection.bucket</codeph> to <codeph>travel-sample</codeph>
-            (or whichever bucket you want to stream from). For <codeph>connection.username</codeph>
-            and <codeph>connection.password</codeph>, supply the credentials of a Couchbase user with read access
-            to the bucket. If you have not yet created such a user, see <xref href="../../security/security-rbac-for-admins-and-apps.dita#topic_auth_for_admins" format="dita"/>.
-            <note>
-              For Couchbase Server versions prior to 5.0, leave the username blank. Set the password property
-              to the bucket password, or leave it blank if the bucket does not have a password. The sample buckets
-              do not have passwords.
-            </note>
-            </p>
-            <p>The first three settings are common for all connectors. The
-            <codeph>connection.cluster_address</codeph> specifies the comma-separated list of cluster nodes, which
-            should be used to bootstrap the connector. The <codeph>use_snapshots</codeph> setting indicates how we want to
-            handle the stream of changes from the server. In this case, we have told the connector to send each event to
-            the Kafka topic immediately, while setting this property to <codeph>true</codeph> will tell the connector task
-            to accumulate events in local memory until the whole snapshot is received. The <codeph>topic.name</codeph>
-            contains the name of the Kafka topic, where all the events will be stored. For simplicity, we don't
-            configure secure connections in this sample; it will be shown later.</p>
-            <p>Run the connector in a standalone Kafka Connect worker in another terminal (this uses
-            <filepath>config/connect-standalone.properties</filepath> from the connector distribution and assumes that
-            Kafka and the Schema Registry are running locally on the default ports):</p>
-            <codeblock outputclass="language-bash"><![CDATA[$ ./bin/connect-standalone config/connect-standalone.properties \
-        config/quickstart-couchbase.properties]]></codeblock>
-            <p> You should see the process start up and log some messages.  Then it will begin receiving events from
-            Couchbase Server and sending the results to Kafka. In order to check that it has copied the data that was
-            present when we started Kafka Connect, start a console consumer, reading from the beginning of the topic:</p>
-            <codeblock outputclass="language-json"><![CDATA[$ ./bin/kafka-avro-console-consumer --new-consumer --bootstrap-server localhost:9092 \
-        --topic test-default --from-beginning
-{"event":"mutation","partition":104,"key":"route_60137","cas":1479128706711552,"bySeqno":1,"revSeqno":1,"expiration":{...
-{"event":"mutation","partition":104,"key":"airport_5736","cas":1479128706973696,"bySeqno":2,"revSeqno":1,"expiration":{...
-{"event":"mutation","partition":104,"key":"landmark_5574","cas":1479128707104768,"bySeqno":3,"revSeqno":1,"expiration":{...
-...
-]]></codeblock>
-            <p>The output will display about 31,000 lines, each containing a mutation (assuming sample bucket hasn't been modified after creation).
-                The shape of the payload is controlled by the <codeph>dcp.message.converter.class</codeph> property of the connector config.
-                By default it is set to <codeph>com.couchbase.connect.kafka.converter.SchemaConverter</codeph>, which formats events into structure
-                with meta information on the top level and optional value as bytestring in <codeph>content</codeph> property.
-                The Avro schema for this converter is shown below:</p>
-            <codeblock outputclass="language-json"><![CDATA[{
+            <title>Getting Started</title>
+            <p>However you obtained the connector archive, go ahead and unzip it now. The result
+                should be a directory called
+                    <codeph>kafka-connect-couchbase-&lt;version&gt;</codeph>. The rest of this guide
+                will refer to this directory as <codeph>$KAFKA_CONNECT_COUCHBASE_HOME</codeph>.</p>
+            <p>This guide assumes you have already installed Couchbase Server locally and have
+                loaded the sample bucket called <codeph>travel-sample</codeph>. (It's fine if you
+                want to use a different bucket; neither the connector nor this guide depend on the
+                contents of the documents in the bucket.)</p>
+            <p>You'll also need a local installation of Kafka or the Confluent Platform.</p>
+        </section>
+
+        <section>
+            <title>Set Up Kafka</title>
+                <p>If you already have an installation of Kafka (or the Confluent Platform) and know
+                    how to start the servers, feel free to skip this section.</p>
+                <p>Still reading? Don't worry, setting up a basic installation is pretty easy.
+                    Download either <xref href="https://kafka.apache.org/downloads" format="html"
+                        scope="external">Kafka</xref> or <xref
+                        href="https://www.confluent.io/download/" format="html" scope="external"
+                        >Confluent</xref>. For simplicity, this guide assumes you're installing from
+                    a ZIP or TAR archive, so steer clear of the deb/rpm packages for now.</p>
+                <p>Decompress the Kafka or Confluent archive and move the resulting directory under
+                        <codeph>~/opt</codeph> (or wherever you like to keep this kind of software).
+                    The rest of this guide refers to the root of the installation directory as
+                        <codeph>$KAFKA_HOME</codeph> or <codeph>$CONFLUENT_HOME</codeph>. Be aware
+                    that some config files are in different relative locations depending on whether
+                    you're using Kafka or Confluent.</p>
+                <p>Make sure the Kafka / Confluent command line tools are in your path:</p>
+                <codeblock xml:space="preserve">export PATH=&lt;path-to-kafka-or-confluent&gt;/bin:$PATH</codeblock>
+        </section>
+
+        <section>
+            <title>Start the Kafka / Confluent Servers</title>
+                    <p>If you're using Confluent, start the servers by running these commands,
+                            <b>each in a separate terminal</b>:</p>
+                    <codeblock xml:space="preserve">zookeeper-server-start $CONFLUENT_HOME/etc/kafka/zookeeper.properties
+kafka-server-start $CONFLUENT_HOME/etc/kafka/server.properties
+schema-registry-start $CONFLUENT_HOME/etc/schema-registry/schema-registry.properties</codeblock>
+                    <p><note>Confluent 3.3.0 introduced a CLI tool that lets you start all the
+                        servers with a single command. It also provides a more sophisticated way to
+                        manage connectors than the technique described in this guide. Read about it
+                            <xref href="http://docs.confluent.io/current/connect/quickstart.html"
+                            format="html" scope="external">here</xref>.</note></p>
+                    <p>If you're not using Confluent, the commands are slightly different, but the
+                        idea is the same. Start the servers by running these commands, <b>each in a
+                            separate terminal</b>:</p>
+                    <codeblock xml:space="preserve">zookeeper-server-start.sh $KAFKA_HOME/config/zookeeper.properties
+kafka-server-start.sh $KAFKA_HOME/config/server.properties</codeblock>
+        </section>
+
+        <section id="configure_source_connector">
+            <title>Configure the Source Connector</title>
+                <p>The Couchbase connector distribution includes sample config files. Look inside
+                        <codeph>$KAFKA_CONNECT_COUCHBASE_HOME/config</codeph> and edit the
+                        <codeph>quickstart-couchbase-source.properties</codeph> file.</p>
+                <p>Take a moment to peruse the configuration options specified here. Some are <xref
+                        href="https://kafka.apache.org/documentation/#connect_configuring"
+                        format="html" scope="external">standard options available to all
+                        connectors</xref>. The rest are specific to the Couchbase connector.</p>
+                <p>For this exercise, change the value of <codeph>connection.bucket</codeph> to
+                        <codeph>travel-sample</codeph> (or whichever bucket you want to stream
+                    from). For <codeph>connection.username</codeph> and
+                        <codeph>connection.password</codeph>, supply the credentials of a Couchbase
+                    user with read access to the bucket. If you have not yet created such a user,
+                    now is a good time to read about
+                    <xref href="../../security/security-rbac-for-admins-and-apps.dita" scope="local" format="dita">
+                        Creating and Managing Users with the UI</xref>.</p>
+                <p><note>For Couchbase Server versions prior to 5.0, leave the username blank. Set
+                    the password property to the bucket password, or leave it blank if the bucket
+                    does not have a password. The sample buckets do not have passwords.</note></p>
+                <p>You might also want to set <codeph>use_snapshots</codeph> to
+                        <codeph>true</codeph>, in which case the source connector will buffer events
+                    until it receives a complete snapshot before committing messages to the Kafka
+                    topic. It doesn't matter for this exercise; just be aware the option exists and
+                    defaults to <codeph>false</codeph>.</p>
+        </section>
+
+        <section>
+            <title>Run the Source Connector</title>
+                <p>Kafka connectors can be run in <xref
+                        href="https://kafka.apache.org/documentation/#connect_running" format="html"
+                        scope="external">standalone or distributed</xref> mode. For now let's run
+                    the connector in standalone mode, using the CLASSPATH environment variable to
+                    include the Couchbase connector JAR in the class path.</p>
+                <p>For Confluent:</p>
+                <codeblock xml:space="preserve">cd $KAFKA_CONNECT_COUCHBASE_HOME
+env CLASSPATH=./* \
+    connect-standalone $CONFLUENT_HOME/etc/schema-registry/connect-avro-standalone.properties \
+                       config/quickstart-couchbase-source.properties</codeblock>
+                <p>Or for Kafka:</p>
+                <codeblock xml:space="preserve">cd $KAFKA_CONNECT_COUCHBASE_HOME
+env CLASSPATH=./* \
+    connect-standalone.sh $KAFKA_HOME/config/connect-standalone.properties \
+                       config/quickstart-couchbase-source.properties</codeblock>
+        </section>
+
+        <section>
+            <title>Alternatively, Run the Connector with Class Loader Isolation</title>
+                    <p>Kafka version 0.11.0 (and Confluent 3.3.0) introduced a mechanism for plugin
+                        class path isolation. To take advantage of this feature, edit the connect
+                        worker config file (the <codeph>connect-*.properties</codeph> file in the
+                        above commands). Modify the <codeph>plugin.path</codeph> property to include
+                        the parent directory of
+                            <codeph>kafka-connect-couchbase-&lt;version&gt;.jar</codeph>.</p>
+                    <p>Run the connector using the same commands as above, but omitting the
+                            <codeph>env CLASSPATH=./*</codeph> prefix. Each Kafka Connect plugin
+                        will use a separate class loader, removing the possibility of dependency
+                        conflicts.</p>
+        </section>
+
+        <section>
+            <title>Observe Messages Published by Couchbase Source Connector</title>
+                <p>The sample config file tells the source connector to publish to a topic called
+                        <codeph>test-default</codeph>. Let's use the Kafka command-line tools to spy
+                    on the contents of the topic.</p>
+                <p>For Confluent:</p>
+                <codeblock xml:space="preserve">kafka-avro-console-consumer --bootstrap-server localhost:9092 \
+                            --topic test-default --from-beginning</codeblock>
+                <p>Or for Kafka:</p>
+                <codeblock xml:space="preserve">kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+                          --topic test-default --from-beginning</codeblock>
+                <p>The expected output is a stream of Couchbase event notification messages, at
+                    least one for each document in the bucket. The messages include document
+                    metadata as well as content. The document content is transferred as a byte array
+                    (encoded as Base64 if the connector is configured to use JSON for message
+                    values).</p>
+                <p>Each message has an <codeph>event</codeph> field whose value indicates the type
+                    of change represented by the message. The possible values are:</p>
+                <ul>
+                    <li><codeph>mutation</codeph>: A change to document content, including creation
+                        and changes made via subdocument commands.</li>
+                    <li><codeph>deletion</codeph>: Removal or expiration of the document.</li>
+                    <li><codeph>expiration</codeph>: Reserved for document expiration (Couchbase
+                        Server does not currently send this event type, but may in future
+                        versions).</li>
+                </ul>
+                <p>Once the consumer catches up to the current state of the bucket, try
+                <xref href="../../sdk/webui-cli-access.dita" scope="local" format="dita">
+                    adding a new document to the bucket via the Couchbase Web Console</xref>.
+                    The consumer will print a notification of type
+                        <codeph>mutation</codeph>. Now delete the document and watch for an event of
+                    type <codeph>deletion</codeph>.</p>
+                <p>Perhaps it goes without saying, but all of the offset management and fault
+                    tolerance features of Kafka Connect work with the Couchbase connector. You can
+                    kill and restart the processes and they will pick up where they left off.</p>
+                <p>The shape of the message payload is controlled by the
+                        <codeph>dcp.message.converter.class</codeph> property of the connector
+                    config. By default it is set to
+                        <codeph>com.couchbase.connect.kafka.converter.SchemaConverter</codeph>,
+                    which formats each notification into a structure that holds document metadata
+                    and contents. For reference, the Avro schema for this payload format is shown
+                    below:</p>
+                <codeblock xml:space="preserve">{
   "type": "record",
   "name": "DcpMessage",
   "namespace": "com.couchbase",
@@ -145,50 +231,60 @@ use_snapshots=false
     }
   ],
   "connect.name": "com.couchbase.DcpMessage"
-}]]></codeblock>
-            <p>Where the <codeph>event</codeph> property describes the kind of event, and can take one of the following values:</p>
-            <ul>
-                <li><codeph>mutation</codeph>: any change of the document, including creation and subdocument commands</li>
-                <li><codeph>deletion</codeph>: removal or expiration of the document.</li>
-                <li><codeph>expiration</codeph>: reserved for document expiration, but Server up to 4.5 does not use it.</li>
-            </ul>
-            <p>When all bucket contents have been transferred, open the Couchbase Admin Console and create a new
-            document with ID <codeph>test</codeph> and body using the Documents UI. If you switch back to the console consumer you should see the new record added
-            (and, importantly, the old entries are not repeated):</p>
-            <codeblock outputclass="language-text"><![CDATA[{"event":"mutation","partition":127,"key":"test","cas":1480340133183488,"bySeqno":29,...
-{"event":"mutation","partition":127,"key":"test","cas":1480340157956096,"bySeqno":30,"revSeqno":2,...]]></codeblock>
-            <p>Removing the document <codeph>test</codeph> will generate a similar event:</p>
-            <codeblock outputclass="language-text"><![CDATA[{"event":"deletion","partition":127,"key":"test","cas":1480340391526400,"bySeqno":32,"revSeqno":3,...]]></codeblock>
-            <p>Of course, all the features of Kafka Connect, including offset management and fault tolerance, work with the source connector. You can restart and kill the processes
-                and they will pick up where they left off, copying only new data (taking into account the <codeph>use_snapshots</codeph> setting).</p>
+}</codeblock>
         </section>
+
         <section>
-            <title>Importing Kafka Messages into Couchbase Using the Sink Connector</title>
-            <p>Since release 3.1, the library implements Sink Connector, which allows to import data from Kafka topics into Couchbase Server.</p>
-            <p>To show how it works, let's write data from the <codeph>test-default</codeph> topic we have just created
-            into new empty bucket. We assume that a bucket named <codeph>receiver</codeph> exists on the server. Our configuration will look like this:</p>
-    <codeblock outputclass="language-text"><![CDATA[name=test-sink-couchbase
-connector.class=com.couchbase.connect.kafka.CouchbaseSinkConnector
-tasks.max=1
-topics=test-default
-connection.cluster_address=127.0.0.1
-connection.bucket=receiver
-connection.username=receiver
-connection.password=secret]]></codeblock>
-            <p>For the username and password properties, supply the credentials of a Couchbase user with write access
-             to the bucket. If you have not yet created such a user, see
-             <xref href="../../security/security-rbac-for-admins-and-apps.dita#topic_auth_for_admins" format="dita"/>.
-             <note>
-               For Couchbase Server versions prior to 5.0, leave the username blank. Set the password property
-               to the bucket password, or leave it blank if the bucket does not have a password.
-             </note>
-             </p><p>
-            Now if you run this job, it will report some diagnostic information about processing data to standard
-            output, and soon the number of documents in the <codeph>receiver</codeph> bucket will match the number of
-            messages in the topic:
-            <codeblock outputclass="language-bash"><![CDATA[$ ./bin/connect-standalone config/connect-standalone.properties \
-        config/quickstart-couchbase-sink.properties]]></codeblock>
-            </p>
+            <title>Couchbase Sink Connector</title>
+            <p>Now let's talk about the sink connector, which reads messages from one or more Kafka
+                topics and writes them to Couchbase Server.</p>
+            <p>The sink connector will attempt to convert message values to JSON. If the conversion
+                fails, the connector will fall back to treating the value as a String BLOB.</p>
+            <p>If the Kafka key is a primitive type, the connector will use it as the document ID.
+                If the Kafka key is absent or of complex type (array or struct), the document ID
+                will be generated as <codeph>topic/partition/offset</codeph>.</p>
+            <p>Alternatively, the document ID can come from the body of the Kafka message. Provide a
+                    <codeph>couchbase.document.id</codeph> property whose value is a JSON Pointer
+                identifying the document ID node. If you want the connector to remove this node
+                before persisting the document to Couchbase, provide a
+                    <codeph>couchbase.remove.document.id</codeph> property with value
+                    <codeph>true</codeph>. If the connector fails to locate the document ID node, it
+                will fall back to using the Kafka key or <codeph>topic/partition/offset</codeph> as
+                described above.</p>
+        </section>
+
+        <section>
+            <title>Configure and Run the Sink Connector</title>
+                <p>In the <codeph>$KAFKA_CONNECT_COUCHBASE_HOME/config</codeph> directory there is a
+                    file called <codeph>quickstart-couchbase-sink.properties</codeph>. Customize
+                    this file as described in <xref href="#kafka-3-quickstart/configure_source_connector" scope="local" format="dita"/>,
+                    only now the bucket will receive messages and the user must have <i>write</i> access to the
+                    bucket.</p>
+                <p><note>You may wish to
+                 <xref href="../../clustersetup/create-bucket.dita" scope="local" format="dita">
+                        create a new bucket</xref> to receive the messages.</note></p>
+                <p>To run the sink connector, use the same command as described in <b>Run the Source
+                        Connector</b>, but pass
+                        <codeph>quickstart-couchbase-sink.properties</codeph> as the second argument
+                    to <codeph>connect-standalone</codeph> instead of
+                        <codeph>quickstart-couchbase-source.properties</codeph>.</p>
+        </section>
+
+        <section>
+            <title>Send Test Messages</title>
+                <p>Now that the Couchbase Sink Connector is running, let's give it some messages to
+                    import:</p>
+                <codeblock xml:space="preserve">cd $KAFKA_CONNECT_COUCHBASE_HOME/examples/json-producer
+mvn compile exec:java</codeblock>
+                <p>The producer will send some messages and then terminate. If all goes well, the
+                    messages will appear in the Couchbase bucket.</p>
+                <p>If you wish to see how the Couchbase Sink Connector behaves in the absence of
+                    message keys, modify the <codeph>publishMessage</codeph> method in the example
+                    source code to set the message keys to null, then rerun the producer.</p>
+                <p>Alternatively, if you want the Couchbase document ID to be the airport code, edit
+                        <codeph>quickstart-couchbase-sink.properties</codeph> and set
+                        <codeph>couchbase.document.id=/airport</codeph>, restart the sink connector,
+                    and run the producer again.</p>
         </section>
     </taskbody>
 </task>
