@@ -24,7 +24,7 @@
         href="../settings/install-sample-buckets.dita#topic_jqr_1rn_vs"/>.</p>
     <p>Couchbase Server is a distributed database that supports flexible data model using JSON. Each
       document in a bucket has a user-generated unique document key and this uniqueness is enforced
-      when inserting data into the bucket. Take a look at the following sample document:
+      when inserting data into the bucket. Consider the following sample document:
       <codeblock>SELECT meta().id, travel 
 FROM `travel-sample` travel 
 WHERE type = 'airline' 
@@ -52,35 +52,40 @@ LIMIT 1;
         for full bucket scans (primary scans) when the query does not have any filters (predicates)
         or when no other index or access path can be used.</p>
         <codeblock spectitle="Metadata for Primary Index">SELECT * FROM system:indexes WHERE name = '#primary';
+
+Results:
 [
-"indexes": {
-    "datastore_id": "http://127.0.0.1:8091",
-    "id": "f6e3c75d6f396e7d",
-    "index_key": [],
-    "is_primary": true,
-    "keyspace_id": "travel-sample",
-    "name": "#primary",
-    "namespace_id": "default",
-    "state": "online",
-    "using": "gsi"
+  {
+    "indexes": {
+      "datastore_id": "http://127.0.0.1:8091",
+      "id": "1b7ac1abf01d9038",
+      "index_key": [],
+      "is_primary": true,
+      "keyspace_id": "travel-sample",
+      "name": "#primary",
+      "namespace_id": "default",
+      "state": "online",
+      "using": "gsi"
     }
-    ]</codeblock><p>The metadata provides additional information about the index like where does the index reside
+  }
+]</codeblock><p>The metadata provides additional information about the index, such as where the index resides
           (<systemoutput>datastore_id</systemoutput>), its state
         (<systemoutput>state</systemoutput>), and the indexing method used
           (<systemoutput>using</systemoutput>).</p>
     </section>
     <section id="named-primary-index"><title>Named Primary Index</title>
-      <p>You can name the primary index,  as seen in the following
-        example.<codeblock>CREATE PRIMARY INDEX `def_primary` ON `travel-sample`;</codeblock></p>
+      <p>You can name the primary index, as seen in the following
+        example.<codeblock>CREATE PRIMARY INDEX def_primary ON `travel-sample`;</codeblock></p>
       <p>The rest of the features of the primary index are the same, except that this index is
         named. The advantage of naming a primary index is that you can have multiple primary indexes
-        in the system. Duplicate indexes help with high availability as well as query load
-        distribution between the indexes. This is true for both primary indexes and secondary
-        indexes.</p>
+        in the system. Duplicate indexes help with high availability and query load distribution
+        between the indexes. This is true for both primary indexes and secondary indexes.</p>
       <codeblock>SELECT meta().id AS documentkey, `travel-sample` airline 
 FROM `travel-sample` 
 WHERE type = 'airline' 
 LIMIT 1;
+
+Results:
 [
   {
     "airline": {
@@ -116,8 +121,10 @@ LIMIT 1;
 CREATE INDEX travel_geo on `travel-sample`(geo.lat);</codeblock>
       <codeblock spectitle="Example: Keys is an Array of Objects"># Schedule is an array of objects with flight details. This command indexes the
 # complete array and is useful only if you're looking for the entire array.
+
 CREATE INDEX travel_schedule ON `travel-sample`(schedule);
-Example:
+
+Example Results:
 "schedule": [
         {
             "day": 0,
@@ -165,32 +172,77 @@ Example:
     </section>
     <section id="functional-index"><title>Functional Index</title>
       <p>It's common to have names in the database with a mix of upper and lower cases. When you
-        need to search, say for the name "John," you want to search for all possibilities of "John,"
-        "john," and so on. In order to do so, you create an index using an expression or a function
-        as the key.  For
+        need to search, say for the city "Villeneuve-sur-lot," you want to search for all uppercase
+        and lowercase possibilities of it. In order to do so, first create an index using an
+        expression or a function as the key. For
         example:<codeblock>CREATE INDEX travel_cxname ON `travel-sample`(LOWER(name));</codeblock></p>
-      <p>If you provide the search string in lowercase, the index helps query engine efficiently
-        search for already lowercased values in the index.
+      <p>If you provide the search string in lowercase, the index helps the query engine more
+        efficiently search for already lowercase values in the index.
         <codeblock>EXPLAIN SELECT * FROM `travel-sample` WHERE LOWER(name) = "john";
-{
-    "#operator": "IndexScan",
-    "index": "travel_cxname",
-    "index_id": "2f39d3b7aac6bbfe",
-    "keyspace": "travel-sample",
-    "namespace": "default",
-    "spans": [
-    {
-        "Range": {
-            "High": [
-            "\"john\""
-            ],
-            "Inclusion": 3,
-            "Low": [
-            "\"john\""
+
+Results:
+[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
+        {
+          "#operator": "IndexScan2",
+          "index": "travel_cxname",
+          "index_id": "59af53f0ec534d08",
+          "index_projection": {
+            "primary_key": true
+          },
+          "keyspace": "travel-sample",
+          "namespace": "default",
+          "spans": [
+            {
+              "exact": true,
+              "range": [
+                {
+                  "high": "\"john\"",
+                  "inclusion": 3,
+                  "low": "\"john\""
+                }
+              ]
+            }
+          ],
+          "using": "gsi"
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "(lower((`travel-sample`.`name`)) = \"john\")"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "self",
+                    "star": true
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
+              }
             ]
+          }
         }
-    }
-    ],</codeblock></p>
+      ]
+    },
+    "text": "SELECT * FROM `travel-sample` WHERE LOWER(name) = \"john\";"
+  }
+]</codeblock></p>
       <p>You can also use complex expressions in the functional index. For example:
         <codeblock>CREATE INDEX travel_cx1 ON `travel-sample`(LOWER(name), length*width, round(salary));</codeblock></p>
     </section>
@@ -226,36 +278,80 @@ Example:
         need to be indexed.<ul id="ul_okh_f5k_px">
           <li><codeph>schedule</codeph> - the array we’re dereferencing into.</li>
           <li><codeph>v</codeph> - the variable implicitly declared to reference each element/object
-            within the array: schedule</li>
-          <li><codeph>v.day</codeph> - the element within each object of the array schedule.</li>
+            within the array <codeph>schedule</codeph>.</li>
+          <li><codeph>v.day</codeph> - the element within each object of the array
+              <codeph>schedule</codeph>.</li>
         </ul></p>
       <p>The following query uses the array index created
         above.<codeblock>EXPLAIN SELECT * FROM `travel-sample` 
-WHERE ANY v IN SCHEDULE SATISFIES v.day = 2 END;
+WHERE ANY v IN schedule SATISFIES v.day = 2 END;
 
-{
-    "#operator": "DistinctScan",
-    "scan": {
-        "#operator": "IndexScan",
-        "index": "travel_sched",
-        "index_id": "db7018bff5f10f17",
-        "keyspace": "travel-sample",
-        "namespace": "default",
-        "spans": [
+Results:
+[
+  {
+    "plan": {
+      "#operator": "Sequence",
+      "~children": [
         {
-            "Range": {
-                "High": [
-                "2"
-                ],
-                "Inclusion": 3,
-                "Low": [
-                "2"
+          "#operator": "DistinctScan",
+          "scan": {
+            "#operator": "IndexScan2",<b>
+            "index": "travel_sched",</b>             / Index created above
+            "index_id": "f026dca7f2419e39",
+            "index_projection": {
+              "primary_key": true
+            },
+            "keyspace": "travel-sample",
+            "namespace": "default",
+            "spans": [
+              {
+                "exact": true,
+                "range": [
+                  {
+                    "high": "2",
+                    "inclusion": 3,
+                    "low": "2"
+                  }
                 ]
-                }
-            }
-        ],
-        "using": "gsi"
-    }</codeblock></p>
+              }
+            ],
+            "using": "gsi"
+          }
+        },
+        {
+          "#operator": "Fetch",
+          "keyspace": "travel-sample",
+          "namespace": "default"
+        },
+        {
+          "#operator": "Parallel",
+          "~child": {
+            "#operator": "Sequence",
+            "~children": [
+              {
+                "#operator": "Filter",
+                "condition": "any `v` in (`travel-sample`.`schedule`) satisfies ((`v`.`day`) = 2) end"
+              },
+              {
+                "#operator": "InitialProject",
+                "result_terms": [
+                  {
+                    "expr": "self",
+                    "star": true
+                  }
+                ]
+              },
+              {
+                "#operator": "FinalProject"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "text": "SELECT * FROM `travel-sample` \nWHERE ANY v IN schedule SATISFIES v.day = 2 END;"
+  }
+]</codeblock></p>
       <p>Because the key is a generalized expression, it provides the flexibility to apply
         additional logic and processing on the data before indexing. For example, you can create
         functional indexing on elements of each array. As you're referencing individual fields of
@@ -283,7 +379,7 @@ WHERE ANY v IN SCHEDULE SATISFIES v.day = 2 END;
         },
     "documentkey": "airline_10"
     }</codeblock></p>
-      <p>Also, since Couchbase data model is JSON and JSON schema is flexible, an index may not
+      <p>Also, since Couchbase data model is JSON and the JSON schema is flexible, an index may not
         contain entries to documents with absent index keys. </p>
       <p>When you want to create an index of airline documents, you can simply add the type field
         for the WHERE clause of the index.
