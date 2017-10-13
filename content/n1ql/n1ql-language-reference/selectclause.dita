@@ -1,55 +1,162 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
-<concept id="concept_qqp_xfk_np">
-  <title>SELECT clause</title>
-  <conbody>
-    <p>Use the SELECT statement to return a <i>ResultSet</i> of matching documents.</p>
-    <p><b>Syntax</b></p>
-    <codeblock>SELECT [ALL|DISTINCT] [RAW|ELEMENT] [<varname>keyspace_name</varname>.] <varname>field_name</varname> [AS <varname>alias_name</varname>]
- [FROM <varname>keyspace_name</varname> [AS <varname>alias_name</varname>] ]
-[WHERE <varname>where_clause</varname>] [AND <varname>where_clause2</varname>]
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_qqp_xfk_np">
+  <title>SELECT Clause</title>
+  <body>
+    <section id="section_q2x_wjg_lbb">
+      <title>Purpose</title>
+      <p>In a SELECT statement, the SELECT clause determines the result set.</p>
+    </section>
+    <section id="section_u2h_zjg_lbb">
+      <title>Prerequisites</title>
+      <p>For you to select data from a document or keyspace, you must have the
+          <parmname>query_select</parmname> privilege on the document or keyspace. For more details
+        about user roles, see <xref href="../../security/security-authorization.dita#authorization"
+        />.</p>
+    </section>
+    <section id="section_mxy_bkg_lbb"><title>Syntax</title>In the below SELECT statement, the SELECT
+      clause is boldfaced:<p>
+        <codeblock><b>SELECT <varname>select_clause</varname></b>
+[FROM <varname>from_clause</varname>]
+[JOIN <varname>join_clause</varname>]
+[WHERE <varname>where_clause</varname> ( [AND <varname>where_clause2</varname>] )* ]
 [GROUP BY <varname>group_clause</varname>]
+[HAVING <varname>having_clause</varname>]
 [UNION|INTERSECT|EXCEPT <varname>union_clause</varname>]
-[ORDER BY <varname>order_clause</varname>]
+[ORDER BY <varname>order_clause</varname> ]
 [LIMIT <varname>limit_int</varname>]
 [OFFSET <varname>offset_clause</varname>]
 ;</codeblock>
-    <p>
-      <dl>
-        <dlentry>
-          <dt>Arguments</dt>
-          <dd>
-            <dl>
-              <dlentry>
-                <dt>ALL | DISTINCT</dt>
-                <dd>[Optional; default is ALL]</dd>
-                <dd>SELECT ALL retrieves all of the data specified and will display all of the
-                  specified columns, including all duplicates.</dd>
-                <dd>SELECT DISTINCT removes duplicate result objects from the query's result
-                    set.<note>Since Couchbase Server 4.5.1, the DISTINCT clause is no longer
-                    blocking in nature since it streams the input and produces the output
-                    in-parallel, while consuming less memory.</note></dd>
-              </dlentry>
-            </dl>
-            <dl>
-              <dlentry>
-                <dt>RAW | ELEMENT</dt>
-                <dd>[Optional; RAW and ELEMENT are synonyms]</dd>
-                <dd>SELECT RAW specifies to make the resulting expression not be qualified; that is,
-                  the standard N1QL output (same as relational engines) returns tuples tagged with
-                  an alias, and the RAW qualifier removes this extra layer. For details, see <xref
-                    href="select_raw.dita#select_raw">SELECT RAW</xref>.</dd>
-              </dlentry>
-              <dlentry>
-                <dt>keyspace_name</dt>
-                <dd>[Optional; default is specified by the FROM clause] The name of the keyspace
-                  (equivalent to a relational database table).</dd>
-                <dd>Multiple keyspaces are separated by a comma.<note>When specifying the keyspace
-                    name in<codeph> SELECT keyspace_name.* </codeph>for all fields, the keyspace
-                    name will not appear in the result set; whereas not specifying the keyspace name
-                      in<codeph> SELECT * FROM keyspace_name </codeph>adds the keyspace name to the
-                    result
-                    set.<codeblock><b>SELECT * FROM `travel-sample` WHERE type="hotel";</b>
+      </p><p><codeph>select_clause::= SELECT [ALL|DISTINCT] ( result-expr [ , result-expr ]* |
+          (RAW|ELEMENT|VALUE) field_expr [ [AS] alias_name ] )</codeph></p><p><b>Railroad
+          Diagram:</b></p><p><image href="images/select-clause.png" id="image_b51_kng_lbb"
+      /></p></section>
+    <section id="sec_Arguments">
+      <title>Arguments</title>
+      <p><dl>
+          <dlentry>
+            <dt>ALL | DISTINCT</dt>
+            <dd>[Optional; default is ALL]</dd>
+            <dd>SELECT ALL retrieves all of the data specified and will result in all of the
+              specified columns, including all duplicates.</dd>
+            <dd>SELECT DISTINCT removes duplicate result objects from the query's result set.</dd>
+          </dlentry>
+        </dl><note>Since Couchbase Server 4.5.1, the DISTINCT clause is no longer blocking in nature
+          since it streams the input and produces the output in-parallel, while consuming less
+          memory.</note>In the below EXPLAIN example of using DISTINCT, the lines using the DISTINCT
+        operator are boldfaced:<codeblock><b>EXPLAIN SELECT DISTINCT city FROM `travel-sample`;</b>
+
+Results:
+{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+        "#operator": "PrimaryScan",
+        "index": "#primary",
+        "keyspace": "travel-sample",
+        "namespace": "default",
+        "using": "gsi"
+      },
+      {
+        "#operator": "Fetch",
+        "keyspace": "travel-sample",
+        "namespace": "default"
+      },
+      {
+        "#operator": "Parallel",
+        "~child": {
+          "#operator": "Sequence",
+          "~children": [
+            {
+              "#operator": "InitialProject",
+              "distinct": true,
+              "result_terms": [
+                {
+                  "expr": "(`travel-sample`.`city`)"
+                }
+              ]
+            },
+            {
+<b>              "#operator": "Distinct"</b>
+            },
+            {
+              "#operator": "FinalProject"
+            }
+          ]
+        }
+      },
+      {
+<b>        "#operator": "Distinct"</b>
+      }
+    ]
+  },
+  "text": "SELECT DISTINCT city\nFROM `travel-sample`;"
+}</codeblock><dl>
+          <dlentry>
+            <dt>result-expr</dt>
+            <dd>One or more expressions that evaluate to one or more field names to be in the
+              ResultSet. These can be from <xref href="subqueries.dita#topic_9">subqueries</xref>,
+              aggregates, expressions, or simple expressions, for
+              example:<codeblock><i><?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>(still working on examples for here)<?oxy_custom_end?></i></codeblock></dd>
+          </dlentry>
+          <dlentry>
+            <dt>RAW | ELEMENT | VALUE</dt>
+            <dd>[Optional; RAW and ELEMENT and VALUE are synonyms]</dd>
+            <dd>SELECT RAW reduces the amount of data returned by eliminating the field attribute. </dd>
+            <dd><b>Example 1</b>: Comparing SELECT and SELECT RAW on a basic query:<table
+                frame="all" rowsep="1" colsep="1" id="table_v1p_kbp_lbb">
+                <tgroup cols="2" align="left">
+                  <colspec colname="c1" colnum="1" colwidth="1*"/>
+                  <colspec colname="c2" colnum="2" colwidth="1*"/>
+                  <tbody>
+                    <row>
+                      <entry><codeph><b>SELECT</b> {"a":1, "b":2};</codeph></entry>
+                      <entry><codeph><b>SELECT RAW</b> {"a":1, "b":2};</codeph></entry>
+                    </row>
+                  </tbody>
+                </tgroup>
+              </table><image href="images/select-clause_ex1.png" id="image_lnm_dsq_mbb"/></dd>
+            <dd>There are times in which this extra layer might not be desirable since it requires
+              extra output parsing. So the RAW qualifier specifies that the expression that follows
+              not to be qualified, as shown in the next example.</dd>
+            <dd><b>Example 2</b>: Comparing SELECT and SELECT RAW listing 5 airport cities
+                alphabetically:<table frame="all" rowsep="1" colsep="1" id="table_xd1_m35_lbb">
+                <tgroup cols="3" align="left">
+                  <colspec colname="c1" colnum="1" colwidth="1*"/>
+                  <colspec colname="c2" colnum="2" colwidth="1*"/>
+                  <colspec colname="c3" colnum="3" colwidth="1.2*"/>
+                  <tbody>
+                    <row>
+                      <entry><codeph><b>SELECT city</b></codeph><p><codeph>FROM
+                            `travel-sample`</codeph></p><p><codeph>WHERE
+                            type="airport"</codeph></p><p><codeph>ORDER BY city LIMIT
+                          5;</codeph></p></entry>
+                      <entry><codeph><b>SELECT RAW city</b></codeph><p><codeph>FROM
+                            `travel-sample`</codeph></p><p><codeph>WHERE
+                            type="airport"</codeph></p><p><codeph>ORDER BY city LIMIT
+                          5;</codeph></p></entry>
+                      <entry><codeph><b>SELECT DISTINCT RAW city</b></codeph><p><codeph>FROM
+                            `travel-sample`</codeph></p><p><codeph>WHERE
+                            type="airport"</codeph></p><p><codeph>ORDER BY city LIMIT
+                          5;</codeph></p></entry>
+                    </row>
+                  </tbody>
+                </tgroup>
+              </table><image href="images/select-clause_ex2.png" id="image_mxc_hsq_mbb"/></dd>
+          </dlentry>
+          <dlentry>
+            <dt>keyspace_name1, keyspace_name2, ..., keyspace_nameX</dt>
+            <dd>[Optional; if the keyspace is unspecified in the SELECT clause, it will be taken
+              from the <xref href="from.dita#concept_rnt_zfk_np">FROM clause</xref>] </dd>
+            <dd>The name of the keyspace or keyspaces used, separated by a comma.</dd>
+            <dd>Keyspaces map to buckets in Couchbase Server. A keyspace is a set of documents that
+              may vary in structure and are a unit of authorization and resource
+                allocation.<note>When specifying the keyspace name in<codeph> SELECT keyspace_name.*
+                </codeph>for all fields, the keyspace name will not appear in the result set;
+                whereas not specifying the keyspace name in<codeph> SELECT * FROM keyspace_name
+                </codeph>adds the keyspace name to the result
+                set.<codeblock><b>SELECT * FROM `travel-sample` WHERE type="hotel";</b>
 
 [
   {
@@ -81,101 +188,98 @@ FROM `travel-sample` WHERE type="hotel" LIMIT 5;</b>
       "Service": 5,
       "Value": 4
     }
-  },</codeblock></note></dd>
-              </dlentry>
-            </dl>
-            <dl>
-              <dlentry>
-                <dt>field_name</dt>
-                <dd>The name of the field or fields, separated by a comma, to be in the query's
-                  ResultSet, such
-                  as:<codeblock>SELECT id, airline, stops FROM `travel-sample` WHERE type="route";</codeblock></dd>
-                <dd>To use a field within an array, use<codeph> [0] </codeph>after the array name,
-                  followed by a period and the field name, such
-                  as:<codeblock>SELECT schedule[0].day FROM `travel-sample` WHERE type="route";</codeblock></dd>
-              </dlentry>
-            </dl>
-            <dl>
-              <dlentry>
-                <dt>AS alias_name</dt>
-                <dd>A temporary name of a bucket name or field name to make names more readable or
-                  unique, such as:<codeblock>SELECT schedule[0].day AS Weekday</codeblock></dd>
-              </dlentry>
-            </dl>
-            <dl>
-              <dlentry>
-                <dt>FROM keyspace_name</dt>
-                <dd>[Optional] The name of the keyspace (equivalent to a relational database table),
-                  internal N1QL system keyspace, file system storage, or micro service that defines
-                  the source of input documents or objects for the query.</dd>
-                <dd>Multiple keyspaces are separated by a comma and can be aliased, such
-                  as:<codeblock>SELECT * FROM `travel-sample` AS ts, `beer-sample` AS bs;</codeblock>For
-                  details, see <xref href="from.dita#concept_rnt_zfk_np">FROM clause</xref>.</dd>
-              </dlentry>
-            </dl>
-            <dl>
-              <dlentry>
-                <dt>WHERE where_clause AND where_clause2</dt>
-                <dd>[Optional] The clause or set of clauses used to filter the documents.
-                    Use<codeph> AND </codeph>between where clauses, such
-                  as:<codeblock>SELECT * FROM `travel-sample` WHERE type="route" AND airline="UA";</codeblock>For
-                  details, see <xref href="where.dita#concept_zvb_dgk_np">WHERE clause</xref>.</dd>
-              </dlentry>
-            </dl>
-            <dl>
-              <dlentry>
-                <dt>GROUP BY group_clause</dt>
-                <dd>[Optional] The clause to organize a ResultSet by one or more expressions and can
-                  be used in aggregate functions, such
-                  as:<codeblock>SELECT * FROM `travel-sample` GROUP BY type;</codeblock>For details,
-                  see <xref href="groupby.dita#concept_uhg_2gk_np">GROUP BY clause</xref>.</dd>
-              </dlentry>
-            </dl>
-            <dl>
-              <dlentry>
-                <dt>UNION | INTERSECT | EXCEPT union_clause</dt>
-                <dd>[Optional] The clause to combine results from multiple sub-selects, such
-                  as:<codeblock>SELECT name, city FROM `travel-sample` WHERE type="route" AND city="San Francisco"
-UNION SELECT name, city FROM `beer-sample` WHERE type="brewery" AND city="San Francisco";</codeblock>For
-                  details, see <xref href="union.dita#concept_iy2_fgk_np">UNION, INTERSECT, and
-                    EXCEPT</xref>. </dd>
-              </dlentry>
-            </dl>
-            <dl>
-              <dlentry>
-                <dt>ORDER BY order_clause</dt>
-                <dd>[Optional] The field or group of fields to order the ResultSet, such
-                  as:<codeblock>SELECT * FROM `travel-sample` ORDER BY city;</codeblock>For details,
-                  see <xref href="orderby.dita#concept_x1g_ggk_np">ORDER BY clause</xref>.</dd>
-              </dlentry>
-            </dl>
-            <dl>
-              <dlentry>
-                <dt>LIMIT limit_clause</dt>
-                <dd>[Optional] The maximum number of objects to be returned in the ResultSet, such
-                  as:<codeblock>SELECT * FROM `travel-sample` LIMIT 10;</codeblock>For details, see
-                    <xref href="limit.dita#concept_dsd_hgk_np">LIMIT clause</xref>.</dd>
-              </dlentry>
-            </dl>
-            <dl>
-              <dlentry>
-                <dt>OFFSET offset_clause</dt>
-                <dd>[Optional] The number of objects to be skipped before starting a ResultSet, such
-                  as:<codeblock>SELECT * FROM `travel-sample` LIMIT 10 OFFSET 200;</codeblock>For
-                  details, see <xref href="offset.dita#concept_lbx_hgk_np">OFFSET
-                  clause</xref>.</dd>
-              </dlentry>
-            </dl>
-            <dl>
-              <dlentry>
-                <dt>;</dt>
-                <dd>All SELECT statements must end with a semi-colon.</dd>
-              </dlentry>
-            </dl>
-          </dd>
-        </dlentry>
-      </dl>
-    </p>
+  },
+...</codeblock></note></dd>
+          </dlentry>
+        </dl><dl>
+          <dlentry>
+            <dt>field_expr</dt>
+            <dd>The name of the field or fields, separated by a comma, to be in the query's
+              ResultSet, such
+              as:<codeblock>SELECT <b>id, airline, stops</b> FROM `travel-sample` WHERE type="route";</codeblock></dd>
+            <dd>To use a field within an array, use<codeph> [0] </codeph>after the array name,
+              followed by a period and the field name, such
+              as:<codeblock>SELECT <b>schedule[0].day</b> FROM `travel-sample` WHERE type="route";</codeblock></dd>
+          </dlentry>
+        </dl><dl>
+          <dlentry>
+            <dt>AS alias_name</dt>
+            <dd>A temporary name of a bucket name or field name to make names more readable or
+              unique, such as:<codeblock>SELECT schedule[0].day <b>AS Weekday</b></codeblock></dd>
+          </dlentry>
+        </dl></p>
+    </section>
+    <section id="sec_BestPractices">
+      <title>Best Practices</title>
+      <p>When possible, explicitly list all fields you want in your ResultSet instead of the "*" to
+        select all fields, since the "*" requires an extra trip over your network (one to get the
+        list of field names and one to select the field names).</p>
+    </section>
+    <section id="sec_Examples">
+      <title>Examples</title>
+      <p><b>Example 1</b>: Select all the fields of 1 document of type <codeph>airline</codeph> from
+        the <codeph>travel-sample</codeph>
+        keyspace.<codeblock>SELECT * FROM `travel-sample` WHERE type="airline" LIMIT 1;
 
-  </conbody>
-</concept>
+Results:
+[
+  {
+    "travel-sample": {
+      "callsign": "MILE-AIR",
+      "country": "United States",
+      "iata": "Q5",
+      "icao": "MLA",
+      "id": 10,
+      "name": "40-Mile Air",
+      "type": "airline"
+    }
+  }
+]</codeblock></p>
+      <p><b>Example 2</b>: Select all the fields of 1 document of type <codeph>landmark</codeph>
+        from the <codeph>travel-sample</codeph>
+        keyspace.<codeblock>SELECT * FROM `travel-sample` WHERE type="landmark" LIMIT 1;
+
+Results:
+[
+  {
+    "travel-sample": {
+      "activity": "see",
+      "address": "Prince Arthur Road, ME4 4UG",
+      "alt": null,
+      "city": "Gillingham",
+      "content": "Adult - £6.99 for an Adult ticket that allows you to come back for further visits within a year (children's and concessionary tickets also available). Museum on military engineering and the history of the British Empire. A quite extensive collection that takes about half a day to see. Of most interest to fans of British and military history or civil engineering. The outside collection of tank mounted bridges etc can be seen for free. There is also an extensive series of themed special event weekends, admission to which is included in the cost of the annual ticket.",
+      "country": "United Kingdom",
+      "directions": null,
+      "email": null,
+      "geo": {
+        "accuracy": "RANGE_INTERPOLATED",
+        "lat": 51.39184,
+        "lon": 0.53616
+      },
+      "hours": "Tues - Fri 9.00am to 5.00pm, Sat - Sun 11.30am - 5.00pm",
+      "id": 10019,
+      "image": null,
+      "name": "Royal Engineers Museum",
+      "phone": "+44 1634 822839",
+      "price": null,
+      "state": null,
+      "title": "Gillingham (Kent)",
+      "tollfree": null,
+      "type": "landmark",
+      "url": "http://www.remuseum.org.uk"
+    }
+  }
+]</codeblock></p>
+    </section>
+    <section id="sec_RelatedLinks">
+      <title>Related Links</title>
+      <p><xref href="from.dita#concept_rnt_zfk_np"/></p>
+      <p><xref href="hints.dita#concept_npj_srf_2s">USE INDEX clause</xref></p>
+      <p><xref href="let.dita#concept_qz5_bgk_np">LET Clause</xref></p>
+      <p><xref href="where.dita#concept_zvb_dgk_np">WHERE Clause</xref></p>
+      <p><xref href="groupby.dita#concept_uhg_2gk_np">GROUP BY Clause</xref></p>
+      <p><xref href="union.dita#concept_iy2_fgk_np">UNION, INTERSECT, and EXCEPT Clause</xref></p>
+    </section>
+
+  </body>
+</topic>
