@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_ghd_55f_nbb">
+  <title>Best Practices for Deploying Couchbase on AWS</title>
+  <body>
+    <p>The Cloud Formation templates (CFT) aim to configure Couchbase according to our recommended
+      best practices on Amazon Web Services (AWS).</p>
+    <section id="aws-compute"><title>Compute</title>
+      <p>Amazon provides a variety of compute types that are EBS optimized. While any such node
+        works well with Couchbase, some may be more cost effective. R4 and M4 machines are the
+        most commonly used. While one core machined deploy successfully, we recommend machines
+        with 4 or more cores for production applications. </p>
+      <p>For a majority of applications the r4.4xlarge will be a good balance of price and performance.</p><p>We recommend using Autoscaling Groups instead of stand alone instances as it improves reliability and simplifies the addition and removal of nodes.</p>
+    </section>
+    
+    <p id="aws-memory"><b>Memory Allocation</b></p>
+    <p>Couchbase recommends allocating 85% of system memory to the database. When using MDS, you can
+      tune this between data, query, index, and search services. The templates currently allocate
+      50% for data and 15% for index. You can adjust this allocation after deployment.</p>
+    
+    <p id="aws-ft-ha"><b>Fault Tolerance and High Availability</b></p>
+    <p>Couchbase is a strongly consistent database with peer-to-peer replication for handling
+      node failures. Replicas are not needed to increase read performance due to a built-in
+      managed caching layer. For deployments in AWS, we typically recommend one replica. In
+      the event of a single node failure, replicas elsewhere in the cluster can be
+      automatically promoted if automatic failover is enabled. For most scenarios, the downed
+      node will recover in a matter of minutes, obviating the need for additional replicas.</p>
+    <p>A minimum of 3 nodes required for the data service to support automatic failover,
+      and a minimum of two nodes for the query, index and search service to support high
+      availability. Depending on your performance and topology needs, these services can be
+      collocated or separated but the minimum node count requirement does not
+      change.</p><p>The Couchbase concept of a Server Group maps closely to an Availability Zone (AZ). We suggest
+      deploying nodes across all available AZs and then creating a Couchbase Server Group per
+      AZ.</p>
+    
+    <section id="aws-storage"><title>Storage</title>
+      <p>Amazon offers numerous storage options for IaaS. When running Couchbase, the following
+        are viable:<ul>
+          <li>EBS gp2</li>
+          <li>EBS io1</li>
+          <li>SSD Instance Store</li>
+        </ul></p>
+      <p>For most applications, EBS gp2 provides a good balance of performance and cost. EBS io1 is
+        the most performant flavor of EBS, but can be expensive. The persistence of EBS offers a
+        significant advantage and we've chosen to provision it in the Cloud Formation template.</p>
+      <p>We recommend a
+            1TB EBS drive as the upper end. Large drives can lead to overly dense nodes that
+            suffer from long rebuild times. It's usually preferable to scale horizontally
+            instead.</p>
+      <p>Instance stores are both performant and side step noisy neighbor issues that can potentially
+        plague EBS. However, the instance store is ephemeral, expensive, and not encrypted, and
+        hence we don't typically recommend instance stores.</p>
+    </section>
+    <section id="aws-network"><title>Network</title>
+      <p>Amazon provides a number of network options, including public DNS, VPN gateways, and Direct
+        Connect. We recommend using public DNS for most applications. They perform very well, are
+        extremely cost effective and are resilient to failure.</p>
+      <p>The templates configure each Couchbase node with the public DNS. In AWS the public DNS
+        resolves to a NAT based IP from outside the VPC and to the private IP from within the VPC.
+        AWS refers to this as split horizon DNS.</p><p>For applications where nodes may be stopped and started, you could use an Elastic IP (EIP).
+        However, that adds significant management complexity. We do not recommend EIPs for most
+        applications. </p><p>Placement groups provide 10G network, which is preferable. However, they make the use of an
+        Autoscaling Group more difficult as nodes will not be automatically spread across
+        Availability Zones. In the Cloud Formation template, we've opted for simplicity.</p>
+    </section>
+    <section id="aws-security"><title>Security</title>
+      <p>The template automatically sets up a user name and password for the Couchbase Web
+        Administrator. </p>
+      <p>The template also configures a Security Group that closes off unused ports. This
+        configuration can be further secured by specifying CIDR blocks to whitelist for XDCR and
+        client connectivity. We also recommend restricting access to intra-cluster communication
+        ports to the security group. Detailed information on Server ports is available here. </p>
+      <p>AWS can enables encryption for disks that use EBS. This is not currently set in the
+        template. </p>
+      <p>The template does not currently configure SSL. We recommend setting it up for production
+        applications. </p>
+      <p>These templates open Sync Gateway access to the internet over ports 4984 and 4985. We
+        typically recommend securing the admin interface for access from
+        <codeph>127.0.0.1</codeph> only. That can be done by editing the
+        <filepath>/home/sync_gateway/sync_gateway.json</filepath> file.</p>
+    </section>
+  </body>
+</topic>
