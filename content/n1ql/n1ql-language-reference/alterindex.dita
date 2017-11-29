@@ -4,9 +4,8 @@
     <title>ALTER INDEX</title>
     <body>
         <p><i>(Introduced in Couchbase Server 5.1)</i></p>
-        <p>Use the <codeph>ALTER INDEX</codeph> statement to change the definition of an existing
-            index, or change the placement of an existing index (and replicas) among different GSI
-            nodes, or change the replica count of an existing index.</p>
+        <p>Use the <codeph>ALTER INDEX</codeph> statement to change the placement of an existing
+            index and replicas among different GSI nodes.</p>
         <p>
             <dl>
                 <dlentry>
@@ -28,7 +27,7 @@
         <p><b>Syntax</b></p>
         <p>
             <codeblock>ALTER INDEX <varname>named_keyspace_ref</varname>.<varname>index_name</varname>
-[ USING GSI | VIEW ]
+[ USING GSI ]
 WITH {"action":"<varname>action_type</varname>", "nodes": [ &lt;"<varname>node_name1</varname>", "<varname>node_name2</varname>", ...> ] }</codeblock>
         </p>
         <p>
@@ -54,10 +53,9 @@ WITH {"action":"<varname>action_type</varname>", "nodes": [ &lt;"<varname>node_n
                         </dl>
                         <dl>
                             <dlentry>
-                                <dt>USING GSI | VIEW</dt>
+                                <dt>USING GSI </dt>
                                 <dd>[Default is "<codeph>USING GSI</codeph>"]</dd>
-                                <dd>Currently, <codeph>VIEW</codeph> and FTS indexes are not
-                                    supported.</dd>
+                                <dd>Uses the Global Secondary Index as the base index.</dd>
                             </dlentry>
                         </dl>
                         <dl>
@@ -73,8 +71,10 @@ WITH {"action":"<varname>action_type</varname>", "nodes": [ &lt;"<varname>node_n
                                                 <dl>
                                                   <dlentry>
                                                   <dt>move</dt>
-                                                  <dd>Moves an index and its replica to different
-                                                  nodes.</dd>
+                                                  <dd>Moves an array of indexes and replicas to
+                                                  different nodes.<note>The length of the nodes
+                                                  array must be equal to the number of index
+                                                  replicas.</note></dd>
                                                   </dlentry>
                                                 </dl>
                                             </dd>
@@ -105,40 +105,75 @@ WITH {"action":"<varname>action_type</varname>", "nodes": [ &lt;"<varname>node_n
                 </dlentry>
             </dl>
         </p>
-        <p/>
+        <p>
+            <note>Cancellation of the <codeph>ALTER INDEX</codeph> command is not possible, as it is
+                a synchronous operation.</note>
+            <note>Timeout is not accepted as part of the parameters since the Move Index REST API is
+                synchronous. The <codeph>cbindex</codeph> command for move accepts a timeout
+                parameter as part of <codeph>WITH</codeph>; but <codeph>ALTER INDEX</codeph> via
+                N1QL has no timeout parameter. It will be a synchronous operation and will complete
+                when the move index completes.</note>
+        </p>
         <section id="section_zng_vvk_1cb"><title>Examples</title><p>When using the below examples,
                 make sure Couchbase Server 5.1 is already running on the named
                     nodes.</p><p><b>Example 1: Moving an index from one node to
-                another.</b></p><p>Create an index on node 1, then move it to node
-                2.<codeblock>CREATE INDEX idx_sched1 ON `travel-sample`(attr1) 
-WITH {"nodes": ["127.0.0.<b>1</b>:8091"]}
+                another.</b></p><p>Create an index on node 172.23.130.<b>24</b>, then move it to
+                node
+                172.23.130.<b>25</b>.<codeblock>CREATE INDEX idx_sched1 ON `travel-sample`(attr1) 
+WITH {"nodes": ["172.23.120.<b>24</b>:8091"]}
 
 ALTER INDEX `travel-sample`.idx_sched1 
-WITH {"action":"move","nodes": ["127.0.0.<b>2</b>:8091"]}</codeblock></p><p><b>Example
+WITH {"action":"move","nodes": ["172.23.120.<b>25</b>:8091"]}</codeblock></p><p><b>Example
                     2: Moving an index replica from one node to another.</b></p><p>Create an index
-                on node 24 with a replica on node 25, then move its replica from node 25 to
-                26.<codeblock>CREATE INDEX idx_sched2 ON `travel-sample`(attr2) 
-WITH {"nodes": ["127.0.0.24:8091", "127.0.0.<b>25</b>:8091"}
+                on node 172.23.120.24 with a replica on node 172.23.120.<b>25</b>, then move its
+                replica from node 172.23.120.<b>25</b> to
+                172.23.120.<b>26</b>.<codeblock>CREATE INDEX idx_sched2 ON `travel-sample`(attr2) 
+WITH {"nodes": ["172.23.120.24:8091", "172.23.120.<b>25</b>:8091"}
 
 ALTER INDEX `travel-sample`.idx_sched2
-WITH {"action":"move","nodes": ["127.0.0.24:8091", "127.0.0.<b>26</b>:8091"}</codeblock></p><b>Example
-                3: Moving multiple replicas.</b><p>Create an index on node 34 with replicas on nodes 35 and 36, then move the replicas to nodes 37
-                and 38.<codeblock>CREATE INDEX idx_sched3 ON `travel-sample`(attr3) 
-WITH {"nodes": ["127.0.0.34:8091", "127.0.0.<b>35</b>:8091", "127.0.0.<b>36</b>:8091"}
+WITH {"action":"move","nodes": ["172.23.120.24:8091", "172.23.120.<b>26</b>:8091"}</codeblock></p><b>Example
+                3: Moving multiple replicas.</b><p>Create an index on node 172.23.120.24 with
+                replicas on nodes 172.23.120.<b>25</b> and 172.23.120.<b>26</b>, then move the
+                replicas to nodes 172.23.120.<b>27</b> and 172.23.120.<b>28</b>.<codeblock>CREATE INDEX idx_sched3 ON `travel-sample`(attr3) 
+WITH {"nodes": ["172.23.120.24:8091", "172.23.120.<b>25</b>:8091", "172.23.120.<b>26</b>:8091"}
 
 ALTER INDEX `travel-sample`.idx_sched3
-WITH {"action":"move","nodes": ["127.0.0.24:8091", "127.0.0.<b>37</b>:8091", "127.0.0.<b>38</b>:8091"}</codeblock>
+WITH {"action":"move","nodes": ["127.0.0.24:8091", "172.23.120.<b>27</b>:8091", "172.23.120.<b>28</b>:8091"}</codeblock>
                 <!--
                 ### TBD ###  <b>Example 4: Creating new replicas.</b></p><p>Create an index
                 on<codeblock>CREATE INDEX</codeblock></p><p>
                 ### TBD ###  <b>Example 5: Deleting replicas.</b></p><p>Create an index on node
                 51<codeblock>CREATE INDEX</codeblock></p>
---></p> 
-            
-                </section>
+--></p></section>
         <section id="section_v4d_4vj_1cb">
             <title>Related Links</title>
-            <p/>
+            <p>
+                <table frame="none" rowsep="0" colsep="0" id="table_bgr_lwr_1cb">
+                    <tgroup cols="2" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="4*"/>
+                        <tbody>
+                            <row>
+                                <entry><xref href="../../cli/cbindex.dita#untitled2"
+                                    >cbindex</xref></entry>
+                                <entry>Move Index via cbindex</entry>
+                            </row>
+                            <row>
+                                <entry>curl /moveIndex</entry>
+                                <entry>Move Index via REST API</entry>
+                            </row>
+                            <row>
+                                <entry/>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry/>
+                                <entry/>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table>
+            </p>
         </section>
     </body>
 </topic>
