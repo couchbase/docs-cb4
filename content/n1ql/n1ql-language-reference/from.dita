@@ -174,57 +174,146 @@
   <p>Getting the input contents<codeph> SELECT * </codeph>produces the following result:</p>
   <codeblock>[ { } ]</codeblock>
   
-  <p><b>Keyspaces</b></p>
-     <p>The simplest type of <codeph>FROM</codeph> clause specifies a keyspace:</p>
-  <codeblock>SELECT * FROM customer</codeblock>
-     <p>This returns every value in the customer keyspace.</p>
-     <p>The keyspace can be prefixed with an optional namespace (pool):</p>
- <codeblock>SELECT * FROM main:customer</codeblock>
-     <p>This queries the customer keyspace in the main namespace.</p>
-     <p>If the namespace is omitted, the default namespace in the current session is used.</p>
+  <p/>
         <p/>
+        <section id="section_yp1_dpf_bcb">
+            <title>Omitted FROM Clause</title>
+            <p>If the <codeph>FROM</codeph> clause is omitted, the data source is equivalent to an
+                array containing a single empty object. This allows you to evaluate expressions that
+                do not depend on stored data.</p>
+            <p><b>Omitted <codeph>FROM</codeph> Example 1: Evaluating an expression.</b></p>
+            <p>Add the two numbers 10 and 20 together.<codeblock>SELECT 10 + 20</codeblock> This
+                results in:</p>
+            <codeblock>[
+  {
+    "$1" : 30
+  }
+] </codeblock>
+            <p><b>Omitted <codeph>FROM</codeph> Example 2: Selecting the local time.</b></p>
+            <p>Select the local time and format the result as
+                "yyyy-mm-dd".<codeblock>SELECT NOW_LOCAL('1111-11-11')</codeblock></p>
+            <p>This results in:</p>
+            <codeblock>[
+  {
+    "$1": "2017-11-30"
+  }
+]</codeblock>
+            <p><b>Omitted <codeph>FROM</codeph> Example 3: Calculating the days until
+                Christmas.</b></p>
+            <p>Use the DATE_DATE_STR function to calculate the days from now until
+                Christmas.<codeblock>SELECT DATE_DIFF_STR('2017-12-25',NOW_LOCAL('1111-11-11'),'day')</codeblock>This
+                results in:</p>
+            <codeblock>[
+  {
+    "$1": 25
+  }
+]</codeblock>
+        </section>
+        <section id="section_r55_1pf_bcb">
+            <title>Keyspaces</title>
+            <p>The simplest type of <codeph>FROM</codeph> clause specifies a keyspace:</p>
+            <codeblock>SELECT * FROM `travel-sample`;</codeblock>
+            <p>This returns every value in the <codeph>`travel-sample`</codeph> keyspace.</p>
+            <p>The keyspace can be prefixed with an optional namespace (pool):</p>
+            <codeblock>SELECT * FROM <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>main<?oxy_custom_end?>:`travel-sample`;</codeblock>
+            <p>This queries the customer keyspace in the main namespace.</p>
+            <p>If the namespace is omitted, the default namespace in the current session is
+                used.</p>
+        </section>
         <section id="section_ekc_ftt_nz"><title>Keyspace Identifier</title><p>This is the name or
                 identifier of an independent keyspace that can serve as a data source or keyspace of
                 one or more documents. Such keyspaces are not dependent on any of the <xref
-                    href="subqueries.dita#topic_9/section_onz_3tj_mz"/>.</p>The following example Q1
-            uses the keyspace<codeph> `travel-sample`</codeph>.<p>
-                <codeblock>Example Q1:
-
-SELECT t1.city
+                    href="subqueries.dita#topic_9/section_onz_3tj_mz"/>.</p><b>Keyspace Example 1:
+                Use the <codeph>`travel-sample`</codeph> keyspace.</b><p>Select 4 unique landmarks
+                from the keyspace
+                <codeph>`travel-sample`</codeph>.</p><p><codeblock>SELECT t1.city
 FROM `travel-sample` t1
-WHERE t1.type = "landmark" LIMIT 4;</codeblock>
-            </p><p dir="ltr">The following non-correlated subquery example Q2 uses the
-                    keyspace<codeph> `travel-sample` </codeph>independent of the same keyspace used
-                in the outer query: </p><p>
-                <codeblock>Example Q2: Find cities that have landmarks and airports.
-
-SELECT t1.city
+WHERE t1.type = "landmark" LIMIT 4;</codeblock>This
+                results
+                in:<codeblock>[
+  {
+    "city": "Gillingham"
+  },
+  {
+    "city": "Giverny"
+  },
+  {
+    "city": "Glasgow"
+  },
+  {
+    "city": "Clarkston"
+  }
+]</codeblock></p><p><b>Keyspace
+                    Example 2: Cities that have landmarks and airports. (non-correlated)</b></p><p
+                dir="ltr">The following non-correlated subquery uses the keyspace
+                    <codeph>`travel-sample`</codeph> independent of the same keyspace used in the
+                outer query:
+                </p><p><codeblock>SELECT DISTINCT t1.city
 FROM `travel-sample` t1
-WHERE t1.type = "landmark" AND 
-      t1.city IN (SELECT RAW city
+WHERE t1.type = "landmark"  
+AND   t1.city IN (SELECT RAW city
                   FROM `travel-sample` 
-                  WHERE type = "airport");</codeblock>
-            </p><p dir="ltr">The following correlated subquery Q2A uses keyspace alias from outer
-                query.</p><p>
-                <codeblock>Example Q2A: Find cities that have museum landmarks.
-
-SELECT t1.city, t1.name
+                  WHERE type = "airport")
+LIMIT 3;</codeblock>This
+                results
+                in:<codeblock>[
+  {
+    "city": "Avignon"
+  },
+  {
+    "city": "Bangor"
+  },
+  {
+    "city": "Glasgow"
+  }
+]</codeblock></p><p
+                dir="ltr"><b>Keyspace Example 3: Cities that have museum landmarks.
+                (correlated)</b></p><p dir="ltr">The following correlated subquery uses the keyspace
+                alias from an outer
+                query:</p><p><codeblock>SELECT t1.city, t1.name
 FROM `travel-sample` t1
-WHERE t1.type = "landmark" AND 
-      (SELECT raw t2
-       FROM split(t1.name) t2 
-       WHERE t2 = "museum")[0] is not null;</codeblock>
-            </p><p dir="ltr">The following subquery example Q2B uses different keyspaces in
-                outer/inner queries.</p><p>
-                <codeblock>Example Q2B: Find cities that have landmarks and breweries.
-
-SELECT t1.city
+WHERE t1.type = "landmark"  
+AND   (SELECT RAW t2
+       FROM SPLIT(t1.name) t2 
+       WHERE t2 = "museum")[0] IS NOT NULL
+LIMIT 3;</codeblock>This
+                results
+                in:<codeblock>[
+  {
+    "city": "Washington",
+    "name": "Washington 'F' Pit mining museum"
+  },
+  {
+    "city": "L'Isle-sur-la-Sorgue",
+    "name": "Campredon museum"
+  },
+  {
+    "city": "Isle of Anglesey",
+    "name": "Swtan heritage museum"
+  }
+]</codeblock></p><p
+                dir="ltr"><b>Keyspace Example 3: Cities that have landmarks and breweries.</b></p><p
+                dir="ltr">The following subquery example uses different keyspaces in the outer and
+                inner
+                queries.</p><p><codeblock>SELECT DISTINCT t1.city
 FROM `travel-sample` t1
-WHERE t1.type = "landmark" AND 
-      t1.city IN (SELECT RAW b1.city
+WHERE t1.type = "landmark" 
+AND   t1.city IN (SELECT RAW b1.city
                   FROM `beer-sample` b1
-                  WHERE b1.type = "brewery");</codeblock>
-            </p></section>
+                  WHERE b1.type = "brewery")
+LIMIT 3;</codeblock>This
+                results
+                in:<codeblock>[
+  {
+    "city": "Bangor"
+  },
+  {
+    "city": "East Lothian"
+  },
+  {
+    "city": "Escondido"
+  }
+]</codeblock></p></section>
         <section id="section_fkc_ftt_nz">
             <title>N1QL Expression</title>
             <p>Couchbase Server version 4.6.2 adds support for generic <xref
@@ -444,29 +533,14 @@ LIMIT 2;
                     is mandatory for the primary keyspace.</note>
             </p>
      </section>
-     <section id="join-clause"><title>JOIN Clause</title>
+     
+     <section id="lookup-join-clause"><title>Lookup JOIN Clause</title>
     <p>The <codeph>JOIN</codeph> clause enables you to create new input objects by combining two or
                 more source objects. N1QL supports two types of joins: <xref
                     href="#concept_rnt_zfk_np/lookup-join" format="dita">lookup joins</xref> and
                     <xref href="#concept_rnt_zfk_np/index-join" format="dita">index joins</xref>. </p>
-            <p><i>join-clause:</i></p>
-            <codeblock>( <varname>lookup-join</varname> | <varname>index-join</varname> )</codeblock>
-            <p><i>lookup-join:</i></p>
-            <codeblock>[ <varname>join-type</varname> ] JOIN <varname>from-path</varname> [ [ AS ] alias ] <varname>on-keys-clause</varname></codeblock>
-            <p><i>index-join:</i></p>
-            <codeblock>[ <varname>join-type</varname> ] JOIN <varname>from-path</varname> [ [ AS ] alias ] ( <varname>on-keys-clause</varname> | <varname>on-key-for-clause</varname> )</codeblock>
-            <p><i>join-type:</i></p>
-            <codeblock>INNER | LEFT [ OUTER ]  </codeblock>
-            <p><i>on-keys-clause:</i></p>
-            <codeblock>ON [ PRIMARY ] KEYS expression  </codeblock>
-            <p><varname>on-key-for-clause:</varname></p>
-            <codeblock>ON [ PRIMARY ] KEY <varname>rhs-expression</varname>.<varname>lhs-expression-key</varname> FOR <varname>lhs-expression</varname> </codeblock>
-            <p><varname>rhs-expression</varname>: keyspace or expression corresponding to the right
-                hand side of JOIN.</p>
-            <p><varname>lhs-expression</varname>: keyspace or expression corresponding to the left
-                hand side of JOIN.</p>
-            <p><varname>lhs-expression-key</varname>: attribute in <varname>rhs-expression</varname>
-                referencing primary key for <varname>lhs-expression</varname>.</p>
+            <p><b>Syntax</b></p>
+            <codeblock>[ <varname>join-type</varname> ] JOIN <varname>from-path</varname> [ [ AS ] <varname>alias</varname> ] <varname>on-keys-clause</varname></codeblock>
          <p id="lookup-join"><b>Lookup JOIN</b></p><p>Lookup joins allow only left-to-right joins, which means each qualified document from the
                 left-hand side (LHS) of the <codeph>JOIN</codeph> operator is required to produce
                 primary keys of documents on the right-hand side (RHS). These keys are subsequently
@@ -571,8 +645,56 @@ LIMIT 2;
                 is performed. At least one joined object is produced for each left-hand source
                 object. If the right-hand source object is NULL or MISSING, then the joined object's
                 right-hand side value is also NULL or MISSING (omitted), respectively.</p>
-         
- <p id="index-join"><b>Index Joins</b></p>
+   </section>      
+     
+ <section id="index-join-clause"><title>Index JOIN Clause</title>
+            <p><b>Syntax</b></p>
+            <codeblock>[ <varname>join-type</varname> ] JOIN <varname>from-path</varname> [ [ AS ] <varname>alias</varname> ] ( <varname>on-keys-clause</varname> | <varname>on-key-for-clause</varname> )</codeblock>
+            <p>
+                <dl>
+                    <dlentry>
+                        <dt>Arguments</dt>
+                        <dd>
+                            <dl>
+                                <dlentry>
+                                    <dt>join-type</dt>
+                                    <dd>
+                                        <dl>
+                                            <dlentry>
+                                                <dt>INNER</dt>
+                                                <dd>Inner JOIN</dd>
+                                            </dlentry>
+                                        </dl>
+                                        <dl>
+                                            <dlentry>
+                                                <dt>LEFT</dt>
+                                                <dd>Left JOIN</dd>
+                                                <dd>[Optional] OUTER LEFT JOIN</dd>
+                                            </dlentry>
+                                        </dl>
+                                    </dd>
+                                </dlentry>
+                            </dl>
+                            <dl>
+                                <dlentry>
+                                    <dt>from-path</dt>
+                                    <dd/>
+                                </dlentry>
+                            </dl>
+                        </dd>
+                    </dlentry>
+                </dl>
+            </p>
+            <p><i>on-keys-clause:</i></p>
+            <codeblock>ON [ PRIMARY ] KEYS expression  </codeblock>
+            <p><varname>on-key-for-clause:</varname></p>
+            <codeblock>ON [ PRIMARY ] KEY <varname>rhs-expression</varname>.<varname>lhs-expression-key</varname> FOR <varname>lhs-expression</varname> </codeblock>
+            <p><varname>rhs-expression</varname>: keyspace or expression corresponding to the right
+                hand side of JOIN.</p>
+            <p><varname>lhs-expression</varname>: keyspace or expression corresponding to the left
+                hand side of JOIN.</p>
+            <p><varname>lhs-expression-key</varname>: attribute in <varname>rhs-expression</varname>
+                referencing primary key for <varname>lhs-expression</varname>.</p>
  <p>When using lookup joins, right-to-left joins with RHS documents containing primary key
                 references to LHS documents cannot be joined efficiently using any index. </p>
             <p>For example, consider the <b>travel-sample</b> data with route and airline documents,
@@ -652,12 +774,28 @@ WHERE  route.type = "route"
   AND    airline.iata = "AA"; </codeblock> 
                 
      </section>
+     
      <section id="unnest"><title>UNNEST Clause</title>
   <p>If a document or object contains a nested array, <codeph>UNNEST</codeph> conceptually performs
                 a join of the nested array with its parent object. Each resulting joined object
                 becomes an input to the query. Unnests can be chained.</p>
-  <p>Here is the syntax for an <codeph>UNNEST</codeph> join:</p>
-<codeblock>[ join-type ] UNNEST path [ [ AS ] alias ]</codeblock>
+  <p><b>Syntax</b></p>
+<codeblock>[ <varname>join-type</varname> ] UNNEST <varname>path</varname> [ [ AS ] <varname>alias</varname> ]</codeblock>
+            <p>
+                <dl>
+                    <dlentry>
+                        <dt>Arguments</dt>
+                        <dd>
+                            <dl>
+                                <dlentry>
+                                    <dt>join-type</dt>
+                                    <dd/>
+                                </dlentry>
+                            </dl>
+                        </dd>
+                    </dlentry>
+                </dl>
+            </p>
   <p>where join-type is <codeph>[ INNER | LEFT [ OUTER ] ]</codeph></p>
   <p>The first path element after each <codeph>UNNEST</codeph> must reference some preceding path. </p>
   <p>By default, an <codeph>INNER UNNEST</codeph> is performed. This means that for each result
@@ -702,15 +840,21 @@ WHERE  route.type = "route"
             ]
 }         </codeblock>
      </section>
-     <section id="nest"><title>NEST Clause</title>
-  <codeblock>[ join-type ] NEST from-path [ [ AS ] alias ] on-keys-clause</codeblock>
-  <p>where join-type is <codeph>[ INNER | LEFT [ OUTER ] ]</codeph></p>
-  <p>Nesting is conceptually the inverse of unnesting. Nesting performs a join across two keyspaces. But 
-   instead of producing a cross-product of the left and right inputs, a single result is produced for each left 
-   input, while the corresponding right inputs are collected into an array and nested as a single array-valued field 
-   in the result object.</p>
-  <p>Nests can be chained with other <codeph>NEST</codeph>, <codeph>JOIN</codeph>, and
-                    <codeph>UNNEST</codeph> clauses. By default, an <codeph>INNER NEST</codeph> is
+     <section id="nest"><title>NEST Clause</title><p>Nesting is conceptually the inverse of
+                unnesting. Nesting performs a join across two keyspaces. But instead of producing a
+                cross-product of the left and right inputs, a single result is produced for each
+                left input, while the corresponding right inputs are collected into an array and
+                nested as a single array-valued field in the result
+                object.</p><b>Syntax</b><codeblock>[ <varname>join-type</varname> ] NEST <varname>from-path</varname> [ [ AS ] <varname>alias</varname> ] <varname>on-keys-clause</varname></codeblock><p>where
+                join-type is <codeph>[ INNER | LEFT [ OUTER ] ]</codeph></p><p>
+                <dl>
+                    <dlentry>
+                        <dt>Arguments</dt>
+                        <dd/>
+                    </dlentry>
+                </dl>
+            </p><p/><p>Nests can be chained with other <codeph>NEST</codeph>, <codeph>JOIN</codeph>,
+                and <codeph>UNNEST</codeph> clauses. By default, an <codeph>INNER NEST</codeph> is
                 performed. This means that for each result object produced, both the left and right
                 source objects must be non-missing and non-null. The right-hand side result of
                     <codeph>NEST</codeph> is always an array or <codeph>MISSING</codeph>. If there
@@ -745,33 +889,29 @@ WHERE  route.type = "route"
                             </row>
                         </tbody>
                     </tgroup>
-                </table></p>
- 
-    <p>If <codeph>LEFT</codeph> or <codeph>LEFT OUTER</codeph> is specified, then a left outer nest
-                is performed. One result object is produced for each left source object.</p>
-    
-    <p><b>Example</b></p>
-  <p>This example shows the <codeph>NEST</codeph> clause using <codeph>invoice</codeph> and
-                    <codeph>invoice_item</codeph> objects.</p>
-  <p>Recall our invoice objects:</p>
-  <codeblock>{
+                </table></p><p>If <codeph>LEFT</codeph> or <codeph>LEFT OUTER</codeph> is specified,
+                then a left outer nest is performed. One result object is produced for each left
+                source object.</p><p><b>Example</b></p><p>This example shows the
+                    <codeph>NEST</codeph> clause using <codeph>invoice</codeph> and
+                    <codeph>invoice_item</codeph> objects.</p><p>Recall our invoice
+                objects:</p><codeblock>{
      "customer_key": ...,
      "invoice_date": ...,
      "invoice_item_keys": [ ... ],
      "total": ...     
- }  </codeblock>
-  <p>And our <codeph>invoice_item</codeph> objects: </p>
-  <codeblock>{
+ }  </codeblock><p>And
+                our <codeph>invoice_item</codeph> objects:
+                </p><codeblock>{
          "invoice_key": ...,
          "product_key": ...,
          "unit_price": ...,
          "quantity": ...,
          "item_subtotal": ...     
-}  </codeblock>
-  <p>If the FROM clause is:</p> 
-  <codeblock>FROM invoice inv NEST invoice_item items ON KEYS inv.invoice_item_keys </codeblock>
-  <p>Then the results would be:</p>
-  <codeblock>  {
+}  </codeblock><p>If
+                the FROM clause
+                is:</p><codeblock>FROM invoice inv NEST invoice_item items ON KEYS inv.invoice_item_keys </codeblock><p>Then
+                the results would
+            be:</p><codeblock>  {
          "invoice" : {
              "customer_key": ...,
              "invoice_date": ...,
@@ -819,8 +959,7 @@ WHERE  route.type = "route"
              }
          ]
      },
-     ... </codeblock>
-     </section>
+     ... </codeblock></section>
      <section>
             <title>Arrays</title>
             <p>If an array occurs along a path, you can use array subscripts to select one element. </p>
