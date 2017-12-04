@@ -707,8 +707,8 @@ AND type="airport";</codeblock><codeblock outputclass="language-json">{
             "airportname": "Washington Union Station"
         }
     ]
-}</codeblock><p>The
-              following <xref
+}</codeblock><p>This
+                <xref
                 href="https://dzone.com/articles/a-couchbase-index-technique-for-like-predicates-wi"
                 format="html" scope="external">blog</xref> provides more information about this
               example.</p></dd>
@@ -817,91 +817,95 @@ AND type="airport";</codeblock><codeblock outputclass="language-json">{
         <dlentry>
           <dt><b>Return Value</b></dt>
           <dd>An array of strings containing all of the tokens obtained from the input string.</dd>
+          <dd>NOTE: By default, for speed, the results are randomly ordered. To make the difference
+            more clear between the two example queries, the <codeph>ARRAY_SORT()</codeph> function
+            is used.</dd>
         </dlentry>
         <dlentry>
           <dt><b>Examples</b></dt>
-          <dd>
-            <codeblock outputclass="language-json">SELECT TOKENS( ['jim@abc.com, kim@abc.com, http://abc.com/, 408-555-1212'],
-             { 'specials': false });
+          <dd><b>Example 1a</b>: List the tokens of an array where <codeph>specials</codeph> is
+              FALSE.<codeblock outputclass="language-json"><b>SELECT ARRAY_SORT( TOKENS( ['jim@abc.com, kim@abc.com, http://abc.com/, 408-555-1212'],
+                 { 'specials': false });</b>
 
+Results:
 [
-    {
-        "$1": [
-            "kim",
-            "408",
-            "com",
-            "abc",
-            "jim",
-            "1212",
-            "555",
-            "http"
-        ]
-    }
-]
+  {
+    "$1": [
+      "1212",
+      "408",
+      "555",
+      "abc",
+      "com",
+      "http",
+      "jim",
+      "kim"
+    ]
+  }
+]</codeblock><b>Example
+              1b</b>: List the tokens of an array where <codeph>specials</codeph> is
+                TRUE.<codeblock outputclass="language-json"><b>SELECT ARRAY_SORT( TOKENS(['jim@abc.com, kim@abc.com, http://abc.com/, 408-555-1212'],
+	           { 'specials': true }));</b>
 
-SELECT TOKENS(['jim@abc.com, kim@abc.com, http://abc.com/, 408-555-1212'],
-	         { 'specials': true });
-
+Results:
 [
-    {
-        "$1": [
-            "jim",
-            "408",
-            "1212",
-            "jim@abc.com",
-            "http",
-            "abc",
-            "408-555-1212",
-            "kim@abc.com",
-            "kim",
-            "555",
-            "http://abc.com",
-            "com"
-        ]
-    }
-]</codeblock>
-            <p>In the following example,<codeph> TOKENS() </codeph>converts all of the URL data into
-              UPPER case and also adds the full URL to the delimited words.</p>
-            <codeblock outputclass="language-json">SELECT TOKENS(url) AS defaulttoken, 
-	   TOKENS(url, {"specials":true, "case":"UPPER"}) AS specialtoken
-FROM `travel-sample` h WHERE h.type = 'hotel'
-LIMIT 1;
+  {
+    "$1": [
+      "1212",
+      "408",
+<b>      "408-555-1212",</b>
+      "555",
+      "abc",
+      "com",
+      "http",
+<b>      "http://abc.com",</b>
+      "jim",
+<b>      "jim@abc.com",</b>
+      "kim",
+<b>      "kim@abc.com"</b>
+    ]
+  }
+]</codeblock><p><b>Example
+                2</b>:  Convert all of the URL data into UPPER case and adds the full URL to the
+              delimited
+              words.</p><codeblock outputclass="language-json"><b>SELECT ARRAY_SORT( TOKENS(url) ) AS defaulttoken, 
+       ARRAY_SORT( TOKENS(url, {"specials":true, "case":"UPPER"}) ) AS specialtoken
+FROM `travel-sample` WHERE type = 'hotel'
+LIMIT 1;</b>
 	
 [
-    {
-        "defaulttoken": [
-            "uk",
-            "www",
-            "http",
-            "yha",
-            "org"
-        ],
-        "specialtoken": [
-            "ORG",
-            "WWW",
-            "HTTP://WWW.YHA.ORG.UK",
-            "YHA",
-            "UK",
-            "HTTP"
-        ]
-    }
-]</codeblock>
-            <p>You can also use<codeph> {"case":"lower"} </codeph>or<codeph> {"case":"upper"}
-              </codeph>to have case sensitive search. Index creation and querying can use this and
-              other parameters in combination. These parameters should be passed within the query
-              predicates as well. The parameters and values have to match exactly for N1QL to pick
-              up and use the index correctly. The following example shows how you can create an
-              index and use it your application.</p>
-            <codeblock outputclass="language-sql">CREATE INDEX idx_url_upper_special on `travel-sample`(
+  {
+    "defaulttoken": [
+      "co",
+      "http",
+      "tantallonhouse",
+      "uk",
+      "www"
+    ],
+    "specialtoken": [
+      "CO",
+      "HTTP",
+      "HTTP://WWW.TANTALLONHOUSE.CO.UK",
+      "TANTALLONHOUSE",
+      "UK",
+      "WWW"
+    ]
+  }
+]</codeblock><p>You
+              can also use<codeph> {"case":"lower"} </codeph>or<codeph> {"case":"upper"} </codeph>to
+              have case sensitive search. Index creation and querying can use this and other
+              parameters in combination. These parameters should be passed within the query
+              predicates as well. The parameters and values must match exactly for N1QL to pick up
+              and use the index correctly. </p><p><b>Example 3</b>: Create an index with
+                <codeph>case</codeph> and use it your
+            application.</p><codeblock outputclass="language-sql">CREATE INDEX idx_url_upper_special on `travel-sample`(
     DISTINCT ARRAY v for v in 
         tokens(url, {"specials":true, "case":"UPPER"}) 
-    END ) where type = 'hotel';</codeblock>
-            <codeblock outputclass="language-json">SELECT name, address, url
-FROM `travel-sample` h
+    END ) where type = 'hotel';</codeblock><codeblock outputclass="language-json">SELECT name, address, url
+FROM `travel-sample`
 WHERE ANY  v in tokens(url, {"specials":true, "case":"UPPER"})
       SATISFIES v = "HTTP://WWW.YHA.ORG.UK" 
       END  
-AND h.type = 'hotel' ;
+AND type = 'hotel' ;
 
 {
     "results": [
@@ -911,8 +915,7 @@ AND h.type = 'hotel' ;
             "url": "http://www.yha.org.uk"
         }
     ]
-}</codeblock>
-          </dd>
+}</codeblock></dd>
         </dlentry>
       </dl>
     </section>
