@@ -4,19 +4,20 @@
  <title>CREATE INDEX</title>
  
  <conbody>
-		<p>The CREATE INDEX statement allows you to create a secondary index. Secondary indexes
-			contain a filtered or a full set of keys in a given bucket. Secondary indexes are
-			optional but increase query efficiency on a bucket.</p>
-		<p>CREATE INDEX is by default a synchronous operation. CREATE INDEX statement blocks until
-			the operation finishes. Index building starts by creating a task that is queued for
-			index build. After this phase, if you lose connectivity, index build operation continues
-			to happen in the background. You can also run index creation asynchronously using the
-			"defer_build" clause. In the async mode, CREATE INDEX starts a task to create the
-			primary index and returns as soon as the task is queued for execution. The full index
+		<p>The <codeph>CREATE INDEX</codeph> statement allows you to create a secondary index. Secondary
+			indexes contain a filtered or a full set of keys in a given bucket. Secondary indexes
+			are optional but increase query efficiency on a bucket.</p>
+		<p><codeph>CREATE INDEX</codeph> is by default a synchronous operation. so every <codeph>CREATE
+				INDEX</codeph> statement blocks until the operation finishes. Index building starts
+			by creating a task that is queued for index build. After this phase, if you lose
+			connectivity, the index build operation continues in the background. You can also run
+			index creation asynchronously using the <codeph>defer_build</codeph> clause. In the
+			asynchronous mode, <codeph>CREATE INDEX</codeph> starts a task to create the primary
+			index and returns as soon as the task is queued for execution, and then the full index
 			creation operation happens in the background.</p>
 		<p>Both GSI and View indexes provide a status field and mark index status pending. With GSI
 			indexer, index status continues to report "pending". This status field and other index
-			metadata can be queried using system:indexes.</p>
+			metadata can be queried using <codeph>system:indexes</codeph>.</p>
 		<p><b>RBAC Privileges</b></p>
 		<p>User executing the CREATE INDEX statement must have the <i>Query Manage Index</i> privilege
 			granted on the keyspace/bucket. For more details about user roles, see <xref
@@ -35,73 +36,152 @@
 				indexes on array elements and optimizes the execution of queries involving array
 				elements. See <xref href="indexing-arrays.dita"/> for details.</note>
 		</p>
-		<p><i>create-index:</i></p>
-		<codeblock>CREATE INDEX [index_name] ON named_keyspace_ref( expression [ , expression ] * )
-    WHERE filter_expressions
+		<p><b>Syntax</b></p>
+		<codeblock>CREATE INDEX <varname>index_name</varname> ON <varname>named_keyspace_ref</varname> ( <varname>expression1</varname> [ , <varname>expression2</varname> ] * )
+    WHERE <varname>filter_expressions</varname>
     [ USING GSI | VIEW ]
-    [ WITH { "nodes": [ "node_name" ], "defer_build":true|false , "num_replica": num_replica } ];</codeblock>
-		<p><i>index_name:</i>
+    [ WITH { "nodes": [ "<varname>node_name</varname>" ], "defer_build":<varname>true</varname>|<varname>false</varname> , "num_replica": <varname>num_replica_num</varname> } ];</codeblock>
+		<p>
+			<dl>
+				<dlentry>
+					<dt>Arguments</dt>
+					<dd>
+						<dl>
+							<dlentry>
+								<dt>index_name</dt>
+								<dd>[Required] A unique name that identifies the index.</dd>
+								<dd>Valid GSI index names can contain any of the following
+									characters: A-Z a-z 0-9 # _, and must start with a letter, [A-Z
+									a-z].</dd>
+								<dd>The minimum length of an index name is 1 character and there is
+									no maximum length set for an index name.</dd>
+								<dd>When querying, if the index name contains a '#' or '_'
+									character, you must enclose the index name within
+									backticks.</dd>
+							</dlentry>
+						</dl>
+						<dl>
+							<dlentry>
+								<dt>named_keyspace_ref</dt>
+								<dd>An identifier that refers to the bucket name. Specifies the
+									bucket as the source for which the index needs to be created. </dd>
+								<dd>You can add an optional namespace name to the keyspace name in
+									this
+									way:<codeblock><varname>namespace-name</varname> : <varname>keyspace-name</varname></codeblock>For
+									example, <codeph>main:customer</codeph> indicates the customer
+									keyspace in the main namespace. If the namespace name is
+									omitted, the default namespace in the current session is
+									used.</dd>
+							</dlentry>
+						</dl>
+						<dl>
+							<dlentry>
+								<dt>expression1, expression2, ... , expressionX</dt>
+								<dd>Refers to an attribute name or a scalar function or an ARRAY
+									expression on the attribute. This constitutes an index-key for
+									the index. For details about array expressions, see <xref
+										href="indexing-arrays.dita"> Array Indexing</xref>.</dd>
+							</dlentry>
+						</dl>
+						<dl>
+							<dlentry>
+								<dt><codeph>USING GSI</codeph> | <codeph>VIEW</codeph></dt>
+								<dd>[Optional; Default is GSI]</dd>
+								<dd>The <codeph>USING</codeph> clause specifies the index type to
+									use. Secondary indexes can be created using global secondary
+									indexes (GSI) or views.</dd>
+							</dlentry>
+						</dl>
+						<dl>
+							<dlentry>
+								<dt><codeph>WITH</codeph></dt>
+								<dd>
+									<dl>
+										<dlentry>
+											<dt>"nodes":["node_name"] </dt>
+											<dd>A single global secondary index can be placed on
+												specific nodes that run the indexing service. The
+												<codeph>nodes</codeph> option allows you to
+												specify the nodes that the index is placed on. </dd>
+											<dd>If <codeph>nodes</codeph> is not specified, then
+												nodes running the index service are randomly
+												selected to host the index, based on the number of
+												replicas. </dd>
+											<dd>Multiple nodes can be specified to distribute
+												replicas of an index amongst multiple nodes, for
+												example:<codeblock>CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
+WHERE type="product" USING GSI 
+WITH {"nodes":["node1:8091", "node2:8091", "node3:8091"]};</codeblock><p>If
+												specifying both <varname>nodes</varname> and
+												<varname>num_replica</varname>, the number of
+												nodes in the array must be one greater than the
+												specified number of replicas otherwise the index
+												creation will fail.</p><note type="important">The
+												node names passed to the <codeph>nodes</codeph>
+												parameter must include the cluster administration
+												port (by default 8091). For example <codeph>WITH
+												{"nodes": ["192.0.2.0:<b>8091</b>"]}</codeph>
+												instead of <codeph>WITH {"nodes":
+												["192.0.2.0"]}</codeph>.</note></dd>
+										</dlentry>
+									</dl>
+									<dl>
+										<dlentry>
+											<dt>"defer_build":true | false</dt>
+											<dd>
+												<p><b>With <codeph>defer_build</codeph> set to
+												<codeph>TRUE</codeph></b>, then the <codeph>CREATE
+												INDEX</codeph> operation queues the task for
+												building the index but immediately pauses the
+												building of the index of type GSI. Index building
+												requires an expensive scan operation. Deferring
+												building of the index with multiple indexes can
+												optimize the expensive scan operation. Admins can
+												defer building multiple indexes and, using the
+												<codeph>BUILD INDEX</codeph> statement, multiple
+												indexes to be built efficiently with one efficient
+												scan of bucket data.</p>
+												<p><b>With <codeph>defer_build</codeph> set to
+												<codeph>FALSE</codeph></b>, then the
+												<codeph>CREATE INDEX</codeph> operation queues the
+												task for building the index and immediately kicks
+												off the building of the index of type GSI. </p>
+											</dd>
+										</dlentry>
+									</dl>
+									<dl>
+										<dlentry>
+											<dt>"num_replica": num_replica_num</dt>
+											<dd><varname>num_replica</varname> specifies the number
+												of replicas of the index to create. </dd>
+											<dd>The indexer will automatically distribute these
+												indexes amongst index nodes in the cluster for
+												load-balancing and high availability purposes. When
+												creating an index with replicas in this manner, the
+												indexer will attempt to distribute the replicas
+												based on the server groups in use in the cluster
+												where possible. </dd>
+											<dd>If <varname>num_replica_num</varname> is not less
+												than the number of index nodes in the cluster, then
+												the index creation will fail.</dd>
+											<dd>
+												<note type="attention">We recommend that you do not
+												create (or drop) secondary indexes when any node
+												with a secondary index role is down as this may
+												result in duplicate index names. </note>
+											</dd>
+										</dlentry>
+									</dl>
+								</dd>
+							</dlentry>
+						</dl>
+					</dd>
+				</dlentry>
+			</dl>
 		</p>
-		<p>A unique name that identifies the index. This parameter is required.</p>
-		<p>Valid GSI index names can contain any of the following characters: A-Z a-z 0-9 # _, and
-			must start with a letter, [A-Z a-z]. The minimum length of an index name is 1 character
-			and there is no maximum length set for an index name. When querying, if the index name
-			contains a '#' or '_' character, you must enclose the index name within backticks. </p>
-		<p><i>named-keyspace-ref( expression [ ,expression ]* )</i></p>
-		<codeblock>[ namespace-name :] keyspace-name </codeblock>
-		<p><i>keyspace-name:</i></p>
-		<p>An identifier that refers to the bucket name. Specifies the bucket as the source for
-			which the index needs to be created. You can add an optional namespace name to the
-			keyspace name in this way:</p>
-		<p><i>namespace-name : keyspace-name</i></p>
-		<p>For example, <codeph>main:customer</codeph> indicates the customer keyspace in the main
-			namespace. If the namespace name is omitted, the default namespace in the current
-			session is used.</p>
- 	<p><i>Expression index-key</i></p>
- 	<p>Refers to an attribute name or a scalar function or an ARRAY expression on the attribute.
- 		This constitutes an index-key for the index. See <xref href="indexing-arrays.dita">
- 			Array Indexing</xref> for more details about the
- 		array expressions.</p>
-		<p><i>USING GSI | VIEW</i></p>
-		<p>USING clause specifies the index type to use. Secondary indexes can be created using
-			global secondary indexes (GSI) or views. If the USING clause is not specified, by
-			default GSI is used as the indexer.</p>
-		<p><i>WITH options</i></p>
-		<p>With clause is used to specify additional options with the GSI type indexes.</p>
-		<p><i>"nodes":["node name"] </i></p>
-		<p>A single global secondary index can be placed on specific nodes that run the indexing
-			service. The "nodes" option allows you to specify the nodes that the index is placed on.
-			If nodes is not specified, nodes running the index service are randomly selected to host
-			the index, based on the number of replicas. Multiple nodes can be specified to
-			distribute replicas of an index amongst multiple nodes, for
-			example:<codeblock conref="../../indexes/index-replication.dita#topic_axj_xtr_zz/nodes-example"/></p>
-		<p>If specifying both <varname>nodes</varname> and <varname>num_replica</varname>, the
-			number of nodes in the array must be one greater than the specified number of replicas
-			otherwise the index creation will fail.</p>
-		<note type="important">The node names passed to the <codeph>nodes</codeph> parameter must
-			include the cluster administration port (by default 8091). For example <codeph>WITH
-				{"nodes": ["192.0.2.0:8091"]}</codeph> instead of <codeph>WITH {"nodes":
-				["192.0.2.0"]}</codeph>.</note>
-		<p><i>"defer_build":true | false</i></p>
-		<p>With defer_build set to true, CREATE INDEX operation queues the task for building the
-			index but immediately pauses the building of the index of type GSI. Index building
-			require an expensive scan operation. Deferring building of the index with multiple
-			indexes can optimize the expensive scan operation. Admins can defer building multiple
-			indexes and, using BUILD INDEX statement, multiple indexes to be built efficiently with
-			one efficient scan of bucket data.</p>
-		<p>With defer_build set to false, CREATE INDEX operation queues the task for building the
-			index and immediately kicks off the building of the index of type GSI. </p>
-		<p><i>"num_replica": num_replica</i></p>
-		<p><varname>num_replica</varname> specifies the number of replicas of the index to create.
-			The indexer will automatically distribute these indexes amongst index nodes in the
-			cluster for load balancing and high availability purposes. When creating an index with
-			replicas in this manner, the indexer will attempt to distribute the replicas based on
-			the server groups in use in the cluster where possible. If the value passed to
-				<varname>num_replica</varname> is not less than the number of index nodes in the
-			cluster then the index creation will fail.</p>
-		<note type="attention">We recommend that you do not create (or drop) secondary indexes when
-			any node with a secondary index role is down as this may result in duplicate index
-			names. </note>
+		<p> </p>
+		<p/>
+		<p/>
 		<p><b>Using the <apiname>meta().id</apiname> function</b></p>
 		<p>For details, see <xref href="indexing-meta-info.dita#untitled4">Indexing Meta Info</xref>.</p>
 		<p><b>Using indices for aggregates</b></p>
@@ -129,8 +209,8 @@ SELECT * FROM system:indexes WHERE name="beer-sample-type-index";</codeblock>
 			<p>Because the deferred build option was enabled, the output from the query on
 					<codeph>system:indexes</codeph> shows <codeph>beer-sample-type-index</codeph>
 				shows the index has not finished building (<codeph>"state": "pending"</codeph>). </p>
-			<p>The following example uses the BUILD INDEX statement to kick off the deferred build
-				on the <codeph>beer-sample-type-index</codeph> index and then queries
+			<p>The following example uses the <codeph>BUILD INDEX</codeph> statement to kick off the deferred
+				build on the <codeph>beer-sample-type-index</codeph> index and then queries
 					<codeph>system:indexes</codeph> for status of the index:</p>
 			<codeblock>BUILD INDEX ON `beer-sample`(`beer-sample-type-index`) USING GSI;
 SELECT * FROM system:indexes WHERE name="beer-sample-type-index";</codeblock>
