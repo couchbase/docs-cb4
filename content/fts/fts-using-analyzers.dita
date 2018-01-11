@@ -1,85 +1,250 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_o23_j34_1v">
-  <title>Using Analyzers</title>
+  
+  <title>
+    Using Analyzers
+  </title>
+  
+  <shortdesc>
+    Analyzers increase search-awareness by transforming input text into token-streams, which
+    permit the management of richer and more finely controlled forms of text-matching. An 
+    analyzer consists of modules, each of
+    which performs a particular role in the transformation (for example, removing
+    undesirable characters; transforming dictionary-based words into non-dictionary-based
+    search-tokens; and performing miscellaneous post-processing activities). 
+  </shortdesc>
+  
   <body>
-    <p><term>Text analysis</term> is the process of transforming input text into a series of terms,
-      or canonical forms of words that are typically stripped of inflections and junk characters.
-      Analysis is done on the text documents when you create the index, and again on the text of
-      your query when you perform a search. </p>
-    <p>When people talk about full text search being "language aware", they are usually referring to the results of text analysis.</p>
-    <p><b>Example</b></p>
-    <p>Consider you have a document containing the text, "watery light beer" and you search for
-      "watered down".</p>
-    <p>There is no exact match in this case, but if you want this query to match this document you
-      can accomplish this by choosing the right analyzer. In this case, you want to use an analyzer
-      that can stem English words. </p>
-    <p>By doing this, the index entry for the document will contain the terms: "water", "light", "beer". And the query will search for terms: "water", "down".</p>
-    <p>Now you see that the terms will match and you get the expected search results.</p>
-    <p>Stemming is just one way in which the text can be transformed, the key here is that choosing the right analyzer is essential to getting high quality search results.</p>
-    <section> <title>Analyzers</title>
-      <p>Analyzers are used to transform input text into a stream of tokens for indexing. Full Text
-        Search includes a number of analyzers or you can build your own. Analyzers are built up from
-        modular components.<ul>
-          <li>Character Filters strip out undesirable characters from the input. For example, the
-            "html" character filter ignores HTML tags and just indexes the content from HTML
-            documents.</li>
-          <li>Tokenizers split input strings into a token stream. Typically you’re trying to create
-            a token for each word.</li>
-          <li>Token Filters are chained together to perform additional post processing on the token
-            stream.</li>
-        </ul></p> </section>
-    <section><title>Tokenizers</title>
-      <p>Tokenizers cut sequences of characters into meaningful units (tokens) while ignoring useless characters, like spaces or commas.</p>
-      <p>Stemming is the process of reducing words to an underlying base form. The goal of stemming is to get rid of grammatical inflections while preserving the words’ meanings. Those underlying base forms are then written into the index.</p>
-      <p>In the Couchbase Server Web Console, you can find a list of available stemmers on the
-          <uicontrol>Index</uicontrol> > <uicontrol>Full Text</uicontrol> >
-          <uicontrol>Edit</uicontrol> or <uicontrol>Create New Index</uicontrol> >
-          <uicontrol>Analyzers</uicontrol>. If you click "<uicontrol>New Analyzer</uicontrol>" you
-        see a list of available stemmers in the "<uicontrol>Token Filters</uicontrol>" drop-down
-        list.</p>
-      <p><b>Single Token</b> </p> 
-      <p>The Single Token Tokenizer returns the entire input bytes as a single token. This can be
-        useful for things like URLs
-          (<filepath>http://www.example.com/blog/stuff+and+nonsense/</filepath>) or email address
-          (<codeph>will.spammington@couchbase.com</codeph>) that might otherwise be broken up at
-        punctuation or special character boundaries. It could also be used when multi-word phrases
-        should be indexed as a single term, for example, in the case of proper place names that
-        would otherwise be broken into multiple terms by the whitespace tokenizer. </p>
-      <p>Consider the excerpt below from the brewery documents in the beer-sample database. You can
-        use a single token analyzer for the <parmname>city</parmname>, <parmname>name</parmname>,
-          <parmname>country</parmname>, <parmname>phone</parmname>, or <parmname>website</parmname>
-        fields because they are all continuous strings that you may not want to divide at dots,
-        dashes, or spaces. The single token tokenizer is probably less useful for the name field,
-        which users will probably enter many different
-        ways.<codeblock outputclass="language-json">{
-        "type": "brewery",
-        "name": "21st Amendment Brewery Cafe",
-        "city": "San Francisco",
-        "country": "United States",
-        "phone": "1-415-369-0900",
-        "website": "http://www.21st-amendment.com/",
-        ...
-        }</codeblock>
+  
+  <section>
+    <title>
+      Principles of Text-Analysis
+    </title>
+  
+    <p>
+      <i>Analyzers</i> pre-process input-text submitted for Full Text Search; typically, by removing
+      characters that might prohibit certain match-options. Analysis is performed on document-contents,
+      when indexes are created; and is also performed on the input-text submitted for a search. The
+      benefits of analysis are often referred to as <i>language awareness</i>.
+    </p>
+    
+    <p>
+      For example, if the input-text for a search is <codeph>watered down</codeph>, and the document-content
+      contains the phrase <codeph>watery light beer</codeph>, the dictionary-based words do not permit
+      a match. However, by using an analyzer that <i>stems</i> words, the input-text yields the tokens
+      <codeph>water</codeph> and <codeph>down</codeph>; while the document-content yields the tokens
+      <codeph>water</codeph>, <codeph>light</codeph>, and <codeph>beer</codeph>. This permits a match on
+      <codeph>water</codeph>.
+    </p>
+    
+    <p>
+      Since different analyzers pre-process text in different ways, effective Full Text Search depends on the right choice
+      of analyzer, for the type of matches that are desired.
+    </p>
+    
+    <p>
+      Couchbase Full Text Search provides a number of pre-constructed analyzers that can defined for use with
+      Full Text Indexes. Additionally, analyzers can be custom-created, by means of the Couchbase Web Console. The 
+      remainder of this page explains the architecture of analyzers, and describes the modular components that
+      Couchbase Full Text Search makes available for custom-creation. It also lists the pre-constructed analyzers
+      that are available, and describes the modules that they contain.
+    </p>
+      
+  </section>
+    
+    <section>
+      
+      <title>
+        Analyzer Architecture
+      </title>
+
+      <p>
+        Analyzers are built up from modular components:
       </p>
-      <p><b>Regular Expression</b> </p> 
-      <p>The Regular Expression Tokenizer will tokenize input using a configurable regular expression. The regular expression should match token text. See the Whitespace Tokenizer for an example of its usage.
+        
+        <ul>
+          
+          <li>
+            <b>Character Filters</b>
+            Strip out undesirable characters from input: for example, the <codeph>html</codeph> 
+            character filter ignores HTML tags, and indexes HTML text-content alone.
+          </li>
+          
+          <li>
+            <b>Tokenizers</b>
+            split input-strings into individual 
+            <i>tokens</i>, which together are made into a <i>token stream</i>. Typically, 
+            a token is established for each word.
+          </li>
+          
+          <li>
+            <b>Token Filters</b> are chained together, to perform additional post-processing on the token stream.
+          </li>
+          
+        </ul> 
+      
+      <p>
+        Each component-type is described below.
       </p>
-      <p><b>Whitespace</b> </p> 
-      <p>The Whitespace Tokenizer is an instance of the Regular Expression Tokenizer. It uses the
-        regular expression <codeph>\w+</codeph>. For many western languages this may work well as a
-        simple tokenizer.</p>
-      <p><b>Unicode</b> </p> 
-      <p>The Unicode Tokenizer uses the <xref href="https://github.com/blevesearch/segment"
-          format="html" scope="external">segment</xref> library to perform <xref
-          href="http://www.unicode.org/reports/tr29/" format="html" scope="external">Unicode Text
-          Segmentation</xref> on word boundaries. It is recommended over the ICU tokenizer for all
-        languages not requiring dictionary-based tokenization that is supported by ICU.</p>
-      <p>Full Text Search includes a number of analyzers or you can build your own. </p> </section>
-    <section><title>Customizing the Field Mappings</title>
-      <p><b>Dynamic Index Mapping</b> </p> 
-      <p>When the indexer encounters a field whose type you haven’t explicitly specified, it guesses
-        the type by looking at the JSON value. <table frame="all" rowsep="1" colsep="1"
+    
+    </section>
+    
+    
+    <section>
+      
+      <title>
+        Tokenizers
+      </title>
+      
+      <p>
+        Tokenizers split input-strings into individual tokens: characters likely to prohibit certain kinds
+        of matching (for example, spaces or commas) are omitted. The tokens so created are then made into
+        a <i>token stream</i> for the query.
+      </p>
+      
+      <p>
+        A typical function of tokenizers is <i>stemming</i>; this reduces words
+        to a base form that typically consists of the initial <i>stem</i> of the word (for example,
+        <codeph>play</codeph>, which is the stem of <codeph>player</codeph>, <codeph>playing</codeph>,
+        <codeph>playable</codeph>, and more). With the stem used as the token, a wider variety of matches
+        can be made (for example, the input-text <codeph>player</codeph> can be matched with the document-content
+        <codeph>playable</codeph>).
+      </p>
+      
+      <p>
+        The following tokenizers are available from the Couchbase Web Console:
+      </p>
+      
+      <ul>
+        <li>
+          <b>Letter</b>: Creates tokens by breaking input-text into subsets that consist of letters only:
+          characters such as punctuation-marks and numbers are omitted. Creation of a token ends whenever
+          a non-letter character is encountered. For example, the text <codeph>Reqmnt: 7-element phrase</codeph>
+          would return the following tokens: <codeph>Reqmnt</codeph>, <codeph>element</codeph>, and 
+          <codeph>phrase</codeph>.
+          
+          <p>
+            
+          </p>
+          
+        </li>
+        
+        <li>
+          <b>Single</b>: Creates a single token from the entirety of the input-text. For example, the text
+          <codeph>in each place</codeph> would return the following token: <codeph>in each place</codeph>.
+          Note that this may be useful for handling URLs or email-addresses, which can thus be prevented
+          from being broken at punctuation or special-character boundaries. It may also be used to prevent
+          multi-word phrases (such as proper placenames, like <codeph>Milton Keynes</codeph> or
+          <codeph>San Francisco</codeph>) from being broken up due to whitespace; so that they become indexed
+          as a single term.
+          
+          <p>
+            
+          </p>
+          
+        </li>
+        
+        <li>
+          <b>Unicode</b>: Creates tokens by performing Unicode Text Segmentation on word-boundaries. For
+          examples, see
+          <xref href="http:http://www.unicode.org/reports/tr29/#Word_Boundaries" scope="external" format="html">Unicode Word Boundaries</xref>.
+        
+          <p>
+            This tokenizer uses the <xref href="https://github.com/blevesearch/segment" format="html" scope="external">segment</xref> library.
+          </p>
+          
+        </li>
+        
+        <li>
+          <b>Web</b>: Creates tokens by identifying and removing html tags. For example, the text
+          <codeph>&lt;h1&gt;Introduction&lt;\h1&gt;</codeph> would return the token <codeph>Introduction</codeph>.
+          
+          <p>
+            
+          </p>
+          
+        </li>
+        
+        <li>
+          <b>Whitespace</b>: Creates tokens by breaking input-text into subsets according to where
+          whitespace occurs. For example, the text <codeph>in each place</codeph> would return the following
+          tokens: <codeph>in</codeph>, <codeph>each</codeph>, and <codeph>place</codeph>.
+          
+          <p>
+            
+          </p>
+          
+        </li>
+        
+      </ul>
+    
+    </section>
+    
+    <section>
+      
+      <title>
+        Token Filters
+      </title>
+      
+      <p>
+        <i>Token Filters</i> accept a token-stream provided by a tokenizer, and make modifications to the tokens in the stream.
+        The following kinds of token-filtering are supported by Couchbase Full Text Search:
+      </p>
+      
+      <ul>
+        
+        <li>
+          <b></b>
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          <b></b>
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          <b></b>
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          <b></b>
+          
+          <p>
+            
+          </p>
+        </li>
+        
+      </ul>
+    </section>
+    
+    <section>
+      
+      <title>
+        Customizing the Field Mappings
+      </title>
+      
+      <p>
+        <b>Dynamic Index Mapping</b> 
+      </p> 
+      
+      <p>
+        When the indexer encounters a field whose type you haven’t explicitly specified, it guesses
+        the type by looking at the JSON value. 
+      </p>
+        
+        <table frame="all" rowsep="1" colsep="1"
           id="table_dcs_gl4_1v">
           <tgroup cols="2" align="left">
             <colspec colname="c1" colnum="1" colwidth="1.0*"/>
@@ -109,12 +274,23 @@
               </row>
             </tbody>
           </tgroup>
-        </table> The indexer attempts to parse String values as dates and indexes them as such if
+        </table> 
+      
+      <p>
+        The indexer attempts to parse String values as dates and indexes them as such if
         the operation succeeds. Full text search and Bleve expect dates to be in the format
         specified by <xref href="https://www.ietf.org/rfc/rfc3339.txt" format="html"
           scope="external">RFC-3339</xref>, which is a specific profile of ISO-8601 that is more
-        restrictive. </p>
-      <p>Note that other String values like "7" or "true" will never be indexed as a number or
-        Boolean. The number type is modeled as 64-bit floating point value internally.</p>    </section>
+        restrictive. 
+      </p>
+      
+      <p>
+        Note that other String values like "7" or "true" will never be indexed as a number or
+        Boolean. The number type is modeled as 64-bit floating point value internally.
+      </p>    
+    
+    </section>
+    
   </body>
+  
 </topic>
