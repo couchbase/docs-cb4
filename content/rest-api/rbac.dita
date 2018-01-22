@@ -25,7 +25,8 @@
     <section>
       <title>PUT /settings/rbac/users/&lt;user_id&gt;</title>
       <p><b>Description</b></p>
-      <p>This command sets names and roles for the specified user IDs.</p>
+      <p>This command sets name and role for the specified user ID. Note that the new user's password is
+      expected to be available, subsequently, from an external domain.</p>
       <p><b>Syntax:</b>
       </p>
       <codeblock>$ curl -X PUT http://user:password@127.0.0.1:8091/settings/rbac/users/&lt;user_id&gt;</codeblock>
@@ -34,7 +35,8 @@
     <section>
       <title>PUT /settings/rbac/users/local/&lt;user_id&gt;</title>
       <p><b>Description</b></p>
-      <p>This command sets names, roles, and passwords for the specified user IDs.</p>
+      <p>This command sets name, role, and password for the specified user ID. Note that the new user is
+      hereby defined locally to Couchbase Server, with the password provided as a parameter.</p>
       <p><b>Syntax:</b>
       </p>
       <codeblock>$ curl -X PUT http://user:password@127.0.0.1:8091/settings/rbac/users/local/&lt;user_id&gt;</codeblock>
@@ -44,7 +46,7 @@
     <section>
       <title>DELETE /settings/rbac/users/&lt;user_id&gt;</title>
       <p><b>Description</b></p>
-      <p>This command deletes the user specified with an ID.</p>
+      <p>This command deletes the user with the specified ID.</p>
       <p><b>Syntax:</b>
       </p>
       <codeblock>$ curl -X DELETE http://user:password@127.0.0.1:8091/settings/rbac/users/&lt;user_id&gt;</codeblock>
@@ -67,9 +69,22 @@
         <dd>
           <codeblock>GET /settings/rbac/roles</codeblock>
         </dd>
-        <dd>Returns array of objects like this one:
-            <codeblock>{"role":"admin", "name":"Admin", "desc":
-      "Can manage ALL cluster features including security."}</codeblock><p>or
+        <dd>Returns array of objects whose fields explain the available roles on the system. A
+          segment of the object might appear as follows:
+          <codeblock>[
+  {
+  "role": "replication_target",
+  "bucket_name": "*",
+  "name": "Replication Target",
+  "desc": "XDC replication target for bucket"
+  },
+  {
+  "role": "query_external_access",
+  "name": "Query External Access",
+  "desc": "Can execute CURL statement"
+  },
+              .
+              .</codeblock><p>or
             with extra property <codeph>"bucket_name":"default"</codeph> if the role is
             parametrized.</p></dd>
       </dlentry>
@@ -79,50 +94,58 @@
         <dt>Get a list of users and roles assigned to them.</dt>
         <dd>
           <codeblock>GET /settings/rbac/users</codeblock>
-          <p>The list does not include built-in users. </p>
-          <p>In the following example, the output of the command shows that John Doe was assigned to
-              the role of the Bucket Administrator for the default bucket, while Alice Smith is the
-              Replication Administrator. </p>
+
+          <p>For example: </p>
         </dd>
         <dd>
           <codeblock>$ curl -X GET http://Administrator:asdasd@127.0.0.1:8091/settings/rbac/users
             
-     [{"name":"John Doe","id":"johndoe","roles":[
-     {"role":"admin"}
-     ,
-      {"role":"bucket_admin","bucket_name":"default"}
-      ]},{"name":"alice-smith","id":"alicesmith","roles":[
-      {"role":"replication_admin"}
-      ]}]</codeblock>
+[
+  {
+    "name": "John Smith",
+    "id": "johnsmith",
+    "domain": "local",
+    "roles": [
+      {
+        "role": "cluster_admin"
+      }
+    ]
+  }
+]</codeblock>
         </dd>
       </dlentry>
     </dl>
      
     <dl>
       <dlentry>
-        <dt>Set names and roles for specified user IDs &lt;user_id&gt;</dt>
+        <dt>Set name and role for the specified user ID &lt;user_id&gt;</dt>
         <dd>
           <codeblock>PUT /settings/rbac/users/&lt;user_id&gt;</codeblock>
         </dd>
-        <dd>In this example, John Doe is assigned to be the Cluster Administrator and a Bucket
-            Administrator for the default bucket, while Alice Smith is assigned to be the
-            Replication Administrator:
-            <codeblock>$ curl -X PUT --data "name=John Doe&amp;roles=cluster_admin,bucket_admin[default]" \
-       http://Administrator:asdasd@127.0.0.1:8091/settings/rbac/users/johndoe
-       
-       [{"name":"John Doe","id":"johndoe,"roles":[
-       {"role":"cluster_admin"}
-       ,
-       {"role":"bucket_admin","bucket_name":"default"}
-       ]},{"name":"Alice Smith","id":"alicesmith","roles":[
-       {"role":"replication_admin"}
-       ]}]</codeblock></dd>
+        <dd>In this example, John Doe is assigned to be Cluster Administrator, and also to be Bucket
+            Administrator for the <codeph>travel-sample</codeph> bucket:
+            <codeblock>$ curl -X PUT --data "name=John Doe&amp;roles=cluster_admin,bucket_admin[travel-sample]" \
+              http://Administrator:asdasd@127.0.0.1:8091/settings/rbac/users/johndoe</codeblock>          
+          
+          <p>
+            Note that by means of the command above, the user is listed
+            by Couchbase Server as being in the <i>External</i>
+            authentication domain: this means that the username
+            specified here is expected to match a username by which they
+            are registered, with a password, on a <i>remote</i> (for example, an <i>LDAP</i>) system. If 
+            the username specified in this command
+            does not so match, the named user is permitted no access to Couchbase Server-resources. See below for an example of
+            adding user and roles by specifying a password to be stored locally. See
+            <xref href="../security/security-authentication.dita" scope="local" format="dita">Authentication</xref> for more
+            information on defining users remotely.
+           </p>
+        </dd>
       </dlentry>
     </dl>
      
      <dl>
        <dlentry>
-         <dt>Set names, roles, and passwords for specified user IDs &lt;user_id&gt;</dt>
+         <dt>Set name, role, and password for the specified user ID &lt;user_id&gt;</dt>
          <dd>
            <codeblock>PUT /settings/rbac/users/local/&lt;user_id&gt;</codeblock>
          </dd>
@@ -131,7 +154,14 @@
            
            <codeblock>$ curl -X PUT --data "name=John Smith&amp;roles=cluster_admin&amp;password=jspassword" \
              -H "Content-Type: application/x-www-form-urlencoded" \
-             http://Administrator:asdasd@127.0.0.1:8091/settings/rbac/users/local/johnsmith</codeblock></dd>
+             http://Administrator:asdasd@127.0.0.1:8091/settings/rbac/users/local/johnsmith</codeblock>
+         
+            <p>
+              Note that by means of the command above, the user is assigned to the
+              <i>Local</i> authentication domain: this means that they have been registered on Couchbase
+              Server itself, with the password specified.
+            </p>
+         </dd>
        </dlentry>
      </dl>
      
@@ -140,29 +170,48 @@
         <dt>Delete users</dt>
         <dd><codeblock>DELETE /settings/rbac/users/&lt;user_id&gt;</codeblock>
         </dd>
-        <dd>In this example, Alice Smith was deleted as the Replication Administrator and the other
-            user, John Doe, remains as a Cluster administrator.
-            <codeblock>$ curl -X DELETE http://Administrator:asdasd@127.0.0.1:8091/settings/rbac/users/alicesmith
-      [{"name":"John Doe","id":"johndoe,"roles":[
-       {"role":"cluster_admin"}     
-       ]}]</codeblock></dd>
+        <dd>In this example, Alice Smith is deleted.
+            <codeblock>$ curl -X DELETE http://Administrator:asdasd@127.0.0.1:8091/settings/rbac/users/alicesmith</codeblock></dd>
       </dlentry>
     </dl>
     <dl>
       <dlentry>
-        <dt>Check multiple permissions</dt>
+        <dt>Check permissions</dt>
         <dd>
           <codeblock>POST /pools/default/checkPermissions</codeblock>
         </dd>
-        <dd>Example:
-          <codeblock>$ curl -X POST --data 'cluster.bucket[default].stats!read,cluster.bucket[default]!write' \
-      http://roadmin:asdasd@127.0.0.1:8091/pools/default/checkPermissions
-      {"cluster.bucket[default].stats!read":true,"cluster.bucket[default]!write":false}</codeblock></dd>
+        <dd>The following example checks the authenticating user's permissions on the <codeph>travel-sample</codeph>
+          bucket, for reading bucket-statistics and for writing to the bucket:
+          
+          <codeblock>$ curl -X POST --data 'cluster.bucket[travel-sample].stats!read,cluster.bucket[travel-sample]!write' \
+      http://Administrator:password@127.0.0.1:8091/pools/default/checkPermissions
+      </codeblock>
+          
+      <p>
+        Output might appear as follows:
+      </p>
+          
+          <codeblock>{
+"cluster.bucket[travel-sample].stats!read": true,
+"cluster.bucket[default]!write": true
+}</codeblock>
+        
+        </dd>
       </dlentry>
-    </dl></section> 
+    </dl>
+   
+   </section> 
     
-    <section><title>Reading the Log Output</title>
-     <p>Here are some output logs with comments to help you understand how to read such logs.</p> 
+    <section>
+      
+      <title>
+        Reading Log Output
+      </title>
+      
+     <p>
+       The following examples of log output are provided, with comments to aid understanding..
+     </p> 
+      
       <codeblock>{"name":"John Doe","id":"johndoe","roles":[{"role":"admin"}]}]
         {'status': '200', 'content-length': '64', 'server': 'Couchbase Server', 'pragma': 'no-cache', \
         'cache-control': 'no-cache', 'date': 'Mon, 13 Jun 2016 10:35:28 GMT',  'content-type': 'application/json’}</codeblock>     
