@@ -1,23 +1,122 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_jfq_fn4_1v">
-  <title>Types of Queries</title>
+  
+  <title>
+    Query Types
+  </title>
+  
+    <shortdesc>
+      Couchbase Full Text Search supports multiple types of query.
+    </shortdesc>
+  
   <body>
-    <p>Different types of Full Text Search queries are available and these query types support
-      several options for making the precise query you are interested in. This topic describes the
-      general purpose of each query type along with a sample JSON data that represents the query
-      type. </p>
-    <p><b>Examples</b></p>
-    <p>The examples below are shown using the REST API query syntax, but you can choose to run these
-      examples with <xref href="../sdk/full-text-search-overview.dita">your 
-      choice of SDK</xref> as well.  The example query JSON reflects data from the <codeph>travel-sample</codeph> 
-      bucket where applicable, and assumes the existence of a Search index called <codeph>hotel</codeph>.</p> 
-      <p>To run the examples using CURL, use the following general syntax:
+    
+    <section id="introduction-to-query-types">
+      
+      <title>
+        Introduction to Query Types
+      </title>
+      
+    <p>
+      Full Text Search allows text-data to be <i>queried</i>. Multiple options are provided for
+      ensuring the right kinds of match. This page describes the
+      purpose of each query-type, and provides sample JSON objects that indicate how queries 
+      can be constructed. 
+    </p>
+      
+    <p>
+      Available query-types include:
+    </p>
+      
+      <ul>
+        
+        <li>
+          <i>Simple Queries</i>: Accept input-text in the form of words and phrases, and attempt to find
+          matches across bodies of text that have been <i>indexed</i>. <i>Analyzers</i> are applied
+          to both input and target, potentially to strip out unnecessary characters, reduce words to
+          the basic stems on which matching should occur, handle punctuation, and more. Additionally,
+          match accuracy-levels can be specified; and
+          multiple queries can be expressed together, with their respective priorities <i>boosted</i>,
+          (to ensure their results' prominence in the eventual result-set).
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          <i>Compound Queries</i>: Accept multiple queries simultaneously, and return either the
+          <i>conjunction</i> of results from the result-sets, or a <i>disjunction</i>.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        
+        <li>
+          <i>Range Queries</i>: Accept ranges for dates and numbers, and return documents that contain
+          values within those ranges.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          <i>Query String Queries</i>: Accept <i>query strings</i>, which express query-requirements 
+          in a special syntax.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          <i>Non-Analytic Queries</i>: Accept words and phrases on which exact matches only are returned. No
+          analysis is performed.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          <i>Special Queries</i>: For testing purposes, return either all of the documents in an index,
+          or none.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        
+      </ul>
+      
+    <p>
+      These query-types are explained in greater detail below. Examples are provided, using
+      the Couchbase REST API query-syntax. (Note that Full Text Search can also
+      be performed with the Couchbase Web Console and the Couchbase SDK.) The JSON data refers to
+      the  <codeph>travel-sample</codeph> 
+      bucket, and assumes the existence of a Full Text Index named <codeph>hotel</codeph>.
+    </p> 
+      
+      <p>
+        To run the examples using <codeph>curl</codeph>, use the following syntax:
+      </p>
+      
       <codeblock>curl -u Administrator:password -X POST -H "Content-Type: application/json" \
   -d '{<varname>your query in JSON here...</varname>}' \
-  http://localhost:8094/api/index/<varname>index_name</varname>/query</codeblock></p>
-    <p>Note that the queries below only show a portion of the query relevant to the query type being
-      described. Wrap the query details in the following basic configuration.
+  http://localhost:8094/api/index/<varname>index_name</varname>/query</codeblock>
+      
+      
+    <p>
+      Note that the examples below show only the JSON fragments that constitute non-generic parts of the queries they
+      describe. For actual use in a Full Text Search, these JSON fragments should be wrapped in the following generic
+      configuration:
+    </p>
+      
       <codeblock outputclass="language-json">{
   "explain": false,
   "fields": [
@@ -25,277 +124,708 @@
   ],
   "highlight": {},
   "query":{ <varname>your_query_details_here</varname> }
-}</codeblock></p>
-    <section><title>Simple Queries</title>
+}</codeblock>
+      
+      <p>
+        For more information on using the REST API to perform queries,
+        see
+        <xref href="./fts-searching-with-the-rest-api.dita" scope="local" format="dita">Searching with the REST API</xref>.
+      </p>
+      
+      
+    </section>
+    
+    <section id="simple-queries">
+      
+      <title>
+        Simple Queries
+      </title>
+      
      <dl>
+       
        <dlentry id="match-query">
-         <dt>Match Query</dt>
-         <dd>A match query analyzes the input text and uses that analyzed text to query the index.
-              Options include specifying a analyzer, performing fuzzy matching or adding in a prefix
-              match.  An attempt is made to use the same analyzer that was used when the field was indexed.
-              <p>The match query can optionally perform fuzzy matching. If the fuzziness parameter
-              is set to a non-zero integer the analyzed text will be matched with the specified
-              level of fuzziness. Also, the <parmname>prefix_length</parmname> parameter can be used
-              to specify that the term is also required to have the same prefix of the specified
-              length.</p><codeblock outputclass="language-json">{
+         
+         <dt>
+           <b>Match Query</b>
+         </dt>
+         
+         <dd>
+           A match query <i>analyzes</i> input text, and uses the results to query an index.
+           Options include specifying an analyzer, performing a <i>fuzzy match</i>, and performing
+           a <i>prefix match</i>.  By default, the analyzer used for the input-text is that previously used on
+           the target-text, during index-creation. For information on analyzers, see
+           <xref href="./fts-using-analyzers.dita" scope="local" format="dita">Understanding Analyzers</xref>.
+           
+           <p>
+             When fuzzy matching is used, if the single parameter
+             is set to a non-zero integer, the analyzed text is matched with a corresponding
+             level of fuzziness. 
+           </p>
+             
+            <p>
+             When a prefix match is used, the <parmname>prefix_length</parmname> parameter specifies
+             that for a match to occur, a prefix of specified length must be shared by the
+             input-term and the target text-element.
+           </p>
+           
+           <p>
+             The following JSON object demonstrates specification of a match query:
+           </p>
+           
+           <codeblock outputclass="language-json">{
  "match": "location hostel",
  "field": "reviews.content",
  "analyzer": "standard",
  "fuzziness": 3,
  "prefix_length": 4
-}</codeblock></dd>
+}</codeblock>
+           
+           <p>
+             A match query is also demonstrated by means of the Java SDK, in
+             <xref href="../sdk/java/full-text-searching-with-sdk.dita" scope="local" format="dita">Searching with the SDK</xref>.
+           </p>
+         
+         </dd>
+         
        </dlentry>
+       
        <dlentry id="match-phrase-query">
-         <dt>Match Phrase Query</dt>
-         <dd>The input text is analyzed and a phrase query is built with the terms resulting from
-            the analysis. This type of query searches for terms occurring in the specified positions
-            and offsets. This depends on term vectors, which are consulted to determine phrase
-              distance.<p>Although this is not an exact match, it is usually the search behavior
-              users want.</p><p>For example, a match phrase query for "location for functions" might
-              match "locate the function" if the standard <codeph>en</codeph> analyzer is used. This
-              is because the stemmer tokenizes "location" and "locate" to "locati", and "functions"
-              and "function" to "function." Stop word removal will remove "for" and "the" but the
-              distance between the tokens will be the same.
-            </p><codeblock outputclass="language-json">{
+         
+         <dt>
+           <b>Match Phrase Query</b>
+         </dt>
+         
+         <dd>
+           The input text is analyzed, and a phrase query is built with the terms resulting from
+           the analysis. This type of query searches for terms in the target that occur <i>in the positions
+           and offsets indicated by the input</i>: this depends on <i>term vectors</i>, which must have been included in the
+           creation of the index used for the search.
+           
+           <p>
+             For example, a match phrase query for <codeph>location for functions</codeph> is matched
+             with <codeph>locate the function</codeph>, if the standard analyzer is used: this analyzer uses a
+             <i>stemmer</i>, which tokenizes <codeph>location</codeph> and <codeph>locate</codeph> to <codeph>locat</codeph>, and 
+             reduces <codeph>functions</codeph>
+               and <codeph>function</codeph> to <codeph>function</codeph>. Additionally, the analyzer employs
+             <i>stop</i> removal, which removes small and less significant words from input and target text, so that
+             matches are attempted on only the more significant elements of vocabulary: in this case  <codeph>for</codeph> and 
+             <codeph>the</codeph> are removed. Following this processing, the tokens <codeph>locat</codeph> and
+             <codeph>function</codeph> are recognized as <i>common to both input and target</i>; and also as being both 
+             <i>in the same sequence
+               as</i>,
+             and <i>at the same distance from</i> one another; and therefore a match is made. 
+            </p>
+           
+           <codeblock outputclass="language-json">{
  "match_phrase": "very nice",
  "field": "reviews.content"
-}</codeblock></dd>
+}</codeblock>
+           
+           <p>
+             A match phrase query is also demonstrated by means of the Java SDK, in
+             <xref href="../sdk/java/full-text-searching-with-sdk.dita" scope="local" format="dita">Searching with the SDK</xref>.
+           </p>
+         
+         </dd>
+         
        </dlentry>
+       
        <dlentry>
-         <dt>Fuzzy Query</dt>
-         <dd>A fuzzy query is a term query that matches terms within a specified edit distance
-            (Levenshtein distance). Also, you can optionally specify that the term must have a
-            matching prefix of the specified
-            length.<codeblock outputclass="language-json">{
+         
+         <dt>
+           <b>Fuzzy Query</b>
+         </dt>
+         
+         <dd>
+           A <i>fuzzy query</i> matches terms within a specified <i>edit</i> (or <i>Levenshtein</i>) distance: meaning
+           that terms are considered to match when they are to a specified degree <i>similar</i>, rather than <i>exact</i>.
+           A common prefix of a stated length may be also specified as a requirement for matching. 
+           
+           <p>
+             Fuzziness is specified by means of a single integer. For example:
+           </p>
+           
+           <codeblock outputclass="language-json">{
  "term": "interest",
  "field": "reviews.content",
  "fuzziness": 2  
-}</codeblock></dd>
+}</codeblock>
+           
+           <p>
+             <i>Fuzziness</i>s is  demonstrated by means of the Java SDK, in the context of the <i>term query</i>
+             (see below), in
+             <xref href="../sdk/java/full-text-searching-with-sdk.dita" scope="local" format="dita">Searching with the SDK</xref>. Note
+             that two such queries are specified, with the difference in fuzziness between them resulting in different forms of
+             match, and different sizes of result-sets.
+           </p>
+         
+         
+         </dd>
+         
        </dlentry>
+       
        <dlentry>
-         <dt>Prefix Query</dt>
-         <dd>The prefix query finds documents containing terms that start with the provided prefix.
+         
+         <dt>
+           <b>Prefix Query</b>
+         </dt>
+         
+         <dd>
+           A <i>prefix</i> query finds documents containing terms that start with the specified prefix.
+           
             <codeblock outputclass="language-json">{ 
  "prefix": "inter",
  "field": "reviews.content" 
-}</codeblock></dd>
+}</codeblock>
+           
+         </dd>
+         
        </dlentry>
+       
        <dlentry>
-         <dt>Regexp Query</dt>
-         <dd>Regexp query finds documents containing terms that match the specified regular
-            expression. <codeblock outputclass="language-json">{
+         
+         <dt>
+           <b>Regexp Query</b>
+         </dt>
+         
+         <dd>
+           A <i>regexp</i> query finds documents containing terms that match the specified regular expression. 
+           
+           <codeblock outputclass="language-json">{
  "regexp": "inter.+",
  "field": "reviews.content"
-}</codeblock></dd>
+}</codeblock>
+           
+           <p>
+             A regexp query is also demonstrated by means of the Java SDK, in
+             <xref href="../sdk/java/full-text-searching-with-sdk.dita" scope="local" format="dita">Searching with the SDK</xref>.
+           </p>
+         
+         </dd>
+         
        </dlentry>
+       
        <dlentry>
-         <dt>Wildcard Query</dt>
-         <dd>The wildcard query uses a wildcard expression to search within individual terms for
-            matches. Wildcard expressions can be any single character (?) or zero to many characters
-            (*). Wildcard expressions can appear in the middle or end of a term but not at the
-            beginning of the search term.
+         
+         <dt>
+           <b>Wildcard Query</b>
+         </dt>
+         
+         <dd>
+           A <i>wildcard</i> query uses a wildcard expression, to search within individual terms for
+           matches. Wildcard expressions can be any single character (<codeph>?</codeph>) or zero to many characters
+           (<codeph>*</codeph>). Wildcard expressions can appear in the middle or end of a term, but not at the
+            beginning.
+            
             <codeblock outputclass="language-json">{ 
  "wildcard": "inter*",
  "field": "reviews.content" 
-}</codeblock></dd>
+}</codeblock>
+           
+           <p>
+             A wildcard query is also demonstrated by means of the Java SDK, in
+             <xref href="../sdk/java/full-text-searching-with-sdk.dita" scope="local" format="dita">Searching with the SDK</xref>.
+           </p>
+         
+         </dd>
+         
        </dlentry>
+       
        <dlentry>
-         <dt>Boolean Field Query</dt>
-         <dd>The Boolean field query searches a field that contains Boolean true or false values. A
-            Boolean field query searches the actual content of the field, and should not be confused
-            with the <xref href="#topic_jfq_fn4_1v/boolean-query" format="dita">Boolean
-              queries</xref> (described in the section on compound queries) that modify whether a
+         
+         <dt>
+           <b>Boolean Field Query</b>
+         </dt>
+         
+         <dd>
+           A <i>boolean field</i> query searches fields that contain boolean <codeph>true</codeph> or 
+           <codeph>false</codeph> values. A
+            boolean field query searches the actual content of the field, and should not be confused
+            with the 
+           <xref href="#topic_jfq_fn4_1v/boolean-query" format="dita">boolean queries</xref> 
+           (described below, in the section on compound queries) that modify whether a
             query must, should, or must not be present.
+            
             <codeblock outputclass="language-json">{
  "bool": true,
  "field": "free_breakfast"
-}</codeblock></dd>
+}</codeblock>
+         
+         </dd>
+         
        </dlentry>
-     </dl></section>
-    <section><title>Compound Queries</title>
+       
+     </dl>
+    </section>
+    
+    <section id="compound-queries">
+      
+      <title>
+        Compound Queries
+      </title>
+      
       <dl>
+        
         <dlentry>
-          <dt>Conjunction Query (AND)</dt>
-          <dd>The conjunction query is a compound query. The result documents must satisfy all of
+          
+          <dt>
+            <b>Conjunction Query (AND)</b>
+          </dt>
+          
+          <dd>
+            A <i>conjunction</i> query contains multiple <i>child queries</i>. Its result documents must satisfy all of
             the child queries.
+            
             <codeblock outputclass="language-json">{
  "conjuncts":[
    {"field":"reviews.content", "match": "location"},
    {"field":"free_breakfast", "bool": true}
  ]
-}</codeblock></dd>
+}</codeblock>
+            
+            <p>
+              A conjunction query is also demonstrated by means of the Java SDK, in
+              <xref href="../sdk/java/full-text-searching-with-sdk.dita" scope="local" format="dita">Searching with the SDK</xref>.
+            </p>
+          
+          </dd>
+          
         </dlentry>
+        
         <dlentry>
-          <dt>Disjunction Query (OR)</dt>
-          <dd>The disjunction query is a compound query. The result documents must satisfy a
-            configurable <userinput>min</userinput> number of child queries. By default this
-              <codeph>min</codeph> is set to 1.
+          
+          <dt>
+            <b>Disjunction Query (OR)</b>
+          </dt>
+          
+          <dd>
+            A <i>disjunction</i> query contains multiple <i>child queries</i>. Its result documents must satisfy a
+            configurable <codeph>min</codeph> number of child queries. By default this
+              <codeph>min</codeph> is set to 1. For example, if three child queries &#8212; A, B, and C &#8212; are
+            specified, a <codeph>min</codeph> of 1 specifies that the result documents should be those returned
+            uniquely for A (with all returned uniquely for B and C, and all returned commonly for A, B, and C, omitted).
+            
             <codeblock outputclass="language-json">{
  "disjuncts":[
    {"field":"reviews.content", "match": "location"},
    {"field":"free_breakfast", "bool": true}
  ]
-}</codeblock></dd>
+}</codeblock>
+            
+            <p>
+              A disjunction query is also demonstrated by means of the Java SDK, in
+              <xref href="../sdk/java/full-text-searching-with-sdk.dita" scope="local" format="dita">Searching with the SDK</xref>.
+            </p>
+          
+          </dd>
+          
         </dlentry>
+        
         <dlentry>
-          <dt id="boolean-query">Boolean Query</dt>
-          <dd>The boolean query is a useful combination of conjunction and disjunction queries. A
-            boolean query takes three lists of queries: <ul>
-              <li>must - result documents must satisfy all of these queries.</li>
-              <li>should - result documents should satisfy these queries.</li>
-              <li>must not - result documents must not satisfy any of these queries.</li>
-            </ul><codeblock outputclass="language-json">{
+          <dt id="boolean-query">
+            <b>Boolean Query</b>
+          </dt>
+          
+          <dd>
+            A <i>boolean query</i> is a combination of conjunction and disjunction queries. A
+            boolean query takes three lists of queries: 
+            
+            <ul>
+              
+              <li>
+                <codeph>must</codeph>: Result documents must satisfy all of these queries.
+              </li>
+              
+              <li>
+                <codeph>should</codeph>: Result documents should satisfy these queries.
+              </li>
+              
+              <li>
+                <codeph>must not</codeph>: Result documents must not satisfy any of these queries.
+              </li>
+            </ul>
+            
+            <codeblock outputclass="language-json">{
  "must": { 
    "conjuncts":[{"field":"reviews.content", "match": "location"}]},
  "must_not": { 
    "disjuncts": [{"field":"free_breakfast", "bool": false}]},
  "should": { 
    "disjuncts": [{"field":"free_breakfast", "bool": true}]}
-}</codeblock></dd></dlentry>
+}</codeblock>
+          </dd>
+          
+        </dlentry>
+        
       <dlentry>
-        <dt>Doc ID Query</dt>
-        <dd>The doc ID query returns the indexed document or documents among the specified set. This
-            is typically used in conjunction queries to restrict the scope of other queries’ output.
-            <codeblock outputclass="language-json">{ "ids": [ "hotel_10158", "hotel_10159" ] }</codeblock></dd>
+        
+        <dt>
+          <b>Doc ID Query</b>
+        </dt>
+        
+        <dd>
+          A <i>doc ID</i> query returns the indexed document or documents among the specified set. This
+            is typically used in conjunction queries, to restrict the scope of other queries’ output.
+            
+            <codeblock outputclass="language-json">{ "ids": [ "hotel_10158", "hotel_10159" ] }
+            </codeblock>
+          
+          <p>
+            A doc ID Query is demonstrated by means of the Java SDK, in
+            <xref href="../sdk/java/full-text-searching-with-sdk.dita" scope="local" format="dita">Searching with the SDK</xref>.
+          </p>
+          
+        </dd>
+        
       </dlentry>
+        
       </dl>
+      
     </section>
-    <section><title>Range Queries</title>
+    
+    <section id="range-queries">
+      
+      <title>
+        Range Queries
+      </title>
+      
       <dl>
+        
         <dlentry>
-          <dt>Date Range Query</dt>
-          <dd>The date range query finds documents containing a date value in the specified field
-            within the specified range. Full text search and Bleve expect dates to be in the format
-            specified by <xref href="https://www.ietf.org/rfc/rfc3339.txt" format="html"
-              scope="external">RFC-3339</xref>, which is a specific profile of ISO-8601 that is more
-            restrictive. Define the endpoints using the fields <parmname>start</parmname> and
-              <parmname>end</parmname>. You can omit one endpoint, but not both. The
+          
+          <dt>
+            <b>Date Range Query</b>
+          </dt>
+          
+          <dd>
+            A <i>date range</i> query finds documents containing a date value, in the specified field
+            within the specified range. Dates should be in the format
+            specified by <xref href="https://www.ietf.org/rfc/rfc3339.txt" format="html" scope="external">RFC-3339</xref>, 
+            which is a specific profile of ISO-8601. Define the endpoints using the fields <parmname>start</parmname> and
+              <parmname>end</parmname>. One endpoint can be omitted, but not both. The
               <parmname>inclusiveStart</parmname> and <parmname>inclusiveEnd</parmname> properties
-            in the query JSON control whether or not the end points are included or excluded.
+            in the query JSON control whether or not the endpoints are included or excluded.
+            
             <codeblock outputclass="language-json">{ 
  "start": "2001-10-09T10:20:30-08:00",
  "end": "2016-10-31",
  "inclusive_start": false,
  "inclusive_end": false,
  "field": "review_date" 
-}</codeblock></dd>
+}</codeblock>
+          </dd>
+          
         </dlentry>
+        
         <dlentry>
-          <dt>Numeric Range Query</dt>
-          <dd>The numeric range query finds documents containing a numeric value in the specified
+          
+          <dt>
+            <b>Numeric Range Query</b>
+          </dt>
+          
+          <dd>
+            A <i>numeric range</i> query finds documents containing a numeric value in the specified
             field within the specified range. Define the endpoints using the fields
               <parmname>min</parmname> and <parmname>max</parmname>. You can omit one endpoint, but
             not both. The <parmname>inclusiveMin</parmname> and <parmname>inclusiveMax</parmname>
-            properties control whether or not the end points are included or excluded. By default,
+            properties control whether or not the endpoints are included or excluded. By default,
               <parmname>min</parmname> is inclusive and <parmname>max</parmname> is exclusive.
+            
             <codeblock outputclass="language-json">{ 
  "min": 100, "max": 1000,
  "inclusive_min": false,
  "inclusive_max": false,
  "field": "id" 
-}</codeblock></dd></dlentry> </dl>
+}</codeblock>
+            
+            <p>
+              A numeric range Query is also demonstrated by means of the Java SDK, in
+              <xref href="../sdk/java/full-text-searching-with-sdk.dita" scope="local" format="dita">Searching with the SDK</xref>.
+            </p>
+          
+          </dd>
+        
+        </dlentry> 
+      
+      </dl>
+      
     </section>
-    <section id="query-string-query-syntax"><title>Query String Query</title>
-      <p>Also known as the String Query, the query string query allows humans to describe complex queries using a simple syntax. When you search a full text index with the Web Console, you use this query syntax. </p><note>Certain queries that are supported by FTS are not yet supported by the query string syntax. This includes wildcards, regexp, and date range queries.</note>
+    
+    <section id="query-string-query-syntax">
+      
+      <title>
+        Query String Query
+      </title>
+      
+      <p>
+        A <i>query string</i> can be used, to express a given query by means of a special syntax. 
+      </p> 
+      
       <codeblock outputclass="language-json">{ "query": "+nice +view" }</codeblock>
-<dl>
-  <dlentry>
-    <dt>Match</dt>
-    <dd>A term without any other syntax is interpreted as a match query for the term in the default
-            field. The default field is <codeph>_all</codeph> unless overridden in the <xref
-              href="fts-custom-mapping.dita#topic_hfg_hh4_1v/def-field-all">index mapping</xref>.
-              <p>Example: <codeph>water</codeph> performs a <xref href="#topic_jfq_fn4_1v/match-query" format="dita"
-                >Match Query</xref> for the term "water".</p></dd>
-  </dlentry>
-  <dlentry>
-    <dt>Match Phrases</dt>
-    <dd>Placing the search terms in quotes performs a match phrase query. This is not an exact match, see <xref href="#topic_jfq_fn4_1v/match-phrase-query" format="dita"
-      >Match Phrases Query</xref> for more information. <p>Example: "<userinput>light beer</userinput>" performs a <xref href="#topic_jfq_fn4_1v/match-phrase-query" format="dita"
-        >Match Phrases Query</xref> for the phrase "<codeph>light beer</codeph>".</p></dd>
-  </dlentry>
-  <dlentry>
-    <dt>Field Scoping</dt>
-    <dd>You can qualify the field for these searches by prefixing them with the name of the field separated by a colon.
-      <p>Example: <userinput>description:water</userinput> performs a <xref href="#topic_jfq_fn4_1v/match-query" format="dita">Match Query</xref> for the term "<codeph>water</codeph>", in the <codeph>description</codeph> field.</p></dd>
-  </dlentry>
-  <dlentry>
-    <dt>Required, Optional, and Exclusion</dt>
-    <dd>When your query string includes multiple items, by default these are placed into the SHOULD
-            clause of a <xref
-              href="http://www.blevesearch.com/docs/Query/#boolean:8f767fbc41af8ff1ddcf4c60ed8c0fe9"
-              format="html" scope="external">Boolean Query</xref>. <p>You can change this by prefixing your items with a <codeph>+</codeph> or ‘<codeph>-</codeph>’<codeph>.</codeph> <codeph>*</codeph> ‘<codeph>+</codeph>’ Prefixing with plus places that item in the MUST portion of the boolean query. <codeph>*</codeph> ‘<codeph>-</codeph>’ Prefixing with a minus places that item in the MUST NOT portion of the boolean query.</p>
-      <p>Example: <codeph>+description:water -light beer</codeph> will perform a boolean query that MUST satisfy the match query for the term "<codeph>water</codeph>" in the description field, MUST NOT satisfy the match query for the term "<codeph>light</codeph>" in the default field, and SHOULD satisfy the match query for the term "<codeph>beer</codeph>" in the default field. Result documents satisfying the SHOULD clause will score higher than those that do not.</p></dd>
-  </dlentry>
-  <dlentry>
-    <dt>Boosting</dt>
-    <dd>You can influence the relative importance of the clauses by suffixing clauses with the <codeph>^</codeph> operator followed by a number. <p>Example: <codeph>description:water name:water^5</codeph> will perform match queries for "<codeph>water</codeph>" in both the <codeph>name</codeph> and <codeph>description</codeph> fields, but documents having the term in the <codeph>name</codeph> field will score higher.</p></dd>
-  </dlentry>
-  <dlentry>
-    <dt>Numeric Ranges</dt>
-    <dd>You can perform numeric ranges by using the &gt;, &gt;=, &lt;, and &lt;= operators, followed by a numeric value. <p>Example: <codeph>abv:&gt;10</codeph> will perform an Numeric Range Query on the <codeph>abv</codeph> field for values greater than ten.</p></dd>
-  </dlentry>
-</dl>
-    </section>
-    <section><title>Special Queries</title>
-      <p>Special queries are usually used in combination with other queries or used to test the systems.</p>
+        
+      <p>
+        A query string Query is demonstrated by means of the Java SDK, in
+        <xref href="../sdk/java/full-text-searching-with-sdk.dita" scope="local" format="dita">Searching with the SDK</xref>.
+        Note also that the Full Text Searches conducted with the Couchbase Web Console themselves
+        use query strings. (See
+        <xref href="./fts-searching-from-the-ui.dita" scope="local" format="dita">Searching from the UI</xref>.)
+      </p>
+      
+      <p>
+        Certain queries supported by FTS are not yet supported by the query string syntax. 
+        This includes wildcards, regexp, and date range queries.
+      </p>
+      
+      <p>
+        Using the query string syntax, the following query types can be performed:
+      </p>
+
       <dl>
+        
         <dlentry>
-          <dt>Match All Query</dt>
-          <dd>Matches all documents in the index. Be aware that this query will match all documents
-            that were indexed even if they have no terms in the index. For example, if a custom map
-            is created on the travel-sample bucket that indexes documents of type="zucchini", the
-            match all query returns all document IDs in the bucket even though there are no
-            documents of type="zucchini". This can be very counter-intuitive.
+          
+          <dt>
+            <b>Match</b>
+          </dt>
+          
+          <dd>
+            A term without any other syntax is interpreted as a match query for the term in the default
+            field. The default field is <codeph>_all</codeph>.
+            
+            <p>
+             For example, <codeph>water</codeph> performs a 
+             <xref href="#topic_jfq_fn4_1v/match-query" format="dita">Match Query</xref> 
+             for the term <codeph>water</codeph>.
+            </p>
+          
+          </dd>
+          
+        </dlentry>
+        
+        <dlentry>
+          
+          <dt>
+            <b>Match Phrases</b>
+          </dt>
+          
+          <dd>
+            Placing the search terms in quotes performs a match phrase query. For example: 
+            <userinput>light beer</userinput> performs a 
+            <xref href="#topic_jfq_fn4_1v/match-phrase-query" format="dita">match phrase query</xref> 
+            for the phrase <codeph>light beer</codeph>.
+          </dd>
+          
+        </dlentry>
+        
+        <dlentry>
+          
+          <dt>
+            <b>Field Scoping</b>
+          </dt>
+          
+          <dd>
+            The specified field in which to search can be specified by prefixing the term with a field-name, separated by a colon.
+            For example, <userinput>description:water</userinput> 
+            performs a <xref href="#topic_jfq_fn4_1v/match-query" format="dita">match query</xref> for the 
+            term <codeph>water</codeph>, in the <codeph>description</codeph> field.
+          </dd>
+          
+        </dlentry>
+        
+        <dlentry>
+          
+          <dt>
+            <b>Required, Optional, and Exclusion</b>
+          </dt>
+          
+          <dd>
+            
+            When a query string includes multiple items, by default these are placed into the SHOULD
+            clause of a 
+            <xref href="http://www.blevesearch.com/docs/Query/#boolean:8f767fbc41af8ff1ddcf4c60ed8c0fe9"
+                    format="html" scope="external">boolean query</xref>. This can be adjusted, by prefixing items 
+            with either <codeph>+</codeph> or <codeph>-</codeph>.
+            Prefixing with <codeph>+</codeph> places that item in the MUST portion of the boolean query.  Prefixing 
+            with <codeph>-</codeph> places that item in the MUST NOT portion of the boolean query.
+            
+            <p>
+              For example, <codeph>+description:water -light beer</codeph> performs a boolean query that MUST satisfy the 
+              match query for the term <codeph>water</codeph> in the <codeph>description</codeph> field, MUST NOT satisfy 
+              the match query 
+              for the term <codeph>light</codeph> in the <codeph>default</codeph> field, and SHOULD satisfy the match query 
+              for the term <codeph>beer</codeph> in the <codeph>default</codeph> field. Result documents satisfying the 
+              SHOULD clause score higher than those that do not.
+             </p>
+            
+          </dd>
+          
+        </dlentry>
+        
+        <dlentry>
+          
+          <dt>
+            <b>Boosting</b>
+          </dt>
+          
+          <dd>
+            
+            When multiple query-clauses are specified, the relative importance a given clause can be specified
+            by suffixing it with the <codeph>^</codeph> operator, 
+            followed by a number. For example, <codeph>description:water name:water^5</codeph> performs Match Queries
+            for <codeph>water</codeph> in both the <codeph>name</codeph> and <codeph>description</codeph> fields, 
+            but documents having the term in the <codeph>name</codeph> field score higher.
+            
+          </dd>
+          
+        </dlentry>
+        
+        <dlentry>
+          
+          <dt>
+            <b>Numeric Ranges</b>
+          </dt>
+          
+          <dd>
+            
+            Numeric ranges can be specified with the &gt;, &gt;=, &lt;, and &lt;= operators, each followed by a 
+            numeric value. For example, <codeph>abv:&gt;10</codeph> performs a numeric range query on 
+            the <codeph>abv</codeph> field, for values greater than 10.
+            
+            <p>
+              A numeric range query is demonstrated by means of the Java SDK, in
+              <xref href="../sdk/java/full-text-searching-with-sdk.dita" scope="local" format="dita">Searching with the SDK</xref>.
+            </p>
+          
+          </dd>
+          
+        </dlentry>
+          
+      </dl>
+      
+    </section>
+    
+    <section id="non-analytic-queries">
+      
+      <title>
+        Non-Analytic Queries
+      </title>
+      
+      <p>
+        <i>Term</i> and <i>Phrase</i> queries support no analysis on
+        their inputs. This means that only exact matches are returned.
+      </p>
+      
+      <p>
+        In most cases, given the benefits of using analyzers, use of match and match phrase queries 
+        is preferable to that of term and phrase. For information on analyzers, see
+        <xref href="./fts-using-analyzers.dita" scope="local" format="dita">Understanding Analyzers</xref>.
+      </p>
+      
+      
+      <dl>
+        
+        <dlentry>
+          
+          <dt>
+            <b>Term Query</b>
+          </dt>
+          
+          <dd>
+            A <i>term</i> query is the simplest possible query. It performs an exact
+            match in the index for the provided term. 
+            
+            <codeblock outputclass="language-json">{
+              "term": "locate",
+              "field": "reviews.content"
+              }</codeblock>
+            
+            <p>
+              Term queries are also demonstrated by means of the Java SDK, in
+              <xref href="../sdk/java/full-text-searching-with-sdk.dita" scope="local" format="dita">Searching with the SDK</xref>.
+            </p>
+            
+          </dd>
+          
+        </dlentry>
+        
+        <dlentry>
+          
+          <dt>
+            <b>Phrase Query</b>
+          </dt>
+          
+          <dd>
+            A <i>phrase query</i> searches for terms occurring in the specified position and offsets.
+            It performs an exact term-match for all the phrase-constituents,
+            without using an analyzer. 
+            
+            <codeblock outputclass="language-json">{
+              "terms": ["nice", "view"],
+              "field": "reviews.content"
+              }</codeblock>
+            
+            <p>
+              A phrase query is also demonstrated by means of the Java SDK, in
+              <xref href="../sdk/java/full-text-searching-with-sdk.dita" scope="local" format="dita">Searching with the SDK</xref>.
+            </p>
+            
+          </dd>
+          
+        </dlentry>
+        
+      </dl>
+      
+    </section>
+    
+    <section id="special-queries">
+      
+      <title>
+        Special Queries
+      </title>
+      
+      <p>
+        <i>Special</i> queries are usually employed either in combination with other queries, or to test the system.
+      </p>
+      
+      <dl>
+        
+        <dlentry>
+          
+          <dt>
+            <b>Match All Query</b>
+          </dt>
+          
+          <dd>
+            Matches <i>all</i> documents in an index,
+            irrespective of terms. For example, if an index
+            is created on the <codeph>travel-sample</codeph> bucket for documents of type <codeph>zucchini</codeph>, the
+            <i>match all</i> query returns all document IDs from the <codeph>travel-sample</codeph> bucket, even though
+            the bucket
+            contains no documents of type <codeph>zucchini</codeph>. 
+            
             <codeblock outputclass="language-json">{ "match_all": {} }</codeblock></dd>
+          
         </dlentry>
+        
         <dlentry>
-          <dt>Match None Query</dt>
-          <dd>Matches no documents in the index. <codeblock outputclass="language-json">{ "match_none": {} }</codeblock></dd>
+          
+          <dt>
+            <b>Match None Query</b>
+          </dt>
+          
+          <dd>
+            Matches no documents in the index. 
+            
+            <codeblock outputclass="language-json">{ "match_none": {} }</codeblock>
+            
+          </dd>
+          
         </dlentry>
+        
       </dl>
+      
     </section>
-    <section>
-      <title>Queries without Analysis</title>
-      <p><codeph>Term</codeph> and <codeph>Phrase</codeph> queries do not perform any analysis on
-        their inputs. This is useful for debugging exactly what is in an index, and in certain other
-        special cases, but it is often used by accident. A <codeph>term</codeph> search is often
-        used in a compound query  to include or exclude certain documents where you can check an
-        exact value. </p>
-      <p>Typically, users want <codeph>match</codeph> and <codeph>phrase match</codeph> queries
-        instead. In most full text queries, an analyzer is used on both the text to be indexed and
-        the query terms. Because the terms in the index have usually been run through an analyzer
-        and a stemmer, they often no longer look like normal language. For example, after analysis
-        the terms in an index might look like "natio" or "beaut" instead of "National" or
-        "beauties". End users of search systems never see the stored terms but, because their
-        queries are also run through the same analyzer that was used to build the index, the results
-        match.</p>
-      <p> </p>
-      <dl>
-        <dlentry>
-          <dt>Term Query</dt>
-          <dd>A <codeph>term</codeph> query is the simplest possible query. It performs an exact
-            match in the index for the provided term. Most of the time users should use a Match
-            Query instead. <p>For example, a term query for "lovingli" would match documents with
-              the term "lovingly" if they were indexed with the "<codeph>en</codeph>" analyzer. A
-              term query for the "lovingly" won’t match any documents that were indexed with the
-                "<codeph>en</codeph>" analyzer.
-            </p><codeblock outputclass="language-json">{
- "term": "locate",
- "field": "reviews.content"
-}</codeblock></dd>
-        </dlentry>
-        <dlentry>
-          <dt>Phrase Query</dt>
-          <dd>A phrase query searches for terms occurring in the specified position and offsets.
-              <p>The phrase query performs an exact term match for all the phrase constituents
-              without using an analyzer. If you want the phrase to be analyzed, consider using the
-              Match Phrase Query
-            instead.</p><codeblock outputclass="language-json">{
- "terms": ["nice", "view"],
- "field": "reviews.content"
-}</codeblock></dd>
-        </dlentry>
-      </dl>
-    </section>
+    
   </body>
+  
 </topic>
