@@ -2,7 +2,7 @@
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_qz5_bgk_np">
  <title>LET clause</title>
- <shortdesc>Use <codeph>LET</codeph> to create and use variables within a query.</shortdesc>
+ <shortdesc>Use <codeph>LET</codeph> to create variables for later use within a query.</shortdesc>
 
  <body>
     <p><i>(Introduced in Couchbase Server 4.0)</i></p>
@@ -13,15 +13,22 @@
         keyword, which creates a new variable and initializes it with the result of the expression
         you supply. You can use the <codeph>LET</codeph> clause within an array, in a for-loop, or
         independently.</p>
-      <p>For example, set a variable to 71, detailed in <xref
+      <p>For example, create a variable for the minimum latitude and set it to 71 (detailed in <xref
           href="#topic_qz5_bgk_np/examples_section" format="dita">Example
-        1</xref>:<codeblock>SELECT airportname, geo.lat
+        1</xref>):<codeblock>SELECT airportname, geo.lat
 FROM `travel-sample`
 <b>LET minimum_lat = 71</b>
 WHERE geo.lat > minimum_lat;</codeblock>Without
-        the LET clause, your complex queries would need to be divided into two separate queries: one
-        query to get a particular value (or set of values), and one query to use the value (or
-        values) from the first query.</p>
+        the <codeph>LET</codeph> clause, your complex queries would need to be divided into two
+        separate queries: <ul id="ul_ghs_knk_rcb">
+          <li>One query to get a particular value (or set of values), and </li>
+          <li>One query to use the value (or values) from the first query.</li>
+        </ul>If the <codeph>LET</codeph> variable is referenced in the <codeph>WHERE</codeph>
+        clause, then it is evaluated before the <codeph>WHERE</codeph> clause; otherwise, it is
+        evaluated after the <codeph>WHERE</codeph> clause.</p>
+      <p>The <codeph>LET</codeph> clause can't be chained and can't be referenced by another
+          <codeph>LET</codeph> variable.</p>
+      <p>Each <codeph>LET</codeph> alias needs to be unique within its scope.</p>
     </section>
     <section id="section_wmc_lyp_2cb">
       <title>Prerequisites</title>
@@ -33,8 +40,10 @@ WHERE geo.lat > minimum_lat;</codeblock>Without
     </section>
     <section id="section_ofl_myp_2cb">
       <title>Syntax</title>
-      <p><codeblock>LET (<varname>alias</varname> = <varname>expr</varname>) [, (<varname>alias2</varname> = <varname>expr2</varname>)]*</codeblock><image
-          href="images/let-clause.png" id="image_exl_4yp_2cb"/></p>
+      <p><image href="images/let-clause.png" id="image_exl_4yp_2cb"/></p>
+      <p>
+        <codeblock>LET (<varname>alias</varname> = <varname>expr</varname>) [, (<varname>alias2</varname> = <varname>expr2</varname>)]*</codeblock>
+      </p>
     </section>
     <section id="section_od3_pyp_2cb">
       <title>Arguments</title>
@@ -56,53 +65,65 @@ WHERE geo.lat > minimum_lat;</codeblock>Without
     </section>
     <section id="examples_section">
       <title>Examples</title>
-      <p><b>Example 1: Use <codeph>LET</codeph> to set a variable to a number.</b></p>
-      <p>Create the variable <codeph>minimum_lat</codeph> for the minimum latitude and set it to
-        "71" to use later for airport latitudes in the <codeph>WHERE</codeph> clause.</p>
-      <p><codeblock>SELECT airportname, geo.lat
-FROM `travel-sample`<b>
-LET minimum_lat = 71</b>
-WHERE geo.lat > minimum_lat;</codeblock>Results:<codeblock>[
+      <p><b>Example 1: Use <codeph>LET</codeph> to set variables to a number, an operation on a
+          field, and a subquery.</b></p>
+      <p>Find all airports and cities between certain latitudes in a country with a landmark.</p>
+      <p><codeblock>SELECT t1.airportname, t1.geo.lat, t1.geo.lon, t1.city, t1.type
+FROM `travel-sample` t1
+<b>LET min_lat = 71, max_lat = ABS(t1.geo.lon)*4+1, 
+    place = (SELECT RAW t2.country 
+            FROM `travel-sample` t2
+            WHERE t2.type = "landmark")</b>
+WHERE t1.type = "airport"
+AND t1.geo.lat > <b>min_lat</b>
+AND t1.geo.lat &lt; <b>max_lat</b>
+AND t1.country IN <b>place</b>;</codeblock>Results:<codeblock>[
   {
     "airportname": "Wiley Post Will Rogers Mem",
-    "lat": 71.285446
+    "city": "Barrow",
+    "lat": 71.285446,
+    "type": "airport"
   },
   {
     "airportname": "Dillant Hopkins Airport",
-    "lat": 72.270833
+    "city": "Keene",
+    "lat": 72.270833,
+    "type": "airport"
   }
-]</codeblock></p>
-      <p><b>Example 2: Use <codeph>LET</codeph> to assign a variable in a for-loop through an
-          array.</b></p>
-      <p>Create the variable <codeph>items</codeph> to search through the <codeph>lat</codeph> field
-        for values larger than 70 of the array <codeph>item</codeph>.</p>
-      <p><codeblock>SELECT airportname, geo.lat AS high_latitude 
-FROM `travel-sample`
-<b>LET items = ARRAY item FOR item IN geo.lat WHEN item.lat > 70 END</b>
-WHERE airportname IS NOT NULL
-ORDER BY geo.lat DESC
-LIMIT 5;</codeblock>Results:<codeblock>[
+]
+</codeblock></p>
+      <p><b>Example 2: Use <codeph>LET</codeph> to set a variable in an array.</b></p>
+      <p>Find all Sunday flights (<codeph>day = 0</codeph>) to the Charles De Gaulle airport
+          (<codeph>CDG</codeph>) on Air India (<codeph>AI</codeph>) airlines.<note> In this example,
+          the <codeph>LET</codeph> variable sch is not used in the <codeph>WHERE</codeph> clause but
+          used only in the projection. Therefore, the Query Planner defers the evaluation to
+          post-predicate evaluation, so there is no overhead for documents that are not qualified by
+          the predicates.</note></p>
+      <p><codeblock>SELECT t1.airline, t1.destinationairport, <b>sch AS schedule</b>
+FROM `travel-sample` AS t1
+<b>LET sch = ARRAY v FOR v IN t1.schedule WHEN v.day = 0 END</b>
+WHERE type = "route"
+AND t1.destinationairport = "CDG"
+AND t1.airline = "AI";
+</codeblock>Results:<codeblock>[
   {
-    "airportname": "Dillant Hopkins Airport",
-    "high_latitude": 72.270833
-  },
-  {
-    "airportname": "Wiley Post Will Rogers Mem",
-    "high_latitude": 71.285446
-  },
-  {
-    "airportname": "Wainwright Airport",
-    "high_latitude": 70.638056
-  },
-  {
-    "airportname": "Wainwright As",
-    "high_latitude": 70.613378
-  },
-  {
-    "airportname": "Atqasuk Edward Burnell Sr Memorial Airport",
-    "high_latitude": 70.4673
+    "airline": "AI",
+    "destinationairport": "CDG",
+    "schedule": [
+      {
+        "day": 0,
+        "flight": "AI988",
+        "utc": "00:24:00"
+      },
+      {
+        "day": 0,
+        "flight": "AI972",
+        "utc": "17:32:00"
+      }
+    ]
   }
-]</codeblock></p>
+]
+</codeblock></p>
     </section>
   </body>
 </topic>
