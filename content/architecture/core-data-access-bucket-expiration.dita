@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!DOCTYPE topic
+  PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+  
+ <topic xml:lang="en-us" id="bucket-expiration">
+  
+  <title>
+   Bucket-Data Expiration
+  </title>
+  
+  <shortdesc>
+   Bucket-data can be user-specified to expire at a given
+   time. 
+  </shortdesc>
+  
+  <body> 
+   
+   <section>
+    
+    <title>
+     Bucket-Data Expiration and GDPR
+    </title>
+   
+   <p>
+    The European Union's <i>General Data Protection Regulation</i> (GDPR) 
+    mandates the deletion of 
+    EU citizens' personal data from a database, after a certain retention-period has elapsed. 
+    Couchbase buckets therefore allow an <i>expiration time</i> to be specified, per
+    bucket: when the expiration-time is reached, all documents <i>created after
+    specification of the expiration-time</i> are automatically deleted. 
+    This simplifies data-expiration policy-enforcement, and reduces
+    database-overhead.
+   </p>
+   
+   <p>
+    Documents created <i>before</i> specification of the expiration-time are
+    <i>not</i> automatically deleted when the expiration-time is reached.
+   </p>
+   
+   <p>
+    Following automatic deletion of all documents within a bucket, the bucket is
+    not itself deleted: it continues to exist, with all settings unchanged other
+    than that for data-expiration, which is reset to zero &#8212; indicating 
+    indefinite, continued existence for all documents subsequently created without
+    individual expiration-times.
+   </p>
+    
+   </section>
+   
+   <section>
+    
+    <title>
+     Expiration: Bucket versus Document
+    </title>
+   
+   <p>
+    As described in the <i>Expiration Overview</i> section of
+    <xref href="../sdk/core-operations.dita#devguide_kvcore_generic/expiry" scope="local" format="dita">Core Operations</xref>,
+    an expiration-time can be specified <i>per document</i>,
+    by means of Couchbase SDK APIs. In consequence, a document may individually bear an
+    expiration-time that differs from that of the bucket. The rules that apply in such
+    cases can be demonstrated as follows:
+   </p>
+   
+   <ol>
+    <li>
+     At point-in-time <i>T0</i>, the expiration-time for bucket <i>B</i> is specified
+     as a quantity-of-time, <i>M</i>.
+     
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     Subsequently, at point-in-time <i>T1</i>, document <i>D0</i> is created, with no
+     individual document-expiration time specified. <i>D0</i> is therefore deleted at
+     <i>T0</i> + <i>M</i>.
+     
+     <p>
+      
+     </p>
+     
+    </li>
+    
+    <li>
+     Subsequently, at point-in-time <i>T2</i>, document <i>D1</i> is created, with
+     an individual document-expiration time specified as quantity-of-time <i>N0</i>.
+     Therefore:
+     
+     <p>
+      
+     </p>
+     
+     <ul>
+      <li>
+       If either <i>N0</i> = 0 (indefinite existence), 
+       or (<i>T2</i> + <i>N0</i>) > (<i>T0</i> + <i>M</i>), expiration-time for <i>D1</i> is set
+       as <i>T0</i> + <i>M</i>.
+       
+       <p>
+        
+       </p>
+       
+      </li>
+      
+      <li>
+       Otherwise, expiration-time for <i>D1</i> is set as <i>T2</i> + <i>N0</i>.
+       
+       <p>
+        
+       </p>
+      </li>
+      
+     </ul>
+    </li>
+    
+    <li>
+     Subsequently, at point-in-time <i>T3</i>, document <i>D1</i> is updated, with
+     an individual document-expiration time specified as quantity-of-time <i>N1</i>.
+     Therefore:
+     
+     <p>
+      
+     </p>
+     
+     <ul>
+      <li>
+       If either 
+       <i>N1</i> = 0 (indefinite existence), 
+       or (<i>T3</i> + <i>N1</i>) > (<i>T0</i> + <i>M</i>), expiration-time for <i>D1</i> is set
+       as <i>T0</i> + <i>M</i>.
+       
+       <p>
+        
+       </p>
+       
+      </li>
+      
+      <li>
+       Otherwise, expiration-time for <i>D1</i> is set as <i>T3</i> + <i>N1</i>.
+       
+       <p>
+        
+       </p>
+      </li>
+     </ul>
+    </li>
+   </ol>
+   
+   </section>
+   
+   <section id="post-expiration-purging">
+    <title>
+     Post-Expiration Purging
+    </title>
+   </section>
+   
+   <p>
+    As described in 
+    <xref href="./core-data-access-bucket-disk-storage.dita" scope="local" format="dita">Bucket Disk Storage</xref>,
+    after item-deletion, a <i>tombstone</i>, which includes keys and metadata, continues to be
+    maintained, as a record. To ensure compliance with GDPR, tombstones of documents automatically deleted by means
+    of a bucket-specified expiration-time should themselves be explicitly removed by means of a <i>Metadata Purge</i>:
+    this can be scheduled by means of the Couchbase Web Console, as described in
+    <xref href="../settings/configure-compact-settings.dita" scope="local" format="dita">Configuring Auto-Compaction</xref>.
+    Note that to ensure compliance, the interval between purges should be established as appropriately low.
+   </p>
+   
+   <section>
+    
+    <title>
+     Bucket-Expiration and XDCR
+    </title>
+    
+    <p>
+     When a bucket is replicated by means of <i>Cross Data-Center Replication</i> (XDCR), a
+     bucket expiration-time established at the origin is <i>not</i> replicated to the target.
+     If the target's expiration-time should be identical to that of the origin, it must
+     be explicitly set for the target.
+    </p>
+    
+    <p>
+     Metadata purging should also be explicitly scheduled at the target, as described above
+     in
+     <xref href="./core-data-access-bucket-expiration.dita#bucket-expiration/post-expiration-purging">Post-Expiration Purging</xref>.
+    </p>
+    
+    <p>
+     
+    </p>
+    
+   </section>
+   
+   <p>
+    
+   </p>
+   
+  </body>
+  
+ </topic>
