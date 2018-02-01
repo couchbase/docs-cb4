@@ -16,14 +16,24 @@
  
  <body>
   
-  <section id="benefits-of-data-compression">
+  <section id="data-compression-overview">
    
    <title>
-    Benefits of Data Compression
+    Overview
    </title>
    
    <p>
-    
+    The compression of data potentially allows a larger working-set to be maintained in RAM. It may
+    also reduce consumption of network-bandwith. A slightly higher consumption of CPU resources may occur,
+    due to the handling of compression and decompression.
+   </p>
+   
+   <p>
+    Couchbase data-compression is provided by 
+    <xref href="http://en.wikipedia.org/wiki/Snappy_(compression)" scope="external" format="html">Snappy</xref>,
+    which is an open-source, compression-decompression library, written in C++. Compression is optionally applied 
+    to individual buckets, either by the server or by its clients. Clients elect to participate in exchanges of compressed data
+    by using the standard <codeph>HELO</codeph> network command.
    </p>
    
   </section>
@@ -35,8 +45,138 @@
    </title>
    
    <p>
-    
+    The following illustration annotates the Couchbase Server-locations where compression can
+    be applied:
    </p>
+   
+    <p>
+     <image href="./images/compression-overview-diagram.png" id="compression-overview-diagram" align="left" width="600"/>
+    </p>
+   
+   <p>
+    The annotations are explained in the table below.
+   </p>
+   
+   <table frame="all" rowsep="1" colsep="1" id="table_sdk_versions">
+    <title>Couchbase Server Data Compression Locations</title>
+    <tgroup cols="2">
+     
+     <colspec colname="c1" colnum="1" colwidth="0.1*"/>
+     <colspec colname="c2" colnum="2" colwidth="1*"/>
+
+     
+     <thead>
+      <row>
+       <entry><b>Annnotation</b></entry>
+       <entry><b>Explanation</b></entry>
+      </row>
+     </thead>
+     
+     <tbody>
+      
+      <row>
+       
+       <entry>
+        <b>1</b>
+       </entry>
+       
+       <entry>
+        External network clients based on the Couchbase SDK elect to participate in exchanges of compressed
+        data by using the <codeph>HELO</codeph> command with flags that confirm support of the <i>Snappy
+        Compression</i> datatype. This allows the client to send compressed documents to receive them from the
+        server. Such clients must perform their own decompression when necessary.
+       </entry>
+
+      </row>
+      
+      <row>
+       
+       <entry>
+        <b>2</b>
+       </entry>
+       
+       <entry>
+        Couchbase Server may store documents in compressed form <i>in memory</i>, depending
+        on its own internal policies.
+       </entry>
+
+      </row>
+
+      <row>
+       
+       <entry>
+        <b>3</b>
+       </entry>
+       
+       <entry>
+        Couchbase Server stores documents in compressed form on disk.
+       </entry>
+       
+      </row>
+      
+      <row>
+       
+       <entry>
+        <b>4</b>
+       </entry>
+       
+       <entry>
+        Within a cluster, Couchbase Server-nodes elect to participate in compressed-data replication by means of
+        the standard procedure for <i>opt-in</i> used by external network clients, such as the SDK. 
+        Compressed-data replication is optional: if not used, compressed documents are decompressed
+        prior to replication.
+       </entry>
+       
+      </row>
+      
+      <row>
+       
+       <entry>
+        <b>5</b>
+       </entry>
+       
+       <entry>
+        Within a cluster, services elect to participate in compressed-data replication by means of
+        the standard procedure for <i>opt-in</i> used by external network clients, such as the SDK.
+        Services must perform their own decompression when necessary.
+       </entry>
+       
+      </row>
+      
+      <row>
+       
+       <entry>
+        <b>6</b>
+       </entry>
+       
+       <entry>
+        External clients elect to participate in compressed-data replication by means of
+        the standard procedure for <i>opt-in</i> used by the SDK, and must perform their own
+        decompression when necessary.
+       </entry>
+       
+      </row>
+      
+      <row>
+       
+       <entry>
+        <b>7</b>
+       </entry>
+       
+       <entry>
+        XDCR elects to participate in compressed-data replication by means of
+        the standard procedure for <i>opt-in</i> used by the SDK; and must perform their
+        own decompression when necessary.
+       </entry>
+       
+      </row>
+      
+      
+     </tbody>
+     
+    </tgroup>
+    
+   </table>
    
   </section>
   
@@ -47,6 +187,102 @@
     </title>
    
    <p>
+    Couchbase Data-Compression is handled on a per-bucket basis. Each bucket
+    is configured to support one of three modes. After a client has negotiated
+    the ability to participate in exchanges of compressed data, by means of the
+    <codeph>HELO</codeph> flag, the actual handling of data depends on the
+    mode supported by the specified bucket. The modes are:
+   </p>
+   
+   <ul>
+    <li>
+     Off
+    </li>
+    
+    <li>
+     Passive
+    </li>
+    
+    <li>
+     Active
+    </li>
+    
+   </ul>
+   
+   <p>
+    These are described in the following sections.
+   </p>
+   
+  </section>
+  
+  <section>
+   
+   <title>
+    Data-Compression Mode: Off
+   </title>
+   
+    <p>
+     The <i>Off</i> compression mode is sometimes referred to as <i>Legacy</i>, and provides the
+     behavior of Couchbase Server 5.0 and pre-5.0. Therefore, on receipt of a compressed document,
+     Couchbase Server decompresses the document for storing in memory; and recompresses it
+     when storing on disk. When sending the document back to the client, Couchbase Server
+     sends the document in uncompressed form.  
+    </p>
+     
+    <p>
+     This compression mode is useful where client-side compression is
+     either considered too consumptive of CPU resources, or has been so fully
+     implemented as to require no compression on the server.
+    </p>
+   
+    <p>
+     This mode is assigned by default to buckets <i>upgraded</i> from a previous
+     version of Couchbase Server.
+    </p>
+   
+  </section>
+  
+  <section>
+   
+   <title>
+    Data-Compression Mode: Passive
+   </title>
+   
+   <p>
+    On receipt of a compressed document,
+    Couchbase Server stores it <i>in compressed form</i> both in memory
+    and on disk. When sending the document back to the client, Couchbase Server
+    sends the document in compressed form, if this is required by the client.  
+   </p>
+   
+   <p>
+    On receipt of an uncompressed document, Couchbase Server does not
+    compress it for storage in memory. Such documents are compressed for
+    storage on disk, and are sent back to clients in uncompressed form.
+   </p>
+   
+   <p>
+    Replication within the cluster uses a compression-enabled DCP stream.
+   </p>
+   
+   <p>
+    This mode is assigned by default to <i>new</i> buckets, in post-5.0
+    versions of Couchbase Server.
+   </p>
+   
+  </section>
+  
+  <section>
+   
+   <title>
+    Data-Compression Mode: Active
+   </title>
+   
+   <p>
+    Couchbase Server actively compresses documents for storage in memory
+    and on disk, even if the documents are been received in a compressed format. 
+    Documents are decompressed before being sent back to clients that do not
+    participate in exchanges of compressed data.
     
    </p>
    
