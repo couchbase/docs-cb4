@@ -10,8 +10,7 @@
   </title>
   
   <shortdesc>
-   Data within a bucket can be user-specified to expire at a given
-   time. 
+   Bucket Time To Live (TTL) can be user-specified per bucket, in order to define the expiration time for each document.
   </shortdesc>
   
   <body> 
@@ -23,35 +22,24 @@
     </title>
    
    <p>
-    
-    Couchbase Server allows an <i>expiration time</i> to be specified per
-    bucket: when the expiration time is reached, all documents <i>created after
-    specification of the expiration time</i> are automatically deleted. 
-    This simplifies data-expiration policy-enforcement.
+    Bucket TTL is a value, specified per bucket, that determines each document’s expiration time: once created, a 
+    document lives for the number of seconds specified by Bucket TTL. When the expiration time is reached, the document 
+    is marked for deletion, and is deleted on the next access-attempt. Deleted documents and their contents no longer 
+    appear in the results of queries or in views.
    </p>
    
    <p>
-    Documents created <i>before</i> specification of the expiration time are
-    <i>not</i> automatically deleted when the expiration time is reached.
+    The maximum value for Bucket TTL is MAX32INT seconds (2147483648, or 68.096 years). The default value is 0, which 
+    indicates that no expiration time is applied. If an expiration time is modified, documents that existed prior to 
+    the modification remain subject to the previous 
+    expiration time, rather than to the modified expiration time. New documents are subject to 
+    the modified expiration time.
    </p>
    
    <p>
-    Following automatic deletion of all documents within a bucket, the bucket is
-    not itself deleted: it continues to exist, with all settings unchanged other
-    than that for data-expiration, which is reset to zero &#8212; indicating 
-    indefinite, continued existence for all documents subsequently created without
-    individual expiration times.
+    Note that Bucket TTL is only available in the Enterprise Edition of Couchbase Server. 
    </p>
     
-    <p>
-     Deleted documents and their contents no longer appear in the results of
-     queries or in views.
-    </p>
-    
-    <p>
-     Note that this feature is only available in the <i>Enterprise Edition</i> of
-     Couchbase Server.
-    </p>
     
    </section>
    
@@ -64,108 +52,12 @@
    <p>
     As described in the <i>Expiration Overview</i> section of
     <xref href="../sdk/core-operations.dita#devguide_kvcore_generic/expiry" scope="local" format="dita">Core Operations</xref>,
-    an expiration time can be specified <i>per document</i>,
-    by means of Couchbase SDK APIs. In consequence, a document may individually bear an
-    expiration time that differs from that of the bucket. The rules that apply can 
-    be demonstrated as follows:
+    an expiration time can be specified per document, by means of Couchbase SDK APIs: this is referred 
+    to as the document’s TTL. If a document’s TTL is specified to be above Bucket TTL, the TTL is 
+    capped to the level of Bucket TTL.
+    
    </p>
-   
-   <ol>
     
-    <li>
-     At point-in-time <i>T0</i>, the expiration time for bucket <i>B</i> is specified
-     as quantity-of-time <i>M</i>.
-     
-     <p>
-      
-     </p>
-     
-    </li>
-    
-    <li>
-     Subsequently, at point-in-time <i>T1</i>, document <i>D0</i> is created, with no
-     individual document-expiration time specified. Expiration time for <i>D0</i> is therefore
-     set to <i>T0</i> + <i>M</i>.
-     
-     <p>
-      
-     </p>
-     
-    </li>
-    
-    <li>
-     Subsequently, at point-in-time <i>T2</i>, document <i>D1</i> is created, with
-     an individual document-expiration time specified as quantity-of-time <i>N0</i>.
-     Therefore:
-     
-     <p>
-      
-     </p>
-     
-     <ul>
-      
-      <li>
-       If either <i>N0</i> = 0 (indefinite existence), 
-       or (<i>T2</i> + <i>N0</i>) > (<i>T0</i> + <i>M</i>), expiration time for <i>D1</i> is set
-       as <i>T0</i> + <i>M</i>.
-       
-       <p>
-        
-       </p>
-       
-      </li>
-      
-      <li>
-       Otherwise, expiration time for <i>D1</i> is set as <i>T2</i> + <i>N0</i>.
-       
-       <p>
-        
-       </p>
-       
-      </li>
-      
-     </ul>
-     
-    </li>
-    
-    <li>
-     Subsequently, at point-in-time <i>T3</i>, document <i>D1</i> is updated, with
-     an individual document-expiration time specified as quantity-of-time <i>N1</i>.
-     Therefore:
-     
-     <p>
-      
-     </p>
-     
-     <ul>
-      
-      <li>
-       If either 
-       <i>N1</i> = 0 (indefinite existence), 
-       or (<i>T3</i> + <i>N1</i>) > (<i>T0</i> + <i>M</i>), expiration time for <i>D1</i> is set
-       as <i>T0</i> + <i>M</i>.
-       
-       <p>
-        
-       </p>
-       
-      </li>
-      
-      <li>
-       Otherwise, expiration time for <i>D1</i> is set as <i>T3</i> + <i>N1</i>.
-       
-       <p>
-        
-       </p>
-       
-      </li>
-      
-     </ul>
-     
-    </li>
-    
-   </ol>
-   
    </section>
    
    <section id="post-expiration-purging">
@@ -177,12 +69,11 @@
      <p>
       As described in 
       <xref href="./core-data-access-bucket-disk-storage.dita" scope="local" format="dita">Bucket Disk Storage</xref>,
-      for each document that is deleted, a <i>tombstone</i>, which includes keys and metadata, continues to be
-      maintained by Couchbase Server for some period of time, as a record: this applies to all instances of 
-      document-deletion, including those
-      achieved by specifying a bucket-expiration time. To ensure that no trace of deleted documents remains, tombstones
-      should themselves be explicitly removed through a <i>Metadata Purge</i>:
-      this can be scheduled by means of the Couchbase Web Console, as described in
+      for each document that is deleted, a tombstone, which includes key and metadata, continues to be maintained by 
+      Couchbase Server for some period of time, as a record: this applies to all instances of document-deletion, 
+      including those achieved by specifying Bucket TTL. To ensure that no trace of deleted documents remains, 
+      tombstones should themselves be explicitly 
+      removed through a Metadata Purge: this can be scheduled by means of the Couchbase Web Console, as described in
       <xref href="../settings/configure-compact-settings.dita" scope="local" format="dita">Configuring Auto-Compaction</xref>.
       Note that the console allows the interval between purges to be established as low, in order to
       ensure prompt tombstone removal.
@@ -197,33 +88,23 @@
     </title>
     
     <p>
-     When a bucket is replicated by means of <i>Cross Data-Center Replication</i> (XDCR), a
-     bucket-expiration time established at the origin-cluster is replicated to the target-cluster <i>only if so specified</i>
-     by the user, prior to the start of XDCR. If no bucket-expiration time is replicated, the bucket's documents,
-     following their replication 
-     to the target-cluster, will <i>not</i> be automatically deleted from the target-cluster 
-     when the bucket-expiration time is reached.
+     When Cross Data-Center Replication occurs, the Bucket TTL setting does not get propagated from the source bucket 
+     to the target. However, documents within the source bucket that have individual expiration times, including ones 
+     derived from the source Bucket TTL setting, are replicated to the target along with their individual expiration times. 
+    </p>
+     
+    <p>
+     Buckets in the target cluster can have their own Bucket TTL settings, which may not correspond to those 
+     of the buckets in the source. If the expiration time of a replicated document is, on the target cluster, above 
+     that of Bucket TTL, the document’s TTL is capped to the level of Bucket TTL.
     </p>
     
     <p>
-     Following replication of a bucket-expiration time to a target-cluster,
-     metadata purging should be explicitly scheduled at the target-cluster; as described above, in
-     <xref href="./core-data-access-bucket-expiration.dita#bucket-expiration/post-expiration-purging">Post-Expiration Purging</xref>.
-    </p>
-    
-    <p>
-     Note that when a document is replicated by XDCR, its expiration time is communicated to the 
-     target as <i>absolute</i>. This requires that
-     the system-clocks of the respective clusters be fully synchronized; otherwise, inconsistent behavior may 
-     result (as, for example,
-     in the case where a document arrives at the target-cluster with an absolute expiration time that is 
-     earlier than the current time
-     acknowledged by the target-cluster).
-    </p>
-    
-    <p>
-     For details on replicating bucket-expiration times with XDCR, see
-     <xref href="../xdcr/xdcr-create.dita" scope="local" format="dita">Managing XDCR</xref>.
+     Note that when a document is replicated by XDCR, its expiration time is communicated to the target as absolute. 
+     This requires that the system clocks of the respective clusters be fully synchronized; otherwise, inconsistent 
+     behavior may result (as, for example, in the case where a document arrives at the target-cluster with an absolute 
+     expiration time that is earlier than the current time acknowledged by the target-cluster). See
+     <xref href="../install/synchronize-clocks-using-ntp.dita" scope="local" format="dita">Clock Sync with NTP</xref>.
     </p>
     
    </section>
