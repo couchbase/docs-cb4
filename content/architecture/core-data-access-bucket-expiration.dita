@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!DOCTYPE topic
+  PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+  
+<topic xml:lang="en-us" id="bucket-expiration">
+ 
+ <title>
+  Bucket Expiration
+ </title>
+ 
+ <shortdesc>
+  <i>Bucket Time To Live</i> (TTL) can be user-specified per bucket, in order to define the expiration time for each document.
+ </shortdesc>
+ 
+ <body> 
+  
+  <section id="bucket-data-expiration-overview">
+   
+   <title>
+    Overview
+   </title>
+   
+   <p>
+    Bucket TTL is a value, specified per bucket, that determines each document’s expiration time: once created, a 
+    document lives for the number of seconds specified by Bucket TTL. When the expiration time is reached, the document 
+    is marked for deletion, and is deleted on the next access-attempt. Deleted documents and their contents no longer 
+    appear in the results of queries or in views.
+   </p>
+   
+   <p>
+    The maximum value for Bucket TTL is MAX32INT seconds (2147483648, or 68.096 years). The default value is 0, which 
+    indicates that no expiration time is applied. If an expiration time is modified, documents that existed prior to 
+    the modification remain subject to the previous 
+    expiration time, rather than to the modified expiration time. New documents are subject to 
+    the modified expiration time.
+   </p>
+   
+   <p>
+    Note that Bucket TTL is only available in the Enterprise Edition of Couchbase Server. 
+   </p>
+   
+   
+  </section>
+  
+  <section id="expiration-bucket-versus-document">
+   
+   <title>
+    Expiration: Bucket versus Document
+   </title>
+   
+   <p>
+    As described in the <i>Expiration Overview</i> section of
+    <xref href="../sdk/core-operations.dita#devguide_kvcore_generic/expiry" scope="local" format="dita">Core Operations</xref>,
+    an expiration time can be specified per document, by means of Couchbase SDK APIs: this is referred 
+    to as the document’s TTL. If a document’s TTL is specified to be above Bucket TTL, the TTL is 
+    capped to the level of Bucket TTL.
+    
+   </p>
+   
+  </section>
+  
+  <section id="post-expiration-purging">
+   
+   <title>
+    Post-Expiration Purging
+   </title>
+   
+   <p>
+    As described in 
+    <xref href="./core-data-access-bucket-disk-storage.dita" scope="local" format="dita">Bucket Disk Storage</xref>,
+    for each document that is deleted, a tombstone, which includes key and metadata, continues to be maintained by 
+    Couchbase Server for some period of time, as a record: this applies to all instances of document-deletion, 
+    including those achieved by specifying Bucket TTL. To ensure that no trace of deleted documents remains, 
+    tombstones should themselves be explicitly 
+    removed through a Metadata Purge: this can be scheduled by means of the Couchbase Web Console, as described in
+    <xref href="../settings/configure-compact-settings.dita" scope="local" format="dita">Configuring Auto-Compaction</xref>.
+    Note that the console allows the interval between purges to be established as low, in order to
+    ensure prompt tombstone removal.
+   </p>
+   
+  </section>
+  
+  <section id="bucket-expiration-and-xdcr">
+   
+   <title>
+    Bucket-Expiration and XDCR
+   </title>
+   
+   <p>
+    When Cross Data-Center Replication occurs, the Bucket TTL setting does not get propagated from the source bucket 
+    to the target. However, documents within the source bucket that have individual expiration times, including ones 
+    derived from the source Bucket TTL setting, are replicated to the target along with their individual expiration times. 
+   </p>
+   
+   <p>
+    Buckets in the target cluster can have their own Bucket TTL settings, which may not correspond to those 
+    of the buckets in the source. If the TTL of a replicated document is, on the target cluster, above 
+    that of Bucket TTL, the document’s TTL is capped to the level of Bucket TTL.
+    In such cases, 
+    <xref href="../xdcr/xdcr-conflict-resolution.dita" scope="local" format="dita">XDCR conflict resolution</xref>
+    (which is an automated process that maintains consistency 
+    between documents modified in different locations) subsequently results in the TTL of the document at the source 
+    also being capped to that of the target’s Bucket TTL. 
+   </p>
+   
+   <p>
+    Note that when a document is replicated by XDCR, its expiration time is communicated to the target as absolute. 
+    This requires that the system clocks of the respective clusters be fully synchronized; otherwise, inconsistent 
+    behavior may result (as, for example, in the case where a document arrives at the target-cluster with an absolute 
+    expiration time that is earlier than the current time acknowledged by the target-cluster). See
+    <xref href="../install/synchronize-clocks-using-ntp.dita" scope="local" format="dita">Clock Sync with NTP</xref>.
+   </p>
+   
+  </section>
+  
+  <section id="setting-bucket-data-expiration">
+   
+   <title>
+    Setting Bucket-Expiration
+   </title>
+   
+   <p>
+    An expiration time can be set for a bucket by means of any of the following:
+   </p>
+   
+   <ul>
+    
+    <li>
+     The APIs of the Couchbase SDK. See
+     <xref href="../sdk/core-operations.dita" scope="local" format="dita">Core Operations</xref>.
+     <p>
+     </p>
+     
+    </li>
+    
+    <li>
+     The UI provided by the Couchbase Web Console. See
+     <xref href="../clustersetup/create-bucket.dita" scope="local" format="dita">Create a Bucket</xref>.
+     <p>
+     </p>
+     
+    </li>
+    
+    <li>
+     The Couchbase CLI. See
+     <xref href="../cli/cbcli/couchbase-cli-bucket-create.dita" scope="local" format="dita">bucket-create</xref>.
+     
+     <p>
+     </p>
+     
+    </li>
+    
+    <li>
+     The Couchbase REST API. See
+     <xref href="../rest-api/rest-bucket-create.dita" scope="local" format="dita">Creating and Editing Buckets</xref>.
+     <p>
+     </p>
+     
+    </li>
+    
+   </ul>
+   
+  </section>
+  
+  <section id="auditing">
+   
+   <title>
+    Auditing
+   </title>
+   
+   <p>
+    If <i>auditing</i> is switched on, changes to each bucket's expiration time are
+    recorded, and can be subsequently viewed. See
+    <xref href="../security/security-auditing.dita" scope="local" format="dita">Auditing</xref>.
+   </p>
+   
+  </section>
+  
+ </body>
+ 
+</topic>
