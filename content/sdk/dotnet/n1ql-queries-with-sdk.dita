@@ -155,34 +155,29 @@ foreach (var l in query)
     
 
 
-    <section><title>Querying Asynchronously</title><p>To perform a query asynchronously, use the <apiname>QueryAsync(QueryRequest query)</apiname>
-        method. The API is pretty similar except everything is returned as an
-          <apiname>Task&lt;QueryResult&gt;</apiname> that will have to be awaited on and you'll need
-        use the <apiname>async</apiname> and <apiname>await</apiname> keywords to execute the task
-        asynchronously or use <apiname>Task.Result()</apiname> to execute the
-          <apiname>Task</apiname> synchronously. For example, lets retrieve the first ten documents
-        from the travel-sample bucket
-        asynchronously:<codeblock outputclass="language-csharp" spectitle="Asynchronous N1QL query">public async void PrintTenAllAsync()
-{
-    const string query = "SELECT * FROM `travel-sample` LIMIT 10";
+    <section><title>Streaming Large Result Sets</title><p>By default the .NET SDK will fetch the entire result set from the server,
+        and de-serialize the entire set in-memory on the application. For smaller result sets this is
+        fine, however with large result sets this causes the memory footprint to grow linearly upwards.
+        This has an impact on CLR Garbage Collection and can lead to poor application performance, and
+        eventually an <apiname>OutOfMemoryException</apiname> may be thrown. To avoid this, it is
+        suggested that large results sets be streamed by setting the <apiname>UseStreaming</apiname>
+        property on the <apiname>QueryRequest</apiname> object:</p>
 
-    var result = await _bucket.QueryAsync&lt;dynamic>(query);
-    foreach(var row in result.Rows)
+<p><codeblock outputclass="language-csharp" spectitle="Streaming N1QL Query">var request = new QueryRequest("SELECT * FROM `travel-sample`;").UseStreaming(true);
+using (var result = _bucket.Query&lt;DocumentContent&gt;(request))
+{
+    foreach (var doc in result)
     {
-        Console.WriteLine(row.name);
+        Console.WriteLine(doc);
     }
 }</codeblock>
-        In the code above, we have a defined a method signature for
-          <apiname>PrintTenAllAsync</apiname> that includes the <apiname>async</apiname> keyword,
-        this will allow us to use the <apiname>await</apiname> keyword within the method to
-        asynchronously execute the query. Within the body of the method, we create a N1QL statement
-        which returns the first ten (10) documents from the travel-sample bucket. Then, using the
-          <apiname>await</apiname> keyword, we execute the
-          <apiname>Task&lt;QueryResult&gt;</apiname> returned from the
-          <codeph>CouchbaseBucket.QueryAsync(…)</codeph> method. This will push the execution of the
-        query to the (likely) thread pool in a non-blocking manner. Finally, we iterate through the
-        rows returned by server in the <apiname>QueryResult</apiname> object.</p>
-    </section>
+        When streaming is enabled, the client will start a persistent connection with the server and
+        only read the header until the Rows are enumerated; then, each row or JSON object will be
+        de-serialized. The net effect is that the memory footprint of the application will stay a
+        constant and not increase linearly, and the Garbage Collector will collect objects created
+        during de-serialization in the first generation.</p>
+    </section>    
+    
     
   </conbody>
 </concept>
