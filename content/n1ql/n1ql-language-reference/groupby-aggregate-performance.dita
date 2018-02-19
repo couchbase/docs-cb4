@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="groupby-aggregate-performance">
+    <title>Group By and Aggregate Performance</title>
+    <shortdesc>N1QL Pushdowns optimize the performance of N1QL queries by supporting GROUP BY and Aggregate expressions.</shortdesc>
+    <body>
+        <p><i>(Introduced in Couchbase Server 5.5 - Enterprise Edition)</i></p>
+        <section id="section_hj3_vcq_xcb">
+            <title>Overview</title>
+            <p>This features improves performance of N1QL queries with aggregations and GROUP BY
+                execution. </p>
+            <p>After the optimizer selects an index for a query block, it attempts the two
+                optimizations below:<ul id="ul_pkn_zcq_xcb">
+                    <li>Pagination optimization, by pushing the OFFSET and LIMIT parameters to the
+                        index scan.</li>
+                    <li>Grouping and aggregation pushdown to the indexer (introduced in Couchbase
+                        5.5).</li>
+                </ul>Prior to Couchbase 5.5, even when a query with aggregate and/or GROUP BY is
+                covered by an index, the query fetched all relevant data from the indexer and group
+                the data within the query engine. With this enhancement, the query intelligently
+                requests the indexer to perform grouping and aggregation in addition to range scan.
+                The Indexer has been enhanced to perform grouping, COUNT(), SUM(), MIN(), MAX(),
+                AVG(), and related operations.</p>
+            <p>This requires no changes to the user query, but a good index design to cover the
+                query and order the keys is required. Not every query will benefit from this
+                optimization, and not every index can accelerate every grouping and aggregation.
+                Understanding the right patterns will help you to design your indexes and queries.
+                Aggregate Pushdown to the global secondary index is supported on both storage
+                engines: Standard GSI and Memory Optimized GSI (MOI).</p>
+            <p>This reduction step of performing the GROUP BY and Aggregation on the indexer reduces
+                the amount of data transfer and disk I/O, resulting in:<ul id="ul_cnz_fdq_xcb">
+                    <li>Improved query response time</li>
+                    <li>Improved resource utilization</li>
+                    <li>Low latency</li>
+                    <li>High scalability</li>
+                    <li>Low TCO</li>
+                </ul>For example, let's compare the previous vs. current performance of using GROUP
+                BY and examine the EXPLAIN plan of the following query that is defined in the
+                Couchbase <codeph>travel-sample</codeph>
+                index:<codeblock>CREATE INDEX `def_type` ON `travel-sample`(`type`) </codeblock>Consider
+                the
+                query:<codeblock>SELECT type, COUNT(type)
+FROM `travel-sample`
+WHERE type IS NOT MISSING
+GROUP BY type;</codeblock>Before
+                Couchbase version 5.5, this query engine fetched relevant data from the indexer and
+                group the data within the query engine and then aggregate. This simple query takes
+                about 250 ms.</p>
+            <p>&lt;gbap_before55.png></p>
+            <p>Now, in Couchbase version 5.5, this query use the same <codeph>def_type</codeph>
+                index, but executes in under 70 ms. In the explain below, you can see fewer steps
+                and the lack of the grouping step after the index scan because the index scan step
+                does the grouping and aggregation as well.</p>
+            <p>&lt;gbap_after55.png></p>
+            <p>As the data and query complexity grows, the performance benefit (both latency and
+                throughput) will grow as well.</p>
+            <p/>
+        </section>
+    </body>
+</topic>
