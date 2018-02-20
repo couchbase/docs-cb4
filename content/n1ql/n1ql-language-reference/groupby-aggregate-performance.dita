@@ -51,8 +51,7 @@ GROUP BY type;</codeblock>Before
                 index, but executes in under 70 ms. In the explain below, you can see fewer steps
                 and the lack of the grouping step after the index scan because the index scan step
                 does the grouping and aggregation as well.</p>
-            <p><image href="images/GBAP_Ex0_QP_after55.png" id="image_bln_w4q_xcb" scale="60"
-                    width="5.5in"/></p>
+            <p><image href="images/GBAP_Ex0_QP_after55.png" id="image_bln_w4q_xcb" scale="70"/></p>
             <p>As the data and query complexity grows, the performance benefit (both latency and
                 throughput) will grow as well.</p>
             <p>For example, consider the
@@ -98,9 +97,11 @@ GROUP BY type;</codeblock></p>
                 is how this query executes when the indexer executes the GROUP BY and aggregation.
                 The query engine does not fetch any data from the data service (KV service), as
                 shown below:</p>
-            <p><image href="images/GBAP_55execution.png" id="image_ngr_kzv_xcb" scale="70"/></p>
+            <p><image href="images/GBAP_55execution.png" id="image_ngr_kzv_xcb" scale="70"
+                    height="700" width="700"/></p>
             <p>For your reference, this is how the same query executed before 5.5.</p>
-            <p><image href="images/GBAP_pre55execution.png" scale="70" id="image_pbg_4zv_xcb"/></p>
+            <p><image href="images/GBAP_pre55execution.png" id="image_pbg_4zv_xcb" height="700"
+                /></p>
         </section>
         <section id="section_fw5_ypq_xcb"><title>Examples for Indexer GROUP BY and
                 Aggregation</title><p>Let’s Consider a composite index to explore some
@@ -163,10 +164,11 @@ HAVING SUM(c) > 1000;</codeblock>The
                 the final group and aggregation. In this scenario (when the grouping is on
                 non-leading keys), any query with aggregation and DISTINCT modifier cannot be
                 accelerated by the indexer, such as <codeph>COUNT(DISTINCT e)</codeph>.</p><p><image
-                    href="images/GBAP_BottomUp_GB_non-leading.png" scale="90" id="image_bpw_c1w_xcb"
-                /></p><p><b id="docs-internal-guid-4376996d-b457-baf4-35a7-55c27622ed76">Positive
-                    query examples on array indexes with GROUP BY on leading index
-                keys</b></p><p>Consider the following index and
+                    href="images/GBAP_BottomUp_GB_non-leading.png" id="image_bpw_c1w_xcb"
+                    height="700"/></p><p><b
+                    id="docs-internal-guid-4376996d-b457-baf4-35a7-55c27622ed76">Positive query
+                    examples on array indexes with GROUP BY on leading index keys</b></p><p>Consider
+                the following index and
                 query:<codeblock>SELECT a,b, SUM(d), AVG(e)
 FROM customer
 WHERE a BETWEEN “AZ” AND “CA”  
@@ -228,7 +230,118 @@ GROUP BY p, c.a;</codeblock>In
                 </ul></p></section>
         <section id="section_khk_52w_xcb">
             <title>Scenarios for Group By and Aggregation</title>
-            <p/>
+            <p>Like any feature in a query language, there are subtle variations between each query
+                and index that affects this optimization. We use the <codeph>travel-sample</codeph>
+                dataset to illustrate both positive and negative use cases.</p>
+            <p>The following table lists the scenarios and requirements for queries to request the
+                indexer to do the grouping and acceleration. When the requirements are unmet, the
+                query will fetch the relevant data and then do the grouping and acceleration as
+                usual. No application changes are necessary. The query plan generated reflects this
+                decision.</p>
+            <p>GROUP BY Scenarios:<table frame="none" rowsep="0" colsep="0" id="table_zjq_t3w_xcb">
+                    <tgroup cols="2" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="30*"/>
+                        <tbody>
+                            <row>
+                                <entry>1.</entry>
+                                <entry>GROUP BY on leading keys</entry>
+                            </row>
+                            <row>
+                                <entry>2.</entry>
+                                <entry>GROUP BY on non-leading keys</entry>
+                            </row>
+                            <row>
+                                <entry>3.</entry>
+                                <entry>GROUP BY keys in different CREATE INDEX order</entry>
+                            </row>
+                            <row>
+                                <entry>4.</entry>
+                                <entry>GROUP BY on expression</entry>
+                            </row>
+                            <row>
+                                <entry>5.</entry>
+                                <entry>Heterogeneous data types for GROUP BY key</entry>
+                            </row>
+                            <row>
+                                <entry>6.</entry>
+                                <entry>GROUP BY META().id Primary Index</entry>
+                            </row>
+                            <row>
+                                <entry>7.</entry>
+                                <entry>LIMIT with GROUP BY on leading keys</entry>
+                            </row>
+                            <row>
+                                <entry>8.</entry>
+                                <entry>OFFSET with GROUP BY on leading keys</entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table>Aggregate Scenarios:<table frame="none" rowsep="0" colsep="0"
+                    id="table_s5v_cjw_xcb">
+                    <tgroup cols="2" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="30*"/>
+                        <tbody>
+                            <row>
+                                <entry>9.</entry>
+                                <entry>Aggregate without GROUP BY</entry>
+                            </row>
+                            <row>
+                                <entry>10.</entry>
+                                <entry>Expression in Aggregate function</entry>
+                            </row>
+                            <row>
+                                <entry>11.</entry>
+                                <entry>SUM, COUNT, MIN, MAX, or AVG Aggregate function</entry>
+                            </row>
+                            <row>
+                                <entry>12.</entry>
+                                <entry>HAVING with an aggregate function inside</entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table>Aggregate on Array Index Scenarios:<table frame="none" rowsep="0" colsep="0"
+                    id="table_mvd_pkw_xcb">
+                    <tgroup cols="2" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="30*"/>
+                        <tbody>
+                            <row>
+                                <entry>13.</entry>
+                                <entry>Aggregate on non-array index field</entry>
+                            </row>
+                            <row>
+                                <entry>14.</entry>
+                                <entry>Aggregate on array index field</entry>
+                            </row>
+                            <row>
+                                <entry>15.</entry>
+                                <entry>DISTINCT Aggregate on non-array index field</entry>
+                            </row>
+                            <row>
+                                <entry>16.</entry>
+                                <entry>DISTINCT Aggregate on array index field</entry>
+                            </row>
+                            <row>
+                                <entry>17.</entry>
+                                <entry>Array of arrays</entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table></p>
+            <p><b>1. GROUP BY on leading keys</b></p>
+            <p>One of the common cases is to have both predicates and GROUP BY on leading keys of
+                the index. First create the index so that the query is covered by the index. You can
+                then think about the order of the keys.</p>
+            <p>The query requires a predicate on leading keys to consider an index. The simplest
+                predicate is <codeph>IS NOT MISSING</codeph>.
+                <codeblock>CREATE INDEX idx ON Keyspace(a, b, c);
+
+SELECT a, b, Aggregate_Function(c)  /* MIN(c), MAX(c), COUNT(c), or SUM(c) */
+FROM Keyspace
+WHERE a IS NOT MISSING              /* 1st index field must be in a WHERE clause */
+GROUP BY a, b;</codeblock></p>
         </section>
     </body>
 </topic>
