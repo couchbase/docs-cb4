@@ -46,15 +46,122 @@ GROUP BY type;</codeblock>Before
                 Couchbase version 5.5, this query engine fetched relevant data from the indexer and
                 group the data within the query engine and then aggregate. This simple query takes
                 about 250 ms.</p>
-            <p>&lt;gbap_before55.png></p>
+            <p><image href="images/GBAP_Ex0_QP_before55.png" id="image_lnh_v4q_xcb"/></p>
             <p>Now, in Couchbase version 5.5, this query use the same <codeph>def_type</codeph>
                 index, but executes in under 70 ms. In the explain below, you can see fewer steps
                 and the lack of the grouping step after the index scan because the index scan step
                 does the grouping and aggregation as well.</p>
-            <p>&lt;gbap_after55.png></p>
+            <p><image href="images/GBAP_Ex0_QP_after55.png" id="image_bln_w4q_xcb" scale="60"/></p>
             <p>As the data and query complexity grows, the performance benefit (both latency and
                 throughput) will grow as well.</p>
-            <p/>
+            <p>For example, consider the
+                query:<codeblock>SELECT type, COUNT(type)
+FROM `travel-sample`
+WHERE type IS NOT MISSING
+GROUP BY type;</codeblock></p>
+            <p>The text explain plan shows the accelerated aggregation details. For details, see the
+                <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>Query Plan
+                Explained<?oxy_custom_end?>
+                section.<codeblock>...
+        "index_group_aggs": {
+          "aggregates": [
+            {
+              "aggregate": "COUNT",
+              "expr": "1",
+              "id": 2,
+              "keypos": -1
+            }
+          ],
+          "depends": [
+            0
+          ],
+          "group": [
+            {
+              "depends": [
+                0
+              ],
+              "expr": "cover ((`travel-sample`.`type`))",
+              "id": 0,
+              "keypos": 0
+            }
+          ]
+        },
+        "index_id": "c5bbb792c69c1704",
+        "index_projection": {
+          "entry_keys": [
+            0,
+            2
+          ]
+        },
+...</codeblock>Here’s
+                is how this query executes when the indexer executes the GROUP BY and aggregation.
+                The query engine does not fetch any data from the data service (KV service), as
+                shown below:</p>
+            <p>&lt;55execution></p>
+            <p>For your reference, this is how the same query executed before 5.5.</p>
+            <p>&lt;pre55execution></p>
         </section>
+        <section id="section_fw5_ypq_xcb"><title>Examples for Indexer GROUP BY and
+                Aggregation</title><p>Let’s Consider a composite index to explore some
+                scenarios:<codeblock>CREATE INDEX idx ON customer(c1, c2, c3, c4, c5)</codeblock>Let’s
+                consider sample queries that can benefit from this optimization and the queries that
+                cannot.</p><p><b>Positive Case examples of queries that use indexing grouping and
+                    aggregation:</b><ul id="ul_fmx_sqq_xcb">
+                    <li><codeph>SELECT COUNT(*) FROM customer WHERE c1 > 10;</codeph></li>
+                    <li><codeph>SELECT COUNT(c1) FROM customer WHERE c1 between 10 and
+                        30;</codeph></li>
+                    <li><codeph>SELECT COUNT(c2) FROM customer WHERE c1 between 10 and 30 and c2 =
+                            40;</codeph></li>
+                    <li><codeph>SELECT c1, AVG(c5), sum(c4), COUNT(c1), MIN (c3), MAX(ABS(c3)) WHERE
+                            c1 > 100 GROUP BY c1;</codeph></li>
+                    <li><codeph>SELECT c2count , SUM(c4) WHERE c1 > 100 GROUP BY c1 LETTING c2count
+                            = COUNT(c2) HAVING c2count > 1;</codeph></li>
+                </ul></p><p><b>Negative Case examples:</b><ul id="ul_p3p_drq_xcb">
+                    <li><codeph>SELECT COUNT(*) FROM customer WHERE c2 > 20;</codeph><ul
+                            id="ul_syp_2rq_xcb">
+                            <li>This query has no predicate on the leading key c1. The index
+                                    <codeph>idx</codeph> cannot be used.</li>
+                        </ul></li>
+                    <li><codeph>SELECT COUNT(*) FROM customer;</codeph><ul id="ul_kc1_grq_xcb">
+                            <li>This query has no predicate at all.</li>
+                        </ul></li>
+                    <li><codeph>SELECT COUNT(v1) FROM customer LET v1 = ROUND(c2) WHERE c1 >
+                            10;</codeph><ul id="ul_mwm_hrq_xcb">
+                            <li>The aggregate depends on <codeph>LET</codeph> variable.</li>
+                        </ul></li>
+                    <li><codeph>SELECT ARRAY_AGG(c1) FROM customer WHERE c1 > 10;</codeph><ul
+                            id="ul_af2_jrq_xcb">
+                            <li><codeph>ARRAY_AGG</codeph> is not supported.</li>
+                        </ul></li>
+                </ul></p><p><b>Positive query examples with GROUP BY on leading index
+                keys</b></p><p>Consider the following
+                index:<codeblock>CREATE INDEX idx ON customer(a, b, c, d, e)</codeblock>In the
+                following query, the GROUP BY keys<codeph> (a, b) </codeph>are the leading keys of
+                the index, so the index is naturally ordered and grouped by the order of the index
+                key definition. Therefore, the query below is suitable for indexer to handle
+                grouping and
+                aggregation.<codeblock>SELECT a, b, SUM(c), AVG(e), COUNT(DISTINCT c)
+FROM customer
+WHERE a BETWEEN “AZ” AND “CA” 
+GROUP BY a, b
+HAVING SUM(c) > 1000;</codeblock>Here's
+                the executed query plan showing that index scan handled grouping and
+                aggregation:</p><image href="images/GBAP_PosEx_QP.png" id="image_lqb_41r_xcb"/><p><b
+                    id="docs-internal-guid-c3d7738b-b0d1-f78b-9de2-09a4baf058a5">Positive query
+                    examples with GROUP BY on non-leading index keys</b></p><p>Consider the
+                following index and
+                query:<codeblock>CREATE INDEX idx ON customer(a, b, c, d, e)
+
+SELECT b, d, SUM(c), AVG(e)
+FROM customer
+WHERE a BETWEEN “AZ” AND “CA” 
+GROUP BY b, d
+HAVING SUM(c) > 1000;</codeblock>The
+                following is a bottom-up rendering of the execution plan for easier viewing. In this
+                case, the indexer sends partial group aggregation, which the query merges to create
+                the final group and aggregation. In this scenario (when the grouping is on
+                non-leading keys), any query with aggregation and DISTINCT modifier cannot be
+                accelerated by the indexer, such as <codeph>COUNT(DISTINCT
+            e)</codeph>.</p><p/></section>
     </body>
 </topic>
