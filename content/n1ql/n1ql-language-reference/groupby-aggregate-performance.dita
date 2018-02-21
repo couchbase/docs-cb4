@@ -51,7 +51,8 @@ GROUP BY type;</codeblock>Before
                 index, but executes in under 70 ms. In the explain below, you can see fewer steps
                 and the lack of the grouping step after the index scan because the index scan step
                 does the grouping and aggregation as well.</p>
-            <p><image href="images/GBAP_Ex0_QP_after55.png" id="image_bln_w4q_xcb" scale="70"/></p>
+            <p><image href="images/GBAP_Ex0_QP_after55.png" id="image_bln_w4q_xcb" height="100"
+                /></p>
             <p>As the data and query complexity grows, the performance benefit (both latency and
                 throughput) will grow as well.</p>
             <p>For example, consider the
@@ -101,7 +102,7 @@ GROUP BY type;</codeblock></p>
                     height="700" width="700"/></p>
             <p>For your reference, this is how the same query executed before 5.5.</p>
             <p><image href="images/GBAP_pre55execution.png" id="image_pbg_4zv_xcb" height="700"
-                /></p>
+                    width="700"/></p>
         </section>
         <section id="section_fw5_ypq_xcb"><title>Examples for Indexer GROUP BY and
                 Aggregation</title><p>Let’s Consider a composite index to explore some
@@ -165,7 +166,7 @@ HAVING SUM(c) > 1000;</codeblock>The
                 non-leading keys), any query with aggregation and DISTINCT modifier cannot be
                 accelerated by the indexer, such as <codeph>COUNT(DISTINCT e)</codeph>.</p><p><image
                     href="images/GBAP_BottomUp_GB_non-leading.png" id="image_bpw_c1w_xcb"
-                    height="700"/></p><p><b
+                    height="750"/></p><p><b
                     id="docs-internal-guid-4376996d-b457-baf4-35a7-55c27622ed76">Positive query
                     examples on array indexes with GROUP BY on leading index keys</b></p><p>Consider
                 the following index and
@@ -336,12 +337,314 @@ GROUP BY p, c.a;</codeblock>In
                 then think about the order of the keys.</p>
             <p>The query requires a predicate on leading keys to consider an index. The simplest
                 predicate is <codeph>IS NOT MISSING</codeph>.
-                <codeblock>CREATE INDEX idx ON Keyspace(a, b, c);
+                    <codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>Keyspace_ref</varname>(<b><i>a</i></b>, b, c);
 
-SELECT a, b, Aggregate_Function(c)  /* MIN(c), MAX(c), COUNT(c), or SUM(c) */
-FROM Keyspace
-WHERE a IS NOT MISSING              /* 1st index field must be in a WHERE clause */
-GROUP BY a, b;</codeblock></p>
+SELECT <b>a, b</b>, <varname>Aggregate_Function</varname>(c)  /* MIN(c), MAX(c), COUNT(c), or SUM(c) */
+FROM <varname>Keyspace_ref</varname>
+WHERE <b><i>a</i></b> IS NOT MISSING              /* 1st <b><i>index</i></b> field must be in a WHERE clause */
+GROUP BY <b>a, b</b>;</codeblock><b>Example
+                    1:</b> List the cities with the landmarks with the highest latitude.</p>
+            <p>Use the <codeph>MAX()</codeph> aggregate to find the highest landmark latitude in
+                each state, group the results by <codeph>country</codeph> and
+                <codeph>state</codeph>, and then sort in reverse order by the highest latitudes per
+                    <codeph>state</codeph>.<codeblock>CREATE INDEX idx1 ON `travel-sample`(country, state, geo.lat) 
+WHERE type="landmark";
+
+SELECT country, state, MAX(ROUND(geo.lat)) AS Max_Latitude
+FROM `travel-sample`
+WHERE country IS NOT MISSING
+AND type = "landmark"
+GROUP BY country, state
+ORDER BY Max_Latitude DESC;</codeblock>In
+                this query, we need to give the predicate<codeph> country IS NOT MISSING
+                </codeph>(or any WHERE clause) to ensure this index is selected for the query.
+                Without a matching predicate, the query will use the primary index.</p>
+            <p>Results:<codeblock>[
+  {
+    "Max_Latitude": 60,
+    "country": "United Kingdom",
+    "state": null
+  },
+  {
+    "Max_Latitude": 51,
+    "country": "United Kingdom",
+    "state": "England"
+  },
+  {
+    "Max_Latitude": 50,
+    "country": "France",
+    "state": "Picardie"
+  },
+...</codeblock>The
+                Example 1 EXPLAIN Plan shows that <codeph>GROUP BY</codeph> is executed by the
+                indexer and is detailed in the
+                <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>GROUP BY Query
+                Plan
+                table<?oxy_custom_end?>:<codeblock>{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+        "#operator": "Sequence",
+        "~children": [
+          {
+<b>            "#operator": "IndexScan3",</b>
+            "covers": [
+              "cover ((`travel-sample`.`country`))",
+              "cover ((`travel-sample`.`state`))",
+              "cover (((`travel-sample`.`geo`).`lat`))",
+              "cover ((meta(`travel-sample`).`id`))",
+              "cover (count(cover ((`travel-sample`.`country`))))",
+              "cover (min(round(cover (((`travel-sample`.`geo`).`lat`)))))"
+            ],
+            "filter_covers": {
+              "cover ((`travel-sample`.`type`))": "landmark"
+            },
+<b>            "index": "idx1",</b>
+            "index_group_aggs": {
+              "aggregates": [
+                {
+                  "aggregate": "MAX",
+                  "depends": [
+                    2
+                  ],
+                  "expr": "round(cover (((`travel-sample`.`geo`).`lat`)))",
+                  "id": 4,
+                  "keypos": -1 
+                }
+              ],
+              "depends": [
+                0,
+                1,
+                2
+              ],
+              "group": [
+                {
+                  "depends": [
+                    0
+                  ],
+                  "expr": "cover ((`travel-sample`.`country`))",
+                  "id": 0,
+                  "keypos": 0
+                },
+                {
+                  "depends": [
+                    1
+                  ],
+                  "expr": "cover ((`travel-sample`.`state`))",
+                  "id": 1,
+                  "keypos": 1
+                }
+              ]
+            },
+...</codeblock></p>
+            <p><b id="docs-internal-guid-b944b625-b4b7-85b3-0987-2afeb4f88289">2. GROUP BY on
+                    non-leading keys</b></p>
+            <p>When using GROUP BY on a non-leading key:<ul id="ul_c1d_5nw_xcb">
+                    <li>The indexer will return <i>pre-aggregated</i> results.</li>
+                    <li>Results can have duplicate or out-of-order groups. The N1QL indexer will do
+                        2nd level of aggregation and compute the final result.</li>
+                    <li>The N1QL indexer can pushdown only if the leading key has a predicate.</li>
+                </ul>To use Aggregate Pushdown, use the below index and query
+                    syntaxes:<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>Keyspace_ref</varname>(<i>a, <b>b, c</b></i>);</codeblock><b>Syntax
+                    A:</b><codeblock>SELECT <varname>Aggregate_Function</varname>(<varname>a</varname>), <b><i>b</i></b>, A<varname>ggregate_Function</varname>(<b><i>c</i></b>) 
+FROM <varname>Keyspace_ref</varname>
+WHERE <varname>a</varname> IS NOT MISSING
+GROUP BY <i><b>b</b></i>;</codeblock><b>Syntax
+                    B:</b><codeblock>SELECT <varname>Aggregate_Function</varname>(a), <varname>Aggregate_Function</varname>(<b><i>b</i></b>), <b><i>c</i></b> 
+FROM <varname>Keyspace_ref</varname>
+WHERE a IS NOT MISSING
+GROUP BY <b><i>c</i></b>;</codeblock><b>Example
+                    2 (A):</b> List the states with their total number of landmarks and the lowest
+                latitude of any landmark.</p>
+            <p>Use the <codeph>COUNT()</codeph> operator to find the total number of landmarks and
+                use the <codeph>MIN()</codeph> operator to find the lowest landmark latitude in each
+                state, group the results by <codeph>state</codeph>, and then sort in order by the
+                lowest latitudes per
+                <codeph>state</codeph>.<codeblock>CREATE INDEX idx2 ON `travel-sample`(country, state, ROUND(geo.lat)) 
+WHERE type="landmark";
+
+SELECT COUNT(country) AS Total_landmarks, <b>state, MIN(ROUND(geo.lat)) AS Min_Latitude</b>
+FROM `travel-sample`
+WHERE country IN ["France", "United States", "United Kingdom"]
+AND type = "landmark"
+GROUP BY state
+ORDER BY Min_Latitude;</codeblock>Explain
+                Plan:</p>
+            <p><image href="images/GBAP_Ex2A_EP.png" id="image_l3d_gvx_xcb"
+                    /><codeblock>{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+        "#operator": "Sequence",
+        "~children": [
+          {
+            "#operator": "IndexScan3",
+            "covers": [
+              "cover ((`travel-sample`.`country`))",
+              "cover ((`travel-sample`.`state`))",
+              "cover (((`travel-sample`.`geo`).`lat`))",
+              "cover ((meta(`travel-sample`).`id`))",
+              "cover (count(cover ((`travel-sample`.`country`))))",
+              "cover (min(round(cover (((`travel-sample`.`geo`).`lat`)))))"
+            ],
+            "filter_covers": {
+              "cover ((`travel-sample`.`type`))": "landmark"
+            },
+            "index": "idx2",
+            "index_group_aggs": {
+             <b> "aggregates": [
+                {
+                  "aggregate": "COUNT",
+                  "depends": [
+                    0
+                  ],
+                  "expr": "cover ((`travel-sample`.`country`))",
+                  "id": 4,
+                  "keypos": 0
+                },
+                {
+                  "aggregate": "MIN",
+                  "depends": [
+                    2
+                  ],
+                  "expr": "round(cover (((`travel-sample`.`geo`).`lat`)))",
+                  "id": 5,
+                  "keypos": -1</b>
+                }
+              ],
+              "depends": [
+                0,
+                1,
+                2
+              ],
+             <b> "group": [
+                {
+                  "depends": [
+                    1
+                  ],
+                  "expr": "cover ((`travel-sample`.`state`))",
+                  "id": 1,
+                  "keypos": 1</b>
+                }
+              ],
+             <b> "partial": true</b>
+            },
+...</codeblock><note>The
+                        <codeph>"partial": true</codeph> line means it was
+                    pre-aggregated.</note>Results:<codeblock>[
+  {
+    "Min_Latitude": 33,
+    "Total_landmarks": 1900,
+    "state": "California"
+  },
+  {
+    "Min_Latitude": 41,
+    "Total_landmarks": 8,
+    "state": "Corse"
+  },
+  {
+    "Min_Latitude": 43,
+    "Total_landmarks": 6,
+    "state": "Languedoc-Roussillon"
+  },
+...</codeblock><b>Example
+                    2 (B):</b> List the number of landmarks by latitude and the state it's in.</p>
+            <p>Use <codeph>COUNT(country)</codeph> for the total number of landmarks at each
+                latitude. At a particular latitude, the <codeph>state</codeph> will be the same; but
+                an aggregate function on it is needed, so <codeph>MIN()</codeph> or
+                    <codeph>MAX()</codeph> is used to return the original
+                    value.<codeblock>SELECT COUNT(country) Num_Landmarks, MIN(state) State_Name, ROUND(geo.lat) Latitude
+FROM `travel-sample`
+WHERE country IS NOT MISSING
+AND type = "landmark"
+GROUP BY ROUND(geo.lat)
+ORDER BY ROUND(geo.lat);</codeblock>Results:<codeblock>[
+  {
+    "Latitude": 33,
+    "Num_Landmarks": 227,
+    "State_Name": "California"
+  },
+  {
+    "Latitude": 34,
+    "Num_Landmarks": 608,
+    "State_Name": "California"
+  },
+  {
+    "Latitude": 35,
+    "Num_Landmarks": 27,
+    "State_Name": "California"
+  },
+...</codeblock><b
+                    id="docs-internal-guid-3e3d5b1a-b5b6-ef35-da76-906170103e59">3. GROUP BY keys in
+                    different CREATE INDEX order</b></p>
+            <p>When using GROUP BY on keys in a different order than they appear in the CREATE INDEX
+                statement, use the following
+                    syntax:<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>Keyspace_ref</varname>(<i>a, b, c</i>);
+
+SELECT <varname>Aggregate_Function</varname>(<b><i>c</i></b>) 
+FROM <varname>Keyspace_ref</varname>
+WHERE a IS NOT MISSING
+GROUP BY <i><b>b, a</b></i>;</codeblock><b>Example
+                    3:</b> Like Example 1 with the GROUP BY fields swapped, list the landmarks with
+                the lowest longitude.</p>
+            <p>Use the <codeph>MIN()</codeph> operator to find the lowest landmark longitude in each
+                city, group the results by <codeph>activity</codeph> and <codeph>city</codeph>, and
+                then sort in reverse order by the lowest longitudes per
+                    <codeph>activity</codeph>.<codeblock>CREATE INDEX idx3 ON `travel-sample`(activity, city, geo.lon) 
+WHERE type="landmark";
+
+SELECT activity, city, MIN(ROUND(geo.lon)) AS Max_Longitude
+FROM `travel-sample`
+WHERE country IS NOT MISSING
+AND type = "landmark"
+GROUP BY activity, city
+ORDER BY Min_Longitude;</codeblock>Results:<codeblock>[
+  {
+    "Min_Longitude": -124,
+    "activity": "buy",
+    "city": "Eureka"
+  },
+  {
+    "Min_Longitude": -123,
+    "activity": "drink",
+    "city": "Glen Ellen"
+  },
+  {
+    "Min_Longitude": -123,
+    "activity": "do",
+    "city": "Santa Rosa"
+  },
+  {
+    "Min_Longitude": -123,
+    "activity": "eat",
+    "city": "Moss Beach"
+  },
+...</codeblock><b
+                    id="docs-internal-guid-9640b8bb-b679-d376-cf13-9a0dd1211391">4. GROUP BY on
+                    expression</b></p>
+            <p>When grouping on an expression or operation, the indexer will return pre-aggregated
+                results whenever the GROUP BY and leading index keys are not an exact match.</p>
+            <p>To use Aggregate Pushdown and avoid pre-aggregated results, use one of the two below
+                index and query combinations:</p>
+            <p><b>Syntax A: Field with an expression</b> (GROUP BY and Index keys
+                    match)<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>Keyspace_ref</varname>(<i><b>a+b</b>, b, c</i>);
+
+SELECT <varname>Aggregate_Function</varname>(<varname>c</varname>) 
+FROM <varname>Keyspace_ref</varname>
+WHERE a IS NOT MISSING
+GROUP BY <i><b>a+b</b></i>;</codeblock><b>Syntax
+                    B: Operation on a field </b>(GROUP BY and Index keys
+                match)<codeblock>CREATE INDEX <varname>idx_operation</varname> ON <varname>Keyspace_ref</varname> (<i><b>LOWER(a)</b>, b, c</i>);
+
+SELECT <varname>Aggregate_Function</varname>(<i>c</i>) 
+FROM <varname>Keyspace_ref</varname>
+WHERE a IS NOT MISSING
+GROUP BY <i><b>LOWER(a)</b></i>;</codeblock>For
+                comparison, the below index and query combination will yield pre-aggregated
+                results.</p>
+            <p><b>Pre-aggregated Syntax: </b>The GROUP BY and Index keys don't match.</p>
         </section>
     </body>
 </topic>
