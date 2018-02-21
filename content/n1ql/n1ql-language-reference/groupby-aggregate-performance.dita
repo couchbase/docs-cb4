@@ -256,9 +256,15 @@ GROUP BY p, c.a;</codeblock>In
                         <dd>4. <xref
                                 href="#groupby-aggregate-performance/docs-internal-guid-9640b8bb-b679-d376-cf13-9a0dd1211391"
                                 format="dita">GROUP BY on expression</xref></dd>
-                        <dd>5. Heterogeneous data types for GROUP BY key</dd>
-                        <dd>6. GROUP BY META().id Primary Index</dd>
-                        <dd>7. LIMIT with GROUP BY on leading keys</dd>
+                        <dd>5. <xref
+                                href="#groupby-aggregate-performance/docs-internal-guid-29f284c7-ba1c-b38b-97a7-1a2d9a3d998b"
+                                format="dita">Heterogeneous data types for GROUP BY key</xref></dd>
+                        <dd>6. <xref
+                                href="#groupby-aggregate-performance/docs-internal-guid-e3f2aba4-ba21-bda0-6921-b83d1b3a30fa"
+                                format="dita">GROUP BY META().id Primary Index</xref></dd>
+                        <dd>7. <xref
+                                href="#groupby-aggregate-performance/docs-internal-guid-67306400-ba24-c55f-4713-86943530e62c"
+                                format="dita">LIMIT with GROUP BY on leading keys</xref></dd>
                         <dd>8. OFFSET with GROUP BY on leading keys</dd>
                     </dlentry>
                 </dl>
@@ -289,7 +295,7 @@ GROUP BY p, c.a;</codeblock>In
                 then think about the order of the keys.</p>
             <p>The query requires a predicate on leading keys to consider an index. The simplest
                 predicate is <codeph>IS NOT MISSING</codeph>.
-                    <codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>Keyspace_ref</varname>(<b><i>a</i></b>, b, c);
+                    <codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>Keyspace_ref</varname> (<b><i>a</i></b>, b, c);
 
 SELECT <b>a, b</b>, <varname>Aggregate_Function</varname>(c)  /* MIN(c), MAX(c), COUNT(c), or SUM(c) */
 FROM <varname>Keyspace_ref</varname>
@@ -397,15 +403,15 @@ ORDER BY Max_Latitude DESC;</codeblock>In
                     <li>Results can have duplicate or out-of-order groups. The N1QL indexer will do
                         2nd level of aggregation and compute the final result.</li>
                     <li>The N1QL indexer can pushdown only if the leading key has a predicate.</li>
-                </ul>To use Aggregate Pushdown, use the below index and query
-                    syntaxes:<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>Keyspace_ref</varname>(<i>a, <b>b, c</b></i>);</codeblock><b>Syntax
+                </ul>To use Aggregate Pushdown, use the following syntax of the index and query
+                    statements:<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>Keyspace_ref</varname> (<i>a, <b>b, c</b></i>);</codeblock><b>Syntax
                     A:</b><codeblock>SELECT <varname>Aggregate_Function</varname>(<varname>a</varname>), <b><i>b</i></b>, A<varname>ggregate_Function</varname>(<b><i>c</i></b>) 
 FROM <varname>Keyspace_ref</varname>
 WHERE <varname>a</varname> IS NOT MISSING
 GROUP BY <i><b>b</b></i>;</codeblock><b>Syntax
                     B:</b><codeblock>SELECT <varname>Aggregate_Function</varname>(a), <varname>Aggregate_Function</varname>(<b><i>b</i></b>), <b><i>c</i></b> 
 FROM <varname>Keyspace_ref</varname>
-WHERE a IS NOT MISSING
+WHERE <varname>a</varname> IS NOT MISSING
 GROUP BY <b><i>c</i></b>;</codeblock><b>Example
                     2 (A):</b> List the states with their total number of landmarks and the lowest
                 latitude of any landmark.</p>
@@ -537,7 +543,7 @@ ORDER BY ROUND(geo.lat);</codeblock>Results:<codeblock>[
 
 SELECT <varname>Aggregate_Function</varname>(<b><i>c</i></b>) 
 FROM <varname>Keyspace_ref</varname>
-WHERE a IS NOT MISSING
+WHERE <varname>a</varname> IS NOT MISSING
 GROUP BY <i><b>b, a</b></i>;</codeblock><b>Example
                     3:</b> Like Example 1 with the GROUP BY fields swapped, list the landmarks with
                 the lowest longitude.</p>
@@ -578,8 +584,8 @@ ORDER BY Min_Longitude;</codeblock>Results:<codeblock>[
                     expression</b></p>
             <p>When grouping on an expression or operation, the indexer will return pre-aggregated
                 results whenever the GROUP BY and leading index keys are not an exact match.</p>
-            <p>To use Aggregate Pushdown and avoid pre-aggregated results, use one of the two below
-                index and query combinations:</p>
+            <p>To use Aggregate Pushdown and avoid pre-aggregated results, use one of the two
+                following syntaxes of the index and query statements:</p>
             <p><b>Syntax A: Field with an expression</b> (GROUP BY and Index keys
                     match)<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>Keyspace_ref</varname>(<i><b>a+b</b>, b, c</i>);
 
@@ -592,11 +598,1089 @@ GROUP BY <i><b>a+b</b></i>;</codeblock><b>Syntax
 
 SELECT <varname>Aggregate_Function</varname>(<i>c</i>) 
 FROM <varname>Keyspace_ref</varname>
-WHERE a IS NOT MISSING
+WHERE <varname>a</varname> IS NOT MISSING
 GROUP BY <i><b>LOWER(a)</b></i>;</codeblock>For
                 comparison, the below index and query combination will yield pre-aggregated
                 results.</p>
-            <p><b>Pre-aggregated Syntax: </b>The GROUP BY and Index keys don't match.</p>
+            <p><b>Pre-aggregated Syntax: </b>The GROUP BY and Index keys don't
+                    match.<codeblock>CREATE INDEX <varname>idx_operation</varname> ON <varname>Keyspace_ref</varname> (<i><b>a</b>, b, c</i>);
+
+SELECT <varname>Aggregate_Function</varname>(<varname>c</varname>) 
+FROM <varname>Keyspace_ref</varname>
+WHERE <varname>a</varname> IS NOT MISSING
+GROUP BY <i><b>UPPER(a)</b></i>;</codeblock><b>Example
+                    4 (A): </b>A field with an expression.</p>
+            <p>Let's say the distance of a flight feels like "nothing" when it's direct, but feels
+                like the true distance when there is one layover. Then we can list and group by
+                flight distances by calculating the distance multiplied by the stops it
+                makes.<codeblock>CREATE INDEX idx4_expr 
+ON `travel-sample`(ROUND(distance*stops), ROUND(distance), sourceairport)
+WHERE type="route";
+
+SELECT <b>ROUND(distance*stops)</b> AS Distance_Feels_Like, 
+       MAX(ROUND(distance)) AS Distance_True, 
+       COUNT(sourceairport) Number_of_Airports
+FROM `travel-sample`
+WHERE ROUND(distance*stops) IS NOT MISSING
+AND type = "route"
+<b>GROUP BY ROUND(distance*stops)</b>;</codeblock>Query
+                Plan:</p>
+            <p><image href="images/GBAP_Ex4A_VP.png" id="image_kp1_yxd_ycb" scale="50"
+                    /><codeblock>...
+        "index_group_aggs": {
+          "aggregates": [
+            {
+              "aggregate": "COUNT",
+              "depends": [
+                2
+              ],
+             <b> "expr": "cover ((`travel-sample`.`sourceairport`))",
+              "id": 4,
+              "keypos": 2</b>
+            },
+            {
+              "aggregate": "MAX",
+              "depends": [
+                1
+              ],
+             <b> "expr": "cover (round((`travel-sample`.`distance`)))",
+              "id": 5,
+              "keypos": 1</b>
+            }
+          ],
+          "depends": [
+            0,
+            1,
+            2
+          ],
+          "group": [
+            {
+              "depends": [
+                0
+              ],
+            <b>  "expr": "cover (round(((`travel-sample`.`distance`) * (`travel-sample`.`stops`))))",
+              "id": 0,
+              "keypos": 0</b>
+            }
+          ]
+...</codeblock>Results:<codeblock>[
+  {
+    "Distance_Feels_Like": 1055,
+    "Distance_True": 1055,
+    "Number_of_Airports": 1
+  },
+  {
+    "Distance_Feels_Like": 1806,
+    "Distance_True": 1806,
+    "Number_of_Airports": 2
+  },
+  {
+    "Distance_Feels_Like": 0,
+    "Distance_True": 13808,
+    "Number_of_Airports": 24018
+  },
+...</codeblock><b>Example
+                    4 (B): An operation on a field.</b></p>
+            <p>Let's say the distance of a flight feels like "nothing" when it's direct, but feels
+                like the true distance when there is one layover. Then we can list and group by the
+                uppercase of the airport codes and listing the flight distances by calculating the
+                distance multiplied by the stops it makes along with the total
+                    distance.<codeblock>CREATE INDEX idx4_oper 
+ON `travel-sample`(sourceairport, ROUND(distance*stops), distance)
+WHERE type="route";
+
+SELECT <b>UPPER</b>(sourceairport) AS Airport_Code, 
+       MIN(ROUND(distance*stops)) AS Distance_Feels_Like, 
+       SUM(ROUND(distance)) AS Total_Distance 
+FROM `travel-sample`
+WHERE sourceairport IS NOT MISSING
+AND type = "route"
+GROUP BY <b>UPPER</b>(sourceairport);</codeblock>Results:<codeblock>[
+  {
+    "Airport_Code": "ESU",
+    "Distance_Feels_Like": 0,
+    "Total_Distance": 6223
+  },
+  {
+    "Airport_Code": "QSF",
+    "Distance_Feels_Like": 0,
+    "Total_Distance": 3285
+  },
+  {
+    "Airport_Code": "LHW",
+    "Distance_Feels_Like": 0,
+    "Total_Distance": 13837
+  },
+...</codeblock><b
+                    id="docs-internal-guid-29f284c7-ba1c-b38b-97a7-1a2d9a3d998b">5. Heterogeneous
+                    data types for GROUP BY key</b></p>
+            <p>When using a mix of data types for the GROUP BY key:<ul id="ul_ztr_5d2_ycb">
+                    <li><codeph>NULLS</codeph> and <codeph>MISSING</codeph> are two separate
+                        groups.</li>
+                </ul><b>Example
+                5</b>:<codeblock>CREATE INDEX idx5 ON `travel-sample`(geo.lat, vacancy, email) 
+WHERE type = "hotel";
+
+SELECT MAX(ROUND(geo.lat)) AS Max_Lattitude, MAX(vacancy) AS Max_Vacancy, MIN(email) AS Min_Email
+FROM `travel-sample`
+WHERE geo.lat IS NOT MISSING
+AND type = "hotel"
+GROUP BY ROUND(geo.lat), vacancy, SUBSTR(email,0,1)
+ORDER BY Min_Email;</codeblock>Results:<codeblock>[
+  {
+    "Max_Lattitude": 36,
+    "Max_Vacancy": false,
+    "Min_Email": null
+  },
+  {
+    "Max_Lattitude": 40,
+    "Max_Vacancy": true,
+    "Min_Email": null
+  },
+  {
+    "Max_Lattitude": 34,
+    "Max_Vacancy": true,
+    "Min_Email": "Bed@TopangaCanyonInn.com"
+  },
+  {
+    "Max_Lattitude": 48,
+    "Max_Vacancy": false,
+    "Min_Email": "BourronILA@ila-chateau.com"
+  },
+...</codeblock>To
+                see a separate grouping of <codeph>MISSING</codeph>, we need to <codeph>GROUP
+                    BY</codeph> a field we know exists in one document but not in another document
+                while both documents have another field in common. For example, create 2 such
+                documents:<codeblock>INSERT INTO `travel-sample` VALUES("01",{"<b>type</b>":1, "email":"abc","<b>xx</b>":<b>3</b>});
+
+INSERT INTO `travel-sample` VALUES("02",{"<b>type</b>":1, "email":"abcd"});</codeblock>Then
+                run the following
+                    query:<codeblock>SELECT type, <b>xx</b>, MIN(email) AS Min_Email
+FROM `travel-sample`
+WHERE type IS NOT NULL
+GROUP BY type, <b>xx</b>;</codeblock>Results:<codeblock>[
+  {
+    "Min_Email": "abc",
+    "<b>type": 1</b>,
+    "<b>xx": 3</b>
+  },
+  {
+    "Min_Email": "abcd",
+    "<b>type": 1</b>              &lt;-- is a separate result since field "xx" is MISSING
+  },
+  {
+    "Min_Email": null,
+    "type": "airline"
+  },
+...</codeblock><b
+                    id="docs-internal-guid-e3f2aba4-ba21-bda0-6921-b83d1b3a30fa">6. GROUP BY
+                    META().ID Primary Index</b></p>
+            <p>If there is no filter, then pushdown is supported for an expression on the Document
+                ID <codeph>META().id</codeph> in the <codeph>GROUP BY</codeph> clause.</p>
+            <p>To use Aggregate Pushdown, use the following syntax of the index and query
+                    statement:<codeblock>CREATE PRIMARY INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname>;
+
+SELECT COUNT(1)
+FROM <varname>named_keyspace_ref</varname>
+GROUP BY SUBSTR(META().id, 0, 10);</codeblock><note>If
+                    there is a filter on the Document ID, then the primary index can be used as a
+                    secondary scan.</note><b>Example 6:</b> List the number of countries that are in
+                each decile of the <codeph>META().id</codeph>
+                    field.<codeblock>CREATE PRIMARY INDEX idx6 ON `travel-sample`;
+
+SELECT COUNT(1) AS Cnt, SUBSTR(META().id,0,9) AS Meta_Group
+FROM `travel-sample`
+GROUP BY SUBSTR(META().id,0,9);</codeblock>Results:<codeblock>[
+  {
+    "Meta_Group": "airport_9",
+    "Number_of_Country": 121
+  },
+  {
+    "Meta_Group": "airport_1",
+    "Number_of_Country": 187
+  },
+  {
+    "Meta_Group": "airport_3",
+    "Number_of_Country": 482
+  },
+...</codeblock><b
+                    id="docs-internal-guid-67306400-ba24-c55f-4713-86943530e62c">7. LIMIT with GROUP
+                    BY on leading keys</b></p>
+            <p>To use Aggregate Pushdown when there is a LIMIT clause and a GROUP BY clause on one
+                or more leading keys, use the following syntax of the index and query
+                    statement:<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<varname>k0, k1</varname>);     
+
+SELECT <varname>k0</varname>, COUNT(<varname>k1</varname>) 
+FROM <varname>named_keyspace_ref</varname>
+WHERE <varname>k0</varname> IS NOT MISSING
+GROUP BY <varname>k0</varname>
+LIMIT <varname>n</varname>;</codeblock><b>Example
+                    7:</b> LIMIT with GROUP BY on the leading
+                key.<codeblock>CREATE INDEX idx7 ON `travel-sample` (<b>city</b>, name) 
+WHERE type = "landmark";
+
+SELECT city AS City, COUNT(DISTINCT name) AS Landmark_Count 
+FROM `travel-sample`
+WHERE city IS NOT MISSING
+AND type = "landmark"
+GROUP BY <b>city</b>
+<b>LIMIT 4;</b></codeblock>Explain
+                    Plan:<codeblock>{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+        "#operator": "Sequence",
+        "~children": [
+          {
+        <b>    "#operator": "IndexScan3",</b>
+            "covers": [
+              "cover ((`travel-sample`.`city`))",
+              "cover ((`travel-sample`.`name`))",
+              "cover ((meta(`travel-sample`).`id`))",
+              "cover (count(distinct cover ((`travel-sample`.`name`))))"
+            ],
+            "filter_covers": {
+              "cover ((`travel-sample`.`type`))": "landmark"
+            },
+         <b>   "index": "idx7",
+            "index_group_aggs": {</b>
+              "aggregates": [
+                {
+                  "aggregate": "COUNT",
+                  "depends": [
+                    1
+                  ],
+                  "distinct": true,
+                  "expr": "cover ((`travel-sample`.`name`))",
+                  "id": 3,
+                  "keypos": 1
+                }
+              ],
+              "depends": [
+                0,
+                1
+              ],
+              "group": [
+                {
+                  "depends": [
+                    0
+                  ],
+                  "expr": "cover ((`travel-sample`.`city`))",
+                  "id": 0,
+                  "keypos": 0
+                }
+              ]
+            },
+            "index_id": "7852b5e2c07281f3",
+            "index_projection": {
+              "entry_keys": [
+                0,
+                3
+              ]
+            },
+            "keyspace": "travel-sample",
+        <b>    "limit": "4",</b>
+            "namespace": "default",
+...</codeblock><note>The
+                        <codeph>limit</codeph> is pushed to the indexer because the GROUP BY key
+                    matched with the leading index
+                    key.</note>Results:<codeblock>[
+  {
+    "City": null,
+    "Landmark_Count": 15
+  },
+  {
+    "City": "Abbeville",
+    "Landmark_Count": 1
+  },
+  {
+    "City": "Abbots Langley",
+    "Landmark_Count": 19
+  },
+  {
+    "City": "Aberdeenshire",
+    "Landmark_Count": 6
+  }
+]</codeblock><b
+                    id="docs-internal-guid-82a268f5-ba2b-e5a4-7785-827a5d72d1d1">8. OFFSET with
+                    GROUP BY on leading keys</b></p>
+            <p>To use Aggregate Pushdown when there is an OFFSET clause and a GROUP BY clause on one
+                or more leading keys, use the following syntax of the index and query
+                    statement.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<varname>k0</varname>, <varname>k1</varname>);     
+
+SELECT <varname>k0</varname>, COUNT(k1) 
+FROM <varname>named_keyspace_ref</varname>
+WHERE <varname>k0</varname> IS NOT MISSING
+GROUP BY <varname>k0</varname>
+OFFSET <varname>n</varname>;</codeblock><b>Example
+                    8:</b> OFFSET with GROUP BY on a leading
+                key.<codeblock>CREATE INDEX idx8 ON `travel-sample` (<b>city</b>, name) 
+WHERE type = "landmark";
+
+SELECT city AS City, COUNT(DISTINCT name) AS Landmark_Count 
+FROM `travel-sample`
+WHERE city IS NOT MISSING
+AND type = "landmark"
+GROUP BY <b>city</b>
+<b>OFFSET 4;</b></codeblock>Explain
+                    Plan:<codeblock>{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+        "#operator": "Sequence",
+        "~children": [
+          {
+         <b>   "#operator": "IndexScan3",</b>
+            "covers": [
+              "cover ((`travel-sample`.`city`))",
+              "cover ((`travel-sample`.`name`))",
+              "cover ((meta(`travel-sample`).`id`))",
+              "cover (count(distinct cover ((`travel-sample`.`name`))))"
+            ],
+            "filter_covers": {
+              "cover ((`travel-sample`.`type`))": "landmark"
+            },
+            "index": "idx7",
+            "index_group_aggs": {
+              "aggregates": [
+                {
+                  "aggregate": "COUNT",
+                  "depends": [
+                    1
+                  ],
+                  "distinct": true,
+                  "expr": "cover ((`travel-sample`.`name`))",
+                  "id": 3,
+                  "keypos": 1
+                }
+              ],
+              "depends": [
+                0,
+                1
+              ],
+              "group": [
+                {
+                  "depends": [
+                    0
+                  ],
+                  "expr": "cover ((`travel-sample`.`city`))",
+                  "id": 0,
+                  "keypos": 0
+                }
+              ]
+            },
+            "index_id": "7852b5e2c07281f3",
+            "index_projection": {
+              "entry_keys": [
+                0,
+                3
+              ]
+            },
+            "keyspace": "travel-sample",
+            "namespace": "default",
+          <b>  "offset": "4",</b>
+            "spans": [
+...</codeblock><note>The
+                        <codeph>offset</codeph> is pushed to the indexer because the GROUP BY key
+                    matched with the leading index
+                    key.</note>Results:<codeblock>[
+  {
+    "City": "Aberdour",
+    "Landmark_Count": 4
+  },
+  {
+    "City": "Aberdulais",
+    "Landmark_Count": 1
+  },
+  {
+    "City": "Abereiddy",
+    "Landmark_Count": 1
+  },
+  {
+    "City": "Aberfeldy",
+    "Landmark_Count": 2
+  },
+...</codeblock><b
+                    id="docs-internal-guid-62fed86e-ba30-23d8-b1eb-ec7749f8b015">9. Aggregate
+                    without GROUP BY key</b></p>
+            <p>This is a case of aggregation over a range without groups. If the index can be used
+                for computing the aggregate, the indexer will return a single aggregate value. To
+                use Aggregate Pushdown, use the following syntax of index and
+                    queries:<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<varname>a, b, c</varname>);
+
+Q1: SELECT <varname>Aggregate_Function</varname>(<varname>c</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>a</varname> IS NOT MISSING;
+
+Q2: SELECT SUM(<varname>a</varname>)
+    FROM <varname>named_keyspace_ref</varname>
+    WHERE <varname>a</varname> IS NOT MISSING;
+
+Q3: SELECT SUM(<varname>a</varname>), COUNT(<varname>a</varname>), MIN(<varname>a</varname>)
+    FROM <varname>named_keyspace_ref</varname>
+    WHERE <varname>a</varname> IS NOT MISSING;
+
+Q4: SELECT SUM(<varname>a</varname>), COUNT(<varname>b</varname>), MIN(<varname>c</varname>)
+    FROM <varname>named_keyspace_ref</varname>
+    WHERE <varname>a</varname> IS NOT MISSING;</codeblock><b>Example
+                    9 (Q1):</b> Multiple Aggregate without GROUP BY
+                    key.<codeblock>CREATE INDEX idx9 
+ON `travel-sample`(ROUND(distance), stops, sourceairport) 
+WHERE type = "airport";
+
+Q1: SELECT SUM(ROUND(distance)) AS Total_Distance, 
+           SUM(stops) AS Total_Stops, 
+           COUNT(sourceairport) AS Total_Airports
+    FROM `travel-sample`
+    WHERE distance IS NOT MISSING
+    AND type = "airport";</codeblock>Results:<codeblock>[
+  {
+    "Total_Airports": 24024,
+    "Total_Distance": 53538071,
+    "Total_Stops": 6
+  }
+]</codeblock><b>Example
+                    9 (Q2):</b> Aggregate without GROUP BY
+                    key.<codeblock>Q2: SELECT SUM(ROUND(distance)) AS Total_Distance
+    FROM `travel-sample`;</codeblock>Results:<codeblock>[
+  {
+    "Total_Distance": 53538071
+  }
+]</codeblock><b>Example
+                    9 (Q3):</b> Multiple Aggregate without GROUP BY
+                    key.<codeblock>Q3: SELECT SUM(ROUND(distance)) AS Total_Distance,
+           COUNT(ROUND(distance)) AS Count_of_Distance,
+           MIN(ROUND(distance)) AS Min_of_Distance
+    FROM `travel-sample`
+    WHERE distance IS NOT MISSING;</codeblock>Results:<codeblock>[
+  {
+    "Count_of_Distance": 24024,
+    "Min_of_Distance": 3,
+    "Total_Distance": 53538071
+  }
+]</codeblock><b>Example
+                    9 (Q4):</b> Multiple Aggregate without GROUP BY
+                    key.<codeblock>Q4: SELECT SUM(ROUND(distance)) AS Total_Distance,
+           COUNT(stops) AS Count_of_Stops,
+           MIN(sourceairport) AS Min_of_Airport
+    FROM `travel-sample`
+    WHERE distance IS NOT MISSING;</codeblock>Results:<codeblock>[
+  {
+    "Count_of_Stops": 24024,
+    "Min_of_Airport": "AAE",
+    "Total_Distance": 53538071
+  }
+]</codeblock><b
+                    id="docs-internal-guid-af7d26f3-ba4e-e380-4deb-14da7f213d50">10. Expression in
+                    Aggregate function</b></p>
+            <p>Aggregations with scalar expressions can be speeded up even if the index key does not
+                have the matching expression on the key. To use Aggregate Pushdown, use the
+                following syntax of the index and query
+                    statement:<codeblock>CREATE INDEX idx_expr ON named_keyspace_ref (a,b,c);
+
+SELECT Aggregate_Function1(Expression(c))
+FROM named_keyspace_ref
+WHERE a IS NOT MISSING
+GROUP BY a,b;</codeblock><b
+                    id="docs-internal-guid-be60f70b-ba52-b179-cd13-728a00e7c632">Example 10:</b>
+                List the landmarks with the highest latitude.</p>
+            <p>Use the <codeph>MAX()</codeph> operator to find the highest landmark latitude in each
+                state, group the results by <codeph>country</codeph> and <codeph>state</codeph>, and
+                then sort in reverse order by the highest
+                latitudes.<codeblock>CREATE INDEX idx10 ON `travel-sample`(country, state, ABS(ROUND(geo.lat))) 
+WHERE type="landmark";
+
+SELECT country, state, SUM(ABS(ROUND(geo.lat))) AS SumAbs_Latitude
+FROM `travel-sample`
+WHERE country IS NOT MISSING
+AND type = "landmark"
+GROUP BY country, state
+ORDER BY SumAbs_Latitude DESC;</codeblock>The
+                Example 10 Explain Plan shows that Aggregates are executed by the indexer and is
+                detailed in the
+                <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>Aggregate Query
+                Plan table<?oxy_custom_end?>:</p>
+            <p><image href="images/GBAP_Ex10_VP.png" id="image_kj3_xl2_ycb" scale="70"
+                    /><codeblock>{
+  "plan": {
+    "#operator": "Sequence",
+    "~children": [
+      {
+        "#operator": "Sequence",
+        "~children": [
+          {
+            "#operator": "IndexScan3",
+            "covers": [
+              "cover ((`travel-sample`.`country`))",
+              "cover ((`travel-sample`.`state`))",
+              "cover (abs(round(((`travel-sample`.`geo`).`lat`))))",
+              "cover ((meta(`travel-sample`).`id`))",
+              "cover (sum(cover (abs(round(((`travel-sample`.`geo`).`lat`))))))"
+            ],
+            "filter_covers": {
+              "cover ((`travel-sample`.`type`))": "landmark"
+            },
+            "index": "idx10",
+            "index_group_aggs": {
+              "aggregates": [
+                {
+                  "aggregate": "SUM",
+                  "depends": [
+                    2
+                  ],
+                <b>  "expr": "cover (abs(round(((`travel-sample`.`geo`).`lat`))))",
+                  "id": 4,
+                  "keypos": 2</b>
+                }
+              ],
+              "depends": [
+                0,
+                1,
+                2
+              ],
+              "group": [
+                {
+                  "depends": [
+                    0
+                  ],
+               <b>   "expr": "cover ((`travel-sample`.`country`))",
+                  "id": 0,
+                  "keypos": 0</b>
+                },
+                {
+                  "depends": [
+                    1
+                  ],
+               <b>   "expr": "cover ((`travel-sample`.`state`))",
+                  "id": 1,
+                  "keypos": 1</b>
+                }
+...</codeblock>Results:<codeblock>[
+  {
+    "SumAbs_Latitude": 117513,
+    "country": "United Kingdom",
+    "state": null
+  },
+  {
+    "SumAbs_Latitude": 68503,
+    "country": "United States",
+    "state": "California"
+  },
+  {
+    "SumAbs_Latitude": 10333,
+    "country": "France",
+    "state": "Île-de-France"
+  },
+...</codeblock><b
+                    id="docs-internal-guid-c2a14520-ba57-2a9f-b0b1-4688448cadcb">11. SUM, COUNT,
+                    MIN, MAX, or AVG Aggregate functions</b></p>
+            <p>Currently, the only aggregate functions that are supported are SUM(), COUNT(), MIN(),
+                MAX(), and AVG() with or without the DISTINCT modifier.</p>
+            <p>To use Aggregate Pushdown, use the below syntax of the index and query
+                    statement:<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<i>a,b,c,d</i>);
+
+SELECT <varname>Aggregate_Function</varname>(<varname>a</varname>), <varname>Aggregate_Function</varname>(<varname>b</varname>), 
+       <varname>Aggregate_Function</varname>(<varname>c</varname>), <varname>Aggregate_Function</varname>(<varname>d</varname>)
+FROM <varname>named_keyspace_ref</varname>
+WHERE <varname>a</varname> IS NOT MISSING
+GROUP BY <varname>a</varname>;</codeblock><b>Example
+                    11:</b><codeblock>CREATE INDEX idx11 ON `travel-sample`(ROUND(geo.lat), geo.alt, city, ROUND(geo.lon)) 
+       WHERE type = "airport";
+
+SELECT MIN(ROUND(geo.lat)) AS Min_Lat, 
+       SUM(geo.alt) AS Sum_Alt, 
+       COUNT(city) AS Count_City,  
+       MAX(ROUND(geo.lon)) AS Max_Lon
+FROM `travel-sample`
+WHERE geo.lat IS NOT MISSING
+AND type = "airport"
+<b>GROUP BY (ROUND(geo.lat)) </b>
+ORDER BY (ROUND(geo.lat)) DESC;</codeblock>Results:<codeblock>[
+  {
+    "Count_City": 1,
+    "Max_Lon": 43,
+   <b> "Min_Lat": 72,</b>
+    "Sum_Alt": 149
+  },
+  {
+    "Count_City": 3,
+    "Max_Lon": -157,
+  <b>  "Min_Lat": 71,</b>
+    "Sum_Alt": 120
+  },
+  {
+    "Count_City": 6,
+    "Max_Lon": -144,
+  <b>  "Min_Lat": 70,</b>
+    "Sum_Alt": 292
+  },
+...</codeblock><b
+                    id="docs-internal-guid-a09e0778-ba63-b476-8b94-010a6fa15ca8">12. DISTINCT
+                    aggregates</b></p>
+            <p>There are four cases when DISTINCT aggregates can use this feature:<ol
+                    id="ol_jbx_zn2_ycb">
+                    <li>If the DISTINCT aggregate is on the leading GROUP BY key(s).</li>
+                    <li>If the DISTINCT aggregate is on the leading GROUP By key(s) + 1 (the
+                        immediate next key).</li>
+                    <li>If the DISTINCT aggregate is on a constant expression (GROUP BY can be on
+                        any key).</li>
+                    <li>If there is no GROUP BY and the DISTINCT aggregate is on the first key only
+                        or in a constant expression.</li>
+                </ol>To use Aggregate Pushdown, use one of the following syntaxes of the index and
+                query statements:</p>
+            <p><b>Case #1:</b> If the DISTINCT aggregate is on the leading GROUP BY key(s).<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<i><b>a, b</b>, c</i>);</codeblock><dl>
+                    <dlentry>
+                        <dt>Syntax A:</dt>
+                        <dd>
+                            <codeblock>SELECT SUM(DISTINCT <b><i>a</i></b>)
+FROM named_keyspace_ref
+WHERE <i>a</i> IS NOT MISSING
+GROUP BY <b><i>a</i></b>;</codeblock>
+                        </dd>
+                    </dlentry>
+                </dl><dl>
+                    <dlentry>
+                        <dt>Syntax B:</dt>
+                        <dd>
+                            <codeblock>SELECT COUNT(DISTINCT <i><b>a</b></i>), SUM(DISTINCT <i><b>b</b></i>)
+FROM <varname>named_keyspace_ref</varname>
+WHERE <i>a</i> IS NOT MISSING
+GROUP BY <i><b>a, b</b></i>;</codeblock>
+                        </dd>
+                    </dlentry>
+                </dl><b>Example 12-1 (A):</b> A DISTINCT aggregate on the leading GROUP BY
+                    key(s).<codeblock>CREATE INDEX idx12_1 ON `travel-sample`(<b>ROUND(geo.lat)</b>, <b>ROUND(geo.lon)</b>, country) 
+WHERE type = "airport";
+
+SELECT SUM(DISTINCT <b>ROUND(geo.lat)</b>) AS Sum_Lat
+FROM `travel-sample`
+WHERE geo.lat IS NOT MISSING
+AND type = "airport"
+GROUP BY <b>ROUND(geo.lat)</b>;</codeblock>Results:<codeblock>[
+  {
+    "Sum_Lat": 27
+  },
+  {
+    "Sum_Lat": 36
+  },
+  {
+    "Sum_Lat": 71
+  },
+...</codeblock><b>Example
+                    12-1 (B):</b> A DISTINCT aggregate on the leading GROUP BY
+                    key(s).<codeblock>SELECT COUNT(DISTINCT <b>ROUND(geo.lat)</b>) AS Count_Lat, 
+       SUM(DISTINCT <b>ROUND(geo.lon)</b>) AS Sum_Lon
+FROM `travel-sample`
+WHERE geo.lat IS NOT MISSING
+AND type = "airport"
+GROUP BY <b>ROUND(geo.lat), ROUND(geo.lon)</b>;</codeblock>Results:<codeblock>[
+  {
+    "Count_Lat": 1,
+    "Sum_Lon": -166
+  },
+  {
+    "Count_Lat": 1,
+    "Sum_Lon": -107
+  },
+  {
+    "Count_Lat": 1,
+    "Sum_Lon": -159
+  },
+...</codeblock><b>Case
+                    #2:</b> If the DISTINCT aggregate is on the leading GROUP BY key(s) + 1 (the
+                next key)<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<i><b>a, b</b>, c</i>);</codeblock><dl>
+                    <dlentry>
+                        <dt>Syntax A:</dt>
+                        <dd>
+                            <codeblock>SELECT SUM(DISTINCT <b><i>b</i></b>)
+FROM <varname>named_keyspace_ref</varname>
+WHERE <i>a</i> IS NOT MISSING
+GROUP BY <b><i>a</i></b>;</codeblock>
+                        </dd>
+                    </dlentry>
+                </dl><dl>
+                    <dlentry>
+                        <dt>Syntax B:</dt>
+                        <dd>
+                            <codeblock>SELECT COUNT(DISTINCT <b><i>c</i></b>)
+FROM <varname>named_keyspace_ref</varname>
+WHERE <i>a</i> IS NOT MISSING
+GROUP BY <b><i>a, b</i></b>;</codeblock>
+                        </dd>
+                    </dlentry>
+                </dl><b>Example 12-2 (A):</b> A DISTINCT aggregate  on the leading GROUP BY key(s) +
+                1 (the next
+                    key).<codeblock>CREATE INDEX idx12_2 ON `travel-sample`(<b>country, ROUND(geo.lat)</b>, ROUND(geo.lon)) 
+WHERE type = "airport";
+
+SELECT COUNT(DISTINCT country) AS Count_Country, 
+       SUM(DISTINCT <b>ROUND(geo.lat)</b>) AS Sum_Lat
+FROM `travel-sample`
+WHERE country IS NOT MISSING
+AND type = "airport"
+GROUP BY <b>country</b>;</codeblock>Results:<codeblock>[
+  {
+    "Count_Country": 1,
+    "Sum_Lat": 483
+  },
+  {
+    "Count_Country": 1,
+    "Sum_Lat": 2290
+  },
+  {
+    "Count_Country": 1,
+    "Sum_Lat": 591
+  }
+]</codeblock><b>Example
+                    12-2 (B):</b> A DISTINCT aggregate on the leading GROUP BY key(s) + 1 (the next
+                    key)<codeblock>SELECT COUNT(DISTINCT country) AS Count_Country, 
+       SUM(DISTINCT ROUND(geo.lat)) AS Sum_Lat, 
+       COUNT(DISTINCT <b>ROUND(geo.lon)</b>) AS Count_Lon
+FROM `travel-sample`
+WHERE country IS NOT MISSING
+AND type = "airport"
+GROUP BY <b>country, ROUND(geo.lat)</b>;</codeblock>Results:<codeblock>[
+  {
+    "Count_Country": 1,
+    "Count_Lon": 16,
+    "Sum_Lat": 483
+  },
+  {
+    "Count_Country": 1,
+    "Count_Lon": 103,
+    "Sum_Lat": 2290
+  },
+  {
+    "Count_Country": 1,
+    "Count_Lon": 13,
+    "Sum_Lat": 591
+  }
+]</codeblock><b>Case
+                    #3:</b> If the DISTINCT aggregate is on a constant expression (GROUP BY can be
+                on any
+                    key)<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<i>a, <b>b</b>, c</i>);
+
+SELECT <i>a</i>, COUNT(DISTINCT 1)
+FROM <varname>named_keyspace_ref</varname>
+WHERE <varname>a</varname> IS NOT MISSING
+GROUP BY <b><i>b</i></b>;</codeblock><note>The
+                    results will be pre-aggregated if the <codeph>GROUP BY</codeph> key is
+                    non-leading, as in this case and example.</note><b>Example 12-3:</b> A DISTINCT
+                aggregate on a constant expression (GROUP BY can be on any
+                    key)<codeblock>CREATE INDEX idx12_3 ON `travel-sample`(country, <b>geo.lat</b>, geo.lon) 
+WHERE type = "airport";
+
+SELECT MIN(country) AS Min_Country, 
+       COUNT(DISTINCT 1) AS Constant_Value,
+       MIN(ROUND(geo.lon)) AS Min_Logitude
+FROM `travel-sample`
+WHERE country IS NOT MISSING
+AND type = "airport"
+GROUP BY <b>geo.lat</b>;</codeblock>Results:<codeblock>[
+  {
+    "Constant_Value": 1,
+    "Min_Country": "United States",
+    "Min_Longitude": -75
+  },
+  {
+    "Constant_Value": 1,
+    "Min_Country": "United States",
+    "Min_Longitude": -169
+  },
+  {
+    "Constant_Value": 1,
+    "Min_Country": "United States",
+    "Min_Longitude": -165
+  },
+...</codeblock><b>Case
+                    #4:</b> If the DISTINCT aggregate is on the first key only or in a constant
+                expression, and there is no GROUP BY
+                clause<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<i>a, b, c</i>);
+
+Q1: SELECT SUM(DISTINCT a)
+    FROM <varname>named_keyspace_ref</varname>;               /* ok */
+
+Q2: SELECT COUNT(DISTINCT 1)
+    FROM <varname>named_keyspace_ref</varname>;               /* ok */
+
+Q3: SELECT SUM(DISTINCT c)
+    FROM <varname>named_keyspace_ref</varname>;                /* not ok */</codeblock>All
+                other cases of DISTINCT pushdown will return an error.</p>
+            <p><b>Example 12-4:</b> A DISTINCT aggregate on the first key only or in a constant
+                expression, and there is no GROUP BY
+                clause.<codeblock>CREATE INDEX idx12_4 ON `travel-sample`(<b>geo.alt</b>, geo.lat, <b>geo.lon</b>) 
+WHERE type = "airport";
+
+Q1: SELECT SUM(DISTINCT ROUND(geo.alt)) AS Sum_Alt
+    FROM `travel-sample`
+    WHERE geo.alt IS NOT MISSING
+    AND type = "airport";</codeblock>Results:<codeblock>[
+  {
+    "Sum_Alt": 1463241
+  }
+]</codeblock>Another
+                query with index<codeph>
+                idx12_4:</codeph><codeblock>Q2: SELECT COUNT(DISTINCT 1) AS Const_expr
+    FROM `travel-sample`
+    WHERE type = "airport";</codeblock>Results:<codeblock>[
+  {
+    "Const_expr": 1
+  }
+]</codeblock>Another
+                query with index<codeph> idx12_4</codeph> but will not pushdown the aggregate to the
+                    indexer:<codeblock>Q3: SELECT SUM(DISTINCT ROUND(geo.lon)) AS Sum_Lon
+    FROM `travel-sample`
+    WHERE geo.alt IS NOT MISSING
+    AND type = "airport";</codeblock>Results:<codeblock>[
+  {
+    "Sum_Lon": -11412
+  }
+]</codeblock><b
+                    id="docs-internal-guid-9773d2db-ba85-f585-ea05-595abd843c10">13. HAVING with an
+                    aggregate function inside</b></p>
+            <p>To use Aggregate Pushdown when a HAVING clause has an aggregate function inside, use
+                the following syntax of index and query
+                    statement:<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<i>k0, k1</i>);     
+
+SELECT <varname>k0</varname>, COUNT(<varname>k1</varname>) 
+FROM <varname>named_keyspace_ref</varname>
+WHERE <varname>k0</varname> IS NOT MISSING
+GROUP BY <varname>k0</varname>
+<b>HAVING Aggregate_Function(<i>k1</i>);</b></codeblock><b>Example
+                    13: </b>HAVING with an aggregate function inside.</p>
+            <p>List the cities that have more than 180
+                    landmarks.<codeblock>CREATE INDEX idx13 ON `travel-sample` (city, name) 
+WHERE type = "landmark";
+
+SELECT city AS City, COUNT(DISTINCT name) AS Landmark_Count 
+FROM `travel-sample`
+WHERE city IS NOT MISSING
+AND type = "landmark"
+GROUP BY city
+<b>HAVING COUNT(DISTINCT name) > 180;</b></codeblock>Results:<codeblock>[
+  {
+    "City": "London",
+    "Landmark_Count": 443
+  },
+  {
+    "City": "Los Angeles",
+    "Landmark_Count": 284
+  },
+  {
+    "City": "San Diego",
+    "Landmark_Count": 197
+  },
+  {
+    "City": "San Francisco",
+    "Landmark_Count": 797
+  }
+]</codeblock><b
+                    id="docs-internal-guid-19518afc-ba8a-3f81-650a-f64236d62a51">14. LETTING with an
+                    aggregate function inside</b></p>
+            <p>To use Aggregate Pushdown when a LETTING clause has an aggregate function inside, use
+                the following syntax of the index and query
+                    statement.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<i>k0, k1</i>);     
+
+SELECT <varname>k0</varname>, COUNT(<varname>k1</varname>) 
+FROM <varname>named_keyspace_ref</varname>
+WHERE <varname>k0</varname> IS NOT MISSING
+GROUP BY <varname>k0</varname>
+<b>LETTING <i>var_expr</i> = Aggregate_Function(<i>k1</i>)</b>
+HAVING <i>var_expr</i>;</codeblock><b>Example
+                    14: </b>LETTING with an aggregate function inside.</p>
+            <p>List cities that have more than half of all
+                    landmarks.<codeblock>CREATE INDEX idx14 ON `travel-sample` (city, name) 
+WHERE type = "landmark";
+
+SELECT city AS City, COUNT(DISTINCT name) AS Landmark_Count 
+FROM `travel-sample`
+WHERE city IS NOT MISSING
+AND type = "landmark"
+GROUP BY city
+<b>LETTING MinimumThingsToSee = COUNT(DISTINCT name)</b>
+HAVING MinimumThingsToSee > 180;</codeblock>Results:<codeblock>[
+  {
+    "City": "London",
+    "Landmark_Count": 443
+  },
+  {
+    "City": "Los Angeles",
+    "Landmark_Count": 284
+  },
+  {
+    "City": "San Diego",
+    "Landmark_Count": 197
+  },
+  {
+    "City": "San Francisco",
+    "Landmark_Count": 797
+  }
+]</codeblock><b
+                    id="docs-internal-guid-f14f9e5d-ba8d-b654-70f2-27f204564ae0">15. Aggregate on
+                    non-array index field</b></p>
+            <p>For cases where your query involves arrays, consider the aggregates on array and
+                non-array fields. For details on array indexes, see
+                <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>16. Aggregate on
+                Array Index Field<?oxy_custom_end?>.</p>
+            <p>When using aggregates on non-array index fields, keep the following in mind:<ul
+                    id="ul_hxv_k52_ycb">
+                    <li>Pushdown is supported for MIN() and MAX() functions.</li>
+                    <li>Pushdown is not supported for SUM() or COUNT() functions, since they can
+                        give wrong results due to duplicate entries caused by array explosion, even
+                        when using a DISTINCT Array Index.</li>
+                    <li><?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>12
+                        DISTINCT Aggregate<?oxy_custom_end?> cases apply to pre-aggregate for
+                        non-leading GROUP BY keys.</li>
+                    <li>Filters can be pushed on any leading or non-leading key.</li>
+                    <li>API3 will use KeyPos to specify the array index field.</li>
+                </ul>To use Aggregate Pushdown, there are three cases of GROUP BY:<ol
+                    id="ol_vgq_x52_ycb">
+                    <li>GROUP BY a non-array index field.</li>
+                    <li>GROUP BY an array index field.</li>
+                    <li>Without a GROUP BY clause.</li>
+                </ol><b>Case #1: </b>GROUP BY a non-array index field.</p>
+            <p>To use Aggregate Pushdown, use the following syntax of the index and query
+                    statements:<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<varname>k0</varname>, ALL <varname>ka0</varname>, <varname>k1</varname>);
+
+Q1: SELECT MIN(<varname>k0</varname>)
+    FROM <varname>named_keyspace_ref</varname>
+    WHERE <varname>k0</varname> > <i>n</i>
+    GROUP BY <varname>k0</varname>;      /* ok */
+
+Q2: SELECT MAX(<varname>k1</varname>)
+    FROM <varname>named_keyspace_ref</varname>
+    WHERE <varname>k0</varname> > <i>n</i>
+    GROUP BY <varname>k0</varname>;      /* ok */
+
+Q3: SELECT MAX(<varname>k1</varname>)
+    FROM <varname>named_keyspace_ref</varname>
+    WHERE <varname>k0</varname> > <i>n</i>
+    GROUP BY <varname>k1</varname>;      /* ok (pre-aggregated) */
+
+Q4: SELECT SUM(<varname>k0</varname>)
+    FROM <varname>named_keyspace_ref</varname>
+    WHERE <varname>k0</varname> > <i>n</i>
+    GROUP BY <varname>k0</varname>;      /* no Aggregate Pushdown */
+
+Q5: SELECT COUNT(<varname>k1</varname>)
+    FROM <varname>named_keyspace_ref</varname>
+    WHERE <varname>k0</varname> > <i>n</i>
+    GROUP BY <varname>k0</varname>;      /* no Aggregate Pushdown */</codeblock><b>Example
+                    15-1: </b>GROUP BY non-array index
+                field.<codeblock>CREATE INDEX idx15_1 ON `travel-sample` (geo.alt, ALL geo.alt, geo.lat) WHERE type = "airport";
+
+Q1: SELECT MIN(geo.alt) AS Min_Altitude
+    FROM `travel-sample`
+    WHERE type = "airport"
+    AND geo.alt > 7800
+    GROUP BY geo.alt;</codeblock>Results:<codeblock>[
+  {
+    "Min_Altitude": 7820
+  },
+  {
+    "Min_Altitude": 8544
+  },
+  {
+    "Min_Altitude": 9078
+  }
+]</codeblock>Another
+                query with index
+                <codeph>idx15_1</codeph>:<codeblock>Q2: SELECT MAX(geo.lat) AS Max_Latitude
+    FROM `travel-sample`
+    WHERE geo.alt > 7800
+    AND type = "airport"
+    GROUP BY geo.alt;</codeblock>Results:<codeblock>[
+  {
+    "Max_Latitude": 39.2232
+  },
+  {
+    "Max_Latitude": 38.893889
+  },
+  {
+    "Max_Latitude": 37.953759
+  }
+]</codeblock>Another
+                query with index <codeph>idx15_1</codeph>, but is
+                pre-aggregated:<codeblock>Q3: SELECT MAX(geo.lat) AS Max_Latitude
+    FROM `travel-sample`
+    WHERE geo.alt IS NOT MISSING
+    AND type = "airport"
+    AND geo.alt > 7800
+    GROUP BY geo.lat;</codeblock>Results:<codeblock>[
+  {
+    "Max_Latitude": 39.2232
+  },
+  {
+    "Max_Latitude": 38.893889
+  },
+  {
+    "Max_Latitude": 37.953759
+  }
+]</codeblock>Another
+                query with index <codeph>idx15_1</codeph>, but does not push down the
+                aggregate:<codeblock>Q4: SELECT SUM(geo.alt) AS Max_Latitude
+    FROM `travel-sample`
+    WHERE type = "airport"
+    AND geo.alt > 7800
+    GROUP BY geo.alt;</codeblock>Results:<codeblock>[
+  {
+    "Max_Latitude": 7820
+  },
+  {
+    "Max_Latitude": 8544
+  },
+  {
+    "Max_Latitude": 9078
+  }
+]</codeblock>Another
+                query with index <codeph>idx15_1</codeph>, but does not push down the
+                    aggregate:<codeblock>Q5: SELECT COUNT(geo.lat) AS Num_of_Latitude
+    FROM `travel-sample`
+    WHERE type = "airport"
+    AND geo.alt > 7800
+    GROUP BY geo.alt;</codeblock>Results:<codeblock>[
+  {
+    "Num_of_Latitude": 1
+  },
+  {
+    "Num_of_Latitude": 1
+  },
+  {
+    "Num_of_Latitude": 1
+  }
+]</codeblock><b>Case
+                    #2: </b>GROUP BY an array index
+                field.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (ALL <varname>ka0</varname>, <varname>k0</varname>, <varname>k1</varname>);
+
+Q1: SELECT MIN(d.k0)
+    FROM named_keyspace_ref d
+    UNNEST d.ka0 AS x
+    WHERE d.ka0 IS NOT MISSING
+    AND x > 10
+    GROUP BY x;         /* ok */
+
+Q2: SELECT MAX(k1)
+    FROM named_keyspace_ref d
+    UNNEST d.ka0 AS x 
+    WHERE d.ka0 IS NOT MISSING
+    AND x > 10 
+    GROUP BY x;         /* ok */
+
+Q3: SELECT SUM(k0) 
+    FROM named_keyspace_ref d 
+    UNNEST d.ka0 AS x 
+    WHERE d.ka0 IS NOT MISSING
+    AND x > 10 
+    GROUP BY x;         /* no Aggregate Pushdown */
+
+Q4: SELECT COUNT(k1) 
+    FROM named_keyspace_ref d 
+    UNNEST d.ka0 AS x 
+    WHERE d.ka0 IS NOT MISSING
+    AND x > 10 
+    GROUP BY x;         /* no Aggregate Pushdown */</codeblock></p>
         </section>
     </body>
 </topic>
