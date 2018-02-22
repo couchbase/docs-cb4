@@ -2,7 +2,8 @@
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="groupby-aggregate-performance">
     <title>Group By and Aggregate Performance</title>
-    <shortdesc>N1QL Pushdowns optimize the performance of N1QL queries by supporting GROUP BY and Aggregate expressions.</shortdesc>
+    <shortdesc>N1QL Pushdowns optimize the performance of N1QL queries by supporting GROUP BY and
+        Aggregate expressions.</shortdesc>
     <body>
         <p><i>(Introduced in Couchbase Server 5.5 - Enterprise Edition)</i></p>
         <section id="Overview">
@@ -1652,7 +1653,7 @@ Q1: SELECT MIN(geo.alt) AS Min_Altitude
   }
 ]</codeblock><b>Case
                     #2: </b>GROUP BY an array index
-                field.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (ALL <varname>ka0</varname>, <varname>k0</varname>, <varname>k1</varname>);
+                    field.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (ALL <varname>ka0</varname>, <varname>k0</varname>, <varname>k1</varname>);
 
 Q1: SELECT MIN(d.k0)
     FROM named_keyspace_ref d
@@ -1680,7 +1681,891 @@ Q4: SELECT COUNT(k1)
     UNNEST d.ka0 AS x 
     WHERE d.ka0 IS NOT MISSING
     AND x > 10 
-    GROUP BY x;         /* no Aggregate Pushdown */</codeblock></p>
+    GROUP BY x;         /* no Aggregate Pushdown */</codeblock><b>Example
+                    15-2: </b>GROUP BY an array index
+                field.<codeblock>CREATE INDEX idx15_2 ON `travel-sample` (ALL public_likes, city, country)
+WHERE type = "hotel";
+
+Q1: SELECT MIN(t.city) AS City
+    FROM `travel-sample` t
+    UNNEST t.public_likes AS x
+    WHERE t.type = "hotel"
+    AND x > "A"
+    GROUP BY x;</codeblock>Results:<codeblock>[
+  {
+    "City": "Na h-Eileanan an Iar"
+  },
+  {
+    "City": "San Francisco"
+  },
+  {
+    "City": "Paris-17E-Arrondissement"
+  },
+...</codeblock>Another
+                query with index<codeph>
+                idx15_2</codeph>:<codeblock>Q2: SELECT MAX(t.city) AS City
+    FROM `travel-sample` t
+    UNNEST t.public_likes AS x 
+    WHERE t.type = "hotel"
+    AND x > "A" 
+    GROUP BY x;</codeblock>Results:<codeblock>[
+  {
+    "City": "Na h-Eileanan an Iar"
+  },
+  {
+    "City": "San Francisco"
+  },
+  {
+    "City": "Paris-17E-Arrondissement"
+  },
+...</codeblock>Another
+                query with index<codeph> idx15_2</codeph>, but does not push down the
+                aggregate:<codeblock>Q3: SELECT SUM(TONUMBER(t.pets_ok)) AS Allows_Pets  
+    FROM `travel-sample` t 
+    UNNEST t.pets_ok AS x 
+    WHERE type = "hotel"
+    AND x IS NOT MISSING
+    GROUP BY x;</codeblock>Another
+                query with index<codeph> idx15_2</codeph>, but does not push down the
+                aggregate:<codeblock>Q4: SELECT COUNT(airline) 
+    FROM `travel-sample` t 
+    UNNEST t.schedule AS x 
+    WHERE type = "route"
+    AND x > 10 
+    GROUP BY x;</codeblock>Or
+                create an index that swaps the first two
+                    arguments:<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<b><i>k0</i>, ALL <i>ka0</i></b>, <i>k1</i>);
+
+Q1: SELECT MIN(<i>k0</i>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>k0</varname>, <varname>ka0</varname>   /* ok */
+
+Q2: SELECT MAX(<varname>k1</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>ka0</varname>       /* ok (pre-aggregated) */
+
+Q3: SELECT SUM(<varname>k0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>k0</varname>, <varname>ka0</varname>   /* no Aggregate Pushdown */
+
+Q4: SELECT COUNT(<varname>k1</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>ka0</varname>       /* no Aggregate Pushdown */</codeblock><b>Example
+                    15-2b: </b>Queries with an index that swaps the first two arguments of Example
+                15-2.<codeblock>CREATE INDEX idx15-2b ON `travel-sample` (<b>distance, ALL schedule</b>, airline)
+WHERE type = "route";
+
+Q1: SELECT MIN(distance)
+    FROM `travel-sample` t
+    UNNEST t.schedule AS x
+    WHERE type = "route"
+    AND distance > 10
+    GROUP BY distance, schedule;</codeblock>Another
+                query with index<codeph> idx15_2b</codeph>, but is
+                pre-aggregated:<codeblock>Q2: SELECT MAX(airline)
+    FROM `travel-sample` t
+    UNNEST t.schedule AS x 
+    WHERE type = "route"
+    AND distance > 10 
+    GROUP BY schedule; </codeblock>Another
+                query with index<codeph> idx15_2b</codeph>, but does not push down the
+                aggregate:<codeblock>Q3: SELECT SUM(distance) 
+    FROM `travel-sample` t 
+    UNNEST t.schedule AS x 
+    WHERE type = "route"
+    AND distance > 10 
+    GROUP BY distance, schedule;</codeblock>Another
+                query with index<codeph> idx15_2b</codeph>, but does not push down the
+                    aggregate:<codeblock>Q4: SELECT COUNT(airline) 
+    FROM `travel-sample` t 
+    UNNEST t.schedule AS x 
+    WHERE type = "route"
+    AND distance > 10 
+    GROUP BY schedule;</codeblock><b>Case
+                    #3: </b>Without a GROUP BY
+                    clause.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<i>k0</i>, ALL <i>ka0</i>, <i>k1</i>);
+
+Q1: SELECT MIN(<varname>k0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname>;     /* ok */
+
+Q2: SELECT MAX(<varname>k1</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname>;     /* ok */
+
+Q3: SELECT SUM(<varname>k0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname>;     /* no Aggregate Pushdown */
+
+Q4: SELECT COUNT(k1) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname>;     /* no Aggregate Pushdown */</codeblock><b>Example
+                    15-3: </b>Queries without GROUP
+                BY.<codeblock>CREATE INDEX idx15_3 ON `travel-sample` (distance, ALL schedule, airline);
+
+Q1: SELECT MIN(distance)
+    FROM `travel-sample` t
+    UNNEST t.schedule AS x
+    WHERE type = "route"
+    AND distance > 10;</codeblock>Another
+                query with index<codeph>
+                idx15_3</codeph>:<codeblock>Q2: SELECT MAX(airline)
+    FROM `travel-sample` t
+    UNNEST t.schedule AS x 
+    WHERE type = "route"
+    AND distance > 10; </codeblock>Another
+                query with index<codeph> idx15_3</codeph>, but does not push down the
+                    aggregate:<codeblock>Q3: SELECT SUM(distance) 
+    FROM `travel-sample` t 
+    UNNEST t.schedule AS x 
+    WHERE type = "route"
+    AND distance > 10;</codeblock><b
+                    id="docs-internal-guid-6b830f6f-babe-926c-480c-d3ddd586babc">16. Aggregate on
+                    array index field</b></p>
+            <p>When using aggregates on an array index field, keep the following in mind:<ul
+                    id="ul_e4y_z1f_ycb">
+                    <li>Pushdown is supported for MIN(), MAX(), SUM(), and COUNT(), as well as for
+                        DISTINCT Array Index.</li>
+                    <li><?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>12.
+                        DISTINCT Aggregate<?oxy_custom_end?> cases apply to pre-aggregates for
+                        non-leading GROUP BY keys.</li>
+                    <li>Filters can be pushed on any leading or non-leading key.</li>
+                    <li>API3 will use KeyPos to specify the array index field.</li>
+                </ul>To use Aggregate Pushdown, there are three cases of GROUP BY:<ol
+                    id="ol_t2s_2bf_ycb">
+                    <li>GROUP BY a non-array index field.</li>
+                    <li>GROUP BY an array index field.</li>
+                    <li>Without a GROUP BY clause.</li>
+                </ol><note><codeph>SUM()</codeph> of an array works only if every element is a
+                    number.</note><b>Case #1:</b> GROUP BY a non-array index
+                    field.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<i>k0</i>, ALL <i>ka0</i>, <i>k1</i>);
+
+Q1: SELECT MIN(<varname>ka0</varname>)
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>k0</varname>;        /* ok */
+
+Q2: SELECT MAX(<varname>ka0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>k1</varname>;        /* ok (pre-aggregated) */
+
+Q3: SELECT SUM(<varname>ka0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>k0</varname>         /* ok */
+
+Q4: SELECT COUNT(<varname>ka0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>k1</varname>         /* ok (pre-aggregated) */</codeblock><b>Example
+                    16-1: </b>GROUP BY a non-array index
+                field.<codeblock>CREATE INDEX idx16_1 ON `travel-sample`(distance, ALL schedule, airline) 
+WHERE type = "route";
+
+Q1: SELECT MIN(schedule) AS Min_Schedule
+    FROM `travel-sample`
+    WHERE distance IS NOT MISSING
+    AND type = "route"
+    AND distance > 2000
+    GROUP BY distance;</codeblock>Results:<codeblock>[
+  {
+    "Min_Schedule": [
+      {
+        "day": 0,
+        "flight": "SS221",
+        "utc": "22:05:00"
+      },
+      {
+        "day": 0,
+        "flight": "SS225",
+        "utc": "18:41:00"
+      },
+      {
+        "day": 0,
+        "flight": "SS741",
+        "utc": "16:40:00"
+      },
+...</codeblock>Another
+                query with index<codeph>
+                idx16_1</codeph>:<codeblock>Q2: SELECT MAX(schedule) AS Max_Schedule
+    FROM `travel-sample`
+    WHERE type = "route"
+    AND distance > 1000
+    GROUP BY airline;</codeblock>Results:<codeblock>[
+  {
+    "Max_Schedule": [
+      {
+        "day": 0,
+        "flight": "XL631",
+        "utc": "09:03:00"
+      },
+      {
+        "day": 0,
+        "flight": "XL967",
+        "utc": "12:36:00"
+      },
+...</codeblock>Another
+                query with index<codeph>
+                    idx16_1</codeph>:<codeblock>Q3: SELECT SUM(schedule) AS Sum_Schedule
+    FROM `travel-sample`
+    WHERE type = "route"
+    AND distance > 1000
+    GROUP BY distance;</codeblock>Results:<codeblock>[
+  {
+    "Sum_Schedule": null
+  },
+  {
+    "Sum_Schedule": null
+  },
+  {
+    "Sum_Schedule": null
+  },
+...</codeblock><note>All
+                    result in<codeph> null </codeph>since not every element of the array is a
+                    number.</note><b>CASE #2: </b>GROUP BY array index
+                    field.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (ALL <varname>ka0</varname>, <varname>k0</varname>, <varname>k1</varname>);
+
+Q1: SELECT MIN(x) 
+    FROM <varname>named_keyspace_ref d</varname>
+    UNNEST <varname>d</varname>.<varname>ka0</varname> AS x 
+    WHERE <varname>x</varname> > <varname>n</varname> 
+    GROUP BY <varname>x</varname>;         /* ok */
+
+Q2: SELECT MAX(<varname>x</varname>) 
+    FROM <varname>named_keyspace_ref d </varname>
+    UNNEST <varname>d.ka0</varname> AS <varname>x</varname> 
+    WHERE <varname>x > n</varname> 
+    GROUP BY <varname>x</varname>;         /* ok */
+
+Q3: SELECT SUM(<varname>x</varname>) 
+    FROM <varname>named_keyspace_ref d</varname> 
+    UNNEST <varname>d.ka0</varname> AS <varname>x</varname> 
+    WHERE <varname>x > n </varname>
+    GROUP BY <varname>x</varname>;         /* ok */
+
+Q4: SELECT COUNT(<varname>x</varname>) 
+    FROM <varname>named_keyspace_ref d</varname> 
+    UNNEST <varname>d.ka0</varname> AS <varname>x</varname> 
+    WHERE <varname>x > n</varname>
+    GROUP BY <varname>x</varname>;         /* ok */</codeblock><b>Example
+                    16-2: </b>GROUP BY array index
+                field.<codeblock>CREATE INDEX idx16_2 ON `travel-sample` (ALL schedule, distance, airline);
+
+Q1: SELECT MIN(x) AS Min_Schedule
+    FROM `travel-sample` t 
+    UNNEST t.schedule AS x 
+    WHERE x > 10 
+    GROUP BY x
+    LIMIT 4;</codeblock>Results:<codeblock>[
+  {
+    "Min_Schedule": {
+      "day": 0,
+      "flight": "2L039",
+      "utc": "15:53:00"
+    }
+  },
+  {
+    "Min_Schedule": {
+      "day": 0,
+      "flight": "2L120",
+      "utc": "16:16:00"
+    }
+  },
+  {
+    "Min_Schedule": {
+      "day": 0,
+      "flight": "2L187",
+      "utc": "07:19:00"
+    }
+  },
+  {
+    "Min_Schedule": {
+      "day": 0,
+      "flight": "2L211",
+      "utc": "07:14:00"
+    }
+  }
+]</codeblock>Another
+                query with index
+                <codeph>idx16_2</codeph>:<codeblock>Q2: SELECT MAX(x) AS Max_Schedule
+    FROM `travel-sample` t 
+    UNNEST t.schedule AS x 
+    WHERE x > 10 
+    GROUP BY x
+    LIMIT 4;</codeblock>Results:<codeblock>[
+  {
+    "Max_Schedule": {
+      "day": 0,
+      "flight": "2L039",
+      "utc": "15:53:00"
+    }
+  },
+  {
+    "Max_Schedule": {
+      "day": 0,
+      "flight": "2L120",
+      "utc": "16:16:00"
+    }
+  },
+  {
+    "Max_Schedule": {
+      "day": 0,
+      "flight": "2L187",
+      "utc": "07:19:00"
+    }
+  },
+  {
+    "Max_Schedule": {
+      "day": 0,
+      "flight": "2L211",
+      "utc": "07:14:00"
+    }
+  }
+]</codeblock>Another
+                query with index
+                    <codeph>idx16_2</codeph>:<codeblock>Q3: SELECT SUM(x) AS Sum_Schedule
+    FROM `travel-sample` t 
+    UNNEST t.schedule AS x 
+    WHERE x > 10 
+    GROUP BY x
+    LIMIT 4;</codeblock>Results:<codeblock>[
+  {
+    "Sum_Schedule": null
+  },
+  {
+    "Sum_Schedule": null
+  },
+  {
+    "Sum_Schedule": null
+  },
+  {
+    "Sum_Schedule": null
+  }
+]</codeblock><note>These
+                    result in<codeph> null </codeph>since not every element of the array is a
+                    number.</note>Another query with index
+                    <codeph>idx16_2</codeph>:<codeblock>Q4: SELECT COUNT(x) AS Count_Schedule
+    FROM `travel-sample` t 
+    UNNEST t.schedule AS x 
+    WHERE x > 10 
+    GROUP BY x
+    LIMIT 4;</codeblock>Results:<codeblock>[
+  {
+    "Count_Schedule": 1
+  },
+  {
+    "Count_Schedule": 1
+  },
+  {
+    "Count_Schedule": 1
+  },
+  {
+    "Count_Schedule": 1
+  }
+]</codeblock><b>Case
+                    #3: </b>Without a GROUP BY
+                    clause.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<varname>k0</varname>, ALL <varname>ka0</varname>, <varname>k1</varname>);
+
+Q1: SELECT MIN(<varname>ka0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname>;      /* ok */
+
+Q2: SELECT MAX(<varname>ka0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname>;      /* ok */
+
+Q3: SELECT SUM(<varname>ka0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname>;      /* ok */
+
+Q4: SELECT COUNT(<varname>ka0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname>;      /* ok */</codeblock><b>Example
+                    16-3: </b>Without a GROUP BY
+                clause.<codeblock>CREATE INDEX idx16_3 ON `travel-sample` (distance, ALL schedule, airline);
+
+Q1: SELECT MIN(schedule) AS Min_Schedule
+    FROM `travel-sample` 
+    WHERE distance > 10;</codeblock>Results:<codeblock>[
+  {
+    "Min_Schedule": [
+      {
+        "day": 0,
+        "flight": "2L039",
+        "utc": "15:53:00"
+      },
+      {
+        "day": 0,
+        "flight": "2L211",
+        "utc": "07:14:00"
+      },
+      {
+        "day": 1,
+        "flight": "2L537",
+        "utc": "02:11:00"
+      },
+...</codeblock>Another
+                query with index<codeph>
+                idx16_3:</codeph><codeblock>Q2: SELECT MAX(schedule) AS Max_Schedule
+    FROM `travel-sample` 
+    WHERE distance > 10;</codeblock>Results:<codeblock>[
+  {
+    "Max_Schedule": [
+      {
+        "day": 0,
+        "flight": "XQ808",
+        "utc": "22:38:00"
+      },
+      {
+        "day": 0,
+        "flight": "XQ458",
+        "utc": "14:11:00"
+      },
+      {
+        "day": 0,
+        "flight": "XQ864",
+        "utc": "00:02:00"
+      },
+...</codeblock>Another
+                query with index<codeph>
+                idx16_3:</codeph><codeblock>Q3: SELECT SUM(schedule) AS Sum_Schedule
+    FROM `travel-sample` 
+    WHERE distance > 10;</codeblock>Results:<codeblock>[
+  {
+    "Sum_Schedule": null
+  }
+]</codeblock>Another
+                query with index<codeph>
+                    idx16_3:</codeph><codeblock>Q4: SELECT COUNT(schedule) AS Count_Schedule
+    FROM `travel-sample` 
+    WHERE distance > 10;</codeblock>Results:<codeblock>[
+  {
+    "Count_Schedule": 24014
+  }
+]</codeblock><b
+                    id="docs-internal-guid-c6e690e3-bada-1180-5846-bd30e534ac57">17. DISTINCT
+                    Aggregate on non-array index field</b></p>
+            <p>When using DISTINCT aggregates on a non-array index field, keep the following in
+                    mind:<ul id="ul_jkp_y2f_ycb">
+                    <li>The DISTINCT aggregate is supported only on leading GROUP BY key(s) or
+                        leading GROUP BY key(s) + 1.</li>
+                    <li>Pushdown supported for SUM() and COUNT().</li>
+                    <li>Filter can be pushed on any leading or non-leading key.</li>
+                    <li>API3 will use KeyPos to specify the array index field.</li>
+                </ul>To use Aggregate Pushdown, there are three cases of GROUP BY:<ol
+                    id="ol_szs_cff_ycb">
+                    <li>GROUP BY a non-array index field.</li>
+                    <li>GROUP BY an array index field.</li>
+                    <li>Without a GROUP BY clause.</li>
+                </ol><b>Case #1: </b>GROUP BY a non-array index
+                    field.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<varname>k0</varname>, ALL <varname>ka0</varname>, <varname>k1</varname>);
+
+Q1: SELECT SUM(DISTINCT <varname>k0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>k0</varname>;             /* ok */
+
+Q2: SELECT COUNT(DISTINCT <varname>k1</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>k0</varname>;             /* no Aggregate Pushdown */
+
+Q3: SELECT COUNT(DISTINCT <varname>k1</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>k1</varname>;             /* no Aggregate Pushdown */</codeblock><b>Example
+                    17-1: </b>GROUP BY a non-array index
+                field.<codeblock>CREATE INDEX idx17_1 ON `travel-sample` (distance, ALL schedule, airline)
+WHERE type = "route";
+
+Q1: SELECT SUM(DISTINCT distance) AS Sum_Distance
+    FROM `travel-sample` 
+    WHERE distance > 10 
+    GROUP BY distance;</codeblock>Results:<codeblock>[
+  {
+    "Sum_Distance": 10.164110830325237
+  },
+  {
+    "Sum_Distance": 10.349883467475943
+  },
+  {
+    "Sum_Distance": 10.773191332888711
+  },
+...</codeblock>Another
+                query with index<codeph>
+                idx17_1:</codeph><codeblock>Q2: SELECT COUNT(DISTINCT airline) AS Sum_Distance
+    FROM `travel-sample` 
+    WHERE distance > 10 
+    GROUP BY distance;</codeblock>Results:<codeblock>[
+  {
+    "Sum_Distance": 4
+  },
+  {
+    "Sum_Distance": 1
+  },
+  {
+    "Sum_Distance": 1
+  },
+...</codeblock>Another
+                query with index<codeph>
+                    idx17_1:</codeph><codeblock>Q3: SELECT COUNT(DISTINCT airline) AS Sum_Distance
+    FROM `travel-sample` 
+    WHERE distance > 10 
+    GROUP BY airline;</codeblock>Results:<codeblock>[
+  {
+    "Sum_Distance": 1
+  },
+  {
+    "Sum_Distance": 1
+  },
+  {
+    "Sum_Distance": 1
+  },
+...</codeblock><b>Case
+                    #2:</b> GROUP BY an array index
+                    field.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (ALL <varname>ka0</varname>, <varname>k0</varname>, <varname>k1</varname>);
+
+Q1: SELECT SUM(DISTINCT <i>d.<b>k0</b></i>) 
+    FROM <varname>named_keyspace_ref d</varname> 
+    UNNEST <varname>d.ka0</varname> AS <varname>x</varname> 
+    WHERE <varname>x</varname> > <varname>n</varname> 
+    GROUP BY <i><b>x</b></i>;         /* ok */
+
+Q2: SELECT COUNT(DISTINCT <i>d.<b>k1</b></i>) 
+    FROM <varname>named_keyspace_ref d</varname> 
+    UNNEST <varname>d.ka0</varname> AS <varname>x</varname> 
+    WHERE <varname>x</varname> > <varname>n</varname> 
+    GROUP BY <i><b>x</b></i>;         /* no Aggregate Pushdown */
+
+Q3: SELECT COUNT(DISTINCT <i>d.<b>k1</b></i>) 
+    FROM <varname>named_keyspace_ref d</varname> 
+    UNNEST <varname>d.ka0</varname> AS <varname>x</varname> 
+    WHERE <varname>x</varname> > <varname>n</varname> 
+    GROUP BY <b><i>x, k0</i></b>      /* ok */</codeblock><b>Example
+                    17-2: </b>GROUP BY an array index
+                field.<codeblock>CREATE INDEX idx17_2 ON `travel-sample` (ALL schedule, distance, airline)
+WHERE type = "route";
+
+Q1: SELECT SUM(DISTINCT t.distance) AS Sum_Distance
+    FROM `travel-sample` t 
+    UNNEST t.schedule AS x 
+    WHERE t.type = "route"
+    AND x > 10 
+    GROUP BY x
+    LIMIT 4;</codeblock>Results:<codeblock>[
+  {
+    "Sum_Distance": 922.7579695456559
+  },
+  {
+    "Sum_Distance": 770.9691328580009
+  },
+  {
+    "Sum_Distance": 770.969132858001
+  },
+  {
+    "Sum_Distance": 922.7579695456559
+  }
+]</codeblock>Another
+                query with index<codeph>
+                idx17_2:</codeph><codeblock>Q2: SELECT COUNT(DISTINCT t.distance) AS Count_Distance
+    FROM `travel-sample` t
+    UNNEST t.schedule AS x 
+    WHERE t.type = "route"
+    AND x > 10 
+    GROUP BY x
+    LIMIT 4;</codeblock>Results:<codeblock>[
+  {
+    "Count_Distance": 1
+  },
+  {
+    "Count_Distance": 1
+  },
+  {
+    "Count_Distance": 1
+  },
+  {
+    "Count_Distance": 1
+  }
+]</codeblock>Another
+                query with index<codeph>
+                idx17_2:</codeph><codeblock>Q3: SELECT COUNT(DISTINCT t.airline) AS Count_Airline
+    FROM `travel-sample` t
+    UNNEST t.schedule AS x 
+    WHERE t.type = "route"
+    AND x > 10 
+    GROUP BY x, t.distance
+    LIMIT 4;</codeblock>Results:<codeblock>[
+  {
+    "Count_Airline": 1
+  },
+  {
+    "Count_Airline": 1
+  },
+  {
+    "Count_Airline": 1
+  },
+  {
+    "Count_Airline": 1
+  }
+]</codeblock>Or
+                swap the first two
+                    arguments:<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<i><b>k0, ALL ka0</b></i>, <varname>k1</varname>);
+
+Q1: SELECT SUM(DISTINCT <varname>k0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>k0</varname>, <varname>ka0</varname>;   /* ok */
+
+Q2: SELECT COUNT(DISTINCT <varname>k1</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>k0, ka0</varname>;   /* ok */</codeblock><b>Example
+                    17-2b: </b>GROUP BY an array index field (Index first two arguments
+                swapped).<codeblock>CREATE INDEX ix17_2b ON `travel-sample` (<b>distance, ALL schedule</b>, airline);
+
+Q1: SELECT SUM(DISTINCT distance) AS Sum_Distance
+    FROM `travel-sample` 
+    WHERE distance > 10 
+    GROUP BY distance, schedule;</codeblock>Results:<codeblock>[
+  {
+    "Sum_Distance": 26.97769224141249
+  },
+  {
+    "Sum_Distance": 1580.6490479675
+  },
+  {
+    "Sum_Distance": 1934.5220892996838
+  },
+...</codeblock>Another
+                query with index<codeph>
+                    idx17_2b:</codeph><codeblock>Q2: SELECT COUNT(DISTINCT airline) AS Count_Airline
+    FROM `travel-sample` 
+    WHERE distance > 10 
+    GROUP BY distance, schedule;</codeblock>Results:<codeblock>[
+  {
+    "Count_Airline": 1
+  },
+  {
+    "Count_Airline": 1
+  },
+  {
+    "Count_Airline": 1
+  },
+...</codeblock><b>Case
+                    #3: </b>Without a GROUP BY
+                    clause<codeblock>CREATE INDEX <varname>idx_expr</varname> ON n<varname>amed_keyspace_ref</varname> (<varname>k0</varname>, ALL <varname>ka0</varname>, <varname>k1</varname>);
+
+Q1: SELECT SUM(DISTINCT <varname>k0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0 > n</varname>;           /* ok */
+
+Q2: SELECT COUNT(DISTINCT <varname>k1</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0 > n</varname>;           /* ok */</codeblock><b>Example
+                    17-3: </b>Without a GROUP BY
+                clause.<codeblock>CREATE INDEX idx17_3 ON `travel-sample` (distance, ALL schedule, airline);
+
+Q1: SELECT SUM(DISTINCT distance) AS Sum_Distance
+    FROM `travel-sample` 
+    WHERE distance > 10;</codeblock>Results:<codeblock>[
+  {
+    "Sum_Distance": 14736742.838651348
+  }
+]</codeblock>Another
+                query with index<codeph>
+                    idx17_3:</codeph><codeblock>Q2: SELECT COUNT(DISTINCT airline) AS Count_Airline
+    FROM `travel-sample` 
+    WHERE distance > 10;</codeblock>Results:<codeblock>[
+  {
+    "Count_Airline": 223
+  }
+]</codeblock><b
+                    id="docs-internal-guid-3d16d747-baee-8dc9-5248-bcf386260db4">18. DISTINCT
+                    Aggregate on array index field.</b></p>
+            <p>When using a DISTINCT Aggregate on an array index field, keep the following in
+                    mind:<ul id="ul_gsb_xhf_ycb">
+                    <li>DISTINCT aggregate is supported on only leading GROUP BY key or leading
+                        GROUP BY key + 1.</li>
+                    <li>Pushdown supported for MIN(), MAX(), SUM(), and COUNT() operations.</li>
+                    <li>Filter can be pushed on any leading or non-leading key.</li>
+                </ul>To use Aggregate Pushdown, there are three cases of GROUP BY:<ol
+                    id="ol_gxs_c3f_ycb">
+                    <li>GROUP BY a non-array index field.</li>
+                    <li>GROUP BY an array index field.</li>
+                    <li>Without a GROUP BY clause.</li>
+                </ol><b>Case #1: </b>GROUP BY a non-array index
+                    field.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<varname>k0</varname>, ALL <varname>ka0</varname>, <varname>k1</varname>);
+
+Q1: SELECT SUM(DISTINCT <varname>ka0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>k0</varname>;              /* ok */
+
+Q2: SELECT COUNT(DISTINCT <varname>ka0</varname>) 
+    FROM <varname>named_keyspace_ref</varname> 
+    WHERE <varname>k0</varname> > <varname>n</varname> 
+    GROUP BY <varname>k1</varname>;              /* no Aggregate Pushdown */</codeblock><b>Example
+                    18-1: </b>GROUP BY a non-array index
+                    field.<codeblock>CREATE INDEX idx18_1 ON `travel-sample` (distance, ALL schedule, airline);
+
+Q1: SELECT SUM(DISTINCT schedule) AS Sum_Schedule
+    FROM `travel-sample` 
+    WHERE distance > 10 
+    GROUP BY distance;</codeblock>Results:<codeblock>[
+  {
+    "Sum_Schedule": null
+  },
+  {
+    "Sum_Schedule": null
+  },
+  {
+    "Sum_Schedule": null
+  },
+...</codeblock><note>All
+                    results are<codeph> null </codeph>since not every element of the array is a
+                    number.</note>Another query with index<codeph>
+                    idx18_1:</codeph><codeblock>Q2: SELECT COUNT(DISTINCT schedule) AS Max_Schedule
+    FROM `travel-sample` 
+    WHERE distance > 10 
+    GROUP BY airline;</codeblock>Results:<codeblock>[
+  {
+    "Max_Schedule": 23
+  },
+  {
+    "Max_Schedule": 12
+  },
+  {
+    "Max_Schedule": 38
+  },
+...</codeblock><b>Case
+                    #2: </b>GROUP BY an array index
+                    field.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (ALL <varname>ka0</varname>, <varname>k0</varname>, <varname>k1</varname>);
+
+SELECT MIN(DISTINCT <varname>ka0</varname>) 
+FROM <varname>named_keyspace_ref d</varname> 
+UNNEST <varname>d.ka0</varname> AS <varname>x</varname> 
+WHERE <varname>x > n</varname> 
+GROUP BY <varname>x</varname>;         /* ok */
+
+SELECT MAX(DISTINCT <varname>ka0</varname>) 
+FROM <varname>named_keyspace_ref d </varname>
+UNNEST <varname>d.ka0</varname> AS <varname>x</varname> 
+WHERE <varname>x</varname> > <varname>n</varname> 
+GROUP BY <varname>x</varname>;         /* ok */
+
+SELECT SUM(DISTINCT <varname>ka0</varname>) 
+FROM <varname>named_keyspace_ref d</varname> 
+UNNEST <varname>d.ka0</varname> AS <varname>x</varname> 
+WHERE <varname>x > n</varname> 
+GROUP BY <varname>x</varname>;         /* ok */
+
+SELECT COUNT(DISTINCT <varname>ka0</varname>) 
+FROM <varname>named_keyspace_ref d</varname> 
+UNNEST <varname>d.ka0</varname> AS <varname>x</varname> 
+WHERE <varname>x > n</varname> 
+GROUP BY <varname>x</varname>;         /* ok */</codeblock><b>Case
+                    #3: </b>Without a GROUP BY
+                    clause.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<varname>k0</varname>, ALL <varname>ka0</varname>, <varname>k1</varname>);
+
+SELECT MIN(DISTINCT <varname>ka0</varname>) 
+FROM <varname>named_keyspace_ref</varname> 
+WHERE <varname>k0 > n</varname>;      /* ok */
+
+SELECT MAX(DISTINCT <varname>ka0</varname>) 
+FROM <varname>named_keyspace_ref</varname> 
+WHERE <varname>k0 > n</varname>;      /* ok */
+
+SELECT SUM(DISTINCT <varname>ka0</varname>) 
+FROM <varname>named_keyspace_ref</varname> 
+WHERE <varname>k0 > n</varname>;      /* ok */
+
+SELECT COUNT(DISTINCT <varname>ka0</varname>) 
+FROM <varname>named_keyspace_ref</varname> 
+WHERE <varname>k0 > n</varname>;      /* ok */</codeblock><b
+                    id="docs-internal-guid-6af647a9-baf9-d11a-f512-01f0fdc2c587">19. Array of
+                    arrays</b></p>
+            <p>To use Aggregate Pushdown with an array of arrays, use the following syntax of the
+                index and query
+                statement:<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<varname>name</varname>, ALL <varname>val2</varname>);  /* val2 is 2-D array */
+
+SELECT <varname>name</varname>, SUM(<varname>q</varname>) 
+FROM <varname>t</varname> UNNEST <varname>val2 p</varname> UNNEST <varname>p q </varname>
+GROUP BY <varname>name</varname>;</codeblock></p>
+        </section>
+        <section id="section_bq1_rjf_ycb">
+            <title>Limitations</title>
+            <p>The following are currently not supported and not pushed to the indexer:<ul
+                    id="ul_pyr_sjf_ycb">
+                    <li><codeph>HAVING</codeph> or <codeph>LETTING</codeph> clauses, unless there is
+                        an aggregate function inside.</li>
+                    <li><codeph>ORDER BY</codeph> clauses.</li>
+                    <li><codeph>ARRAY_AGG() </codeph>or any facility to add new Aggregate function,
+                        such as Median.</li>
+                    <li><codeph>LIMIT</codeph> pushdown with <codeph>GROUP BY</codeph> on
+                        non-leading keys.</li>
+                    <li><codeph>OFFSET</codeph> pushdown with <codeph>GROUP BY</codeph> on
+                        non-leading keys.</li>
+                    <li>A subquery in a <codeph>GROUP BY</codeph> or Aggregate pushdown.</li>
+                </ul></p>
+            <p><b>Aggregate Comparison</b><table frame="all" rowsep="1" colsep="1"
+                    id="table_hvz_skf_ycb">
+                    <tgroup cols="5" align="center">
+                        <colspec colname="c1" colnum="1" colwidth="2*"/>
+                        <colspec colname="c2" colnum="2" colwidth="1*"/>
+                        <colspec colname="c3" colnum="3" colwidth="1*"/>
+                        <colspec colname="c4" colnum="4" colwidth="1*"/>
+                        <colspec colname="c5" colnum="5" colwidth="1*"/>
+                        <thead>
+                            <row>
+                                <entry>Item</entry>
+                                <entry>Aggregate on Non-Array Index Field</entry>
+                                <entry>Aggregate on Non-Array Index Field</entry>
+                                <entry>DISTINCT Aggregate on Non-Array Index Field</entry>
+                                <entry>DISTINCT Aggregate on Non-Array Index Field</entry>
+                            </row>
+                        </thead>
+                        <tbody>
+                            <row>
+                                <entry>Supports <codeph>MIN()</codeph> and
+                                    <codeph>MAX()</codeph></entry>
+                                <entry><b>✓</b></entry>
+                                <entry><b>✓</b></entry>
+                                <entry>-</entry>
+                                <entry>-</entry>
+                            </row>
+                            <row>
+                                <entry>Supports <codeph>SUM()</codeph> and
+                                    <codeph>COUNT()</codeph></entry>
+                                <entry>-</entry>
+                                <entry><b>✓</b></entry>
+                                <entry><b>✓</b></entry>
+                                <entry><b>✓</b></entry>
+                            </row>
+                            <row>
+                                <entry>Supports <codeph>AVG()</codeph></entry>
+                                <entry><b>✓</b></entry>
+                                <entry><b>✓</b></entry>
+                                <entry><b>✓</b></entry>
+                                <entry><b>✓</b></entry>
+                            </row>
+                            <row>
+                                <entry>Supports <codeph>ARRAY_AGG()</codeph></entry>
+                                <entry>-</entry>
+                                <entry>-</entry>
+                                <entry>-</entry>
+                                <entry>-</entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table></p>
+        </section>
+        <section id="section_bpf_wjf_ycb">
+            <title>Appx 1 - Query Plan Fields</title>
         </section>
     </body>
 </topic>
