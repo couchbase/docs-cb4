@@ -1,6 +1,6 @@
 # Couchbase Documentation
 
-The Couchbase Documentation Repository for Couchbase 4+ DITA based Docs
+The Couchbase Documentation Repository for Couchbase 4+ DITA based Docsdddd
 
 ### Contributing
 A guide for contributing to the Couchbase Server Documentation can be found 
