@@ -12,79 +12,178 @@
     <section>
       <title>Synopsis</title>
       <p><i>cbbackupmgr restore</i> [--archive &lt;archive_dir&gt;] [--repo &lt;repo_name&gt;] [--start &lt;backup&gt;] [--end &lt;backup&gt;] [--exclude-buckets &lt;bucket_list&gt;] [--include-buckets &lt;bucket_list&gt;] [--disable-bucket-config] [--disable-views] [--disable-gsi-indexes] [--disable-ft-indexes] [--disable-data] [--force-updates][--threads &lt;integer&gt;] [--no-progress-bar] </p>
+      <p><i>cbbackupmgr restore</i> [--archive &lt;archive_dir>] [--repo &lt;repo_name>] [--cluster
+        &lt;host>] [--username &lt;username>] [--password &lt;password>] [--start &lt;backup>]
+        [--end &lt;backup>] [--exclude-buckets &lt;bucket_list>] [--include-buckets
+        &lt;bucket_list>] [--map-buckets &lt;list>] [--disable-bucket-config] [--disable-views]
+        [--disable-gsi-indexes] [--disable-ft-indexes] [--disable-data] [--force-updates][--threads
+        &lt;integer>] [--no-progress-bar]</p>
     </section>
     <section>
       <title>Description</title>
-      <p>Restores data from the backup archive to a target Couchbase cluster. </p>
+      <p>Restores data from the backup archive to a target Couchbase cluster. By default all data,
+        index definitions, view definitions, full-text index definitions and bucket configuration
+        data are restored to the cluster unless specified otherwise in the repository's backup
+        config or though command line parameters when running the restore command. For example, if
+        you changed bucket configuration settings since your last backup, then restoring a previous
+        backup will by default overwrite these settings unless you explicitly tell
+          <cmdname>cbbackupmgr </cmdname>not to restore the bucket settings using the
+          <parmname>--disable-bucket-config</parmname> flag.</p>
       <p>The restore command is capable of restoring a single backup or a range of backups. When restoring a single backup, all data from that backup is restored. If a range of backups is restored, then <i>cbbackupmgr</i> takes into account any failovers that may have occurred in between the time that the backups were originally taken. If a failover did occur in between the backups, and the backup archive contains data that no longer exists in the cluster, then the data that no longer exists is skipped during the restore. If no failovers occurred in between backups then restoring a range of backups restores all data from each backup. If all data must be restored regardless of whether a failover occurred in between the original backups, then data should be restored one backup at a time. </p>
       <p>The restore command is guaranteed to work during rebalances and failovers. If a rebalance is taking place, <i>cbbackupmgr</i> tracks the movement of vBuckets around a Couchbase cluster and ensures that data is restored to the appropriate node. If a failover occurs during the restore then the client will wait 180 seconds for the failed node to be removed from the cluster. If the failed node is not removed in 180 seconds then the restore will fail, but if the failed node is removed before the timeout then data will continue to be restored. </p>
+      <p>Note that if you are restoring indexes then it is highly likely that you will need to take
+        some manual steps in order to properly restore them. This is because by default indexes will
+        only be built if they are restored to the exact same index node that they were backed up
+        from. If the index node they were backed up from does not exist then the indexes will be
+        restored in round-robin fashion among the current indexer nodes. These indexes will be
+        created, but not built and will required the administrator to manually build them. We do
+        this because we cannot know the optimal index topology ahead of time. By not building the
+        indexes the administrator can move each index between nodes and build them when they deem
+        that the index topology is optimal.</p>
     </section>
     <section>
-      <title>Options</title>
-      <p>Below is a list of required and optional parameters for the restore command. </p>
+      <title>Options</title><p>Below is a list of required and optional parameters for the restore
+        command. </p>
       <b>Required</b>
-      <p>--archive &lt;archive_dir&gt; </p><sl>
-        <sli>The directory containing the backup repository to restore data from. 
-        </sli></sl>
-      <p>--repo &lt;repo_name&gt; </p><sl>
-        <sli>The name of the backup repository to restore data from. 
-        </sli></sl>
-      <p>--host &lt;hostname&gt; </p><sl>
-        <sli>The hostname of one of the nodes in the cluster to restore data to. 
-See the Host Formats section below for hostname specification details. 
-        </sli></sl>
-      <p>--username &lt;username&gt; </p><sl>
-        <sli>The username for cluster authentication. 
-        </sli></sl>
-      <p>--password &lt;password&gt; </p><sl>
-        <sli>The password for cluster authentication. 
-        </sli></sl>
+      <dl>
+        <dlentry>
+          <dt>-a,--archive &lt;archive_dir></dt>
+          <dd>The directory containing the backup repository to restore data from.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>-r,--repo &lt;repo_name></dt>
+          <dd>The name of the backup repository to restore data from.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>-c,--cluster &lt;hostname></dt>
+          <dd>The hostname of one of the nodes in the cluster to restore data to. See the Host
+            Formats section below for hostname specification details.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>-u,--username &lt;username></dt>
+          <dd>The username for cluster authentication. The user must have the appropriate privileges
+            to take a backup.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>-p,--password &lt;password></dt>
+          <dd>The password for cluster authentication. The user must have the appropriate privileges
+            to take a backup. If not password is supplied to this option then you will be prompted
+            to enter your password.</dd>
+        </dlentry>
+      </dl>
       <b>Optional</b>
-      <p>--start &lt;backup&gt; </p><sl>
-        <sli>The name of the	first backup in	the backup repository to restore. 
-If not specified this value will default to the oldest backup in the backup repository. 
-        </sli></sl>
-      <p>--end &lt;backup&gt; </p><sl>
-        <sli>The name of the last backup in the backup repository to restore. 
-If not specified this value will default to the most recent backup in the backup repository. 
-        </sli></sl>
-      <p>--exclude-buckets &lt;bucket_list&gt; </p><sl>
-        <sli>Restores all buckets in a backup that are not specified in &lt;bucket_list&gt;. 
-This flag cannot be specified at the same time as the --include-buckets flag. 
-Takes a comma separated list of bucket names. 
-        </sli></sl>
-      <p>--include-buckets &lt;bucket_list&gt; </p><sl>
-        <sli>Restores only buckets in a backup that are specified in &lt;bucket-list&gt;. 
-This flag cannot be specified at the same time as the --exclude-buckets flag. 
-Takes a comma separated list of bucket names. 
-        </sli></sl>
-      <p>--disable-views </p><sl>
-        <sli>Skips restoring view definitions for all buckets. 
-        </sli></sl>
-      <p>--disable-gsi-indexes </p><sl>
-        <sli>Skips restoring gsi index definitions for all buckets. 
-        </sli></sl>
-      <p>--disable-ft-indexes </p><sl>
-        <sli>Skips restoring full-text index definitions for all buckets. 
-        </sli></sl>
-      <p>--disable-data </p><sl>
-        <sli>Skips restoring all key-value data for all buckets. 
-        </sli></sl>
-      <p>--force-updates </p><sl>
-        <sli>Forces data in the Couchbase cluster to be overwritten even if the data in the cluster is newer. 
-By default updates are not forced and all updates use the conflict resolution mechanism in Couchbase to ensure that newer data on the cluster, if any, is not overwritten by older restore data. 
-        </sli></sl>
-      <p>--threads &lt;num&gt; </p><sl>
-        <sli>Specifies the number of concurrent clients to use when restoring data. 
-Fewer clients means restores take longer, but there will be less cluster resources used to complete the restore. 
-More clients means faster restores, but at the cost of more cluster resource usage. 
-This parameter defaults to 1 if it is not specified and it is recommended that you do not set this parameter to be higher than the number of CPUs on the machine where the restore is taking place. 
-        </sli></sl>
-      <p>--no-progress-bar </p><sl>
-        <sli>By default, a progress bar is printed to stdout so that the user can see how long the restore is expected to take, the amount of data that is being transferred per second, and the amount of data that has been restored. 
-Specifying this flag disables the progress bar and is useful when running automated jobs. 
-        </sli></sl>
-    </section>
+      <dl>
+        <dlentry>
+          <dt>--start &lt;backup></dt>
+          <dd>The name of the first backup in the backup repository to restore or an index value
+            which references an incremental backup. Valid index values are any positive integer,
+            "oldest", and "latest". If a positive integer is used then it should reference the index
+            of the incremental backup starting from the oldest to the most recent backup. For
+            example, "1" corresponds to the oldest backup, "2" corresponds to the second oldest
+            backup, and so on. Specifying "oldest" means that the index of the oldest backup should
+            be used and specifying "latest" means the index of the most recent backup should be
+            used. If this flag is not specified then the restore will start with the oldest backup
+            in the backup repository.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>--end &lt;backup></dt>
+          <dd>The name of the last backup in the backup repository to restore or an index value
+            which references an incremental backup. Valid index values are any positive integer,
+            "oldest", and "latest". If a positive integer is used then it should reference the index
+            of the incremental backup starting from the oldest to the most recent backup. For
+            example, "1" corresponds to the oldest backup, "2" corresponds to the second oldest
+            backup, and so on. Specifying "oldest" means that the index of the oldest backup should
+            be used and specifying "latest" means the index of the most recent backup should be
+            used. If this flag is not specified then the restore will end with the most recent
+            backup in the backup repository.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>--exclude-buckets &lt;bucket_list></dt>
+          <dd>Restores all buckets in a backup that are not specified in &lt;bucket_list>. This flag
+            cannot be specified at the same time as the --include-buckets flag. Takes a comma
+            separated list of bucket names.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>--include-buckets &lt;bucket_list></dt>
+          <dd>Restores only buckets in a backup that are specified in &lt;bucket-list>. This flag
+            cannot be specified at the same time as the --exclude-buckets flag. Takes a comma
+            separated list of bucket names.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>--filter-keys</dt>
+          <dd>Only restore data where the key matches a particular regular expression.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>--filter-values</dt>
+          <dd>Only restore data where the value matches a particular regular expression.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>--enable-bucket-config</dt>
+          <dd>Enables restoring the bucket configuration.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>--disable-views</dt>
+          <dd>Skips restoring view definitions for all buckets. </dd>
+        </dlentry>
+        <dlentry>
+          <dt>--disable-gsi-indexes</dt>
+          <dd>Skips restoring gsi index definitions for all buckets.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>--disable-ft-indexes</dt>
+          <dd>Skips restoring full-text index definitions for all buckets.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>--disable-data</dt>
+          <dd>Skips restoring all key-value data for all buckets.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>--force-updates</dt>
+          <dd>Forces data in the Couchbase cluster to be overwritten even if the data in the cluster
+            is newer. By default updates are not forced and all updates use Couchbase's conflict
+            resolution mechanism to ensure that if newer data exists on the cluster that is not
+            overwritten by older restore data.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>--map-buckets &lt;bucket_mapping></dt>
+          <dd>Specified when you want to restore a backup to a destination bucket that has a
+            different name than the bucket that was originally backed up. This parameter takes a
+            list of mappings since multiple buckets may be restored at the same time. Each bucket
+            mapping is separated by an "=" and if multiple bucket mappings are specified then they
+            should be comma separated. If we have two buckets, bucket-1 and bucket-2, and we want to
+            restore them to renamed-1 and renamed-2 then we would denote the mapping as
+            "bucket-1=renamed-1,bucket-2=renamed-2".</dd>
+        </dlentry>
+        <dlentry>
+          <dt>--no-ssl-verify</dt>
+          <dd>Skips the SSL verification phase. Specifying this flag will allow a connection using
+            SSL encryption, but will not verify the identity of the server you connect to. You are
+            vulnerable to a man-in-the-middle attack if you use this flag. Either this flag or the
+            --cacert flag must be specified when using an SSL encrypted connection.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>--cacert &lt;cert_path></dt>
+          <dd>Specifies a CA certificate that will be used to verify the identity of the server
+            being connecting to. Either this flag or the --no-ssl-verify flag must be specified when
+            using an SSL encrypted connection.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>-t,--threads &lt;num></dt>
+          <dd>Specifies the number of concurrent clients to use when restoring data. Fewer clients
+            means restores will take longer, but there will be less cluster resources used to
+            complete the restore. More clients means faster restores, but at the cost of more
+            cluster resource usage. This parameter defaults to 1 if it is not specified and it is
+            recommended that this parameter is not set to be higher than the number of CPUs on the
+            machine where the restore is taking place.</dd>
+        </dlentry>
+        <dlentry>
+          <dt>--no-progress-bar</dt>
+          <dd>By default, a progress bar is printed to stdout so that the user can see how long the
+            restore is expected to take, the amount of data that is being transferred per second,
+            and the amount of data that has been restored. Specifying this flag disables the
+            progress bar and is useful when running automated jobs. </dd>
+        </dlentry>
+      </dl></section>
     <section>
       <title>Host Formats</title>
       <p>When specifying a host for the <i>restore</i> command the following formats are expected: </p>
@@ -150,12 +249,26 @@ Size      Items          Name
     </section>
     <section>
       <title>Discussion</title>
-      <p>The restore command works by replaying the data recorded into backup files. During the restore this creates key-value traffic against the cluster that shows up in the form of "set" operations. The restore command replays data from each file in order to guarantee that older backup data does not overwrite newer data. The restore command uses Couchbase's conflict resolution mechanism by default to ensure this behavior. The conflict resolution mechanism can be disable by specifying the --force-updates flag when executing a restore. </p>
+      <p>The restore command works by replaying the data recorded in backup files. During a restore
+        each key-value pair backed up by cbbackupmgr will be sent to the cluster as either a "set"
+        or "delete" operation. The restore command replays data from each file in order of backup
+        time to guarantee that older backup data does not overwrite newer backup data. The restore
+        command uses Couchbase's conflict resolution mechanism by default to ensure this behavior.
+        The conflict resolution mechanism can be disable by specifying the --force-updates flag when
+        executing a restore.</p>
+      <p>Starting in Couchbase 4.6 each bucket can have different conflict resolution mechanisms.
+        cbbackupmgr will backup all meta data used for conflict resolution, but since each conflict
+        resolution mechanism is different cbbackupmgr will prevent restores to a bucket when the
+        source and destination conflict resolution methods differ. This is done because by default
+        cbbackupmgr will use the conflict resolution mechanism of the destination bucket to ensure
+        an older value does not overwrite a newer value. If you want to restore a backup to a bucket
+        with a different conflict resolution type you can do by using the --force-updates flag. This
+        is allowed because forcing updates means that cbbackupmgr will skip doing conflict
+        resolution on the destination bucket.</p>
       <p>Unlike backups, restores cannot be resumed if they fail. </p>
     </section>
     <section>
       <title>Environment And Configuration Variables</title>
-      <p>(None) </p>
     </section>
 <!--    <section>
       <title>See Also</title>
