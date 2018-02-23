@@ -743,48 +743,19 @@ GROUP BY <b>UPPER</b>(sourceairport);</codeblock>Results:<codeblock>[
 ...</codeblock><b
                     id="docs-internal-guid-29f284c7-ba1c-b38b-97a7-1a2d9a3d998b">5. Heterogeneous
                     data types for GROUP BY key</b></p>
-            <p>When using a mix of data types for the GROUP BY key:<ul id="ul_ztr_5d2_ycb">
-                    <li><codeph>NULLS</codeph> and <codeph>MISSING</codeph> are two separate
-                        groups.</li>
-                </ul><b>Example
-                5</b>:<codeblock>CREATE INDEX idx5 ON `travel-sample`(geo.lat, vacancy, email) 
-WHERE type = "hotel";
+            <p>When a field has a mix of data types for the GROUP BY key:<ul id="ul_ztr_5d2_ycb">
+          <li><codeph>NULLS</codeph> and <codeph>MISSING</codeph> are two separate groups.</li>
+        </ul><b>Example 5</b>:</p>
+      <p>To see a separate grouping of <codeph>MISSING</codeph> and <codeph>NULL</codeph>, we need
+        to <codeph>GROUP BY</codeph> a field we know exists in one document but not in another
+        document while both documents have another field in common. For example, create 3 such
+        documents:<codeblock>INSERT INTO `travel-sample` VALUES("01",{"<b>type</b>":1, "email":"abc","<b>xx</b>":<b>3</b>});
 
-SELECT MAX(ROUND(geo.lat)) AS Max_Lattitude, MAX(vacancy) AS Max_Vacancy, MIN(email) AS Min_Email
-FROM `travel-sample`
-WHERE geo.lat IS NOT MISSING
-AND type = "hotel"
-GROUP BY ROUND(geo.lat), vacancy, SUBSTR(email,0,1)
-ORDER BY Min_Email;</codeblock>Results:<codeblock>[
-  {
-    "Max_Lattitude": 36,
-    "Max_Vacancy": false,
-    "Min_Email": null
-  },
-  {
-    "Max_Lattitude": 40,
-    "Max_Vacancy": true,
-    "Min_Email": null
-  },
-  {
-    "Max_Lattitude": 34,
-    "Max_Vacancy": true,
-    "Min_Email": "Bed@TopangaCanyonInn.com"
-  },
-  {
-    "Max_Lattitude": 48,
-    "Max_Vacancy": false,
-    "Min_Email": "BourronILA@ila-chateau.com"
-  },
-...</codeblock>To
-                see a separate grouping of <codeph>MISSING</codeph>, we need to <codeph>GROUP
-                    BY</codeph> a field we know exists in one document but not in another document
-                while both documents have another field in common. For example, create 2 such
-                documents:<codeblock>INSERT INTO `travel-sample` VALUES("01",{"<b>type</b>":1, "email":"abc","<b>xx</b>":<b>3</b>});
+INSERT INTO `travel-sample` VALUES("01",{"<b>type</b>":1, "email":"abc","<b>xx</b>":<b>null</b>});
 
 INSERT INTO `travel-sample` VALUES("02",{"<b>type</b>":1, "email":"abcd"});</codeblock>Then
-                run the following
-                    query:<codeblock>SELECT type, <b>xx</b>, MIN(email) AS Min_Email
+        run the following
+          query:<codeblock>SELECT type, <b>xx</b>, MIN(email) AS Min_Email
 FROM `travel-sample`
 WHERE type IS NOT NULL
 GROUP BY type, <b>xx</b>;</codeblock>Results:<codeblock>[
@@ -792,6 +763,11 @@ GROUP BY type, <b>xx</b>;</codeblock>Results:<codeblock>[
     "Min_Email": "abc",
     "<b>type": 1</b>,
     "<b>xx": 3</b>
+  },
+  {
+    "Min_Email": "abc",
+    "<b>type": 1</b>,
+    "<b>xx": null</b>
   },
   {
     "Min_Email": "abcd",
@@ -802,20 +778,20 @@ GROUP BY type, <b>xx</b>;</codeblock>Results:<codeblock>[
     "type": "airline"
   },
 ...</codeblock><b
-                    id="docs-internal-guid-e3f2aba4-ba21-bda0-6921-b83d1b3a30fa">6. GROUP BY
-                    META().ID Primary Index</b></p>
+          id="docs-internal-guid-e3f2aba4-ba21-bda0-6921-b83d1b3a30fa">6. GROUP BY META().ID Primary
+          Index</b></p>
             <p>If there is no filter, then pushdown is supported for an expression on the Document
                 ID <codeph>META().id</codeph> in the <codeph>GROUP BY</codeph> clause.</p>
-            <p>To use Aggregate Pushdown, use the following syntax of the index and query
-                    statement:<codeblock>CREATE PRIMARY INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname>;
+            <p>To use Aggregate Pushdown, use the following example of the index and query
+          statement:<codeblock>CREATE PRIMARY INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname>;
 
 SELECT COUNT(1)
 FROM <varname>named_keyspace_ref</varname>
 GROUP BY SUBSTR(META().id, 0, 10);</codeblock><note>If
-                    there is a filter on the Document ID, then the primary index can be used as a
-                    secondary scan.</note><b>Example 6:</b> List the number of countries that are in
-                each decile of the <codeph>META().id</codeph>
-                    field.<codeblock>CREATE PRIMARY INDEX idx6 ON `travel-sample`;
+          there is a filter on the Document ID, then the primary index can be used as a secondary
+          scan.</note><b>Example 6:</b> List the number of countries that are in each decile of the
+          <codeph>META().id</codeph>
+          field.<codeblock>CREATE PRIMARY INDEX idx6 ON `travel-sample`;
 
 SELECT COUNT(1) AS Cnt, SUBSTR(META().id,0,9) AS Meta_Group
 FROM `travel-sample`
@@ -833,19 +809,19 @@ GROUP BY SUBSTR(META().id,0,9);</codeblock>Results:<codeblock>[
     "Number_of_Country": 482
   },
 ...</codeblock><b
-                    id="docs-internal-guid-67306400-ba24-c55f-4713-86943530e62c">7. LIMIT with GROUP
-                    BY on leading keys</b></p>
+          id="docs-internal-guid-67306400-ba24-c55f-4713-86943530e62c">7. LIMIT with GROUP BY on
+          leading keys</b></p>
             <p>To use Aggregate Pushdown when there is a LIMIT clause and a GROUP BY clause on one
-                or more leading keys, use the following syntax of the index and query
-                    statement:<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<varname>k0, k1</varname>);     
+        or more leading keys, use the following example of the index and query
+          statement:<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<varname>k0, k1</varname>);     
 
 SELECT <varname>k0</varname>, COUNT(<varname>k1</varname>) 
 FROM <varname>named_keyspace_ref</varname>
 WHERE <varname>k0</varname> IS NOT MISSING
 GROUP BY <varname>k0</varname>
 LIMIT <varname>n</varname>;</codeblock><b>Example
-                    7:</b> LIMIT with GROUP BY on the leading
-                key.<codeblock>CREATE INDEX idx7 ON `travel-sample` (<b>city</b>, name) 
+          7:</b> LIMIT with GROUP BY on the leading
+        key.<codeblock>CREATE INDEX idx7 ON `travel-sample` (<b>city</b>, name) 
 WHERE type = "landmark";
 
 SELECT city AS City, COUNT(DISTINCT name) AS Landmark_Count 
@@ -854,7 +830,7 @@ WHERE city IS NOT MISSING
 AND type = "landmark"
 GROUP BY <b>city</b>
 <b>LIMIT 4;</b></codeblock>Explain
-                    Plan:<codeblock>{
+          Plan:<codeblock>{
   "plan": {
     "#operator": "Sequence",
     "~children": [
@@ -912,9 +888,9 @@ GROUP BY <b>city</b>
         <b>    "limit": "4",</b>
             "namespace": "default",
 ...</codeblock><note>The
-                        <codeph>limit</codeph> is pushed to the indexer because the GROUP BY key
-                    matched with the leading index
-                    key.</note>Results:<codeblock>[
+            <codeph>limit</codeph> is pushed to the indexer because the GROUP BY key matched with
+          the leading index
+          key.</note>Results:<codeblock>[
   {
     "City": null,
     "Landmark_Count": 15
@@ -932,19 +908,19 @@ GROUP BY <b>city</b>
     "Landmark_Count": 6
   }
 ]</codeblock><b
-                    id="docs-internal-guid-82a268f5-ba2b-e5a4-7785-827a5d72d1d1">8. OFFSET with
-                    GROUP BY on leading keys</b></p>
+          id="docs-internal-guid-82a268f5-ba2b-e5a4-7785-827a5d72d1d1">8. OFFSET with GROUP BY on
+          leading keys</b></p>
             <p>To use Aggregate Pushdown when there is an OFFSET clause and a GROUP BY clause on one
-                or more leading keys, use the following syntax of the index and query
-                    statement.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<varname>k0</varname>, <varname>k1</varname>);     
+        or more leading keys, use the following example of the index and query
+          statement.<codeblock>CREATE INDEX <varname>idx_expr</varname> ON <varname>named_keyspace_ref</varname> (<varname>k0</varname>, <varname>k1</varname>);     
 
 SELECT <varname>k0</varname>, COUNT(k1) 
 FROM <varname>named_keyspace_ref</varname>
 WHERE <varname>k0</varname> IS NOT MISSING
 GROUP BY <varname>k0</varname>
 OFFSET <varname>n</varname>;</codeblock><b>Example
-                    8:</b> OFFSET with GROUP BY on a leading
-                key.<codeblock>CREATE INDEX idx8 ON `travel-sample` (<b>city</b>, name) 
+          8:</b> OFFSET with GROUP BY on a leading
+        key.<codeblock>CREATE INDEX idx8 ON `travel-sample` (<b>city</b>, name) 
 WHERE type = "landmark";
 
 SELECT city AS City, COUNT(DISTINCT name) AS Landmark_Count 
@@ -953,7 +929,7 @@ WHERE city IS NOT MISSING
 AND type = "landmark"
 GROUP BY <b>city</b>
 <b>OFFSET 4;</b></codeblock>Explain
-                    Plan:<codeblock>{
+          Plan:<codeblock>{
   "plan": {
     "#operator": "Sequence",
     "~children": [
@@ -1012,9 +988,9 @@ GROUP BY <b>city</b>
           <b>  "offset": "4",</b>
             "spans": [
 ...</codeblock><note>The
-                        <codeph>offset</codeph> is pushed to the indexer because the GROUP BY key
-                    matched with the leading index
-                    key.</note>Results:<codeblock>[
+            <codeph>offset</codeph> is pushed to the indexer because the GROUP BY key matched with
+          the leading index
+          key.</note>Results:<codeblock>[
   {
     "City": "Aberdour",
     "Landmark_Count": 4
@@ -1032,8 +1008,8 @@ GROUP BY <b>city</b>
     "Landmark_Count": 2
   },
 ...</codeblock><b
-                    id="docs-internal-guid-62fed86e-ba30-23d8-b1eb-ec7749f8b015">9. Aggregate
-                    without GROUP BY key</b></p>
+          id="docs-internal-guid-62fed86e-ba30-23d8-b1eb-ec7749f8b015">9. Aggregate without GROUP BY
+          key</b></p>
             <p>This is a case of aggregation over a range without groups. If the index can be used
                 for computing the aggregate, the indexer will return a single aggregate value. To
                 use Aggregate Pushdown, use the following syntax of index and
