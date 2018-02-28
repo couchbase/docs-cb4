@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="eventing_examples">
+  
+  <title>
+    Eventing Examples
+  </title>
+  
+  <shortdesc>
+    Examples of how to use the Eventing framework.
+  </shortdesc>
+  
+  <body>
+    
+    <section>
+      
+      <title>
+        Prerequisites
+      </title>
+      
+      <p>
+        The following prerequisites must be observed:
+      </p>
+      
+      <ul>
+        <li>
+          <i>Creation of a Metadata bucket</i>: Functions stores artifacts and checkpoint information in a 
+          bucket. Set up a single bucket, across the cluster, as a metadata bucket. 
+          Ideally, this bucket should not be used for storing information from any other 
+          application. For the following examples, this metadata bucket is 
+          named <codeph>metadata</codeph>.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          <i>Creation of Source and Target buckets</i>: Create two buckets and name them 
+          <codeph>source</codeph> and <codeph>target</codeph> respectively. These buckets 
+          can be either of the type 
+          <codeph>Couchbase</codeph> or <codeph>Ephemeral</codeph>. Default settings can be used.
+          
+          <p>
+            
+          </p>
+          
+        </li>
+        
+      </ul>
+      
+    </section>
+    
+    <section>
+      
+      <title>
+        Example 1
+      </title>
+      
+      <p>
+        Problem: When a document is created, one of the attributes of the document needs to 
+        be translated to a new value, and the same needs to be captured for lookups, to 
+        be used later. In this case, the sample document (mentioned below), has twi IP 
+        strings that need to be converted to numerals, so that range-scans can be performed 
+        for a given new IP.
+      </p>
+      
+      <p>
+        Solution: Creat an OnUpdate handler in a function that listens to changes/mutations 
+        in a source bucket. The source bucket will contain the sample document. A target 
+        bucket needs to be defined, to store the enriched document. The OnUpdate handler 
+        invokes the user-defined function, named get_numip_first_3_octets, on the IP string 
+        that returns an integer for a given IP string. This function is computed for both 
+        ip_start and ip_end; and the original document is appended with two new attributes, 
+        and inserted into the target bucket. The original document in the source bucket is 
+        not changed. 
+      </p>
+      
+      <p>
+        Sample document:
+      </p>
+      
+      <codeblock outputclass="language-javascript">{
+  "country": "AD",
+  "ip_end": "5.62.60.9",
+  "ip_start": "5.62.60.1"
+}
+</codeblock>
+      
+      <p>
+        Proceed as follows:
+      </p>
+      
+      <ol>
+        <li>
+          Click on ‘Add Function’.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Choose the Source Bucket that contains the sample document.
+          
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Specify a ‘metadata’ bucket; mentioned in the Prerequisites.
+          
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Specify a function-name and a readable description.
+          
+          <ol>
+            <li>
+              Function name: enrich_ip_nums
+            </li>
+            <li>
+              Function description: Enrich a document, converts IP 
+              Strings to Integers that are stored in new attributes.
+              
+            </li>
+          </ol>
+          
+
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          ‘Settings’ can contain the standard defaults.
+          <p>
+          </p>
+        </li>
+        
+        <li>
+          Bindings: Create a binding for ‘target’ bucket as ‘tgt’:
+          
+          <ol>
+            <li>
+              Choose the ‘target’ bucket from the name dropdown.
+            </li>
+            <li>
+              Type ‘tgt’ (without quotes) in value textbox.
+              
+            </li>
+          </ol>
+          
+        </li>
+        
+        <li>
+          Click ‘Next: Add Code’ and paste the code specified in the Sample Code Section, below.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Click on ‘Eventing’ in the left navigation bar: this takes you to the Functions summary screen.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Click on the ‘Deploy’ button for the ‘enrich_ip_nums’ function. Choose ‘Everything’ in 
+          the Feed Boundary dropdown. The function should be ‘deployed’ and ‘running’ in a few seconds.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Check the ‘target’ bucket for the enriched document, with the following structure inserted.
+          
+          <codeblock outputclass="language-javascript">{
+  "country": "AD",
+  "ip_end": "5.62.60.9",
+  "ip_start": "5.62.60.1",
+  "ip_num_start": 87964673,
+  "ip_num_end": 87964681
+}</codeblock>
+          
+          <p>
+          </p>
+        </li>
+
+      </ol>
+      
+      <p>
+        Sample code:
+      </p>
+      
+      <codeblock outputclass="language-javascript">function OnUpdate(doc, meta) {
+  log('document', doc);
+  doc["ip_num_start"] = get_numip_first_3_octets(doc["ip_start"]);
+  doc["ip_num_end"]   = get_numip_first_3_octets(doc["ip_end"]);
+  tgt[meta.id]=doc;
+}
+
+function get_numip_first_3_octets(ip)
+{
+  var return_val = 0;
+  if (ip)
+  {
+    var parts = ip.split('.');
+
+    //IP Number = A x (256*256*256) + B x (256*256) + C x 256 + D 
+    return_val = (parts[0]*(256*256*256)) + (parts[1]*(256*256)) + (parts[2]*256) + parseInt(parts[3]);
+    return return_val;
+  }
+}
+</codeblock>
+      
+      
+    </section>
+    
+    <section>
+      
+      <title>
+        Example 2
+        
+      </title>
+      
+      <p>
+        
+      </p>
+      
+      
+      
+    </section>
+    
+    
+   
+  </body>
+</topic>
