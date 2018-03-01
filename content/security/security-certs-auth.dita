@@ -26,12 +26,47 @@
         <li>When the client presents the certificate, the server checks for the validity of the
           certificate. </li>
         <li>If the certificate is valid and not expired, then it parses the certificate to obtain
-          the user specified in the certificate. </li>
+          the user name specified in the certificate. </li>
         <li>The server then verifies the user and the roles assigned to the user. If the user has
           appropriate roles, then it authenticates the user and completes the handshake. </li>
         <li>If any of the checks fail, the handshake is not completed. </li>
       </ol>
     </p>
+    <p>Since the identity in client certificates can be encoded in different ways for different
+      kinds of users, Couchbase provides a flexible scheme to extract the identity from different
+      certificates. Starting version 5.1, Couchbase Server supports multiple prefixes to be
+      specified for client certificate authentication, as shown below. </p>
+    <p>
+      <codeblock>"client_cert_auth": {
+  "state": "enable",
+  "prefixes": [
+    {
+      "path": "san.dnsname",
+      "prefix": "www.",
+      "delimiters": ".,;"
+     },
+     {},
+     ...
+  ]
+}</codeblock>
+    </p>
+    <p>The "prefixes" field is an array of <codeph>{<i>path</i>, <i>prefix</i>,
+        <i>delimiters</i>}</codeph> tuples, where: <ul id="ul_qz3_rx5_zcb">
+        <li><codeph><i>path</i></codeph> can be one of the following values:
+            "<codeph>subject.cn</codeph>", "<codeph>san.uri</codeph>", "<codeph>san.email</codeph>",
+            "<codeph>san.dns</codeph>"</li>
+        <li><codeph><i>prefix</i></codeph> specifies the client certificate prefix value.</li>
+        <li><codeph><i>delimiters</i></codeph> is a list of characters that can individually be
+          treated as a delimiter</li>
+      </ul></p>
+    
+    <p>The following constraints apply when specifying multiple tuples:<ul id="ul_yfv_hx5_zcb">
+        <li>You can specify up to a maximum of 10 <codeph>{path, prefix,delimiters}</codeph> tuples
+          in the "prefixes" array.</li>
+        <li>No two tuples can have the same "<codeph><i>path</i></codeph>" and
+              "<codeph><i>prefix</i></codeph>" fields. </li>
+        <li>All the fields in the tuple must be specified. </li>
+      </ul></p>
     <section>
       <title>Prerequisites</title>
       <p>
@@ -59,19 +94,32 @@
       <p><b>Using REST API</b></p>
       <p>
         <ol>
-          <li>Enable x.509 certificate authentication on the server. You must set this parameter
-            once per
-            cluster.<codeblock>curl -X POST  --data-binary "state=enable" http://Administrator:password@localhost:8091/settings/clientCertAuth</codeblock></li>
-          <li>Specify the path of the certificate to use to parse for the user on the server.
-            <codeblock>curl -X POST  --data-binary "path=subject.cn" http://Administrator:password@localhost:8091/settings/clientCertAuth</codeblock></li>
-          <li>Specify the prefix and delimiter in that path expression.
-            <codeblock>curl -X POST  --data-binary "delimiter=" http://Administrator:password@localhost:8091/settings/clientCertAuth
-curl -X POST  --data-binary "prefix=" http://Administrator:password@localhost:8091/settings/clientCertAuth    </codeblock></li>
+          <li>Create a data file containing the payload for your certificate authentication
+            settings. For example, <codeph>cb-certauth-setting.json</codeph>:
+            <codeblock>{
+	"state": "enable",
+	"prefixes": [{
+			"path": "san.uri",
+			"prefix": "www.",
+			"delimiter": "."
+		},
+		{
+			"path": "san.email",
+			"prefix": "couchbase.",
+			"delimiter": "."
+		}
+	]
+}</codeblock></li>
+          <li>Run the following command to enable x.509 certificate authentication on the
+            server.<codeblock>curl -H "Content-Type: application/json" --data-binary @cb-certauth-setting.json http://Administrator:password@127.0.0.1:8091/settings/clientCertAuth </codeblock></li>
         </ol>
       </p>
+      <p>To retrieve the client certificate authentication settings, run the following command:
+        <codeblock>curl -X GET  Administrator:password@localhost:8091/settings/clientCertAuth</codeblock><codeblock spectitle="Result">{"state":"enable","prefixes":[{"delimiter":".","path":"san.uri","prefix":"www."},{"delimiter":".","path":"san.email","prefix":"couchbase."}]}</codeblock></p>
       <p><b>Using CLI</b></p>
-      <p>Use the following <cmdname>couchbase-cli</cmdname> command:
-        <codeblock>couchbase-cli ssl-manage &lt;options></codeblock></p>
+      <p>Use the <cmdname>couchbase-cli</cmdname>
+        <xref href="../cli/cbcli/couchbase-cli-ssl-manage.dita#couchbaseclisslmanage1.idm68744912"/>
+        command: <codeblock>couchbase-cli ssl-manage &lt;options></codeblock></p>
       <table frame="all" rowsep="1" colsep="1" id="table_t3d_5yh_p1b">
         <tgroup cols="3">
           <colspec colname="c1" colnum="1" colwidth="1*"/>
@@ -104,8 +152,10 @@ curl -X POST  --data-binary "prefix=" http://Administrator:password@localhost:80
             </row>
             <row>
               <entry>--set-client-auth-path</entry>
-              <entry>subject.cn | san.uri | san.dnsname | san.name</entry>
-              <entry>Set SSL client certificate type value.</entry>
+              <entry>subject.cn | san.uri | san.dnsname | san.email</entry>
+              <entry>Set SSL client certificate type value. This field will be used to extract the
+                user name from the certificate. Currently, only the fields specified in the values
+                column are supported.</entry>
             </row>
             <row>
               <entry>--set-client-auth-prefix</entry>
@@ -115,7 +165,9 @@ curl -X POST  --data-binary "prefix=" http://Administrator:password@localhost:80
             <row>
               <entry>--set-client-auth-delimiter</entry>
               <entry>set_client_auth_delimiter</entry>
-              <entry>Set SSL client certificate delimiter value.</entry>
+              <entry>Set SSL client certificate delimiter value. The delimiter can either be a
+                string or a character. The parsing of the certificate for the user name ends when
+                the delimiter value is found.</entry>
             </row>
             <row>
               <entry>--client-auth</entry>
@@ -138,12 +190,20 @@ curl -X POST  --data-binary "prefix=" http://Administrator:password@localhost:80
    
     <section><title>Limitations</title>
       <p>Note the following limitations to the feature in the current release: <ul>
-        <li>X.509 Certificate Based Authentication will only work for data service.</li>
-        <li>For Couchbase Server 5.1, X.509 Certificate-based Authentication support is suported by all SDK Clients. 
-          However, only the very latest versions support it - check the <xref href="https://developer.couchbase.com/server/other-products/release-notes-archives/java-sdk" scope="external" format="html">release notes</xref> 
-          for your SDK version.</li>
-      </ul>  
-      </p>
+          <li>X.509 Certificate Based Authentication will only work for data service.</li>
+          <li>For Couchbase Server 5.1, X.509 Certificate-based Authentication support is suported
+            by all SDK Clients. However, only the very latest versions support it - check the <xref
+              href="https://developer.couchbase.com/server/other-products/release-notes-archives/java-sdk"
+              scope="external" format="html">release notes</xref> for your SDK version.</li>
+        </ul></p>
+    </section>
+    
+    <section><title>Upgrade</title>
+      <p>When upgrading from an earlier version to 5.1, the cluster will be in mixed mode and will
+        return client certificate authentication settings in the older format until the cluster is
+        completely upgraded. Once the cluster has been upgraded, any existing client certificate
+        authentication settings from earlier versions will be automatically transformed into the new
+        format. </p>
     </section>
     
   </body>
