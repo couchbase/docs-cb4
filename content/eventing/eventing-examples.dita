@@ -58,7 +58,7 @@
       </title>
       
       <p>
-        Problem: When a document is created, one of the attributes of the document needs to 
+        <i>Problem</i>: When a document is created, one of the attributes of the document needs to 
         be translated to a new value, and the same needs to be captured for lookups, to 
         be used later. In this case, the sample document (mentioned below), has twi IP 
         strings that need to be converted to numerals, so that range-scans can be performed 
@@ -66,12 +66,12 @@
       </p>
       
       <p>
-        Solution: Creat an OnUpdate handler in a function that listens to changes/mutations 
+        <i>Solution</i>: Create an <codeph>OnUpdate</codeph> handler in a function that listens to changes/mutations 
         in a source bucket. The source bucket will contain the sample document. A target 
-        bucket needs to be defined, to store the enriched document. The OnUpdate handler 
+        bucket needs to be defined, to store the enriched document. The <codeph>OnUpdate</codeph> handler 
         invokes the user-defined function, named get_numip_first_3_octets, on the IP string 
         that returns an integer for a given IP string. This function is computed for both 
-        ip_start and ip_end; and the original document is appended with two new attributes, 
+        <codeph>ip_start</codeph> and <codeph>ip_end</codeph>; and the original document is appended with two new attributes, 
         and inserted into the target bucket. The original document in the source bucket is 
         not changed. 
       </p>
@@ -102,8 +102,7 @@
         
         <li>
           Choose the Source Bucket that contains the sample document.
-          
-          
+
           <p>
             
           </p>
@@ -111,8 +110,7 @@
         
         <li>
           Specify a ‘metadata’ bucket; mentioned in the Prerequisites.
-          
-          
+
           <p>
             
           </p>
@@ -153,9 +151,7 @@
             </li>
             <li>
               Type ‘tgt’ (without quotes) in value textbox.
-              
 
-              
             </li>
           </ol>
           
@@ -239,18 +235,178 @@ function get_numip_first_3_octets(ip)
       
       <title>
         Example 2
-        
       </title>
       
       <p>
-        
+        <i>Problem</i>: When a document expires from a source bucket, archive the document’s 
+        value in another target bucket.
       </p>
       
+      <p>
+        <i>Solution</i>: As the Function Service does not have an <codeph>OnExpiry</codeph> handler, 
+        create a 
+        timer that will execute a few minutes before expiry. We create a docTimer in the 
+        <codeph>OnUpdate</codeph> handler. The docTimer will be executed two 
+        minutes before expiry; and this callback, associated with the docTimer, will 
+        retrieve the document’s value from the source bucket, and store in the target bucket. 
+        The original document in the source bucket is not changed. 
+      </p>
       
+      <p>
+        A sample document with a TTL set for 10 minutes from creation-time can be created 
+        using the following python script:
+      </p>
       
+      <codeblock outputclass="language-python">from couchbase.cluster import Cluster
+from couchbase.cluster import PasswordAuthenticator
+import time
+cluster = Cluster('couchbase://localhost:8091')
+authenticator = PasswordAuthenticator('test', 'asdasd')
+cluster.authenticate(authenticator)
+
+cb = cluster.open_bucket('logs')
+print("Lets insert a document")
+cb.upsert('demo-key', 'demo-value')
+print "Doc Value:", cb.get('demo-key').value
+print "Document inserted. Lets set its TTL"
+cb.touch('demo-key', ttl=10*60)</codeblock>
+      
+      <p>
+        Proceed as follows:
+      </p>
+      
+      <ol>
+        <li>
+          Click on ‘Add Function’.
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Choose the Source Bucket that contains the sample document.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Specify a ‘metadata’ bucket; mentioned in the Prerequisites.
+          
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Specify a function-name and a readable description. Function name should be
+          <codeph>add_timer_before_expiry</codeph>. Function description should be
+          <i>Create a timer two minutes before expiry of a document.</i>
+
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          ‘Settings’ can contain the standard defaults.
+
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Bindings:
+          
+          <ol>
+            <li>
+              Create a binding for the source bucket as <codeph>src</codeph>. Choose the source
+              bucket from the <b>name</b> dropdown, and type <codeph>src</codeph> in the <b>value</b>
+              textbox.
+              
+              <p>
+                
+              </p>
+            </li>
+            
+            <li>
+              Create a binding for the target bucket as <codeph>tgt</codeph>. Choose the target
+              bucket from the <b>name</b> dropdown, and type <codeph>tgt</codeph> in the <b>value</b>
+              textbox.
+              
+              <p>
+                
+              </p>
+            </li>
+          </ol>
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Click ‘Next: Add Code’, and paste the code specified in the Sample Code Section, below.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Click on ‘Eventing’ in the left navigation bar: this takes you to the Functions summary screen.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Click on the ‘Deploy’ button for the ‘add_timer_before_expiry’ function. Choose ‘Everything’ in the 
+          Feed Boundary dropdown. The function should be ‘deployed’ and ‘running’ in a few seconds.
+
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Check the ‘target’ bucket for one inserted document. 
+          
+          <p>
+            
+          </p>
+        </li>
+
+      </ol>
+      
+      <p>
+        Sample code:
+      </p>
+      
+      <codeblock outputclass="language-javascript">function OnUpdate(doc, meta) {
+  if (meta.expiration > 0 ) //do only for those documents that have a non-zero TTL
+  {
+    //have to x by 1000, as timestamp in secs; and for Date operations need in milli-secs
+    var expiry = new Date(meta.expiration*1000); 
+    // Compute 2 minutes from the TTL timestamp        
+    var twoMinsPrior =  Math.round(expiry.setMinutes(expiry.getMinutes()-2)/1000); 
+    docTimer(DocTimerCallback, meta.id, twoMinsPrior);  //create the docTimer
+    log('Added Doc Timer to DocId:', meta.id);
+  }
+}
+
+function DocTimerCallback(docid, expiry) {
+  log('DocTimerCallback Executed for DocId:', String(docid));
+  tgt[docid] = "To Be Expired Key's Value is:" + String(src[docid]) ;
+  log('Doc Timer Executed for DocId', String(docid));
+}</codeblock>
+
     </section>
-    
-    
-   
+
   </body>
 </topic>
