@@ -14,22 +14,60 @@
     
     <section>
       
-      <title id="eventing_examples_prerequisites">
-        Prerequisites
+      <title id="eventing_examples_preparations">
+        Preparations
       </title>
       
       <p>
-        The following prerequisites must be observed:
+        This page contains examples of how to use the Eventing framework, by means of the Couchbase Web Console. 
+        The examples require the creation of three buckets, which are as follows:
       </p>
       
       <ul>
         <li>
-          <i>Creation of a Metadata bucket</i>: The Functions Service stores artifacts and checkpoint 
-          information in a 
-          bucket. Set up a single bucket, across the cluster, as a metadata bucket. 
+          <i>Metadata bucket</i>: Each function run as part of the Functions Service depends on a <i>metadata</i> bucket, defined on
+          the cluster. This bucket is used for the storage of artifacts and checkpoint information. You must
+          create or reference such a bucket explicitly, per function. 
           Ideally, this bucket should not be used for storing information from any other 
-          application. For the following examples, this metadata bucket is 
-          named <codeph>metadata</codeph>.
+          application, though the same metadata bucket may be used for multiple functions.
+          
+          <p>
+            The examples on this page refer to a single metadata bucket, named <codeph>metadata</codeph>. Therefore, to 
+            create such a bucket, proceed as follows:
+            
+            <ol>
+              
+              <li>
+                Access the <b>Buckets</b> screen, by left-clickin on the <b>Buckets</b> tab, in the left-hand navigation panel.
+                
+                <p>
+                  
+                </p>
+              </li>
+              
+              <li>
+                On the <b>Buckets</b> screen, left-click on the <b>Add Bucket</b> tab, at the upper right.
+                
+                <p>
+                  
+                </p>
+              </li>
+              
+              <li>
+                When the <b>Add Data Bucket</b> dialog appears, specify <codeph>metdata</codeph> as the bucket-name, and
+                specify an appropriate <b>Memory Quota</b> for the bucket. All other default settings can be applied. Then,
+                left-click on the <uicontrol>Add Bucket</uicontrol> button.
+                
+                <p>
+                  
+                </p>
+              </li>
+            </ol>
+            
+            The <codeph>metadata</codeph> bucket now appears on the <b>Buckets</b> screen. For more information on creating
+            buckets, see
+            <xref href="../clustersetup/create-bucket.dita" scope="local" format="dita">Create a Bucket</xref>.
+          </p>
           
           <p>
             
@@ -37,15 +75,77 @@
         </li>
         
         <li>
-          <i>Creation of Source and Target buckets</i>: Create two buckets, and name them 
-          <codeph>source</codeph> and <codeph>target</codeph> respectively. These buckets 
-          can be of either type: 
-          <codeph>Couchbase</codeph> or <codeph>Ephemeral</codeph>. Default settings can be used.
+          <i>Source bucket</i>: This is a bucket that will contain source-data. You must create both the bucket and
+          the source-data. (For a detailed explanation of the <b>Buckets</b> and <b>Documents</b> screens, see the
+          page
+          <xref href="../getting-started/look-at-the-results.dita" scope="local" format="dita">Look at the Results</xref>,
+          within the Couchbase Server <i>Getting Started</i> sequence.)
+          
+          <p>
+            Proceed as follows:
+          </p>
+          
+          <p>
+          
+          <ol>
+            <li>
+              Using the Couchbase Web Console, create a bucket named <codeph>source</codeph>, using the procedure described immediately
+              above, for the <codeph>metadata</codeph> bucket. 
+              
+              <p>
+                
+              </p>
+            </li>
+            
+            <li>
+              When the <codeph>source</codeph> bucket appears in the <b>Buckets</b> screen, left-click on the
+              <uicontrol>Documents</uicontrol> tab, towards the right-hand side of its row. This brings up the
+              <b>Documents</b> screen. 
+              
+              <p>
+                
+              </p>
+            </li>
+            
+            <li>
+              When the <b>Add Document</b> dialog appears, specify the name <codeph>sampleDocument</codeph> for the new
+              document. Then, left-click on the <uicontrol>Save</uicontrol> button. This brings up the
+              <b>Edit Document</b> dialog.
+              
+              <p>
+                
+              </p>
+            </li>
+            
+            <li>
+              Within the edit panel of the <b>Edit Document</b> dialog, paste the following document:
+              
+              <p>
+              </p>
+              
+              <codeblock outputclass="language-javascript">{
+  "country": "AD",
+  "ip_end": "5.62.60.9",
+  "ip_start": "5.62.60.1"
+}</codeblock>
+              
+              Left-click on the <uicontrol>Save</uicontrol> button.
+              
+            </li>
+          </ol>
+            
+          </p>
+            
           
           <p>
             
           </p>
           
+        </li>
+        
+        <li>
+          Using the Couchbase Web Console, create a bucket named <codeph>target</codeph>, using the procedure described
+          above, for the <codeph>metadata</codeph> bucket. No document need be added.
         </li>
         
       </ul>
@@ -59,35 +159,26 @@
       </title>
       
       <p>
-        <i>Problem</i>: When a document is created, one of the attributes of the document needs to 
-        be translated to a new value, and this needs to be captured for lookups, to 
-        be used later. In this case, the sample document (mentioned below), has two IP 
-        strings that need to be converted to numerals, so that range-scans can be performed 
-        for a given, new IP.
-      </p>
+        <i>Problem</i>: A document contains attributes (for example IP addresses) whose form is 
+        considered insufficiently
+        supportive of search. 
+        Ideally, on the document's creation
+        or modification, these attributes would be converted to values (for example, numerals) whose form is more 
+        supportive of search; and these values stored separately.
+      </p>         
       
       <p>
-        <i>Solution</i>: Create an <codeph>OnUpdate</codeph> handler in a function that listens to changes/mutations 
-        in a source bucket. The source bucket will contain the sample document. A target 
-        bucket needs to be defined, to store the enriched document. The <codeph>OnUpdate</codeph> handler 
-        invokes the user-defined function, named 
-        <codeph>get_numip_first_3_octets</codeph>, on the IP string 
-        that returns an integer for a given IP string. This function is computed for both 
-        <codeph>ip_start</codeph> and <codeph>ip_end</codeph>; and the original document is appended with two new attributes, 
-        and inserted into the target bucket. The original document in the source bucket is 
-        not changed. 
+        <i>Solution</i>: Create a JavaScript function that contains an <codeph>OnUpdate</codeph> handler.
+        The handler listens for data-changes within a specified, source bucket. When any document 
+        is created or mutated, the handler checks whether, in consequence, certain conditions have been met: if the
+        conditions
+        have been met, an appropriate routine is executed. In this case, the created or mutated document must contain two
+        specifically named fields, each of which has an IP address as its value: the values correspond to the
+        beginning and ending of an address-range. The handler-routine converts each IP address to a numeral. A new document is created
+        in a specified, target bucket: this new document is identical to the old, except that it contains two additional
+        fields, which respectively contain the numerals that correspond to the beginning and ending IP addresses. The
+        original document, in the source bucket, is not changed.
       </p>
-      
-      <p>
-        Sample document:
-      </p>
-      
-      <codeblock outputclass="language-javascript">{
-  "country": "AD",
-  "ip_end": "5.62.60.9",
-  "ip_start": "5.62.60.1"
-}
-</codeblock>
       
       <p>
         Proceed as follows:
