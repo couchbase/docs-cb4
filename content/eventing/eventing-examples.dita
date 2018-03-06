@@ -6,32 +6,147 @@
     Examples
   </title>
   
-  <shortdesc> Examples of how to use the Eventing service. </shortdesc>
+  <shortdesc>
+    Examples of how to use the Eventing framework.
+  </shortdesc>
   
   <body>
     
     <section>
       
-      <title id="eventing_examples_prerequisites">
-        Prerequisites
+      <title id="eventing_examples_preparations">
+        Preparations
       </title>
       
       <p>
-        The following prerequisites must be observed:
+        This page contains examples of how to use the Eventing framework, by means of the Couchbase Web Console. 
+        The examples require the creation of three buckets, which are as follows:
       </p>
       
       <ul>
         <li>
-          <i>Creation of a Metadata bucket</i>: Functions store artifacts and checkpoint information
-          in a bucket. Set up a single bucket, across the cluster, as a metadata bucket. Ideally,
-          this bucket should not be used for storing information from any other application. For the
-          following examples, this metadata bucket is named <codeph>metadata</codeph>.  </li>
+          <i>Metadata bucket</i>: Each function run as part of the Functions Service depends on a <i>metadata</i> bucket, defined on
+          the cluster. This bucket is used for the storage of artifacts and checkpoint information. You must
+          create or reference such a bucket explicitly, per function. 
+          Ideally, this bucket should not be used for storing information from any other 
+          application, though the same metadata bucket may be used for multiple functions.
+          
+          <p>
+            The examples on this page refer to a single metadata bucket, named <codeph>metadata</codeph>. Therefore, to 
+            create such a bucket, proceed as follows:
+            
+            <ol>
+              
+              <li>
+                Access the <b>Buckets</b> screen, by left-clickin on the <b>Buckets</b> tab, in the left-hand navigation panel.
+                
+                <p>
+                  
+                </p>
+              </li>
+              
+              <li>
+                On the <b>Buckets</b> screen, left-click on the <b>Add Bucket</b> tab, at the upper right.
+                
+                <p>
+                  
+                </p>
+              </li>
+              
+              <li>
+                When the <b>Add Data Bucket</b> dialog appears, specify <codeph>metdata</codeph> as the bucket-name, and
+                specify an appropriate <b>Memory Quota</b> for the bucket. All other default settings can be applied. Then,
+                left-click on the <uicontrol>Add Bucket</uicontrol> button.
+                
+                <p>
+                  
+                </p>
+              </li>
+            </ol>
+            
+            The <codeph>metadata</codeph> bucket now appears on the <b>Buckets</b> screen. For more information on creating
+            buckets, see
+            <xref href="../clustersetup/create-bucket.dita" scope="local" format="dita">Create a Bucket</xref>.
+          </p>
+          
+          <p>
+            
+          </p>
+        </li>
         
         <li>
-          <i>Creation of Source and Target buckets</i>: Create two buckets, and name them
-            <codeph>source</codeph> and <codeph>target</codeph> respectively. These buckets can be
-          of either type: <codeph>Couchbase</codeph> or <codeph>Ephemeral</codeph>. Default settings
-          can be used. </li>
+          <i>Source bucket</i>: This is a bucket that will contain source-data. You must create both the bucket and
+          the source-data. (For a detailed explanation of the <b>Buckets</b> and <b>Documents</b> screens, see the
+          page
+          <xref href="../getting-started/look-at-the-results.dita" scope="local" format="dita">Look at the Results</xref>,
+          within the Couchbase Server <i>Getting Started</i> sequence.)
+          
+          <p>
+            Proceed as follows:
+          </p>
+          
+          <p>
+          
+          <ol>
+            <li>
+              Using the Couchbase Web Console, create a bucket named <codeph>source</codeph>, using the procedure described immediately
+              above, for the <codeph>metadata</codeph> bucket. 
+              
+              <p>
+                
+              </p>
+            </li>
+            
+            <li>
+              When the <codeph>source</codeph> bucket appears in the <b>Buckets</b> screen, left-click on the
+              <uicontrol>Documents</uicontrol> tab, towards the right-hand side of its row. This brings up the
+              <b>Documents</b> screen. 
+              
+              <p>
+                
+              </p>
+            </li>
+            
+            <li>
+              When the <b>Add Document</b> dialog appears, specify the name <codeph>sampleDocument</codeph> for the new
+              document. Then, left-click on the <uicontrol>Save</uicontrol> button. This brings up the
+              <b>Edit Document</b> dialog.
+              
+              <p>
+                
+              </p>
+            </li>
+            
+            <li>
+              Within the edit panel of the <b>Edit Document</b> dialog, paste the following document:
+              
+              <p>
+              </p>
+              
+              <codeblock outputclass="language-javascript">{
+  "country": "AD",
+  "ip_end": "5.62.60.9",
+  "ip_start": "5.62.60.1"
+}</codeblock>
+              
+              Left-click on the <uicontrol>Save</uicontrol> button.
+              
+            </li>
+          </ol>
+            
+          </p>
+            
+          
+          <p>
+            
+          </p>
+          
+        </li>
+        
+        <li>
+          Using the Couchbase Web Console, create a bucket named <codeph>target</codeph>, using the procedure described
+          above, for the <codeph>metadata</codeph> bucket. No document need be added.
+        </li>
         
       </ul>
       
@@ -44,77 +159,202 @@
       </title>
       
       <p>
-        <i>Problem</i>: When a document is created, one of the attributes of the document needs to 
-        be translated to a new value, and this needs to be captured for lookups, to 
-        be used later. In this case, the sample document (mentioned below), has two IP 
-        strings that need to be converted to numerals, so that range-scans can be performed 
-        for a given, new IP.
-      </p>
+        <i>Problem</i>: A document contains attributes (for example IP addresses) whose form is 
+        considered insufficiently
+        supportive of search. 
+        Ideally, on the document's creation
+        or modification, these attributes would be converted to values (for example, numerals) whose form is more 
+        supportive of search; and these values stored separately.
+      </p>         
       
       <p>
-        <i>Solution</i>: Create an <codeph>OnUpdate</codeph> handler in a function that listens to changes/mutations 
-        in a source bucket. The source bucket will contain the sample document. A target 
-        bucket needs to be defined, to store the enriched document. The <codeph>OnUpdate</codeph> handler 
-        invokes the user-defined function, named 
-        <codeph>get_numip_first_3_octets</codeph>, on the IP string 
-        that returns an integer for a given IP string. This function is computed for both 
-        <codeph>ip_start</codeph> and <codeph>ip_end</codeph>; and the original document is appended with two new attributes, 
-        and inserted into the target bucket. The original document in the source bucket is 
-        not changed. 
+        <i>Solution</i>: Create a JavaScript function that contains an <codeph>OnUpdate</codeph> handler.
+        The handler listens for data-changes within a specified, source bucket. When any document 
+        is created or mutated, the handler checks whether, in consequence, certain conditions have been met: if the
+        conditions
+        have been met, an appropriate routine is executed. In this case, the created or mutated document must contain two
+        specifically named fields, each of which has an IP address as its value: the values correspond to the
+        beginning and ending of an address-range. The handler-routine converts each IP address to a numeral. A new document is created
+        in a specified, target bucket: this new document is identical to the old, except that it contains two additional
+        fields, which respectively contain the numerals that correspond to the beginning and ending IP addresses. The
+        original document, in the source bucket, is not changed.
       </p>
-      
-      <p>
-        Sample document:
-      </p>
-      
-      <codeblock outputclass="language-javascript">{
-  "country": "AD",
-  "ip_end": "5.62.60.9",
-  "ip_start": "5.62.60.1"
-}
-</codeblock>
       
       <p>
         Proceed as follows:
       </p>
       
       <ol>
-        <li> Click on ‘Add Function’. </li>
+        <li>
+          Access the <b>Eventing</b> screen, by left-clicking on the <uicontrol>Eventing</uicontrol> tab, in the navigation
+          panel at the left-hand side of the Couchbase Web Console:
+          
+          <p>
+            <image href="./images/eventingTab.png" id="eventing_tab" align="left" width="220"/>
+          </p>
+          
+          <p>
+            The <b>Eventing</b> screen now appears. This shows all currently defined functions, and so is
+            initially empty. To add a function, left-click on the <uicontrol>Add Function</uicontrol> button,
+            at the upper right:
+          </p>
+          
+          <p>
+            <image href="./images/addFunctionButton.png" id="add_function_button" align="left" width="340"/>
+          </p>
+          
+          <p>
+            This brings up the <b>Add Function</b> dialog:
+          </p>
+          
+          <p>
+            <image href="./images/addFunctionDialog.png" id="add_function_dialog" align="left" width="520"/>
+          </p>
+          
+          <p>
+            The elements within the dialog are as follows:
+          </p>
+          
+          <ul>
+            <li>
+              <b>Source Bucket</b>: The name of a bucket currently defined on the cluster.
+              The function you define listens to changes made to the contents of
+              this bucket &#8212; such as the creation or mutation of a document. The
+              bucket must be of type <i>Couchbase</i> or <i>Ephemeral</i>: buckets of
+              type <i>Memcached</i> are not supported. Use the arrows control at the
+              right-hand side of the field to select from currently defined buckets:
+              
+              <p>
+                <image href="./images/selectSourceBucket.png" id="select_source_bucket" align="left" width="440"/>
+              </p>
+              
+              <p>
+                For the current example, select the <codeph>source</codeph> bucket.
+              </p>
+              
+              <p>
+                
+              </p>
+            </li>
+            
+            <li>
+              
+              <p>
+                
+              </p>
+            </li>
+            
+            <li>
+              
+              <p>
+                
+              </p>
+            </li>
+            
+            <li>
+              
+              <p>
+                
+              </p>
+            </li>
+            
+            <li>
+              
+              <p>
+                
+              </p>
+            </li>
+          </ul>
+          
+          
+
+          
+        </li>
+
         
-        <li> Choose the Source Bucket that contains the sample document. </li>
+        <li>
+          Choose the Source Bucket that contains the sample document.
+
+          <p>
+            
+          </p>
+        </li>
         
-        <li> Specify a ‘metadata’ bucket (as mentioned above, in <xref
-            href="./eventing-examples.dita#eventing_examples/eventing_examples_prerequisites"
-            scope="local" format="dita">Prerequisites</xref> section). </li>
+        <li>
+          Specify a ‘metadata’ bucket (as mentioned above, in  
+          <xref href="./eventing-examples.dita#eventing_examples/eventing_examples_prerequisites" scope="local" format="dita">Prerequisites</xref>
+          section).
+
+          <p>
+            
+          </p>
+        </li>
         
-        <li> Specify the function-name <codeph>enrich_ip_nums</codeph> and the following
-          description: <i>Enrich a document, converts IP Strings to Integers that are stored in new
-            attributes</i>. </li>
+        <li>
+          Specify the function-name <codeph>enrich_ip_nums</codeph> and the following description:
+          <i>Enrich a document, converts IP Strings to Integers that are stored in new attributes</i>.
+          
+          <p>
+            
+          </p>
+        </li>
         
-        <li> ‘Settings’ can contain the standard defaults. </li>
+        <li>
+          ‘Settings’ can contain the standard defaults.
+          <p>
+          </p>
+        </li>
         
-        <li> Create a binding for the <codeph>target</codeph> bucket. To do so, choose the
-            <codeph>target</codeph> bucket from the <b>name</b> dropdown; and type
-            <codeph>tgt</codeph> into the <b>value</b> textbox. </li>
+        <li>
+          Create a binding for the <codeph>target</codeph> bucket. To do so, choose the 
+          <codeph>target</codeph> bucket from the <b>name</b> dropdown; and type
+          <codeph>tgt</codeph> into the <b>value</b> textbox.
+
+          <p>
+            
+          </p>
+          
+        </li>
         
-        <li> Click ‘Next: Add Code’ and paste the code specified into the Sample Code Section. </li>
+        <li>
+          Click ‘Next: Add Code’ and paste the code specified into the Sample Code Section.
+          
+          <p>
+            
+          </p>
+        </li>
         
-        <li> Click on ‘Eventing’ in the left navigation bar: this takes you to the Functions summary
-          screen. </li>
+        <li>
+          Click on ‘Eventing’ in the left navigation bar: this takes you to the Functions summary screen.
+          
+          <p>
+            
+          </p>
+        </li>
         
-        <li> Click on the ‘Deploy’ button for the <codeph>enrich_ip_nums</codeph> function. Choose
-          ‘Everything’ in the Feed Boundary dropdown. The function should be ‘deployed’ and
-          ‘running’ in a few seconds. </li>
+        <li>
+          Click on the ‘Deploy’ button for the <codeph>enrich_ip_nums</codeph> function. Choose ‘Everything’ in 
+          the Feed Boundary dropdown. The function should be ‘deployed’ and ‘running’ in a few seconds.
+          
+          <p>
+            
+          </p>
+        </li>
         
-        <li> Check the <codeph>target</codeph> bucket for the enriched document, with the following
-          structure inserted.
+        <li>
+          Check the <codeph>target</codeph> bucket for the enriched document, with the following structure inserted.
+          
           <codeblock outputclass="language-javascript">{
   "country": "AD",
   "ip_end": "5.62.60.9",
   "ip_start": "5.62.60.1",
   "ip_num_start": 87964673,
   "ip_num_end": 87964681
-}</codeblock></li>
+}</codeblock>
+          
+          <p>
+          </p>
+        </li>
 
       </ol>
       
@@ -158,12 +398,14 @@ function get_numip_first_3_octets(ip)
       </p>
       
       <p>
-        <i>Solution</i>: As the Function does not have an <codeph>OnExpiry</codeph> handler, create
-        a timer that will execute a few minutes before expiry. We create a docTimer in the
-          <codeph>OnUpdate</codeph> handler. The docTimer will be executed two minutes before
-        expiry; and this callback, associated with the docTimer, will retrieve the document’s value
-        from the source bucket, and will store in the target bucket. The original document in the
-        source bucket is not changed. </p>
+        <i>Solution</i>: As the Function Service does not have an <codeph>OnExpiry</codeph> handler, 
+        create a 
+        timer that will execute a few minutes before expiry. We create a docTimer in the 
+        <codeph>OnUpdate</codeph> handler. The docTimer will be executed two 
+        minutes before expiry; and this callback, associated with the docTimer, will 
+        retrieve the document’s value from the source bucket, and will store in the target bucket. 
+        The original document in the source bucket is not changed. 
+      </p>
       
       <p>
         A sample document with a TTL set for ten minutes from creation-time can be created 
@@ -189,40 +431,113 @@ cb.touch('demo-key', ttl=10*60)</codeblock>
       </p>
       
       <ol>
-        <li> Click on ‘Add Function’. </li>
-        
-        <li> Choose the Source Bucket that contains the sample document. </li>
-        
-        <li> Specify a ‘metadata’ bucket; as mentioned above, in the <xref
-            href="./eventing-examples.dita#eventing_examples/eventing_examples_prerequisites"
-            scope="local" format="dita">Prerequisites</xref> section. </li>
-        
-        <li> Specify a function-name and a readable description. Function name should be
-            <codeph>add_timer_before_expiry</codeph>. Function description should be <i>Create a
-            timer two minutes before expiry of a document.</i>
+        <li>
+          Click on ‘Add Function’.
+          <p>
+            
+          </p>
         </li>
         
-        <li> ‘Settings’ can contain the standard defaults. </li>
+        <li>
+          Choose the Source Bucket that contains the sample document.
+          
+          <p>
+            
+          </p>
+        </li>
         
-        <li> Bindings: <ol>
-            <li> Create a binding for the source bucket as <codeph>src</codeph>. Choose the source
-              bucket from the <b>name</b> dropdown, and type <codeph>src</codeph> in the
-                <b>value</b> textbox. </li>
-            <li> Create a binding for the target bucket as <codeph>tgt</codeph>. Choose the target
-              bucket from the <b>name</b> dropdown, and type <codeph>tgt</codeph> in the
-                <b>value</b> textbox. </li>
-          </ol></li>
+        <li>
+          Specify a ‘metadata’ bucket; as mentioned above,
+          in the <xref href="./eventing-examples.dita#eventing_examples/eventing_examples_prerequisites" scope="local" format="dita">Prerequisites</xref>
+          section.
+          
+          
+          <p>
+            
+          </p>
+        </li>
         
-        <li> Click ‘Next: Add Code’, and paste the code specified in the Sample Code Section, below. </li>
+        <li>
+          Specify a function-name and a readable description. Function name should be
+          <codeph>add_timer_before_expiry</codeph>. Function description should be
+          <i>Create a timer two minutes before expiry of a document.</i>
+
+          
+          <p>
+            
+          </p>
+        </li>
         
-        <li> Click on ‘Eventing’ in the left navigation bar: this takes you to the Functions summary
-          screen. </li>
+        <li>
+          ‘Settings’ can contain the standard defaults.
+
+          <p>
+            
+          </p>
+        </li>
         
-        <li> Click on the ‘Deploy’ button for the <codeph>add_timer_before_expiry</codeph> function.
-          Choose ‘Everything’ in the Feed Boundary dropdown. The function should be ‘deployed’ and
-          ‘running’ in a few seconds. </li>
+        <li>
+          Bindings:
+          
+          <ol>
+            <li>
+              Create a binding for the source bucket as <codeph>src</codeph>. Choose the source
+              bucket from the <b>name</b> dropdown, and type <codeph>src</codeph> in the <b>value</b>
+              textbox.
+              
+              <p>
+                
+              </p>
+            </li>
+            
+            <li>
+              Create a binding for the target bucket as <codeph>tgt</codeph>. Choose the target
+              bucket from the <b>name</b> dropdown, and type <codeph>tgt</codeph> in the <b>value</b>
+              textbox.
+              
+              <p>
+                
+              </p>
+            </li>
+          </ol>
+          
+          <p>
+            
+          </p>
+        </li>
         
-        <li> Check the ‘target’ bucket for one inserted document. </li>
+        <li>
+          Click ‘Next: Add Code’, and paste the code specified in the Sample Code Section, below.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Click on ‘Eventing’ in the left navigation bar: this takes you to the Functions summary screen.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Click on the ‘Deploy’ button for the <codeph>add_timer_before_expiry</codeph> function. Choose ‘Everything’ in the 
+          Feed Boundary dropdown. The function should be ‘deployed’ and ‘running’ in a few seconds.
+
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Check the ‘target’ bucket for one inserted document. 
+          
+          <p>
+            
+          </p>
+        </li>
 
       </ol>
       
