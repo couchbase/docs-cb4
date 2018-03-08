@@ -167,25 +167,23 @@
       </title>
       
       <p>
-        <i>Challenge</i>: A document contains attributes (in this example, IP addresses) whose form is 
-        insufficiently
-        supportive of search. 
-        Ideally, on the document's creation
-        or modification, these attributes would be converted to values (in this example, numerals) whose form is more 
-        supportive of search. The original attributes could then be retrieved based on successful searches on
-        the converted values.
+        <i>Problem</i>: A document contains attributes whose form makes them difficult to search on (for
+        example, IP addresses). Would it 
+        be possible, on the document's creation or modification, 
+        to convert these attributes to a form more supportive of search? The 
+        original attributes could then be retrieved, based on successful searches performed on the converted values.
       </p>         
       
       <p>
         <i>Solution</i>: Create a JavaScript function that contains an <codeph>OnUpdate</codeph> handler.
-        The handler listens for data-changes within a specified, source bucket. When any document 
-        is created or mutated, the handler executes a user-defined routine, if appropriate conditions
-        have been met. In this case, the created or mutated document must contain two
-        specifically named fields, each of which has an IP address as its value: the values correspond to the
-        beginning and ending of an address-range. The handler-routine converts each IP address to a numeral. A new 
+        The handler listens for data-changes within a specified, source bucket. When any document within the bucket
+        is created or mutated, the handler executes a user-defined routine. In this example, if the 
+        created or mutated document contains two
+        specifically named fields containing IP addresses (these respectively corresponding to the
+        beginning and ending of an address-range), the handler-routine converts each IP address to an integer. A new 
         document is created
         in a specified, target bucket: this new document is identical to the old, except that it contains two additional
-        fields, which respectively contain the numerals that correspond to the beginning and ending IP addresses. The
+        fields, which contain numerals that correspond to the IP addresses. The
         original document, in the source bucket, is not changed.
       </p>
       
@@ -581,53 +579,73 @@ function get_numip_first_3_octets(ip)
       </title>
       
       <p>
-        <i>Problem</i>: When a document expires from a source bucket, archive the document’s 
-        value in another target bucket.
+        <i>Problem</i>: When a document in an existing bucket is about to expire, might 
+        one or more of its attributes be archived, in a newly created bucket? 
+      </p>
+        
+      <p>
+        (For information on bucket expiration, see
+        the <i>Item Deletion</i> section of 
+        <xref href="../architecture/core-data-access-bucket-disk-storage.dita" scope="local" format="dita">Bucket 
+        Disk Storage</xref>.)
       </p>
       
       <p>
-        <i>Solution</i>: As the Function Service does not have an <codeph>OnExpiry</codeph> handler, 
-        create a 
-        timer that will execute a few minutes before expiry. We create a docTimer in the 
-        <codeph>OnUpdate</codeph> handler. The docTimer will be executed two 
-        minutes before expiry; and this callback, associated with the docTimer, will 
-        retrieve the document’s value from the source bucket, and will store in the target bucket. 
-        The original document in the source bucket is not changed. 
+        <i>Solution</i>: Create an <codeph>OnUpdate</codeph> handler, which runs whenever a document is
+        created or mutated. The handler runs a <codeph>docTimer</codeph> routine, which itself executes
+        a callback function, two minutes prior to any document's established expiration: this function
+        retrieves a specified value from the document, and stores it in a document of the same name, in
+        a specified target bucket. The original document in the source bucket is not changed. 
       </p>
       
       <p>
-        A sample document with a TTL set for ten minutes from creation-time can be created 
-        with the following python script:
+        For this example, Example 2, the buckets used in Example 1 are reused: <codeph>source</codeph>,
+        <codeph>target</codeph>, and <codeph>metadata</codeph>. A new document is created within
+        the <codeph>source</codeph> bucket: this document has its expiration 
+        &#8212; or <i>Time To Live</i> (<i>TTL</i>) &#8212; set to occur <i>ten minutes after the
+        document's creation-time</i>. Note that a document's expiration cannot be established 
+        by means of the Couchbase Web Console: the standard procedure for establishing or modifying
+        expiration is by means of the Couchbase SDK. The following Python script, based on the
+        Couchbase SDK Python client, can be so used:
+
       </p>
       
       <codeblock outputclass="language-python">from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
 import time
 cluster = Cluster('couchbase://localhost:8091')
-authenticator = PasswordAuthenticator('test', 'asdasd')
+authenticator = PasswordAuthenticator('Administrator', 'password')
 cluster.authenticate(authenticator)
 
-cb = cluster.open_bucket('logs')
-print("Lets insert a document")
-cb.upsert('demo-key', 'demo-value')
-print "Doc Value:", cb.get('demo-key').value
-print "Document inserted. Lets set its TTL"
-cb.touch('demo-key', ttl=10*60)</codeblock>
+cb = cluster.open_bucket('source')
+cb.upsert('SampleDocument2', {'a_key': 'a_value'})
+cb.touch('SampleDocument2', ttl=4*60)</codeblock>
+      
+      <p>
+        This script imports a Couchbase <codeph>cluster</codeph> object, and authenticates
+        against it, using (for demonstration purposes) the Full Administrator username and
+        passowrd. The cluster is assumed to be accessible on <codeph>localhost</codeph>.
+        The script then opens the existing <codeph>source</codeph> bucket, and inserts a new
+        document named <codeph>SampleDocument2</codeph>, whose body is <codeph>{'a_key': 'a_value'}</codeph>.
+      </p>
+      
+      <p>
+        Information on installing the Couchbase Python SDK can be found in
+        <xref href="../sdk/python/start-using-sdk.dita" scope="local" format="dita">Start Using the SDK</xref>.
+        Information on using the Couchbase Python SDK to establish bucket-expiration can be found in 
+        <xref href="../sdk/python/document-operations.dita" scope="local" format="dita">Document Operations</xref>.
+      </p>
       
       <p>
         Proceed as follows:
       </p>
       
       <ol>
-        <li>
-          Click on ‘Add Function’.
-          <p>
-            
-          </p>
-        </li>
         
         <li>
-          Choose the Source Bucket that contains the sample document.
+          Install the Couchbase SDK Python client, and, from the appropriate folder, start python.
+          
+          <codeblock outputclass="language-bourne">./python</codeblock>
           
           <p>
             
@@ -635,59 +653,46 @@ cb.touch('demo-key', ttl=10*60)</codeblock>
         </li>
         
         <li>
-          Specify a ‘metadata’ bucket; as mentioned above,
-          in the <xref href="./eventing-examples.dita#eventing_examples/eventing_examples_prerequisites" scope="local" format="dita">Prerequisites</xref>
-          section.
+          At the Python prompt, enter the code given above. The session should appear as follows:
           
+          <codeblock outputclass="language-bourne">>>> from couchbase.cluster import Cluster
+>>> from couchbase.cluster import PasswordAuthenticator
+>>> import time
+>>> cluster = Cluster('couchbase://localhost:8091')
+>>> authenticator = PasswordAuthenticator('Administrator', 'password')
+>>> cluster.authenticate(authenticator)
+>>> cb = cluster.open_bucket('source')
+>>> cb.upsert('SampleDocument2', {'a_key': 'a_value'})
+OperationResult&lt;rc=0x0, key='SampleDocument2', cas=0x1519ec8cdee90000&gt;
+>>> cb.touch('SampleDocument2', ttl=10*60)
+OperationResult&lt;rc=0x0, key='SampleDocument2', cas=0x1519ec8e686c0000&gt;
+>>></codeblock> 
           
           <p>
             
           </p>
-        </li>
-        
-        <li>
-          Specify a function-name and a readable description. Function name should be
-          <codeph>add_timer_before_expiry</codeph>. Function description should be
-          <i>Create a timer two minutes before expiry of a document.</i>
-
-          
-          <p>
-            
-          </p>
-        </li>
-        
-        <li>
-          ‘Settings’ can contain the standard defaults.
-
-          <p>
-            
-          </p>
-        </li>
-        
-        <li>
-          Bindings:
-          
-          <ol>
-            <li>
-              Create a binding for the source bucket as <codeph>src</codeph>. Choose the source
-              bucket from the <b>name</b> dropdown, and type <codeph>src</codeph> in the <b>value</b>
-              textbox.
               
-              <p>
-                
-              </p>
-            </li>
-            
-            <li>
-              Create a binding for the target bucket as <codeph>tgt</codeph>. Choose the target
-              bucket from the <b>name</b> dropdown, and type <codeph>tgt</codeph> in the <b>value</b>
-              textbox.
-              
-              <p>
-                
-              </p>
-            </li>
-          </ol>
+        </li>
+        
+        <li>
+          Access the <b>Buckets</b> screen of Couchbase Web Console, and left-click on the <b>Document</b>
+          tab of the <codeph>source</codeph> bucket. This should appear as follows:
+          
+          <p>
+            <image href="./images/ex2sourceBucketSubsequent.png" id="ex2_source_bucket_subsequent" align="left" width="880"/>
+          </p>
+          
+          <p>
+            Note that by hovering over the document <b>id</b>, the document's metadata is displayed:
+          </p>
+          
+          <p>
+            <image href="./images/ex2metaDataDisplay.png" id="ex2_meta_data_display" align="left" width="880"/>
+          </p>
+          
+          <p>
+            This confirms the established document expiration-time, in seconds.
+          </p>
           
           <p>
             
@@ -695,7 +700,8 @@ cb.touch('demo-key', ttl=10*60)</codeblock>
         </li>
         
         <li>
-          Click ‘Next: Add Code’, and paste the code specified in the Sample Code Section, below.
+          Access the <b>Eventing</b> screen, by left-clicking on the <uicontrol>Eventing</uicontrol> tab, in the
+          left-hand navigation panel.
           
           <p>
             
@@ -703,37 +709,30 @@ cb.touch('demo-key', ttl=10*60)</codeblock>
         </li>
         
         <li>
-          Click on ‘Eventing’ in the left navigation bar: this takes you to the Functions summary screen.
+          Click on the <uicontrol>Add Function</uicontrol> tab, at the upper right. When the <b>Add Function</b>
+          dialog appears, specify <codeph>source</codeph> as the <b>Source Bucket</b>, and <codeph>metadata</codeph> as
+          the <b>Metadata Bucket</b>. Then, specify <codeph>add_timer_before_expiry</codeph> as the function-name. Optionally,
+          add a function-description. Leave the <b>Settings</b> at default, for all values. In <b>Bindings</b>, specify
+          <codeph>tgt</codeph> as the <b>value</b> for the <b>name</b> <codeph>target</codeph>. The dialog should appear
+          approximately as follows: 
+          
+          <p>
+            <image href="./images/ex2AddFunctionDialogComplete.png" id="ex2add_function_dialog_complete.png" align="left" width="460"/>
+          </p>
           
           <p>
             
           </p>
-        </li>
-        
-        <li>
-          Click on the ‘Deploy’ button for the <codeph>add_timer_before_expiry</codeph> function. Choose ‘Everything’ in the 
-          Feed Boundary dropdown. The function should be ‘deployed’ and ‘running’ in a few seconds.
 
-          <p>
-            
-          </p>
+          
         </li>
         
         <li>
-          Check the ‘target’ bucket for one inserted document. 
+          Left-click on the <uicontrol>Next: Add Code</uicontrol> button, at the lower right of the <b>Add Function</b> dialog. the
+          dialog disappears, and the <b>add_timer_before_expiry</b> screen is displayed. 
+          Copy the following JavaScript routine, and paste it into the main, interactive panel, over the placeholder code:
           
-          <p>
-            
-          </p>
-        </li>
-
-      </ol>
-      
-      <p>
-        Sample code:
-      </p>
-      
-      <codeblock outputclass="language-javascript">function OnUpdate(doc, meta) {
+          <codeblock outputclass="language-javascript">function OnUpdate(doc, meta) {
   if (meta.expiration > 0 ) //do only for those documents that have a non-zero TTL
   {
     //have to x by 1000, as timestamp in secs; and for Date operations need in milli-secs
@@ -747,9 +746,64 @@ cb.touch('demo-key', ttl=10*60)</codeblock>
 
 function DocTimerCallback(docid, expiry) {
   log('DocTimerCallback Executed for DocId:', String(docid));
-  tgt[docid] = "To Be Expired Key's Value is:" + String(src[docid]) ;
+  tgt[docid] = "To Be Expired Key's Value is:" + JSON.stringify(src[docid]);
   log('Doc Timer Executed for DocId', String(docid));
 }</codeblock>
+ 
+        
+        <p>
+          The screen now appears as follows:
+        </p>
+          
+          <p>
+            <image href="./images/addTimerBeforeExpiryCode.png" id="ex2add_timer_before_expiry_code.png" align="left" width="580"/>
+          </p>
+          
+          <p>
+            The <codeph>OnUpdate</codeph> routine, for each document with a non-zero expiration-time established, computes
+            a <codeph>docTimer</codeph> execution-time that is two minutes prior to the document expiration-time. The
+            callback for the <codeph>docTimer</codeph> creates a new document in the <codeph>tgt</codeph> bucket,
+            with the same <codeph>docid</codeph> as the original document; and makes the value of the new document
+            a slightly modified version of the original.
+          </p>
+          
+          <p>
+            
+          </p>
+          
+        </li>
+        
+        <li>
+          Click on the ‘Deploy’ button for the <codeph>add_timer_before_expiry</codeph> function. Choose ‘Everything’ in the 
+          Feed Boundary dropdown. The function should be ‘deployed’ and ‘running’ in a few seconds.
+
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          The new document will be created two minutes before the expiration-time of the original. Therefore, when sufficient
+          time has elapsed, access the <b>Buckets</b> screen, and examine the documents currently within the <codeph>target</codeph>
+          bucket. Eventually, the display is as follows:
+          
+          <p>
+            <image href="./images/ex2sourceBucketSubsequent.png" id="ex2source_bucket_subsequent.png" align="left" width="680"/>
+          </p>
+          
+          <p>
+            This indicates that the new document has been created, with a value based on that of the original. After ten minutes
+            have elapsed, check the documents within the <codeph>source</codeph> bucket: the original document, <codeph>SourceDocument2</codeph>,
+            is no longer visible, having been removed on its expiration-time being reached.
+          </p>
+          
+          
+          <p>
+            
+          </p>
+        </li>
+
+      </ol>
 
     </section>
 
