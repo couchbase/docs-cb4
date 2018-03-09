@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="geospatial_queries">
+  
+  <title>
+    Geospatial Queries
+  </title>
+  
+    <shortdesc>
+      Geospatial queries return documents that contain location-data.
+    </shortdesc>
+  
+  <body>
+    
+    <section id="introduction-to-geospatial-querying">
+      
+      <title>
+        Introduction to Geospatial Querying
+      </title>
+      
+        <p>
+         A <i>geospatial query</i> specifies a location, and returns each document that contains
+         a proximity-match. A location is represented by means of
+         <i>longitude</i>-<i>latitude</i> coordinate pairs. 
+        </p>
+      
+        <p>
+          This allows an application, based on the user's input of a particular coordinate, address, or
+          property name, to derive a list of <i>points of interest</i> that lie within a specified distance
+          of the user-referenced location; and display these for the user's benefit.
+        </p>
+      
+        <p>
+          The location-data provided by a geospatial query can be either of the following:
+        </p>
+      
+      <ul>
+        <li>
+          A location, specified as a longitude-latitude coordinate pair; and a distance, in miles. The location
+          determines the center of a circle whose radius-length is the specified distance.
+          Documents are returned if they reference a location within the circle.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Two longitude-latitude coordinate pairs. These are respectively taken to indicate the top left and
+          bottom right corners of a bounding box. Documents are returned if they reference a location within the
+          box.
+          
+          <p>
+            
+          </p>
+        </li>
+      </ul>
+      
+      <p>
+        To be successful, a geospatial query must reference an index within which the <i>geopoint</i> type mapping
+        has been applied to the field containing the target longitude-latitude coordinate pair.
+      </p>
+    
+    </section>
+    
+    <section id="recognizing_target_data">
+      
+      <title>
+        Recognizing Target Data
+      </title>
+      
+      <p>
+        The <codeph>travel-sample</codeph> bucket, provided for test and development, 
+        contains multiple documents that specify
+        locations. For example, those that represent airports, such as <codeph>airport_1254</codeph>:
+      </p>
+      
+      <codeblock outputclass="language-javascript">{
+  "airportname": "Calais Dunkerque",
+  "city": "Calais",
+  "country": "France",
+  "faa": "CQF",
+  "geo": {
+    "alt": 12,
+    "lat": 50.962097,
+    "lon": 1.954764
+  },
+  "icao": "LFAC",
+  "id": 1254,
+  "type": "airport",
+  "tz": "Europe/Paris"
+}</codeblock>
+      
+      <p>
+        The <codeph>geo</codeph> field contains the <codeph>lon</codeph> and <codeph>lat</codeph> key-value
+        pairs. Such a parent-field is accessed directly by a geospatial query: the internal <codeph>long</codeph>
+        and <codeph>lat</codeph> child-fields are not explicitly specified. Moreover, any other 
+        child-field, such as <codeph>alt</codeph>, is ignored.
+      </p>
+      
+      <p>
+        For information on installing the <codeph>travel-sample</codeph> bucket, see
+        <xref href="../settings/install-sample-buckets.dita" scope="local" format="dita">Install Sample Buckets</xref>.
+      </p>
+      
+    </section>
+    
+    
+    <section id="creating_a_geospatial_index">
+      
+      <title>
+        Creating a Geospatial Index
+      </title>
+      
+      <p>
+        To be successful, a geospatial query must reference an index that applies the <i>geopoint</i> type mapping to the field
+        containing the longitude-latitude coordinate pair.
+        This can be achieved by means of the Couchbase Web Console. Detailed instructions for setting up indexes, and
+        specifying type mappings, are provided in
+        <xref href="./fts-creating-indexes.dita" scope="local" format="dita">Creating Indexes</xref>. For
+        initial experimentation with geospatial querying, the <codeph>geo</codeph> field of documents 
+        within the <codeph>travel-sample</codeph>
+        bucket can be specified as a child mapping of the <codeph>default</codeph> type mapping, as follows: 
+      </p>
+      
+      <p>
+        <image href="./images/fts-geopoint-definition.png" id="fts_geopoint_definition" align="left" width="620"/>
+      </p>
+      
+      <p>
+        The index so created can also be specified by means of the Couchbase REST API. See
+        <xref href="./fts-demonstration-indexes.dita#topic_fts_demonstration-indexes/topic_fts_demonstration-indexes" scope="local" format="dita">Demonstration Indexes</xref> 
+        for the body of the index to be used, and see
+        <xref href="./fts-creating-indexes.dita#topic_ksl_wwk_1v/index-creation-with-the-rest-api" scope="local" format="dita">Index-Creation 
+        with the REST API</xref> for information on using the REST syntax.
+      </p>
+      
+    </section>
+    
+    <section id="creating_geospatial_rest_query_radius_based">
+      
+      <title>
+        Creating a Query: Radius-Based
+      </title>
+      
+      <p>
+        This section and the following provide examples of the query-bodies required to make geospatial queries with
+        the Couchbase REST API.
+        Note that more detailed information on performing queries with the Couchbase REST API can be found in
+        <xref href="./fts-searching-with-the-rest-api.dita" scope="local" format="dita">Searching with the REST API</xref>; which
+        shows how to use the full <codeph>curl</codeph> command, and how to incorporate query-bodies into it.
+      </p>
+      
+      <p>
+        The following query-body specifies a longitude of <codeph>-2.235143</codeph>, and a latitude of <codeph>53.482358</codeph>.
+        The target-field <codeph>geo</codeph> is specified, as is
+        a <codeph>distance</codeph> of <codeph>100</codeph> miles: this is the radius within which target-locations must reside,
+        for their documents to be returned. 
+      </p>
+      
+      <codeblock outputclass="language-javascript">{
+  "from": 0,
+  "size": 10,
+  "query": {
+    "location": {
+      "lon": -2.235143,
+      "lat": 53.482358
+     },
+      "distance": "100mi",
+      "field": "geo"
+    },
+  "sort": [
+    {
+      "by": "geo_distance",
+      "field": "geo",
+      "unit": "mi",
+      "location": {
+      "lon": -2.235143,
+      "lat": 53.482358
+      }
+    }
+  ]
+}</codeblock>
+      
+      <p>
+        Note that the longitude-latitude coordinate pair can also be specified as an array, if desired. The <codeph>lon</codeph> value
+        must always precede the <codeph>lat</codeph>:
+      </p>
+      
+      <codeblock outputclass="language-javascript">"location": [-2.235143, 53.482358],</codeblock>
+      
+      <p>
+        The query also contains a <codeph>sort</codeph> object, which specifies that the returned documents
+        should be ordered in terms of their <i>geo_distance</i> from specified <codeph>lon</codeph> and <codeph>lat</codeph>
+        coordinates: these values need not be identical to those specified in the <codeph>query</codeph> object.
+      </p>
+      
+      <p>
+        A subset of formatted console output might appear as follows: 
+      </p>
+      
+      <codeblock outputclass="language-javascript">            .
+            .
+            .
+"hits": [
+  {
+    "index": "geoIndex_61d8c796ef7f4360_acbbef99",
+    "id": "landmark_17411",
+    "score": 1.4045076008239446e-06,
+    "sort": [
+      " \u0001?E#9>N\f\"e"
+    ]
+  },
+  {
+    "index": "geoIndex_61d8c796ef7f4360_acbbef99",
+    "id": "landmark_17409",
+    "score": 1.4045076008239446e-06,
+    "sort": [
+      " \u0001?O~i*(kD,"
+    ]
+  },
+  {
+    "index": "geoIndex_61d8c796ef7f4360_acbbef99",
+    "id": "landmark_17403",
+    "score": 1.4045076008239446e-06,
+    "sort": [
+      " \u0001?Sg*|/t\u001f\u0002"
+    ]
+  },
+  {
+    "index": "geoIndex_61d8c796ef7f4360_acbbef99",
+    "id": "hotel_17413",
+    "score": 1.4045076008239446e-06,
+    "sort": [
+      " \u0001?U]S\\.e\u0002_"
+   ]
+  },
+            .
+            .
+            .</codeblock>
+      
+    </section>
+    
+    <section id="creating_geospatial_rest_query_bounding_box_based">
+      
+      <title>
+        Creating a Query: Box-Based
+      </title>
+      
+      <p>
+        The
+        following query body forms the <codeph>top_left</codeph> corner of a <i>bounding box</i>, by means of a
+        longitude of <codeph>-2.235143</codeph> and a latitude of <codeph>53.482358</codeph>.
+        It also forms the <codeph>botom_right</codeph>, by means of 
+        <codeph>28.955043</codeph> and
+        <codeph>40.991862</codeph>. If a target data-location falls within the box,
+        its document is returned. The results are specified to be sorted on <codeph>name</codeph>
+        alone. 
+      </p>
+      
+      <codeblock outputclass="language-javascript">{ 
+  "from": 0,
+  "size": 10,
+  "query": {
+    "top_left": {
+      "lon": -2.235143,
+      "lat": 53.482358
+     },
+    "bottom_right": {
+      "lon": 28.955043,
+      "lat": 40.991862
+     },
+    "field": "geo"
+  },
+  "sort": [
+    "name"
+  ]
+}</codeblock>
+      
+      <p>
+        A subset of formatted output might appear as follows:
+      </p>
+      
+      <codeblock outputclass="language-javascript">          .
+          .
+          .
+"hits": [
+  {
+    "index": "geoIndex_61d8c796ef7f4360_acbbef99",
+    "id": "landmark_17411",
+    "score": 1.4045076008239446e-06,
+    "sort": [
+      " \u0001?E#9>N\f\"e"
+    ]
+  },
+  {
+    "index": "geoIndex_61d8c796ef7f4360_acbbef99",
+    "id": "landmark_17409",
+    "score": 1.4045076008239446e-06,
+    "sort": [
+      " \u0001?O~i*(kD,"
+    ]
+  },
+  {
+    "index": "geoIndex_61d8c796ef7f4360_acbbef99",
+    "id": "landmark_17403",
+    "score": 1.4045076008239446e-06,
+    "sort": [
+      " \u0001?Sg*|/t\u001f\u0002"
+    ]
+  },
+  {
+    "index": "geoIndex_61d8c796ef7f4360_acbbef99",
+    "id": "hotel_17413",
+    "score": 1.4045076008239446e-06,
+    "sort": [
+      " \u0001?U]S\\.e\u0002_"
+    ]
+  },
+          .
+          .
+          .</codeblock>
+      
+    </section>
+    
+  </body>
+  
+</topic>
