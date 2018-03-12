@@ -100,6 +100,72 @@
             </ul>
         </section>
         
+        <section>
+            <title>
+                Certificate-Based Authentication
+            </title>
+            
+            <p>
+                Couchbase Server supports the use of X.509 certificates to authenticate clients. This allows
+                authenticated users to access specific resources by means of the data service (no other service
+                is currently available to clients through this form of authentication). 
+            </p>
+            
+            <p>    
+                The process relies on a certificate
+                authority, for the issuing of certificates that validate identities. A certificate includes
+                information such as the name of the entity it identifies, an expiration date, the name of the authority
+                that issued the certificate, and the digital signature of the authority.
+                A client attempting to access Couchbase Server can present a certificate to the server, allowing
+                the server to check the validity of the certificate. If the certificate is valid, the user
+                under whose identity the client is running,
+                and the roles assigned that user, are verified. If the assigned roles are appropriate for
+                the level of access requested to the specified resource, access is granted.
+            </p>
+            
+            <p>
+                The C SDK has supported working with X.509 certificates since 2.8.4. Version 2.8.5 of libcouchbase added 
+                the ability for the SSL trust store to be kept in a separate file. The trust store has to be specified 
+                with option <codeph>truststorepath=…</codeph>, otherwise the library will expect it to be stored with the 
+                certificate in <codeph>certpath=</codeph>, and the trust store and certificate concatenated in the certpath.
+            </p>
+            
+            <p>
+                This shell script will generate the client certificate - you will need to ensure that you have 
+                <xref href="https://www.openssl.org" format="html" scope="external">OpenSSL</xref> installed on your system:
+                <codeblock>export CB_ROOT=/opt/couchbase
+ 
+export TOPDIR=SSLCA
+export ROOT_DIR=rootdir
+export CLIENT_DIR=clientdir
+export INT_DIR=intdir
+export ROOT_CA=ca
+export INTERMEDIATE=int
+export CLIENT=client
+export CHAIN=chain
+ 
+export ADMINCRED=Administrator:password
+export ip=127.0.0.1
+export USERNAME=testuser
+ 
+cd ${TOPDIR}
+ 
+mkdir -p ${CLIENT_DIR}
+ 
+cd ${CLIENT_DIR}
+openssl genrsa -out ${CLIENT}.key 2048
+openssl req -new -key ${CLIENT}.key -out ${CLIENT}.csr -subj "/CN=${USERNAME}/OU=None/O=None/L=None/S=None/C=US"
+openssl x509 -req -in ${CLIENT}.csr -CA ../${INT_DIR}/${INTERMEDIATE}.pem \
+  -CAkey ../${INT_DIR}/${INTERMEDIATE}.key -CAcreateserial \
+  -CAserial ../${INT_DIR}/intermediateCA.srl -out ${CLIENT}.pem -days 365
+ 
+cat ./${CLIENT}.pem ../${INT_DIR}/${INTERMEDIATE}.pem ../${ROOT_DIR}/${ROOT_CA}.pem > ./${CHAIN}.pem</codeblock>
+                Which is then used by passing <codeph>${CLIENT_DIR}/${CHAIN}.pem</codeph> as the <codeph>certpath</codeph> 
+                option, and <codeph>${CLIENT_DIR}/${CLIENT}.key</codeph> as <codeph>keypath</codeph> in the connection 
+                string (and don't forget couchbase<b><i>s</i></b> or http<b><i>s</i></b> in the schema). For 
+                example:<codeblock>couchbases://127.0.0.1?certpath=/path/to/chain.pem&amp;keypath=/path/to/client.key</codeblock></p>
+        </section>
+
     </body>
         
 </topic>
