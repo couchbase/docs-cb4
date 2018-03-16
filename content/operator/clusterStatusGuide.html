@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  </head>
+    <body>
+<article class="doc">
+<h1>Couchbase Cluster Status</h1>
+<div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>Kubernetes users often need to check the status of various objects (for
+example, pods, deployments, and StatefulSets) that have been deployed
+inside their Kubernetes clusters. Status checking is done by
+<code>`describing'' one of the objects in the cluster using
+`kubectl describe</code> command. This command outputs the configuration for
+the specified object, a status section, and an event section. The status
+section varies depending on the object type and shows various health
+metrics related to the object described. The events sections is printed
+last and shows major events that have happened during the life of the
+object.</p>
+</div>
+<div class="paragraph">
+<p>Since the Couchbase Operator registers a ``CouchbaseCluster'' Custom
+Resource Definition(CRD) with Kubernetes, it allows Kuberentes to know
+about Couchbase clusters natively. This means that the CouchbaseCluster
+becomes another object that can be described to get the configuration,
+status, and events specific to a particular Couchbase cluster.</p>
+</div>
+<div class="paragraph">
+<p>To describe a Couchbase cluster named ``cb-example'', run the following
+command: On Kubernetes:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">kubectl describe couchbasecluster cb-example</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Note that the object name in the above command is <code>couchbasecluster''.
+You can also use the shorthand name </code>cbc'' as the object name to save
+some typing. On Kubernetes:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">kubectl describe cbc cb-example</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>On OpenShift:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">oc describe cbc cb-example</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Below is an example of the output of the <code>kubectl describe</code> command. The
+various parts of the output and their significance will be discussed in
+detail in the following sections.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml">Name:       cb-example
+Kind:       CouchbaseCluster
+Spec:   ...
+Status:
+  Admin Console Port:       30239
+  Admin Console Port SSL:   31628
+  Buckets:
+    Default:
+      Conflict Resolution:  seqno
+      Enable Flush:     true
+      Enable Index Replica: false
+      Eviction Policy:      fullEviction
+      Io Priority:      high
+      Memory Quota:     128
+      Name:         default
+      Replicas:         1
+      Type:         couchbase
+  Cluster Id:           9ae7fe4634e0360cf9c9245cb4ebb27b
+  Conditions:
+    ...
+    Message:            Data is equally distributed across all nodes in the cluster
+    Reason:         Cluster is balanced
+    Status:         True
+    Type:           Balanced
+  Control Paused:       false
+  Current Version:      enterprise-5.0.1
+  Members:
+    Ready:
+      cb-example-0000
+      cb-example-0001
+      cb-example-0002
+  Phase:        Running
+  Reason:
+  Size:         3
+  Events:
+  FirstSeen LastSeen    Count   From            Type        Reason          Message
+  --------- --------    -----   ----            --------    ------          -------
+  21m       21m     1   couchbase-operator  Normal      NewMemberAdded      New member cb-example-0000 added to cluster</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="status-and-events"><a class="anchor" href="#status-and-events"></a>Status And Events</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Often when the status spec of the schema is updated, an associated event
+is generated which details the reason why the change occurred. For
+instance, increasing the size of the cluster causes an add member event
+to appear in the Events section of the status result. The following
+section explains the information provided in the status response along
+with any events associated with value updates.</p>
+</div>
+<div class="sect3">
+<h4 id="admin-console"><a class="anchor" href="#admin-console"></a>Admin Console</h4>
+<div class="literalblock">
+<div class="content">
+<pre>Admin Console Port: 30239
+Admin Console Port SSL: 31628</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The ports used for exposing the Couchbase cluster’s Web Console. This
+section of the status is only visible when the <code>exposeAdminConsole</code>
+setting of the cluster spec is enabled. See
+<a href="adminConsoleAccess.adoc">Accessing the Couchbase Web Console</a> for
+information on how to expose and access the Couchbase Web Console.</p>
+</div>
+<div class="paragraph">
+<p>Enabling and disabling the <code>exposeAdminConsole</code> setting produces the
+following events, respectively:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>Events:
+  ...  ServiceCreated       Service for admin console `cb-example-ui` was created
+  ...  ServiceDeleted       Service for admin console `cb-example-ui` was deleted</pre>
+</div>
+</div>
+</div>
+<div class="sect3">
+<h4 id="buckets"><a class="anchor" href="#buckets"></a>Buckets</h4>
+<div class="literalblock">
+<div class="content">
+<pre>Buckets:
+  Default:
+    Memory Quota:       128
+    Name:           default
+    ...</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>A list of buckets currently active within the Couchbase cluster. The
+values of the bucket status are the same as the values provided in the
+bucket specification. See
+<a href="couchbaseClusterConfig.adoc">CouchbaseCluster Configuration</a> for
+details about the bucket specification. When buckets from the
+specification are added, updated, or removed the following events are
+generated, respectively:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>Events:
+  ... BucketCreated     A new bucket `default` was created
+  ... BucketEdited      Bucket `default` was edited
+  ... BucketDeleted     Bucket `default` was deleted</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The bucket section of the status only reflects valid changes that have
+been made to the cluster. In the case of attempts to update bucket
+section with an invalid specification, the following message will be
+seen in the <code>Conditions</code> section of the Status:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>Conditions:
+  Message:  Bucket: default cannot change (default) bucket param='conflictResolution' from 'seqno' to 'timestamp'
+  Reason:       Bucket edit failed
+  Status:       False
+  Type:         ManageBuckets</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>To resolve errors resulting from invalid updates, edit the cluster
+specification according to the message shown under Conditions and apply
+the updated specification.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="cluster-id"><a class="anchor" href="#cluster-id"></a>Cluster ID</h4>
+<div class="literalblock">
+<div class="content">
+<pre>Cluster Id:         9ae7fe4634e0360cf9c9245cb4ebb27b</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The cluster identifier as provided by the Couchbase cluster. This value
+is provided directly by the Couchbase cluster and is therefore never
+updated by any changes to the cluster specification.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="members"><a class="anchor" href="#members"></a>Members</h4>
+<div class="literalblock">
+<div class="content">
+<pre>Members:
+  Ready:
+    cb-example-0000
+    cb-example-0001
+    cb-example-0002</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Members represent pods that are managed by the Couchbase Operator. All
+members in the Ready section represent pods that make up the Couchbase
+cluster. The status of cluster members is directly affected by the value
+of <code>Size</code> in the cluster spec. When <code>Size</code> is increased a member add
+event is generated, followed by rebalance:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>Events:
+  ... NewMemberAdded        New member cb-example-0003 added to cluster
+  ... RebalanceStarted  A rebalance has been started to balance data across the cluster</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Removing a member generates the expected removal event, followed by a
+rebalance:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>Events:
+  ... RebalanceStarted  A rebalance has been started to balance data across the cluster
+  ... MemberRemoved     Existing member cb-example-0003 removed from the cluster</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Note: It is also possible for a MemberRemoved event to be generated when
+an auto-failover occurs and a member is replaced by a new member.</p>
+</div>
+<div class="paragraph">
+<p>The <code>Conditions</code> section of the status is also updated as the operator
+works to resolve changes to cluster spec size or failures. Important
+condition to check when scaling are: * Balanced: Denoting whether data
+is equally distributed across all nodes in the cluster. * Available:
+Denoting whether all members are up and all VBuckets are available. *
+Scaling: Denoting whether cluster is currently scaling.</p>
+</div>
+<div class="paragraph">
+<p>See <a href="conditionsAndEvents.adoc">Conditions and Events</a> for more
+information about these conditions and their statuses.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="phase"><a class="anchor" href="#phase"></a>Phase</h4>
+<div class="literalblock">
+<div class="content">
+<pre>Phase:      Running</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The current phase of the cluster displayed as one of the following
+phases: * Creating: When a cluster is first deployed. * Running: After
+the <code>couchbasecluster</code> resource object is available and the first
+orchestrator pod is running. * Failed: When a failure occurs within the
+creation or running phase of the cluster. * None: Initial state denoted
+by an empty string.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="size"><a class="anchor" href="#size"></a>Size</h4>
+<div class="literalblock">
+<div class="content">
+<pre>Size:           3</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The size of the Couchbase cluster. When you change this value in the
+cluster specification, this value is also updated as members are added
+to the Couchbase cluster. If an error occurs while the Operator is
+attempting to conform the cluster to the desired size, check the
+<code>Conditions</code> section for information about the current state of the
+cluster. See <a href="adminConsoleAccess.adoc">Accessing the Couchbase Web
+Console</a> for information on how to manually access the cluster and
+collect logs when additional troubleshooting is needed.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="conditions"><a class="anchor" href="#conditions"></a>Conditions</h4>
+<div class="literalblock">
+<div class="content">
+<pre>Conditions:
+  ...
+  Message:          Data is equally distributed across all nodes in the cluster
+  Reason:           Cluster is balanced
+  Status:           True
+  Type:         Balanced</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>A list of conditions reflecting the current state of the Couchbase
+cluster. Each Condition item is denoted by a <code>Type</code> along with an
+associated <code>Status</code>. The various conditions and their statuses are
+documented in <a href="conditionsAndEvents.adoc">Conditions and Events</a>.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="events"><a class="anchor" href="#events"></a>Events</h4>
+<div class="literalblock">
+<div class="content">
+<pre>Events:
+  29m       29m     1   couchbase-operator-1917615544-j1mg8         Normal      NewMemberAdded      New member cb-example-0003 added to cluster
+  29m       29m     1   couchbase-operator-1917615544-j1mg8         Normal      RebalanceStarted    A rebalance has been started to balance data across the cluster
+  51m       51m     1   couchbase-operator-1917615544-j1mg8         Normal      BucketEdited        Bucket `default` was edited</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Events generated during cluster reconciliation. The last 10 events are
+recorded and timestamped as the Operator works to reconcile the cluster
+to its desired cluster state. The types of events that can occur
+throughout the lifecycle of a CouchbaseCluster are documented in
+<a href="conditionsAndEvents.adoc">Conditions and Events</a>.</p>
+</div>
+</div>
+</div>
+</div>
+</article>
+</body>
+</html>

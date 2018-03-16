@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  </head>  
+
+<body>
+<article class="doc">
+<h1>Deploying a Couchbase Cluster</h1>
+<div class="paragraph">
+<p><strong>Prerequisites</strong> Before proceeding to deploy a Couchbase cluster, ensure
+that the <a href="prerequisiteAndSetup.adoc">prerequisites</a> are met and the
+Couchbase Operator is up and running.</p>
+</div>
+<div class="paragraph">
+<p><strong>Deploying a Cluster</strong> Deploying a Couchbase cluster requires creating a
+configuration file that describes what the cluster should look like.
+Like all Kubernetes configurations, Couchbase clusters are defined using
+either YAML or JSON (YAML is preferred by Kubernetes) and then pushed
+into Kubernetes. Below is a sample configuration file for a Couchbase
+cluster.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml">apiVersion: couchbase.database.couchbase.com/v1beta1
+kind: CouchbaseCluster
+metadata:
+  name: cb-example
+spec:
+  baseImage: couchbase/server
+  version: enterprise-5.0.1
+  authSecret: cb-example-auth
+  exposeAdminConsole: true
+  cluster:
+    dataServiceMemoryQuota: 256
+    indexServiceMemoryQuota: 256
+    searchServiceMemoryQuota: 256
+    indexStorageSetting: memory_optimized
+    autoFailoverTimeout: 30
+  buckets:
+    - name: default
+      type: couchbase
+      memoryQuota: 128
+      replicas: 1
+      ioPriority: high
+      evictionPolicy: fullEviction
+      conflictResolution: seqno
+      enableFlush: true
+      enableIndexReplica: false
+  servers:
+    - size: 3
+      name: all_services
+      services:
+        - data
+        - index
+        - query
+        - search
+      dataPath: /opt/couchbase/var/lib/couchbase/data
+      indexPath: /opt/couchbase/var/lib/couchbase/data</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>By taking a quick look at this configuration file you can see that it
+defines a cluster by specifying the following:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Cluster name: cb-example (metadata.name)</p>
+</li>
+<li>
+<p>Couchbase version: 5.0.1 (spec.version)</p>
+</li>
+<li>
+<p>Buckets: 1 bucket named default (spec.buckets)</p>
+</li>
+<li>
+<p>Size: 3 node cluster with all services on each node (spec.servers)</p>
+</li>
+<li>
+<p>Auth secret: cb-example-auth</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>One thing that’s important to note is the <code>authSecret</code> field. The
+Couchbase Operator uses Kubernetes Secrets to create and manage the
+Couchbase super-user credentials. As a result, the <code>authSecret</code> field
+must refer to secret that contains both a user name and a password
+field. For convenience, we provide a sample secret that can be pushed
+into your Kubernetes cluster. The secret sets the user name to
+<code>Administrator'' and the password to </code>password''. To load this secret
+into your Kubernetes cluster, run the following command: On Kubernetes:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ kubectl create -f https://s3.amazonaws.com/packages.couchbase.com/kubernetes/beta/secret.yaml
+secret "cb-example-auth" created</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>On OpenShift:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ oc create -f https://s3.amazonaws.com/packages.couchbase.com/kubernetes/beta/secret.yaml
+secret "cb-example-auth" created</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The Couchbase Operator configuration is now ready to be pushed to
+Kubernetes. To push the Couchbase Operator configuration, run the
+following command: On Kubernetes:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ kubectl create -f https://s3.amazonaws.com/packages.couchbase.com/kubernetes/beta/couchbase-cluster.yaml
+couchbasecluster "cb-example" created</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>On OpenShift:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ oc create -f https://s3.amazonaws.com/packages.couchbase.com/kubernetes/beta/couchbase-cluster.yaml
+couchbasecluster "cb-example" created</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The Couchbase Operator automatically begins creating the cluster.
+Depending on the configuration, creating a cluster can take some time.
+You can track the progress of cluster creation using the
+<code>kubectl describe</code> command. For details on how to use this command and
+an explanation of the output, see <a href="clusterStatusGuide.adoc">Displaying
+Information about a Couchbase Cluster</a>.</p>
+</div>
+<div class="paragraph">
+<p>Once the cluster has been provisioned, you’ll see that various pods, a
+service, and a Couchbase cluster have been created. Since the
+configuration above was for a 3-nodes cluster, you should see three pods
+created. The Couchbase Operator also creates an internal headless
+service that can be used by applications deployed inside the same
+Kubernetes namespace to connect to the Couchbase cluster. Run the
+following command to see the newly created pods:</p>
+</div>
+<div class="paragraph">
+<p>On Kubernetes:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ kubectl get pods</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>NAME READY STATUS RESTARTS AGE cb-example-0000 1/1 Running 0 1m
+cb-example-0001 1/1 Running 0 1m cb-example-0002 1/1 Running 0 1m
+couchbase-operator-1917615544-pd4q6 1/1 Running 0 8m
+<code>On OpenShift, run the following command:`bash $ oc get pods ``</code> A
+CouchbaseCluster object is also created for the cluster and can be used
+to get health and status information about the cluster. For details on
+how to inspect these objects, see <a href="listAndDescribe.adoc">Listing and
+Describing Pods, Services, and CouchbaseClusters</a></p>
+</div>
+<div class="paragraph">
+<p>For further details on what each field in the CouchbaseCluster
+configuration does, as well as a list of all available fields see
+<a href="couchbaseClusterConfig.adoc">CouchbaseCluster Configuration</a>.</p>
+</div>
+</article>
+</body>
+</html>
