@@ -873,6 +873,43 @@ while(true) {
               exponential or random delay. </p></dd>
                 </dlentry>
               </dl>
+
+              <dl id="retryexceptions">
+                <dlentry>
+                  <dt>Retry for some exceptions</dt>
+                    <dd>Using <codeph>RetryBuilder</codeph> allows a more nuanced approach, letting you mandate different responses to different exceptions, and leading to code which can be easier to reason about - like the two examples bellow. This first example configures the Retry Builder so that when an error happens during a document fetch, it retries up to 20 times and waits 100 ms in between attempts. But it only retries on the two exceptions given, everything else is propagated downstream. Note how the 100 * 20 ms = 2s aligns with the timeout provided; this doesn't have to be, but it makes sense to align it.<codeblock>bucket.async()
+.get("document_id")
+.retryWhen(RetryBuilder
+    .anyOf(BackpressureException.class, RequestCancelledException.class)
+    .delay(Delay.fixed(100, TimeUnit.MILLISECONDS))
+    .max(20)
+    .build()
+)
+.timeout(2, TimeUnit.SECONDS)
+.toBlocking()
+.single();</codeblock>This example can be modified to produce the variationbelow, where different retry strategies are used for different exception types. A request cancellation might be retried immediately (1ms), whereas backpressure signalling overload may need a more gradual back off, with an exponential strategy:<codeblock>bucket.async()
+.get("document_id")
+.retryWhen(RetryBuilder
+    .anyOf(BackpressureException.class)
+    .delay(Delay.exponential(TimeUnit.MILLISECONDS, 1000, 1))
+    .max(Integer.MAX_VALUE)
+    .build()
+)
+.retryWhen(RetryBuilder
+    .anyOf(RequestCancelledException.class)
+    .delay(Delay.fixed(1, TimeUnit.MILLISECONDS))
+    .max(2)
+    .build()
+)
+.timeout(2, TimeUnit.SECONDS)
+.toBlocking()
+.single();</codeblock>Note the following values (and their defaults), which we override above:<ul>
+                      <li>max attempts => 1</li>
+                      <li>default retry delay => constant 1ms</li>
+                      <li>anyOf errors => all errors are retried by default</li></ul>
+                    </dd>
+                </dlentry>
+              </dl>
     </section>
 
     <section>
