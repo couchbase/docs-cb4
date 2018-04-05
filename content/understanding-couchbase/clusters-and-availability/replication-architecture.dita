@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="concept_hj1_njj_vs">
+ <title>High Availability and Replication Architecture</title>
+ <shortdesc>Couchbase Server provides high availability for reading and for writing of data through
+  a variety of features. For writing, the ability to get data off of a single node as quickly as
+  possible is paramount to avoid any data loss due to a failure of that individual node. </shortdesc>
+ <body>
+  <section id="intra-cluster-replication"><title>Intra-cluster Replication </title>
+   <p>Intra-cluster replication involves replicas that are placed on another node in the same
+    cluster.</p>
+   <p><b>Replicas</b></p>
+   <p>Replicas are copies of data that are placed on another node in a cluster. The source of the replicated vBucket data is called the active vBucket. Active vBuckets perform read and write operations on individual documents. The destination vBucket is called the replica vBucket. Replica vBuckets receive a continuous stream of mutations from the active vBucket through the Database Change Protocol (DCP). Although replica vBuckets are not accessed typically, they can respond to read requests. </p>
+   <p>Within the data service, active vBuckets are spread across the cluster for even distribution of data and best performance. Additional replicas are optional. As an administrator, you can create between one and three additional copies (replica vBuckets) of the active vBuckets.
+    Replica vBuckets are also spread across the cluster for best availability and can use failure-domain definitions to guide distribution. For example, to protect against the node failure-domain, Couchbase Server places an active vBucket and its corresponding replica vBucket on separate nodes or separate racks. <fig id="fig_z5p_ybd_ws">
+     <title>Couchbase Server replicas</title>
+     <image placement="break" href="./images/server-replication.png" width="500" align="left"
+      id="image_avp_ybd_ws"/>
+    </fig></p>
+  </section>
+  <section id="cross-datacenter-replication"><title>Cross Datacenter Replication</title>
+   <p>Using the cross datacenter replication (XDCR) capability you can set up replication of data between clusters. XDCR helps protect against data center failures and also helps maintain data locality in globally distributed mission critical applications.</p>
+   <p>As an administrator, you can use XDCR to create replication relationships that replicate data
+    from a source cluster’s bucket to a destination cluster’s bucket. You can also set up complex
+    topologies across many clusters such as bidirectional topologies, ring topologies, tree
+    structured topologies, and more. </p>
+   <p>XDCR uses DCP to stream mutations with an agent running on each node within the data service.
+    This XDCR agent is tuned to function with low latency and high reliability over WAN type
+    latencies and efficiently handle frequent connectivity issues between clusters. <fig
+     id="fig_m4y_g3d_ws">
+     <title>Cross datacenter replication (XDCR)</title>
+     <image placement="break" href="./images/xdcr.png" width="600" align="left" id="image_n4y_g3d_ws">
+      <alt>Cross datacenter replication (XDCR) with Couchbase Server </alt>
+     </image>
+    </fig></p>
+   <p>In XDCR, each replication stream is set up between a source and destination bucket on separate
+    clusters. Each bucket on each cluster can be a source or a destination for many replication
+    definitions in XDCR. XDCR is a "push-based" replication and so each source node runs the XDCR
+    agent and pushes mutations to the destination bucket.</p>
+   <p>The XDCR agent on the source node uses direct access communication (XMem) protocol to propagate
+    mutations from the source vBucket to the matching vBucket on the destination cluster. Since there
+    are equal number of vBuckets (default is 1024) on both the source and the destination clusters,
+    there is a one-to-one match for each source and destination vBucket.</p>
+   <p>It is important to note that XDCR does not require source and destination clusters to have
+    identical topology. XDCR agents are topology aware and match the destination vBucket with the
+    local vBucket, propagating mutations directly from vBucket to vBucket.</p>
+   <p><b>Conflict Resolution in XDCR</b></p>
+   <p>One aspect of database replication that is unique to cross datacenter replication (XDCR) is
+    the need to prepare for and manage conflicts between the two databases. Conflict resolution is
+    not an issue for an active off site backup or standby cluster since updates happen in only one
+    cluster. However, replication of data with XDCR is asynchronous and does not preclude updates
+    from occurring on different sides of the cluster, which means conflicts can happen unless there
+    is external coordination over how data is updated.</p>
+   <p>Until Couchbase Server version 4.6, XDCR conflict resolution used the revision ID as the first
+    field to resolve conflicts between two writes across clusters. Revision IDs keep track of the
+    number of mutations to a document; this XDCR conflict resolution can be best characterized as
+    "the most updates wins". Couchbase Server 4.6 introduces another strategy for conflict
+    resolution, <i>timestamp-based resolution</i>, where conflicts are resolved by comparing
+    timestamps of conflicting documents. This conflict resolution mode is also known as Last Write
+    Wins (LWW) and is best characterized as "the most recent update wins". </p>
+   <p>See <xref href="../../xdcr/xdcr-conflict-resolution.dita#conflict-resolution"/> for more
+    details.</p>
+  </section>
+  <section> <title>Database Change Protocol (DCP) </title>
+   <p>Database Change Protocol (DCP) is the protocol used to stream bucket level mutations. Given
+    the distributed nature of Couchbase Server, DCP sits at the heart of Couchbase Server
+    architecture. DCP is used for high speed replication of mutations to maintain replica vBuckets,
+    incremental MapReduce views and spatial views, Global Secondary Indexes (GSIs), cross datacenter
+    replication (XDCR), backups, and many other external connectors.</p>
+   <p>DCP is a memory based replication protocol that is ordering, resumable, and consistent. DCP immediately streams any changes made to documents in memory to the destination. The memory based communication reduces latency and greatly boosts availability, prevents data loss, improves freshness of indexes, and more.
+   </p>
+   <p>To work with DCP, you need to be familiar with the following concepts, which are listed in alphabetical order for convenience. <dl>
+    <dlentry>
+     <dt>Application client</dt>
+     <dd>A normal client that transmits read, write, update, delete, and query requests to the server cluster, usually for an interactive web application.</dd>
+    </dlentry>
+    <dlentry>
+     <dt>DCP client</dt>
+     <dd>A special client that streams data from one or more Couchbase server nodes, for purposes of intra-cluster replication (to be a backup in case the master server fails), indexing (to answer queries in aggregate about the data in the whole cluster), XDCR (to replicate data from one cluster to another cluster, usually located in a separate data center), incremental backup, and any 3rd party component that wants to index, monitor, or analyze Couchbase data in near real time, or in batch mode on a schedule.</dd>
+    </dlentry>
+    <dlentry>
+     <dt>Failover log</dt>
+     <dd>A list of previously known vBucket versions for a vBucket. If a client connects to a server and was previously connected to a different version of a vBucket than that server is currently working with, the failure log is used to find a rollback point.</dd>
+    </dlentry>
+    <dlentry>
+     <dt>History branch</dt>
+     <dd>Whenever a node becomes the master node for a vBucket in the event of a failover or uncontrolled shutdown and restart, if it was not the farthest ahead of all processes watching events on that partition and starts taking mutations, it might reuse sequence numbers that other processes have already seen on this partition. This can be a history branch, and the new master must assign the vBucket a new vBucket version so that DCP clients in the distributed system can recognize that they are ahead of the new master and roll back changes at the point this happened in the stream. During a controlled handover from an old master to a new master, the sequence history cannot have branches, so there is no need to assign a new version to the vBucket being handed off. Controlled handovers occur in the case of a rebalance for elasticity (such as adding or removing a node) or a swap rebalance in the case of an upgrade (such as adding a new version of Couchbase Server to a cluster or removing an old version of Couchbase Server).</dd>
+    </dlentry>
+    <dlentry>
+     <dt>Mutation</dt>
+     <dd>A mutation is an event that deletes a key or changes the value a key points to. Mutations occur when transactions such as create, update, delete or expire are executed.</dd>
+    </dlentry>
+    <dlentry>
+     <dt>Rollback point</dt>
+     <dd>The server uses the failover log to find the first possible history branch between the last time a client was receiving mutations for a vBucket and now. The sequence number of that history branch is the rollback point that is sent to the client.</dd>
+    </dlentry>
+    <dlentry>
+     <dt>Sequence number</dt>
+     <dd>Each mutation that occurs on a vBucket is assigned a number, which strictly increases as events are assigned numbers (there is no harm in skipping numbers, but they must increase), that can be used to order that event against other mutations within the same vBucket. This does not give a cluster-wide ordering of events, but it does enable processes watching events on a vBucket to resume where they left off after a disconnect.</dd>
+    </dlentry>
+    <dlentry>
+     <dt>Server</dt>
+     <dd>A master or replica node that serves as the network storage component of a cluster. For a given partition, only one node can be master in the cluster. If that node fails or becomes unresponsive, the cluster selects a replica node to become the new master.</dd>
+    </dlentry>
+    <dlentry>
+     <dt>Snapshot</dt>
+     <dd>To send a client a consistent picture of the data it has, the server takes a snapshot of the state of its disk write queue or the state of its storage, depending on where it needs to read from to satisfy the client’s current requests. This snapshot represents the exact state of the mutations it contains at the time it was taken. Using this snapshot, the server can send the items that existed at the point in time the snapshot was taken, and only those items, in the state they were in when the snapshot was taken. Snapshots do not imply that everything is locked or copied into a new structure. In the current Couchbase storage subsystem, snapshots are essentially "free." The only cost is when a file is copy compacted to remove garbage and wasted space, the old file cannot be freed until all snapshot holders have released the old file. It’s also possible to "kick" a snapshot holder if the system determines the holder of the snapshot is taking too long. DCP clients that are kicked can reconnect and a new snapshot will be obtained, allowing it to restart from where it left off.</dd>
+    </dlentry>
+    <dlentry>
+     <dt>vBucket</dt>
+     <dd>Couchbase splits the key space into a fixed amount of vBuckets, usually 1024. Keys are deterministically assigned to a vBucket, and vBuckets are assigned to nodes to balance the load across the cluster.</dd>
+    </dlentry>
+    <dlentry>
+     <dt>vBucket stream</dt>
+     <dd>A grouping of messages related to receiving mutations for a specific vBucket. This includes mutation, deletion, and expiration messages and snapshot marker messages. The transport layer provides a way to separate and multiplex multiple streams of information for different vBuckets. All messages between snapshot marker messages are considered to be one snapshot. A snapshot contains only the recent update for any given key within the snapshot window. It might require several complete snapshots to get the current version of the document.</dd>
+    </dlentry>
+    <dlentry>
+     <dt>vBucket version</dt>
+     <dd>A universally unique identifier (UUID) and sequence number pair associated with a vBucket.
+       A new version is assigned to a vBucket by the new master node any time there might have been
+       a history branch. The UUID is a randomly generated number, and the sequence number is the
+       sequence number that vBucket last processed at the time the version was created. </dd>
+    </dlentry>
+   </dl></p>
+  </section>
+ </body>
+ <related-links>
+  <link href="../../xdcr/xdcr-intro.dita"/>
+ </related-links>
+</topic>
