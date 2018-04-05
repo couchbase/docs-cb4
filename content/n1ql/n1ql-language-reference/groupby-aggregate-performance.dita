@@ -111,103 +111,121 @@ GROUP BY type;</codeblock></p>
         consider sample queries that can benefit from this optimization and the queries that
         cannot.</p><p><b>Positive Case examples of queries that use indexing grouping and
           aggregation:</b><ul id="ul_fmx_sqq_xcb">
-          <li><codeph>SELECT COUNT(*) FROM customer WHERE c1 > 10;</codeph></li>
-          <li><codeph>SELECT COUNT(c1) FROM customer WHERE c1 between 10 and 30;</codeph></li>
-          <li><codeph>SELECT COUNT(c2) FROM customer WHERE c1 between 10 and 30 and c2 =
-              40;</codeph></li>
-          <li><codeph>SELECT c1, AVG(c5), sum(c4), COUNT(c1), MIN (c3), MAX(ABS(c3)) WHERE c1 > 100
-              GROUP BY c1;</codeph></li>
-          <li><codeph>SELECT c2count , SUM(c4) WHERE c1 > 100 GROUP BY c1 LETTING c2count =
-              COUNT(c2) HAVING c2count > 1;</codeph></li>
+          <li><codeph>SELECT COUNT(*) FROM `travel-sample` WHERE geo.alt > 10 AND
+              type="airport";</codeph></li>
+          <li><codeph>SELECT COUNT(geo.alt) FROM `travel-sample` WHERE geo.alt BETWEEN 10 AND 30 AND
+              type = "airport";</codeph></li>
+          <li><codeph>SELECT COUNT(geo.lat) FROM `travel-sample` WHERE geo.alt BETWEEN 10 AND 30 AND
+              geo.lat = 40 AND type = "airport";</codeph></li>
+          <li><codeph>SELECT geo.alt, AVG(id), SUM(id), COUNT(geo.alt), MIN (geo.lon),
+              MAX(ABS(geo.lon)) FROM `travel-sample` WHERE geo.alt > 100 AND type = "airport" GROUP
+              BY geo.alt;</codeph></li>
+          <li><codeph>SELECT lat_count, SUM(id) FROM `travel-sample` WHERE geo.alt > 100 AND type =
+              "airport" GROUP BY geo.alt LETTING lat_count = COUNT(geo.lat) HAVING lat_count >
+              1;</codeph></li>
+          <li><codeph>SELECT AVG(DISTINCT geo.lat) FROM `travel-sample` WHERE geo.alt > 100 AND type
+              = "airport" GROUP BY geo.alt;</codeph></li>
         </ul></p><p><b>Negative Case examples:</b><ul id="ul_p3p_drq_xcb">
-          <li><codeph>SELECT COUNT(*) FROM customer WHERE c2 > 20;</codeph><ul id="ul_syp_2rq_xcb">
-              <li>This query has no predicate on the leading key c1. The index <codeph>idx</codeph>
-                cannot be used.</li>
+          <li><codeph>SELECT COUNT(*) FROM `travel-sample` WHERE geo.lat > 20 AND type =
+              "airport";</codeph><ul id="ul_syp_2rq_xcb">
+              <li>This query has no predicate on the leading key <codeph>geo.alt</codeph>. The index
+                  <codeph>idx_a</codeph> cannot be used.</li>
             </ul></li>
-          <li><codeph>SELECT COUNT(*) FROM customer;</codeph><ul id="ul_kc1_grq_xcb">
+          <li><codeph>SELECT COUNT(*) FROM `travel-sample`;</codeph><ul id="ul_kc1_grq_xcb">
               <li>This query has no predicate at all.</li>
             </ul></li>
-          <li><codeph>SELECT COUNT(v1) FROM customer LET v1 = ROUND(c2) WHERE c1 > 10;</codeph><ul
-              id="ul_mwm_hrq_xcb">
+          <li><codeph>SELECT COUNT(v1) FROM `travel-sample` LET v1 = ROUND(geo.lat) WHERE geo.lat >
+              10 AND type = "airport";</codeph><ul id="ul_mwm_hrq_xcb">
               <li>The aggregate depends on <codeph>LET</codeph> variable.</li>
             </ul></li>
-          <li><codeph>SELECT ARRAY_AGG(c1) FROM customer WHERE c1 > 10;</codeph><ul
-              id="ul_af2_jrq_xcb">
+          <li><codeph>SELECT ARRAY_AGG(geo.alt) FROM `travel-sample` WHERE geo.alt > 10 AND type =
+              "airport";</codeph><ul id="ul_af2_jrq_xcb">
               <li><codeph>ARRAY_AGG</codeph> is not supported.</li>
             </ul></li>
         </ul></p><p><b>Positive query examples with GROUP BY on leading index
-        keys</b></p><p>Consider the following
-        index:<codeblock>CREATE INDEX idx ON customer(a, b, c, d, e)</codeblock>In the following
-        query, the GROUP BY keys<codeph> (a, b) </codeph>are the leading keys of the index, so the
-        index is naturally ordered and grouped by the order of the index key definition. Therefore,
-        the query below is suitable for indexer to handle grouping and
-        aggregation.<codeblock>SELECT a, b, SUM(c), AVG(e), COUNT(DISTINCT c)
-FROM customer
-WHERE a BETWEEN “AZ” AND “CA” 
-GROUP BY a, b
-HAVING SUM(c) > 1000;</codeblock>Here's
+          keys</b></p><p><b>Example B:</b> Consider the following
+        index:<codeblock>CREATE INDEX idx_b ON `travel-sample`(geo.alt, geo.lat, geo.lon, id)</codeblock>In
+        the following query, the GROUP BY keys<codeph> (geo.alt, geo.lat) </codeph>are the leading
+        keys of the index, so the index is naturally ordered and grouped by the order of the index
+        key definition. Therefore, the query below is suitable for indexer to handle grouping and
+        aggregation.<codeblock>SELECT geo.alt, geo.lat, SUM(geo.lon), AVG(id), COUNT(DISTINCT geo.lon)
+FROM `travel-sample`
+WHERE geo.alt BETWEEN 10 AND 30
+AND type = "airport" 
+GROUP BY geo.alt, geo.lat
+HAVING SUM(geo.lon) > 1000;</codeblock>Here's
         the executed query plan showing that index scan handled grouping and aggregation:</p><image
-        href="images/GBAP_PosEx_QP.png" id="image_lqb_41r_xcb"/><p><b
+        href="images/GBAP_ExB_Plan.png" id="image_lhl_5xy_jdb" scale="70"/><p><b
           id="docs-internal-guid-c3d7738b-b0d1-f78b-9de2-09a4baf058a5">Positive query examples with
-          GROUP BY on non-leading index keys</b></p><p>Consider the following index and
-        query:<codeblock>CREATE INDEX idx ON customer(a, b, c, d, e)
+          GROUP BY on non-leading index keys</b></p><p><b>Example C:</b> Consider the following
+        index and
+        query:<codeblock>CREATE INDEX idx_c ON `travel-sample`(geo.alt, geo.lat, geo.lon, id)
+ WHERE type = "airport"
 
-SELECT b, d, SUM(c), AVG(e)
-FROM customer
-WHERE a BETWEEN “AZ” AND “CA” 
-GROUP BY b, d
-HAVING SUM(c) > 1000;</codeblock>The
+SELECT geo.lat, id, SUM(geo.lon)
+FROM `travel-sample`
+WHERE geo.alt BETWEEN 10 AND 30
+AND type = "airport" 
+GROUP BY geo.lat, id
+HAVING SUM(geo.lon) > 1000;</codeblock>The
         following is a bottom-up rendering of the execution plan for easier viewing. In this case,
         the indexer sends partial group aggregation, which the query merges to create the final
         group and aggregation. In this scenario (when the grouping is on non-leading keys), any
         query with aggregation and DISTINCT modifier cannot be accelerated by the indexer, such as
-          <codeph>COUNT(DISTINCT e)</codeph>.</p><p><image
-          href="images/GBAP_BottomUp_GB_non-leading.png" id="image_bpw_c1w_xcb" height="750"
-          /></p><p><b id="docs-internal-guid-4376996d-b457-baf4-35a7-55c27622ed76">Positive query
-          examples on array indexes with GROUP BY on leading index keys</b></p><p>Consider the
+          <codeph>COUNT(DISTINCT id)</codeph>.</p><p><image href="images/GBAP_ExC_Plan.png"
+          id="image_fjx_cyy_jdb" scale="50"/></p><p><b
+          id="docs-internal-guid-4376996d-b457-baf4-35a7-55c27622ed76">Positive query examples on
+          array indexes with GROUP BY on leading index keys</b></p><p><b>Example D:</b> Consider the
         following index and
-        query:<codeblock>SELECT a,b, SUM(d), AVG(e)
-FROM customer
-WHERE a BETWEEN “AZ” AND “CA”  
- AND b > 500
- AND ANY v IN array1 SATISFIES  v = “XYZ” END
-GROUP BY a,b
-HAVING SUM(d) > 1000;</codeblock>In
+        query:<codeblock>CREATE INDEX idx_d ON `travel-sample` (geo.lat, geo.lon, DISTINCT public_likes, id) WHERE type = "hotel"
+
+SELECT geo.lat, geo.lon, SUM(id), AVG(id)
+FROM `travel-sample`
+WHERE geo.lat BETWEEN 10 AND 30  
+ <b>AND geo.lon > 50</b>
+ AND type = "hotel"
+ AND ANY v IN public_likes SATISFIES  v = “%a%” END
+GROUP BY geo.lat, geo.lon
+HAVING SUM(id) > 100;</codeblock>In
         this case, the predicates are on the leading keys up to and including the array key.
         Therefore, indexer can efficiently do the grouping as seen by the optimal plan below. It’s
         important to note the array index key is created with a <codeph>DISTINCT</codeph> modifier
         (not the <codeph>ALL</codeph> modifier) to get this optimization and that the
           <codeph>SATISFIES</codeph> clause in the <codeph>ANY</codeph> predicate must be that of
-        equality (that is, <codeph>v = “XYZ”</codeph>).</p><image
-        href="images/GBAP_leadingkey_arraykey.png" id="image_xlp_4cw_xcb"/><p>On the other hand, if
-        there’s a predicate missing on b, which is prior to the array key, the grouping is done by
-        the old
-        method:<codeblock>CREATE INDEX idx_array ON customer(a, b, DISTINCT array1, d, e)
+        equality (that is, <codeph>v = “%a%”</codeph>).</p><image href="images/GBAP_ExD_Plan.png"
+        id="image_p31_ryy_jdb" scale="70"/><p><b>Example D2:</b> On the other hand, if there’s a
+        predicate missing on<codeph> geo.lon</codeph>--which is prior to the array key--while using
+        the same<codeph> idx_d </codeph>index as above, then the grouping is done by the old
+        method:<codeblock>SELECT geo.lat, geo.lon, SUM(id), AVG(id)
+FROM `travel-sample`
+WHERE geo.lat BETWEEN 10 AND 30  
+ AND type = "hotel"
+ AND ANY v IN public_likes SATISFIES  v = “%a%” END
+GROUP BY geo.lat, geo.lon
+HAVING SUM(id) > 100;</codeblock></p><image
+        href="images/GBAP_ExD2_Plan.png" id="image_shx_czy_jdb"/><p><b>Example E:</b> Consider the
+        index and
+        query:<codeblock>CREATE INDEX idx_e ON `travel-sample` (ALL public_likes, geo.lat, geo.lon, id) WHERE type = "hotel"
 
-SELECT a,b, SUM(d), AVG(e)
-FROM customer
-WHERE a between "AZ" AND "CA"               
- AND ANY v IN array1 SATISFIES  v = "XYZ" END
-GROUP BY a,b
-HAVING SUM(d) > 1000;</codeblock></p><image
-        href="images/GBAP_LeadingKey_OldMethod.png" id="image_ggn_ycw_xcb"/><p>Consider the index
-        and
-        query:<codeblock>CREATE INDEX idx_all_array ON customer(ALL array2, a, b, d, e)
-
-SELECT p,c.a, SUM(p), AVG(c.a)
-FROM customer AS c UNNEST c.array2 AS p
-WHERE p > 10             
-GROUP BY p, c.a;</codeblock>In
+SELECT un, t.geo.lat, COUNT(un), AVG(t.geo.lat)
+FROM `travel-sample` AS t
+ UNNEST t.public_likes AS un
+WHERE un > "J"
+AND t.type = "hotel"
+GROUP BY un, t.geo.lat;</codeblock>In
         this case, the <codeph>UNNEST</codeph> operation can use the index because the leading
           <codeph>ALL</codeph> array key is the array being unwound. Note, the unwound operation
-        repeats the parent document (<codeph>customer</codeph>) and the <codeph>c.a</codeph>
-        reference would have duplicates compared to the original <codeph>customer</codeph>
-        documents.</p><p><image href="images/GBAP_Unnest_All_ArrayKey.png" id="image_ghz_q2w_xcb"
-        /></p><p><b id="docs-internal-guid-3c74c5b0-b46f-0a48-66b0-058d528fa9c2">Query qualification
-          and pushdown</b></p><p>Not every GROUP BY and aggregate query can be handled by the
-        indexer. Following are some simple rules that will help you to write the proper queries and
-        design the required indexes to get the most of this feature.</p><p>The following are
-        necessary in order for an indexer to execute GROUP BY and aggregates:<ul id="ul_rm2_xdw_xcb">
+        repeats the parent document (<codeph>travel-sample</codeph>) and the
+          <codeph>t.geo.lat</codeph> reference would have duplicates compared to the original
+          <codeph>travel-sample</codeph> documents.</p><p><image href="images/GBAP_ExE_Plan.png"
+          id="image_dkl_w1z_jdb" scale="50"/></p></section>
+    <section id="section_nyj_2bz_jdb">
+      <title>Query Qualification and Pushdown</title>
+      <p>Not every GROUP BY and aggregate query can be handled by the indexer. Following are some
+        simple rules that will help you to write the proper queries and design the required indexes
+        to get the most of this feature.</p>
+      <p>The following are necessary in order for an indexer to execute GROUP BY and aggregates:<ul
+          id="ul_rm2_xdw_xcb">
           <li>All the query predicates are able to convert into ranges and able to push to
             indexer.</li>
           <li>The whole query must be covered by an index.<ul id="ul_epn_ydw_xcb">
@@ -222,7 +240,8 @@ GROUP BY p, c.a;</codeblock>In
               <li>An expression based on index keys or document key</li>
             </ul></li>
           <li>GROUP BY and aggregate expressions must be simple.</li>
-        </ul></p></section>
+        </ul></p>
+    </section>
         <section id="section_khk_52w_xcb">
             <title>Scenarios for Group By and Aggregation</title>
             <p>Like any feature in a query language, there are subtle variations between each query
