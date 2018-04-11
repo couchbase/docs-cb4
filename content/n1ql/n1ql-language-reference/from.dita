@@ -731,17 +731,16 @@ ORDER BY route.sourceairport;</codeblock>Results:<codeblock>[
   },
 ...</codeblock><b>ANSI
                     Join Example 2:</b> Left Outer Join of U.S. airports in the same city as a
-                landmark.</p><p>List the airports and landmarks in the same city, ordered by the
-                airports.
+                landmark.</p><p>List the airports and landmarks in the same city, ordered by the airports.
                 <codeblock>SELECT DISTINCT  MIN(aport.airportname) AS Airport__Name, 
                  MIN(lmark.name) AS Landmark_Name,
                  MIN(aport.tz) AS Landmark_Time
 FROM `travel-sample` aport 
 <b>LEFT JOIN</b> `travel-sample` lmark
   ON aport.city = lmark.city
+  AND lmark.type = "landmark"
 WHERE lmark.country = "United States"
 AND aport.type = "airport"
-AND lmark.type = "landmark"
 GROUP BY lmark.name
 ORDER BY lmark.name;</codeblock></p><p>Results:<codeblock>[
   {
@@ -765,19 +764,18 @@ ORDER BY lmark.name;</codeblock></p><p>Results:<codeblock>[
     "Landmark_Time": "America/Los_Angeles"
   },
 ...</codeblock><b>ANSI
-                    Join Example 3:</b> RIGHT OUTER JOIN of Example #2.</p><p>List the airports and
-                landmarks in the same city, ordered by the landmarks.<note>The LEFT OUTER JOIN will
-                    list all left-side results regardless of matching right-side documents; while
-                    the RIGHT OUTER JOIN will list all right-side results regardless of matching
-                    left-side
+                    Join Example 3:</b> RIGHT OUTER JOIN of Example #2.</p><p>List the airports and landmarks in the same city, ordered by the landmarks.<note>The LEFT OUTER
+                    JOIN will list all left-side results regardless of matching right-side
+                    documents; while the RIGHT OUTER JOIN will list all right-side results
+                    regardless of matching left-side
                     documents.</note><codeblock>SELECT DISTINCT  MIN(aport.airportname) AS Airport_Name, 
                  MIN(lmark.name) AS Landmark_Name,
                  MIN(aport.tz) AS Landmark_Time
 FROM `travel-sample` aport 
 RIGHT JOIN `travel-sample` lmark
   ON aport.city = lmark.city
+  AND aport.type = "airport"
 WHERE aport.country = "United States"
-AND aport.type = "airport"
 AND lmark.type = "landmark"
 GROUP BY lmark.name
 ORDER BY lmark.name;</codeblock>Results:<codeblock>[
@@ -824,8 +822,7 @@ WHERE beer.type = "beer"
     "id": "oso-dank"
   }
   ]</codeblock>Visual
-                Explain Plan:<image
-                    href="images/FROM_AnsiJoin-Ex4-BeerVisual1.png"
+                Explain Plan:<image href="images/FROM_AnsiJoin-Ex4-BeerVisual1.png"
                     id="image_xxm_2k1_bdb"/></p><p>If you add <codeph>name</codeph> as the second
                 index key to the <codeph>beer_brewery</codeph>
                 index:<codeblock>CREATE INDEX beer_brewery_name ON `beer-sample` (brewery_id, <b>name</b>) 
@@ -854,15 +851,19 @@ WHERE type = "beer"</codeblock>...
                 Join: nested-loop join and hash join. The default join method is nested-loop join.
                 Two corresponding join hints are introduced: <codeph>USE HASH</codeph> and
                     <codeph>USE NL</codeph>.</p>
-            <p>Hash join is only considered when the<codeph> USE HASH </codeph>hint is specified. In
-                such cases, if a hash join is chosen successfully, then that’ll be the join method
-                used for this join. If the hash join cannot be generated, then the planner will
-                further consider nested-loop join and will either generate a nested-loop join or
-                return an error for the join.</p>
+            <p>Hash join is only considered when the<codeph> USE HASH </codeph>hint is specified,
+                and it requires at least one equality predicate between the left-hand side and
+                right-hand side. In such cases, if a hash join is chosen successfully, then that’ll
+                be the join method used for this join. If the hash join cannot be generated, then
+                the planner will further consider nested-loop join and will either generate a
+                nested-loop join or return an error for the join.</p>
             <p>If no join hint is specified or USE NL hint is specified, then nested-loop join is
                 considered.</p>
-            <p>For Community Edition (CE), any specified<codeph> USE HASH </codeph>hint will be
-                silently ignored and only nested-loop join is considered by the planner.</p>
+            <p>
+                <note>For Community Edition (CE), any specified<codeph> USE HASH </codeph>hint will
+                    be silently ignored and only nested-loop join is considered by the
+                    planner.</note>
+            </p>
             <p><b>USE HASH hint</b></p>
             <p>The<codeph> USE HASH </codeph>hint is similar to the existing<codeph> USE INDEX
                     </codeph>o<codeph>r USE KEYS </codeph>hint in that the<codeph> USE HASH
@@ -871,16 +872,15 @@ WHERE type = "beer"</codeblock>...
                 indicate whether the keyspace is to be used as:<ul id="ul_f2b_2l1_bdb">
                     <li>The build side of the hash join --<codeph> USE HASH(build)</codeph></li>
                     <li>The probe side of the hash join --<codeph> USE HASH(probe)</codeph></li>
-                </ul>If an ANSI LEFT OUTER JOIN is being specified, then the right-hand-side of the
-                join must be the build side of the hash join, that is, only a <codeph>USE
-                    HASH(BUILD)</codeph> hint will be useful. If a<codeph> USE HASH(PROBE)
-                </codeph>hint is being specified, then the hint will be ignored, the hash join will
-                not be considered, and only a Nested-loop join will be considered.</p>
-            <p>If an ANSI NEST (or ANSI OUTER NEST) is being specified, then similar to ANSI LEFT
-                OUTER JOIN, the right-hand side of the nest must be the build side of the hash join,
-                that is, only a<codeph> USE HASH(BUILD) </codeph>hint is effectively supported; so
-                    a<codeph> USE HASH(PROBE) </codeph>hint will be ignored and a nested-loop nest
-                will be considered instead.</p>
+                </ul></p>
+            <p>A hash join has two sides: a <codeph>BUILD</codeph> and a <codeph>PROBE</codeph>. The
+                    <codeph>BUILD</codeph> side of the join will be used to create an in-memory hash
+                table. The <codeph>PROBE</codeph> side will use that table to find matches and
+                perform the join. Typically, this means you want the <codeph>BUILD</codeph> side to
+                be used on the smaller of the two sets. However, you can only supply one hash hint,
+                and only to the right side of the join. So if you specify <codeph>BUILD</codeph> on
+                the right side, then you are implicitly using <codeph>PROBE</codeph> on the left
+                side (and vice versa).</p>
             <p><b>USE HASH Example 1:</b> PROBE</p>
             <p>The keyspace <codeph>aline</codeph> is to be joined (with <codeph>rte</codeph>) using
                 hash join, and <codeph>aline</codeph> is used as the probe side of the hash
@@ -941,9 +941,9 @@ FROM `travel-sample` rte
 INNER JOIN `travel-sample` aline 
 <b>USE HASH (PROBE) KEYS ["airline_key1", "airline_key2", "airline_key3"]</b>
 ON (rte.airlineid = META(aline).id)
-WHERE rte.type = "route";</codeblock>For
-                hash join to work properly, the keys expression in the USE KEYS hint:<ul
-                    id="ul_e2f_gzg_bdb">
+WHERE rte.type = "route";</codeblock>When
+                chosen, the hash join will always work; the restrictions are on any USE KEYS hint
+                    clause:<ul id="ul_e2f_gzg_bdb">
                     <li>Must not depend on any previous keyspaces.</li>
                     <li>The expression must be constants, host variables, etc. </li>
                     <li>Must not contain any subqueries. </li>
