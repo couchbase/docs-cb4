@@ -25,10 +25,154 @@
         </section>
         <section id="section_ebq_xlt_mdb">
             <title>Create Index</title>
-            <p>When creating a partitioned index, use the following
-                syntax:<codeblock>CREATE INDEX idx_name ON bucket_name ( field_name [ , field_name2 ] * )
+            <p>When creating a partitioned index, use the following syntax:<image
+                    href="../n1ql/n1ql-language-reference/images/IndexPartitioning_CreateIndex_RR_5.5.png"
+                    id="image_yg3_swf_ndb"
+                /><codeblock>CREATE INDEX idx_name ON bucket_name ( field_name [ , field_name2 ] * )
     PARTITION BY HASH partition_key_expr
     [ WITH { "num_partition": partition_int } ];</codeblock></p>
+        </section>
+        <section id="section_wsw_ccg_ndb">
+            <title>Arguments</title>
+            <p>
+                <dl>
+                    <dlentry>
+                        <dt><codeph>CREATE INDEX</codeph></dt>
+                        <dd>The reserved words to create a new index.</dd>
+                    </dlentry>
+                </dl>
+                <dl>
+                    <dlentry>
+                        <dt>idx_name</dt>
+                        <dd>String representing the unique name of your index.</dd>
+                    </dlentry>
+                </dl>
+                <dl>
+                    <dlentry>
+                        <dt><codeph>ON</codeph></dt>
+                        <dd>The reserved word to be followed by the name of the bucket being
+                            indexed.</dd>
+                    </dlentry>
+                </dl>
+                <dl>
+                    <dlentry>
+                        <dt>bucket_name</dt>
+                        <dd>String representing the bucket to be indexed.</dd>
+                        <dd>
+                            <note>If there is a hyphen (-) inside the bucket name, backticks (` `)
+                                are needed around the bucket name.</note>
+                        </dd>
+                    </dlentry>
+                </dl>
+                <dl>
+                    <dlentry>
+                        <dt>( field_name )</dt>
+                        <dd>String of one or more field names (comma-separated) to be included in
+                            the index.</dd>
+                    </dlentry>
+                </dl>
+                <dl>
+                    <dlentry>
+                        <dt><codeph>PARTITION BY HASH</codeph></dt>
+                        <dd>The reserved words to be followed by a list of partition keys. Each
+                            partition key is a document field or an expression of one or more
+                            document fields. </dd>
+                    </dlentry>
+                </dl>
+                <dl>
+                    <dlentry>
+                        <dt>partition_key_expr</dt>
+                        <dd>One or more fields or an expression of one or more fields representing
+                            the partition keys.</dd>
+                    </dlentry>
+                </dl>
+                <dl>
+                    <dlentry>
+                        <dt><codeph>WITH { }</codeph></dt>
+                        <dd>[Optional] The reserved word to be used with one or more of the
+                            following arguments.</dd>
+                        <dd/>
+                        <dd>
+                            <dl>
+                                <dlentry>
+                                    <dt><codeph>"num_parition":</codeph> partition_int</dt>
+                                    <dd>The integer <b>partition_int</b> defines the number of
+                                        partitions to divide into. Default is 16.</dd>
+                                    <dd>For details, see
+                                        <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>Number
+                                        of Index Partitions<?oxy_custom_end?>.</dd>
+                                    <dd/>
+                                </dlentry>
+                            </dl>
+                            <dl>
+                                <dlentry>
+                                    <dt><codeph>"nodes": ["</codeph>###.###.###.###:####", ...]</dt>
+                                    <dd>The node list to restrict the set of nodes available for
+                                        placement, separated by commas.</dd>
+                                    <dd>For details, see
+                                        <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>Node
+                                        Placement<?oxy_custom_end?>.</dd>
+                                </dlentry>
+                            </dl>
+                        </dd>
+                    </dlentry>
+                </dl>
+            </p>
+        </section>
+        <section id="section_fcg_ldg_ndb">
+            <title>Partition Keys</title>
+            <p>Partition keys are hashed to generate the partition ID for each document. The
+                partition ID is used to locate the partition in which the secondary keys would
+                reside. Partition keys can be one or more fields or an expression of one or more
+                fields, for example:<ul id="ul_qwl_mdg_ndb">
+                    <li>The document key<codeph> META().id</codeph></li>
+                    <li>Any single or multiple immutable field name in the defined index</li>
+                    <li>Any single or multiple immutable field name in the document</li>
+                    <li>A function on the index key fields, such as <codeph>LOWER(), LEAST(),
+                            GREATEST(), SUBSTR()</codeph>, etc.</li>
+                    <li>A complex formula on the index key fields combining functions and
+                            operators<note>Array expressions are not allowed.</note></li>
+                </ul>Your partition keys should be immutable, that is, the field values shouldn't
+                change. For example, the `travel-sample` field type almost never changes and is
+                therefore a good candidate for partition key. If your partition key has changed,
+                then the corresponding document should be deleted and re-created with the new
+                partition key.</p>
+            <p>Each partition key can have a different data type:<ul id="ul_ewd_ydg_ndb">
+                    <li>Scalar</li>
+                    <li>Array (whole array as a partition key, not as individual elements within an
+                        array)</li>
+                    <li>JSON Object (whole JSON object as partition key, not as individual elements
+                        within the object)</li>
+                    <li>MISSING value<ul id="ul_yrx_lhg_ndb">
+                            <li>If the partition key is the leading index key, the document will not
+                                be indexed;</li>
+                            <li>Otherwise, a MISSING value is used as the partition value.</li>
+                        </ul></li>
+                    <li>NULL value</li>
+                </ul></p>
+        </section>
+        <section id="section_fpl_qhg_ndb">
+            <title>Choosing Partition Keys</title>
+            <p>When a mutation occurs, the index keys will be put into one of the index partitions
+                by the following steps:<ol id="ol_ung_shg_ndb">
+                    <li>Extract the partition keys from the document. </li>
+                    <li>Apply the hash function to the partition keys to get the partition
+                        number.</li>
+                    <li>Put the corresponding index keys into the corresponding partition.</li>
+                </ol></p>
+            <p>Depending on the partition keys, the data size for each index partition can differ.
+                If the data set is skewed, more index keys could end up hashing into the same
+                partition. If the index is partitioned by the document key<codeph>
+                    meta().id</codeph>, then the index keys are nearly evenly distributed among all
+                the partitions. </p>
+            <p><b>Example 1: Hash by Document Key.</b></p>
+            <p>Indexing on the hash key of <codeph> META().id </codeph>will always evenly spread
+                your index over any number of
+                nodes.<codeblock>CREATE INDEX idx1 ON `travel-sample`(airline, destinationairport, sourceairport) 
+ PARTITION BY HASH(<b>META().id</b>);</codeblock></p>
+            <p>In the Query Workbench "Query" listing, partitioned indexes are notated with the word
+                    <b><?oxy_custom_start type="oxy_content_highlight" color="255,60,255"?>partitioned<?oxy_custom_end?></b>
+                next to them, as shown in the below screenshot:</p>
         </section>
         <p/>
     </body>
