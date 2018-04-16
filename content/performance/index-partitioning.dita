@@ -69,6 +69,9 @@
                         <dt>( field_name )</dt>
                         <dd>String of one or more field names (comma-separated) to be included in
                             the index.</dd>
+                        <dd>
+                            <note>The field name(s) must be enclosed inside parentheses.</note>
+                        </dd>
                     </dlentry>
                 </dl>
                 <dl>
@@ -172,7 +175,175 @@
  PARTITION BY HASH(<b>META().id</b>);</codeblock></p>
             <p>In the Query Workbench "Query" listing, partitioned indexes are notated with the word
                     <b><?oxy_custom_start type="oxy_content_highlight" color="255,60,255"?>partitioned<?oxy_custom_end?></b>
-                next to them, as shown in the below screenshot:</p>
+                next to them, as shown in the below screenshot:<image
+                    href="../n1ql/n1ql-language-reference/images/IndexPartitioning_IndexList.png"
+                    id="image_ncg_4jg_ndb"/><note>Every partitioned index appends<codeph> WITH {
+                        "immutable":true } </codeph>to the end of its definition.</note>For query
+                performance, it can be beneficial to match the partition key with the query
+                predicate. For example, let’s say a query has a equality predicate based on the
+                field <codeph>country</codeph>. If the index is also partitioned by
+                    <codeph>country</codeph>, then the query will only need to read a single
+                partition for a given country. Otherwise, the query must gather all the qualifying
+                index keys from all the partitions.</p>
+            <p><b>Example 2: Hash by the index's 1st field.</b></p>
+            <p>Indexing on the 1st field of your index is fast to create, but be aware of your
+                data's distribution. This example results in 3 countries with a variance that is not
+                too skewed.
+                    <codeblock>CREATE INDEX idx2 ON `travel-sample`(country, activity, name) 
+ PARTITION BY HASH(<b>country</b>);</codeblock><b>Example
+                    3: Hash by the index's 3rd field.</b></p>
+            <p>Indexing does not need to be on the leading index key and can be any of its index
+                keys. This example uses the 3rd field of the index, but the distribution of
+                    <codeph>sourceairport</codeph> is a little more skewed than Example 2's
+                    <codeph>country</codeph>
+                    field.<codeblock>CREATE INDEX idx3 ON `travel-sample`(airline, destinationairport, sourceairport) 
+ PARTITION BY HASH(<b>sourceairport</b>);</codeblock><b>Example
+                    4: Hash with the LOWER operator.</b></p>
+            <p>For slightly faster comparisons, you can make your hash to be all lowercase letters.
+                In that case, use <codeph>LOWER</codeph> on your index field.
+                    <codeblock>CREATE INDEX idx4 ON `travel-sample`(airline, destinationairport, sourceairport) 
+ PARTITION BY HASH(<b>LOWER(airline)</b>);</codeblock><b>Example
+                    5: Hash with a complex formula.</b></p>
+            <p>If you wanted to hash by your Document ID starting from the 2nd character
+                (essentially dropping the 1st character) combined with the airline, then you'd use
+                the following
+                hash.<codeblock>CREATE INDEX idx5 ON `travel-sample`(airline, destinationairport, sourceairport) 
+ PARTITION BY HASH(<b>SUBSTR(meta().id, POSITION(meta().id,'__')+2),airline</b>);</codeblock></p>
+        </section>
+        <section id="section_iny_skg_ndb">
+            <title>Number of Index Partitions</title>
+            <p>The number of index partitions is fixed when the index is created. By default, each
+                index will have 16 partitions. The administrator can override the number of
+                partitions at index creation time.</p>
+            <p><b>Example 6: Create an index with 8
+                partitions.</b><codeblock>CREATE INDEX idx6 ON `travel-sample`(airline, sourceairport, destinationairport)
+ PARTITION BY HASH(airline) <b>WITH {"num_partition":8}</b></codeblock></p>
+        </section>
+        <section id="section_grk_dpg_ndb">
+            <title>Node Placement</title>
+            <p>When a partitioned index is created, the partitions across available index nodes. By
+                default, the indexer will assume each partition has an equal size, and it will place
+                the partitions according to availability of resources on each node. For example, if
+                an indexer node has more available free memory than the other nodes, it will assign
+                more partitions to this indexer node. If the index has a replica, then the replica
+                partition will not be placed onto the same node.</p>
+            <p>Alternatively, users can specify the node list to restrict the set of nodes available
+                for placement, by using a command similar to the following example:</p>
+            <p><b>Example 7: Create an index on specific ports of a
+                node.</b><codeblock>CREATE INDEX idx7 ON `travel-sample`(airline, sourceairport, destinationairport)
+ PARTITION BY KEY(airline) <b>WITH {"nodes":["127.0.0.1:9001", "127.0.0.1:9002"]}</b></codeblock>Users
+                can optionally provide a sizing hints. Using the sizing hints, the planner will use
+                a formula to compute estimated memory and CPU usage of the index. Based on estimated
+                memory and CPU usage, the planner will try to place the partitions according to free
+                resources available to each indexer node. <table frame="all" rowsep="1" colsep="1"
+                    id="table_zz5_jpg_ndb">
+                    <tgroup cols="3" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="3*"/>
+                        <colspec colname="c3" colnum="3" colwidth="1*"/>
+                        <thead>
+                            <row>
+                                <entry>Optional Sizing Hint</entry>
+                                <entry>Description</entry>
+                                <entry>Example</entry>
+                            </row>
+                        </thead>
+                        <tbody>
+                            <row>
+                                <entry><codeph>secKeySize</codeph></entry>
+                                <entry>The average length of the combined index keys</entry>
+                                <entry><codeph>20</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph>docKeySize</codeph></entry>
+                                <entry>The average length of the document key
+                                        <codeph>meta().id</codeph></entry>
+                                <entry><codeph>20</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph>arrSize</codeph></entry>
+                                <entry>The average length of the array field. Non-arrays will be
+                                    ignored.</entry>
+                                <entry><codeph>10</codeph></entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table>To provide sizing estimation, users can use a command similar to the
+                following example:</p>
+            <p><b>Example 8: Create an index with specific key
+                    sizes.</b><codeblock>CREATE INDEX idx_8 ON `travel-sample`(airline, sourceairport, destinationairport) 
+ PARTITION BY HASH (airline) <b>WITH {"secKeySize":20, "docKeySize":20}</b></codeblock><b>Example
+                    8b: Create an index with specific key and array
+                sizes.</b><codeblock>CREATE INDEX idx_8b ON `travel-sample`(airline, sourceairport, schedule) 
+ PARTITION BY HASH (airline) <b>WITH {"secKeySize":20, "docKeySize":20, "arrSize": 100}</b></codeblock></p>
+        </section>
+        <section id="section_t3l_ldh_ndb">
+            <title>Managing Partitioned Index</title>
+            <p>A partitioned index can be created with multiple replica to ensure indexes to be
+                online despite failure. If there are multiple server groups in a cluster, replica
+                partitions will be spread out to each server group, when possible. If one of the
+                server groups is offline, the remaining replica partitions will be available to
+                serve all queries. Every index replica is available to serve queries. Therefore,
+                index replica can also be used for load rebalancing of query requests. </p>
+            <p>During rebalancing, index partitions can be moved across indexer nodes to balance
+                resource consumptions. At the time of rebalancing, the rebalancer gathers statistics
+                from each index. The statistics are fed into an optimization algorithm to determine
+                possible placement of each partition in order to minimize the variation of resource
+                consumption across indexer nodes. </p>
+        </section>
+        <section id="section_ms4_qdh_ndb">
+            <title>Partition Elimination</title>
+            <p>For query performance, it can be beneficial to match the partition key with the query
+                predicate. For example, let’s say a query has an equality predicate, or IN clause,
+                based on the field <codeph>airline</codeph>. If the index is also partitioned by
+                    <codeph>airline</codeph>, then the query will only need to read a single
+                partition for a given airline. Otherwise, that query will have to gather all the
+                qualifying index keys from all the partitions.</p>
+            <p><b>Example 9:</b> Create a partition and query based on the <codeph>airline</codeph>
+                field.<codeblock>CREATE INDEX idx_pe2 ON `travel-sample` (airline, sourceairport)
+ PARTITION BY HASH (airline)</codeblock>Then
+                run a query whose WHERE clause specifies the <codeph>airline</codeph>
+                field.<codeblock>SELECT airline, sourceairport
+FROM `travel-sample` 
+WHERE airline IN ["UA", "AA"]
+OFFSET 50 
+ORDER BY airline</codeblock>This
+                query will only scan the partitions containing partition key values “UA” and
+                “AA”.</p>
+        </section>
+        <section id="section_zyh_vdh_ndb">
+            <title>Query Performance Consideration</title>
+            <p>Partitioned index can offer better query performance for large aggregated query.
+                Along with the aggregate pushdown feature, each partition can perform aggregation in
+                parallel. The performance increase will depend on the
+                    <codeph>max_parallelism</codeph> parameter when performing the query.</p>
+            <p>To optimize aggregate query performance, it is beneficial to create the partitioned
+                index such that:<ul id="ul_atv_wdh_ndb">
+                    <li>Group keys match the partition keys.</li>
+                    <li>Group keys match the leading index keys.</li>
+                    <li>Partition keys match the leading index keys.</li>
+                </ul></p>
+            <p><b>Example 10: Hash by GROUP BY key.</b></p>
+            <p>Create an index partition on <codeph>country</codeph> and <codeph>state</codeph> and
+                then group by those fields. <note>The performance increase is not noticeable on
+                    small
+                recordsets.</note><codeblock>CREATE INDEX idx_gb1 ON `travel-sample`(country, state, geo.lat) 
+ PARTITION BY HASH(country, state);
+
+SELECT country, state, MAX(ROUND(geo.lat)) AS Max_Latitude
+FROM `travel-sample`
+WHERE country IS NOT MISSING
+AND type = "landmark"
+GROUP BY country, state
+ORDER BY Max_Latitude DESC;</codeblock>With
+                partition elimination, partitioned index can provide compatible range query
+                performance as non-partitioned index. Without partition elimination, partitioned
+                index will have higher overhead for queries with a large OFFSET or LIMIT value.
+                Alternatively, applications can use <codeph>keyset</codeph> based pagination with
+                partitioned index to achieve good pagination query performance, detailed at this
+                    <xref
+                    href="https://blog.couchbase.com/offset-keyset-pagination-n1ql-query-couchbase/"
+                    format="html" scope="external">OFFSET and Keyset Couchbase BLOG</xref>.</p>
         </section>
         <p/>
     </body>
