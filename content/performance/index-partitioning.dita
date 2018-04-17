@@ -2,9 +2,10 @@
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="untitled1">
     <title>Index Partitioning</title>
-    <shortdesc>How to create, drop, build, rebalance, and eliminate Index Partitioning, as well as, its impact on queries.</shortdesc>
+    <shortdesc>How to create, drop, build, and rebalance Index Partitioning, as well as, partition
+        elimination, partition pruning, and query impact.</shortdesc>
     <body>
-        <p><i>(Introduced in Couchbase Server 5.5)</i></p>
+        <p><i>(Introduced in Couchbase Server 5.5 Enterprise Edition)</i></p>
         <section id="section_bgn_glt_mdb">
             <title>Introduction</title>
             <p>Index Partitioning allows you to increase query performance by dividing and spreading
@@ -25,7 +26,12 @@
         </section>
         <section id="section_ebq_xlt_mdb">
             <title>Create Index</title>
-            <p>When creating a partitioned index, use the following syntax:<image
+            <p>There are many ways and options when creating an index. The simplest type of index
+                would be to use the Document ID, such
+                as:<codeblock>CREATE INDEX idx ON `travel-sample`(airline) 
+ PARTITION BY HASH(META().id);</codeblock>For
+                more complex indexes and settings, follow the below syntax.</p>
+            <p><b>Syntax</b><image
                     href="../n1ql/n1ql-language-reference/images/IndexPartitioning_CreateIndex_RR_5.5.png"
                     id="image_yg3_swf_ndb"
                 /><codeblock>CREATE INDEX idx_name ON bucket_name ( field_name [ , field_name2 ] * )
@@ -37,21 +43,8 @@
             <p>
                 <dl>
                     <dlentry>
-                        <dt><codeph>CREATE INDEX</codeph></dt>
-                        <dd>The reserved words to create a new index.</dd>
-                    </dlentry>
-                </dl>
-                <dl>
-                    <dlentry>
                         <dt>idx_name</dt>
                         <dd>String representing the unique name of your index.</dd>
-                    </dlentry>
-                </dl>
-                <dl>
-                    <dlentry>
-                        <dt><codeph>ON</codeph></dt>
-                        <dd>The reserved word to be followed by the name of the bucket being
-                            indexed.</dd>
                     </dlentry>
                 </dl>
                 <dl>
@@ -76,17 +69,10 @@
                 </dl>
                 <dl>
                     <dlentry>
-                        <dt><codeph>PARTITION BY HASH</codeph></dt>
-                        <dd>The reserved words to be followed by a list of partition keys. Each
-                            partition key is a document field or an expression of one or more
-                            document fields. </dd>
-                    </dlentry>
-                </dl>
-                <dl>
-                    <dlentry>
-                        <dt>partition_key_expr</dt>
+                        <dt>( partition_key_expr )</dt>
                         <dd>One or more fields or an expression of one or more fields representing
-                            the partition keys.</dd>
+                            the partition keys.<note>This expression must be enclosed inside
+                                parentheses.</note></dd>
                     </dlentry>
                 </dl>
                 <dl>
@@ -101,9 +87,9 @@
                                     <dt><codeph>"num_parition":</codeph> partition_int</dt>
                                     <dd>The integer <b>partition_int</b> defines the number of
                                         partitions to divide into. Default is 16.</dd>
-                                    <dd>For details, see
-                                        <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>Number
-                                        of Index Partitions<?oxy_custom_end?>.</dd>
+                                    <dd>For details and examples, see <xref
+                                            href="#untitled1/section_iny_skg_ndb" format="dita"
+                                            >Number of Index Partitions</xref>.</dd>
                                     <dd/>
                                 </dlentry>
                             </dl>
@@ -112,9 +98,9 @@
                                     <dt><codeph>"nodes": ["</codeph>###.###.###.###:####", ...]</dt>
                                     <dd>The node list to restrict the set of nodes available for
                                         placement, separated by commas.</dd>
-                                    <dd>For details, see
-                                        <?oxy_custom_start type="oxy_content_highlight" color="255,255,0"?>Node
-                                        Placement<?oxy_custom_end?>.</dd>
+                                    <dd>For details and examples, see <xref
+                                            href="#untitled1/section_grk_dpg_ndb" format="dita">Node
+                                            Placement</xref>.</dd>
                                 </dlentry>
                             </dl>
                         </dd>
@@ -127,19 +113,60 @@
             <p>Partition keys are hashed to generate the partition ID for each document. The
                 partition ID is used to locate the partition in which the secondary keys would
                 reside. Partition keys can be one or more fields or an expression of one or more
-                fields, for example:<ul id="ul_qwl_mdg_ndb">
-                    <li>The document key<codeph> META().id</codeph></li>
-                    <li>Any single or multiple immutable field name in the defined index</li>
-                    <li>Any single or multiple immutable field name in the document</li>
-                    <li>A function on the index key fields, such as <codeph>LOWER(), LEAST(),
-                            GREATEST(), SUBSTR()</codeph>, etc.</li>
-                    <li>A complex formula on the index key fields combining functions and
-                            operators<note>Array expressions are not allowed.</note></li>
-                </ul>Your partition keys should be immutable, that is, the field values shouldn't
-                change. For example, the `travel-sample` field type almost never changes and is
-                therefore a good candidate for partition key. If your partition key has changed,
-                then the corresponding document should be deleted and re-created with the new
-                partition key.</p>
+                fields, for example:<table frame="all" rowsep="1" colsep="1" id="table_kgw_vs4_ndb">
+                    <tgroup cols="2" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="2*"/>
+                        <thead>
+                            <row>
+                                <entry>Partition Type</entry>
+                                <entry>Example</entry>
+                            </row>
+                        </thead>
+                        <tbody>
+                            <row>
+                                <entry>The document key.</entry>
+                                <entry><codeph>CREATE INDEX idx ON `travel-sample`(airline)
+                                        PARTITION BY HASH(<b>META().id</b>);</codeph></entry>
+                            </row>
+                            <row>
+                                <entry>Any single or multiple immutable field name in the defined
+                                    index.</entry>
+                                <entry><codeph>CREATE INDEX idx2 ON `travel-sample`(<b>country</b>,
+                                        activity, name) PARTITION BY
+                                    HASH(<b>country</b>);</codeph></entry>
+                            </row>
+                            <row>
+                                <entry>Any single or multiple immutable field name in the
+                                    document.</entry>
+                                <entry><codeph>CREATE INDEX idx3 ON `travel-sample`(airline,
+                                        destinationairport, <b>sourceairport</b>) PARTITION BY
+                                            HASH(<b>sourceairport</b>);</codeph></entry>
+                            </row>
+                            <row>
+                                <entry>A function on the index key fields, such as <codeph>LOWER(),
+                                        LEAST(), GREATEST(), SUBSTR()</codeph>, etc.</entry>
+                                <entry><codeph>CREATE INDEX idx4 ON `travel-sample`(airline,
+                                        destinationairport, sourceairport) PARTITION BY
+                                            HASH(<b>LOWER(airline)</b>);</codeph></entry>
+                            </row>
+                            <row>
+                                <entry>A complex formula on the index key fields combining functions
+                                    and operators.</entry>
+                                <entry><codeph>CREATE INDEX idx5 ON `travel-sample`(airline,
+                                        destinationairport, sourceairport) PARTITION BY
+                                            HASH(<b>SUBSTR(meta().id,
+                                            POSITION(meta().id,'__')+2),airline</b>);</codeph></entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table><note>Array expressions are not allowed, for example: <codeph>CREATE INDEX
+                        idxArray ON `travel-sample`(airline, destinationairport, sourceairport)
+                        PARTITION BY HASH(<b>schedule</b>);</codeph></note>Your partition keys
+                should be immutable, that is, the field values shouldn't change. For example, the
+                `travel-sample` field type almost never changes and is therefore a good candidate
+                for partition key. If your partition key has changed, then the corresponding
+                document should be deleted and re-created with the new partition key.</p>
             <p>Each partition key can have a different data type:<ul id="ul_ewd_ydg_ndb">
                     <li>Scalar</li>
                     <li>Array (whole array as a partition key, not as individual elements within an
