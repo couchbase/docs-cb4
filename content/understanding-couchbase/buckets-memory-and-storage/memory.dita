@@ -138,7 +138,7 @@
    <p>
     When Couchbase Server is restarted on a node, the node goes through a <i>warmup process</i> 
     before it starts handling data requests again. During this warmup process, data 
-    on disk is sequentially loaded into memory. The time required
+    on disk is sequentially reloaded into memory. The time required
     depends on the size and configuration of the system, the amount of data persisted on
     the node, and the ejection policy configured for the buckets. 
    </p>
@@ -148,89 +148,51 @@
     identified via a scanner process, which examines an <i>access log</i>, and obtains the 
     appropriate keys. The corresponding items are then loaded with priority. The scanner
     process is configurable, via the CLI utility <codeph>cbepctl flush_param</codeph>.
+    This utility also provides parameters, <codeph>warmup_min_memory_threshold</codeph>
+    <codeph>warmup_min_item_threshold</codeph>, which allow the enablement of traffic
+    before all items have been reloaded into memory.
    </p>
    
-   <p>
-    Couchbase Server can switch to <i>ready mode</i>, before it has actually retrieved all documents 
-    into RAM: this allows the serving of data to begin immediately. 
-   </p>
+   
    
   </section>
   
   <section id="full-ejection">
    
    <title>
-    Tunable Memory with Ejection Policy
+    Ejection
    </title>
    
    <p>
-    Tunable memory enables you to configure the ejection policy for a bucket as one of the following: 
+    If a bucket's memory quota is exceeded, items are <i>ejected</i> from the bucket. Different
+    <i>ejection methods</i> are available, and are configured for a bucket on its definition. For
+    information, see
+    <xref href="../../architecture/core-data-access-buckets.dita" scope="local" format="dita">Buckets</xref>.
     
-    <ul>
-    <li id="value-only-ejection"><term>Value-only ejection </term>(default) removes data from the cache but keeps all keys
-     and metadata fields for non-resident items. When a value bucket ejection occurs, the value of
-     the item is reset. Value-only ejection, also referred to as value ejection, is well suited for
-     cases where low latency access is critical to the application and the total item keys for the
-     bucket can easily fit in the allocated Data RAM quota. 
-    </li>
-     
-    <li>
-     <term>Full metadata ejection </term>removes all data <b>including keys</b>, metadata, and
-     key-value pairs from the cache for non-resident items. Full ejection is well suited for cases
-     where the application has cold data that is not accessed frequently or the total data size is
-     too large to fit in memory plus higher latency access to the data is accepted. The performance
-     of full eviction cache management is significantly improved by <xref href="./bloom-filters.dita"
-      >Bloom filters</xref>. Bloom filters are enabled by default and cannot be disabled. <note
-       spectitle="Important">Full ejection may involve additional disk I/O per operation. For
-       example, when the request <i>get_miss</i> which requests a key that does not exist is
-       received, Couchbase Server will check for the key on the disk even if the bucket is 100%
-       resident. </note>
-    </li>
-     
-   </ul>
    </p>
   </section>
   
   <section>
    
    <title>
-    Working Set Management and Ejection
+    Working Set Management
    </title>
    
    <p>
-    Couchbase Server actively manages the data stored in a caching layer; this includes the 
-    information which is frequently accessed by clients and which needs to be available for rapid 
-    reads and writes. When there are too many items in RAM, Couchbase Server removes certain data 
-    to create free space and to maintain system performance. This process is called "working set 
-    management" and the set of data in RAM is referred to as the "working set". In general, the 
-    working set consists of all the keys, metadata, and associated documents which are frequently 
-    used require fast access. The process the server performs to remove data from RAM is known as 
-    ejection.
+    On each node, the total memory available to Couchbase Server is managed according
+    to two <i>watermarks</i>, which are
+    <codeph>mem_low_wat</codeph> and <codeph>mem_high_wat</codeph>,.
    </p>
    
    <p>
-    Couchbase Server performs ejections automatically. When ejecting information, it works in 
-    conjunction with the disk persistence system to ensure that data in RAM is persisted to 
-    disk and can be safely retrieved back into RAM whenever the item is requested. 
-   </p>
-   
-   <p>
-    In addition to the Data RAM quota for the caching layer, the engine uses two watermarks,
-    <parmname>mem_low_wat</parmname> and <parmname>mem_high_wat</parmname>, to determine when it
-    needs to start persisting more data to disk.
-   </p>
-   
-   <p>
-    As more and more data is held in the caching layer, at some point in time it passes the
-    <parmname>mem_low_wat</parmname> value. At this point, no action is taken. As data continues to
-    load, it eventually reaches the <parmname>mem_high_wat</parmname> value. At this point, the
-    Couchbase Server schedules a background job called item pager which ensures that items are
-    migrated to disk and memory is freed up for other Couchbase Server items. This job runs until
-    measured memory reaches <parmname>mem_low_wat</parmname>. If the rate of incoming items is
-    faster than the migration of items to disk, the system returns errors indicating there is not
-    enough space until there is sufficient memory available. The process of migrating data from the
-    cache to make way for actively used information is called ejection and is controlled
-    automatically through thresholds set on each configured bucket in the Couchbase Server cluster.
+    As the amount of data in memory increases, it eventually passes the
+    <codeph>mem_low_wat</codeph> value. At this point, no action is taken. Then, as still more data is
+    loaded, it eventually reaches the <codeph>mem_high_wat</codeph> value. At this point, the
+    Couchbase Server schedules a background job referred to as the <i>item pager</i>, which ensures that items are
+    migrated to disk, and that memory is freed. The item pager runs until
+    the amount of data in memory has decreased to the <codeph>mem_low_wat</codeph>. If the rate of incoming items is
+    faster than the migration of items to disk, the system continuously provides notification of insufficient
+    of memory, until sufficient memory is available. 
    </p> 
     
     <p>
