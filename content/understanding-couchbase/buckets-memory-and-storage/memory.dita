@@ -31,7 +31,7 @@
     service across the cluster. For example, if 2048 MB is specified for the Analytics Service,
     and the Analytics Service is run on three of a cluster's five nodes, each of the three
     instances of the service is duly allocated 2048 MB. Note that it is not possible to have
-    a different memory allocation for one or a subset of multiple instances of the same service.
+    different memory allocations across multiple instances of the same service within a single cluster.
    </p>
    
    <p>
@@ -61,7 +61,7 @@
    
    <p>
     If, when the initial node of a cluster is set up, only a subset of services is assigned, additional
-    nodes may subsequently be added, in order to host additional services: in which case, each new service can be given
+    nodes might subsequently be added, in order to host additional services: in which case, each new service can be given
     its initial memory allocation as its node is added.
    </p>
    
@@ -70,7 +70,7 @@
     services running on the cluster, and specifies
     the memory allocation for each.
     The panel is interactive, and allows the memory allocations to be changed and saved. If a modification
-    attemptedly goes above the maximum allocation tolerated by any node in the cluster, or below
+    attemptedly goes above the maximum allocation supported by any node in the cluster, or below
     minimum quotas that are either imposed by default (see below) or are the result of existing usage (as
     might be the case with Data Service memory-resources, allocated to defined buckets),
     a notification 
@@ -127,89 +127,34 @@
    
    
   </section>
+
   
   <section>
-   <title>
-    Listeners
-   </title>
    
-   <p>
-    When client connection requests arrive at the database engine, the listener service receives the requests 
-    and authenticates the client. Upon successful authentication, the listener service assigns a worker 
-    thread to the connection to service its request. A single worker thread can handle multiple client 
-    connections using a non-blocking event loop.
-   </p>
-   
-   <p>
-    The number of worker threads that can be created is automatically determined based on the number of CPU 
-    threads present on the node. By default the number of worker threads is 0.75 x number of CPU threads.
-   </p>
-  </section>
-  
-  <section>
-   <title>
-    vBucket manager and managed cache
-   </title>
-   
-   <p>
-    After executing mutation and read requests, the server uses the managed cache to hold updated and newly 
-    created values. However, with a high flow of incoming operations, the system can run out of memory 
-    quickly. In order to reuse the memory, mutations are also queued for disk persistence.  Once the 
-    mutated items are persisted, the server frees up the memory consumed by these items, making space 
-    for newer operations. This operation is called <i>cache eviction</i>. With a highly concurrent set 
-    of operations consuming memory and a high throughput disk subsystem persisting data to disk, 
-    there can be many pages eligible for reuse. The server uses the Least Recently Used (LRU) 
-    algorithm to identify the memory pages that can be reused. 
-   </p>
-   
-   <p>
-    It is important to size the RAM capacity appropriately for your working set: the portion of data that 
-    your application is working with at any given point in time and needs very low latency and high 
-    throughput access. In some applications, the working set is the entire data set, while in others 
-    it is a smaller subset.
-   </p>
-   
-  </section>
-  
-  <section>
    <title>
     Initialization and Warmup
    </title>
    
    <p>
-    Whenever you restart the Couchbase Server or restore the data, the node goes through a warmup process 
-    before it starts handling data requests again. During warmup, the Couchbase Server loads 
-    data  persisted on disk into RAM. 
-   </p>
-   
-   <p>
-    Couchbase Server provides an optimized warmup process that loads data sequentially from disk
-    into RAM. It divides the data to be loaded and handles it in multiple phases. After the warmup
-    process completes, the data is available for clients to read and write. The time needed for a
-    node warmup depends on the system size, system configuration, the amount of data persisted in
+    When Couchbase Server is restarted on a node, the node goes through a <i>warmup process</i> 
+    before it starts handling data requests again. During this warmup process, data 
+    on disk is sequentially loaded into memory. The time required
+    depends on the size and configuration of the system, the amount of data persisted on
     the node, and the ejection policy configured for the buckets. 
    </p>
+    
+   <p>
+    Frequently used items are
+    identified via a scanner process, which examines an <i>access log</i>, and obtains the 
+    appropriate keys. The corresponding items are then loaded with priority. The scanner
+    process is configurable, via the CLI utility <codeph>cbepctl flush_param</codeph>.
+   </p>
    
    <p>
-    Couchbase Server identifies items that are frequently used, prioritizes them, and loads them
-    before sequentially loading the remaining data. The frequently-used items are prioritized in an
-    access log. The server performs a prefetch to get a list of the most frequently accessed keys
-    and then fetches these keys before fetching any other items from disk. 
+    Couchbase Server can switch to <i>ready mode</i>, before it has actually retrieved all documents 
+    into RAM: this allows the serving of data to begin immediately. 
    </p>
    
-   <p>
-    The server runs a configurable scanner process that determines the keys that are most frequently 
-    used. The scanner process is preset and is configurable. You can use the command-line tool,
-    <cmdname>cbepctl flush_param</cmdname>, to change the initial time and interval for the scanner 
-    process. For example, you can configure the scanner process to run during a specific time period 
-    when a given list of keys need to be identified and made available sooner.
-   </p>
-   
-   <p>The server can also switch into a <i>ready mode</i> before it has actually retrieved all documents 
-    for keys into RAM, thereby enabling data to be served before all the stored items are loaded. 
-    Switching into ready mode is a configurable setting that enables you to adjust the server 
-    warmup time.
-   </p>
   </section>
   
   <section id="full-ejection">
