@@ -148,12 +148,10 @@
     identified via a scanner process, which examines an <i>access log</i>, and obtains the 
     appropriate keys. The corresponding items are then loaded with priority. The scanner
     process is configurable, via the CLI utility <codeph>cbepctl flush_param</codeph>.
-    This utility also provides parameters, <codeph>warmup_min_memory_threshold</codeph>
-    <codeph>warmup_min_item_threshold</codeph>, which allow the enablement of traffic
+    This utility also provides parameters, <codeph>warmup_min_memory_threshold</codeph> and 
+    <codeph>warmup_min_item_threshold</codeph>, which can be used to schedule the resumption of traffic
     before all items have been reloaded into memory.
    </p>
-   
-   
    
   </section>
   
@@ -164,68 +162,52 @@
    </title>
    
    <p>
-    If a bucket's memory quota is exceeded, items are <i>ejected</i> from the bucket. Different
-    <i>ejection methods</i> are available, and are configured for a bucket on its definition. For
-    information, see
+    If a bucket's memory quota is exceeded, items amay <i>ejected</i> from the bucket. Different
+    <i>ejection methods</i> are available, and are configured for a bucket on its definition. In
+    some cases, ejection is configured not to occur.
+    For detailed information, see
     <xref href="../../architecture/core-data-access-buckets.dita" scope="local" format="dita">Buckets</xref>.
-    
-   </p>
-  </section>
-  
-  <section>
-   
-   <title>
-    Working Set Management
-   </title>
-   
-   <p>
-    On each node, the total memory available to Couchbase Server is managed according
-    to two <i>watermarks</i>, which are
-    <codeph>mem_low_wat</codeph> and <codeph>mem_high_wat</codeph>,.
    </p>
    
    <p>
-    As the amount of data in memory increases, it eventually passes the
-    <codeph>mem_low_wat</codeph> value. At this point, no action is taken. Then, as still more data is
-    loaded, it eventually reaches the <codeph>mem_high_wat</codeph> value. At this point, the
-    Couchbase Server schedules a background job referred to as the <i>item pager</i>, which ensures that items are
-    migrated to disk, and that memory is freed. The item pager runs until
-    the amount of data in memory has decreased to the <codeph>mem_low_wat</codeph>. If the rate of incoming items is
-    faster than the migration of items to disk, the system continuously provides notification of insufficient
-    of memory, until sufficient memory is available. 
+    For each bucket, available memory is managed according to two <i>watermarks</i>, which are
+    <codeph>mem_low_wat</codeph> and <codeph>mem_high_wat</codeph>,
+   </p>
+   
+   <p>
+    If data is consistently loaded into the bucket, its quantity is eventually at the point indicated by the
+    <codeph>mem_low_wat</codeph> watermark. No action is yet taken. Then, eventually, after still more data has been
+    loaded, its quantity reaches the the point indicated by the <codeph>mem_high_wat</codeph> watermark. 
+    If, based on the bucket's configuration, items can be ejected from the bucket, 
+    Couchbase Server now schedules a background job, referred to as the <i>item pager</i>, which
+    ejects items from the bucket until
+    the quantity of data has decreased to the <codeph>mem_low_wat</codeph> watermark. 
+    If the rate at which data continues to be loaded is greater than that at which it is being ejected, or
+    if ejection cannot be performed, the system provides notification of insufficient memory, until
+    sufficient memory becomes or is made available.
    </p> 
+   
+   <p>
+    The relationship of <codeph>mem_low_wat</codeph> and <codeph>mem_high_wat</codeph> to the 
+    bucket's overall memory quota is illustrated as follows:
+   </p>
     
     <p>
      <image href="./images/tunableMemory.png" width="400" id="tunable_memory"/>
     </p>
-
+   
+  </section>
+   
+   <section>
+    <title>
+     Expiration
+    </title>
    <p>
-    Depending on the ejection policy set for the bucket, the vBucket Manager removes just the
-    document or both the document, key and the metadata for the item being ejected. Keeping an
-    active working set with keys and metadata in RAM serves three important purposes in a system:
-    
-    <ul>
-     <li>
-      Couchbase Server uses the remaining key and metadata in RAM if a client requests for that
-      key. Otherwise, the node tries to fetch the item from disk and return it into RAM.
-     </li>
-     
-     <li>
-      The node can also use the keys and metadata in RAM for <i>miss access</i>. This means that
-      it can quickly determine whether an item is missing and if so, perform some action, such as
-      add it.
-     </li>
-     
-     <li>
       The expiration process in Couchbase Server uses the metadata in RAM to quickly scan for
       items that have expired and later removes them from disk. This process is known as <i>expiry pager</i> 
       and runs every 60 minutes by default.
-     </li>
-     
-    </ul>
    </p>
-   
-  </section>
+   </section>  
   
   <section>
    
