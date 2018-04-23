@@ -210,25 +210,37 @@
   <section>
    
    <title>
-    Not Recently Used (NRU) Items
+    Not Recently Used Items
    </title>
    
    <p>
     All items in the server contain metadata indicating whether or not the item has been recently accessed. 
-    This metadata is known as not-recently-used (NRU). If an item has not been recently used, 
-    then the item is a candidate for ejection. When data in the cache exceeds the high water mark 
-    (mem_high_wat), the server evicts items from RAM.
+    This metadata is known as <i>Not Recently Used</i> (NRU). If an item has not been recently used, 
+    then the item is a candidate for ejection. When data in the cache exceeds the high water mark, the server evicts items from RAM.
    </p>
    
    <p>
-    Couchbase Server provides two NRU bits per item and also provides a replication protocol that can 
-    propagate items that are frequently read, but not mutated often.
+    Couchbase Server provides a value for each item, to track how often it is used. This value
+    consists of two bits. A replication protocol is provided for
+    propagating items that are frequently read, but are not often mutated.
    </p>
    
    <p>
-    NRUs are decremented or incremented by server processes to indicate an item that is more
-    frequently or less frequently used. The following table lists the bit values with the
-    corresponding scores and statuses: 
+    The NRU value changes in the following circumstances:
+   </p>
+   
+   <ul>
+    <li>
+     A client reads or writes an item. The server correspondingly decrements the NRU value,
+     and so lowers the item's score.
+    </li>
+    
+    <li>
+     The <i>item pager</i> runs, and determines which items are frequently used. On completion, 
+     the item pager increments the value of less frequently used items. 
+    </li>
+    
+   </ul>
     
     <table frame="all" rowsep="1" colsep="1"
      id="table_ekt_2yz_xs">
@@ -242,7 +254,7 @@
        <row>
         <entry>Binary NRU</entry>
         <entry>Score</entry>
-        <entry>Access pattern</entry>
+        <entry>Access Pattern</entry>
         <entry>Description</entry>
        </row>
       </thead>
@@ -274,37 +286,32 @@
       </tbody>
      </tgroup>
     </table>
+
+   <p>
+    Couchbase Server settings can be configured to specify the percentage of RAM to be consumed 
+    before items are ejected, 
+    and to specify whether ejection should occur more frequently on replicated data than on original 
+    data.
    </p>
+    
+  </section>
+  
+  <section>
+   <title>
+    Understanding the Item Pager
+   </title>
    
    <p>
-    There are two processes that change the NRU for an item:
-    
-    <ul>
-     <li>
-      When a client reads or writes an item, the server decrements NRU and lowers the item's score.
-     </li>
-     
-     <li>
-      A daily process which creates a list of frequently-used items in RAM. After the completion of this process, 
-      the server increments one of the NRU bits. 
-     </li>
-     
-    </ul>
-    
-    Because these two processes change NRUs, they play an important role in identifying the candidate items for ejection. </p>
-   <p>You can configure the Couchbase Server settings to change the behavior during ejection. For example, you can specify the percentage of RAM to be consumed before items are ejected, or specify whether ejection should occur more frequently on replicated data than on original data. Couchbase recommends that the default settings be used.</p>
-  </section>
-  <section><title>Understanding the Item Pager</title>
-   <p>The item pager process runs periodically to remove documents from RAM. When the amount of RAM
-    used by items reaches the high water mark (upper threshold), both active and replica data are
-    ejected until the amount of RAM consumed (memory usage) reaches the low water mark (lower
-    threshold). Using the default settings, active documents have a 40% chance of eviction while
+    The item pager process runs periodically to remove documents from RAM. When the amount of RAM
+    used by items reaches the high water mark, both active and replica data are
+    ejected, until memory usage reaches the low water mark. Using the default settings,
+    active documents have a 40% chance of eviction, while
     replica documents have a 60% chance of eviction. Both the high water mark and low water mark are
-    expressed as a percentage amount of RAM, such as 80%.</p>
-   <p>You can change the high water mark and low water mark settings for a node by specifying a
-    percentage amount of RAM, for example, 80%. Couchbase recommends that you use the following
-    default settings: <table frame="all" rowsep="1" colsep="1" id="table_pnj_x21_ys">
-     <title>Default setting for RAM water marks</title>
+    conventionally expressed as a percentage amount of RAM, such as 80%. Settings can be
+    custom-specified. The following table shows the recommended, default values:
+   </p>
+   
+   <table>
      <tgroup cols="3" align="left">
       <colspec colname="c1" colnum="1"/>
       <colspec colname="c2" colnum="2"/>
@@ -312,8 +319,8 @@
       <thead>
        <row>
         <entry>Version</entry>
-        <entry>High water mark</entry>
-        <entry>Low water mark</entry>
+        <entry>High Water Mark</entry>
+        <entry>Low Water Mark</entry>
        </row>
       </thead>
       <tbody>
@@ -330,32 +337,30 @@
       </tbody>
      </tgroup>
     </table>
-   </p>
+
    
    <p>
-    The item pager ejects items from RAM in two phases: 
-    
-    <ol>
+    The item pager ejects items in two phases: 
+   </p>
+   
+    <ul>
      
      <li>
-      Eject items based on NRU: The item pager scans NRU for items, creates a list of 
-      items with a NRU score 3, and ejects all the identified items. It then 
-      checks the RAM usage and repeats the process if the usage is still above 
+      <i>Based on NRU</i>: NRU-values are scanned, and a list is created of 
+      items with a score of 3: items so identified are ejected. Memory usage 
+      is checked, and the process repeated if usage is still above 
       the low water mark. 
      </li>
      
      <li>
-      Eject items based on algorithm: The item pager increments the NRU of all items by 1. For
-      every item whose NRU is equal to 3, it generates a random number. If the random number for an
-      item is greater than a specified probability, it ejects the item from RAM. The probability is
-      based on the current memory usage, low water mark, and whether a vBucket is in an active or
+      <i>Based on algorithm</i>: The NRU of all items is incremented by 1. Then, for
+      every item whose NRU is equal to 3, a random number is generated. If an item's number
+      is greater than a specified probability, the item is ejected. The probability is
+      based on current memory usage, the low water mark, and whether a vBucket is in an active or
       replica state. If a vBucket is in an active state, the probability of ejection is lower than
       if the vBucket is in a replica state. 
       
-      <table frame="all" rowsep="1" colsep="1"
-       id="table_qpb_hg1_ys">
-       <title>Probability of ejection based on active vBuckets versus replica vBuckets (using
-        default settings)</title>
+      <table frame="all" rowsep="1" colsep="1" id="table_qpb_hg1_ys2">
        <tgroup cols="2" align="left">
         <colspec colname="c1" colnum="1"/>
         <colspec colname="c2" colnum="2"/>
@@ -373,8 +378,8 @@
         </tbody>
        </tgroup>
       </table></li>
-    </ol>
-   </p>
+    </ul>
+
   </section>
   
   <section>
@@ -383,25 +388,20 @@
    </title>
    
    <p>
-    Over time, the memory used by the managed cache of a running Couchbase Server can become 
-    fragmented. The storage engine now includes an <i>Active Defragmenter</i> task to 
-    defragment cache memory.
-   </p>
-   
-   <p>
-    Cache fragmentation is a side-effect of how Couchbase Server organizes cache memory to maximize 
-    performance. Each page in the cache is typically responsible for holding documents of a specific 
-    size range. Over time, if memory pages assigned to a specific size range become sparsely populated 
-    (due to documents of that size being ejected or items changing in size), then the unused space in 
-    those pages cannot be used for documents of other sizes until a complete page is free and that page 
-    is re-assigned to a new size. Such effects are highly workload dependent and can result in memory 
-    that cannot be used efficiently by the managed cache. 
+    Over time, Couchbase Server memory can become 
+    fragmented.
+    Each page in memory is typically responsible for holding documents of a specific 
+    size-range. Over time, if memory pages assigned to a specific size-range become sparsely populated 
+    (due to documents of that size being ejected, or items changing in size), the unused space in 
+    those pages cannot be used for documents of other sizes, until a complete page is free, and that page 
+    is re-assigned to a new size. Such effects, which are highly workload dependent, may result in memory 
+    that cannot be used efficiently. 
    </p> 
    
    <p>
-    The Active Memory Defragmenter attempts to address any fragmentation by periodically scanning the 
-    cache to identify pages which are sparsely used, and repacking the items stored on those pages to 
-    free up <i>whole</i> pages.
+    Couchbase Server provides an <i>Active Memory Defragmenter</i>, which periodically scans the 
+    cache, to identify pages that are sparsely used. It then repacks the items on those pages, to 
+    free up space.
    </p>
    
   </section>
@@ -414,48 +414,38 @@
    </title>
    
    <p>
-    A Bloom filter is a probabilistic data structure used to test whether an element is a
-   member of a set. False positive matches are possible, but false negatives are not. This means a
-   query returns either "possibly in set" or "definitely not in set". It is a bit array with a
-   predefined size that is calculated based on the expected number of items and the probability of
-   false positives or the probability of finding a key that doesn't exist. Bloom filter
-   significantly improves the performance of full ejection scenarios and XDCR.  
-   </p>
-
-   <p>
-    In the full ejection mode, the key and metadata are evicted along with the value. Therefore,
-    if a key is non resident, there is no way of knowing if a key exists or not, without accessing
-    the disk. In such a scenario, if a client issues a lot of GETs on keys that may not even exist
-    in server, Bloom filters help eliminate many unnecessary disk accesses. Similarly for XDCR,
-    when we set up remote replication to a brand new cluster, we would be able to avoid many
-    unnecessary GetMeta-disk-fetches with the help of the bloom filter.
+    By default, Couchbase Server uses 
+    <xref href="https://en.wikipedia.org/wiki/Bloom_filter" scope="external" format="html">Bloom Filters</xref> 
+    to minimize on-disk searches for non-existent
+    items: non-existence can be determined without the disk needing to be searched.
+    This allows high performance to be maintained in the contexts of Full-Value Ejection and XDCR, when
+    key and metadata have been removed from memory, and may or may not continue to exist on disk.
    </p>
    
    <p>
-    With Bloom filters, the probability of false positives decreases as the size of the array
-    increases and increases as the number of inserted elements increases. Based on the algorithm
-    that takes into account the number of keys and the probability of false positives, you can
-    estimate the size of the Bloom filter and the number of bits to store each key. 
+    A <i>Bloom Filter</i> is a probabilistic data structure, used to test whether an element is a
+    member of a set. False positive matches are possible, but false negatives are not: for the purposes
+    of Couchbase Server, this means that an
+    item can be determined <i>definitely not to be</i>, but cannot be determined <i>definitely to be</i>
+    on disk. In consequence, the information provided by Bloom Filters can mimimize but cannot absolutely 
+    prevent on-disk searches for non-existent keys.
    </p>
-   
-   <p>
-    For value eviction only the deleted keys will be stored, while in case of full eviction both
-    the deleted keys and non-resident items will be stored. 
-   </p>
-   
-   <p>
-    The algorithm calculates the almost exact probability of false positives, including the
-    number of hash functions (<codeph>k</codeph>), size of the bit array (<codeph>m</codeph>), and
-    the number of inserted elements (<codeph>n</codeph>):
-   </p>
-   
-   <codeblock outputclass="language-c">k = m/n (ln 2)</codeblock>
-   
-   <p>
-    You can expect an increase in memory usage or memory overhead while using the Bloom filter:
     
-    <table frame="all" rowsep="1" colsep="1" id="table_dkx_rvg_vq">
-     <title>Memory overhead for Bloom filter use</title>
+   <p>
+    When an item is created, its key is hashed, and stored in the Bloom Filter. The hash is never 
+    removed from the Bloom Filter (thus, even if the item and key are entirely deleted from both memory and disk, the corresponding
+    hash is retained by the Bloom Filter). When an item's key is searched on, and proves not to be in memory, the Bloom Filter is
+    immediately searched for the corresponding hash. If the hash is <i>not</i> contained by
+    the Bloom Filter, the item is thereby determined not to be on disk, and no disk-search is necessary. If the 
+    hash <i>is</i> contained by the Bloom Filter, the item may or may not be on disk, and disk-search is required.
+   </p>
+   
+   <p>
+    Bloom Filters entail some degree of memory-overhead, as indicated by the following table:
+   </p>
+    
+    <table frame="all" rowsep="1" colsep="1" id="table_dkx_rvg_vq2">
+     
      <tgroup cols="3" align="left">
       <colspec colname="c1" colnum="1" colwidth="1.0*"/>
       <colspec colname="c2" colnum="2" colwidth="1.0*"/>
@@ -479,23 +469,15 @@
         <entry>4 bits</entry>
        </row>
        <row>
-        <entry>Size of the Bloom filter to fit the estimated keys with desired false positive
+        <entry>Size of the Bloom Filter to fit the estimated keys with desired false positive
          probability</entry>
         <entry>95851 bits (=> =12 KB per vBucket) (=> =12 MB for 1024 vBuckets)</entry>
         <entry>62353 bits (=> =8 KB per vBucket) (=> =8 MB for 1024 vBuckets)</entry>
        </row>
       </tbody>
      </tgroup>
-    </table></p> 
+    </table>
    
-   <p>
-    In a case of full eviction, you will not know whether an item exists in the memory until you
-    perform a background fetch. Therefore, use of the Bloom filter helps to avoid unnecessary
-    background fetches and improves latency. 
-   </p>
-   
-   <p>
-    For more information about working set management and eviction, see <xref href="./db-engine-architecture.dita"></xref></p>
   </section>
  </body>
 </topic>
