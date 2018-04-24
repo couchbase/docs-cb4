@@ -25,40 +25,41 @@
    compressed form on disk. This allows data-sets to exceed the size permitted
    by current memory-resources; since items not in memory can be
    restored to memory from disk, as needed. It also facilitates backup and restore, 
-   since data lost from memory due to node-failure, can be reacquired from disk
-   when the node itself is brought back to health.
+   since data lost from memory due to node-failure can be reacquired from disk
+   when the node itself returns to health.
   </p>
    
    <p>
-    Client-interactions with the server are not blocked during the process whereby items 
-    are written to and read
-    from disk (other than in terms of a specific item, being restored from disk to memory,
-    not being made available to the client until restoration is complete).
+    Client-interactions with the server are not blocked during the reading and writing 
+    of items to and
+    from disk (other than as regards a specific item, being restored from disk to memory;
+    which is not made available to the client until restoration is complete).
    </p>
    
    <p>
-    Not all items are saved on disk: <i>Ephemeral</i> buckets and their items are maintained
+    Not all items are written to disk: <i>Ephemeral</i> buckets and their items are maintained
     in memory only. See
     <xref href="../buckets-memory-and-storage/buckets.dita" scope="local" format="dita">Buckets</xref>
     for detailed information.
    </p>
    
    <p>
-    Items saved to disk are always saved in compressed form. Based on bucket configuration, 
+    Items written to disk are always written in compressed form. Based on bucket configuration, 
     items may be maintained in compressed form in memory also. See
     <xref href="../buckets-memory-and-storage/compression.dita" scope="local" format="dita">Compression</xref>
     for detailed information.
    </p>
    
    <p>
-    Items can be removed from disk based on a configured point of expiration. See
+    Items can be removed from disk based on a configured point of expiration, referred to as
+    <i>Time-To-Live</i>. See
     <xref href="../buckets-memory-and-storage/expiration.dita" scope="local" format="dita">Expiration</xref>
     for detailed information.
    </p>
    
    <p>
-    For illustrations of how Couchbase Server saves new Couchbase bucket-items and updates existing, using
-    both memory and storage resources, see
+    For illustrations of how Couchbase Server saves new and updates existing Couchbase bucket-items, 
+    thereby employing both memory and storage resources, see
     <xref href="../buckets-memory-and-storage/memory-and-storage.dita" scope="local" format="dita">Memory 
      and Storage</xref>.
    </p>
@@ -72,13 +73,18 @@
    </title>
    
    <p>
-    Synchronized, multi-threaded <i>readers</i> and <i>writers</i> provide simultaneous read-write operations 
-    for data on disk: this simultaneity increases I/O throughput. To avoid conflict, each reader-thread or 
-    writer-thread is 
-    assigned to a specific subset of the 1024
-    vBuckets for a given bucket. For example, the first of five reader-threads is assigned to 
-    vBuckets 0, 6, 11, 16, 21, and so on; while the second is assigned to vBuckets 1, 7, 12, 17, 22, and
+    Synchronized, multi-threaded <i>readers</i> and <i>writers</i> provide simultaneous, high-performance 
+    read-write operations for data on disk. Conflicts are avoided by assigning each thread (reader
+    or writer) a specific subset of the 1024
+    vBuckets for each Couchbase bucket. For example, the first of five reader-threads is assigned 
+    vBuckets 0, 5, 10, 15, 20, and so on; while the second is assigned vBuckets 1, 6, 11, 16, 21, and
     so on.
+   </p>
+   
+   <p>
+    Thread-status can be viewed, by means of the <cmdname>cbstats</cmdname> command, specified with the 
+    <parmname>raw workload</parmname> option. See
+    <xref href="../../cli/cbstats-intro.dita" scope="local" format="dita">cbstats</xref> for information.
    </p>
   </section>
   
@@ -89,105 +95,69 @@
    </title>
    
    <p>
-    
+    Items can be deleted by a client application: either by immediate action, or by setting
+    a <i>Time-To-Live</i> (TTL) value: this value is established through accessing the 
+    <codeph>TTL</codeph> meta-data field of the item, which establishes a future point-in-time
+    for the item's <i>expiration</i>. When the point-in-time is reached, Couchbase Server deletes
+    the item.
+   </p>
+ 
+   <p>
+    Following deletion by either method, a <i>tombstone</i> is maintained as a record. 
+   </p>
+   
+   <p>
+    An item's TTL can be specified either directly on the item itself, or on the bucket that
+    contains the item. For detailed information, see
+    <xref href="../buckets-memory-and-storage/expiration.dita" scope="local" format="dita">Expiration</xref>.
    </p>
    
   </section>
   
-  <dl>
+  <section>
+   <title>
+    Tombstones
+   </title>
    
-   <dlentry>
-    <dt>Item deletion</dt>
-    <dd>Items can be deleted explicitly by the client applications or deleted using an expiration flag. 
-     Couchbase Server never deletes items from disk unless one of these operations are performed. 
-     However, after deletion or expiration, a tombstone is maintained as the record of deletion. 
-     Tombstones help communicate the deletion or the expiration to downstream components. Once all 
-     downstream components have been notified, the tombstone gets purged as well. </dd>
-   </dlentry>
-   <dlentry id="tombstone">
-    <dt>Tombstone purging</dt>
-    <dd>Tombstones are records of expired or deleted items that include item keys and metadata.
-      <p>Couchbase Server and other distributed databases maintain tombstones in order to provide
-      eventual consistency between nodes and between clusters. Tombstones are records of expired or
-      deleted items and they include the key for the item and metadata. Couchbase Server stores the
-      key plus several bytes of metadata per deleted item in two structures per node. With millions
-      of mutations, the space taken up by tombstones can grow quickly. This is especially the case
-      if there are a large number of deletions or expired documents.</p><p>The Metadata Purge
-      Interval sets frequency for a node to permanently purge metadata of deleted and expired items.
-      The Metadata Purge Interval setting runs as part of auto-compaction. This helps reduce the
-      storage requirement by roughly 3x times than before and also frees up space much faster.</p></dd> </dlentry>
-  </dl>
-  
-  <section id="disk-priority"><title>Disk I/O priority</title>
-   <p>Disk I/O priority enables workload priorities to be set at the bucket level.</p>
-   <p>You can configure the bucket priority settings at the bucket level and set the value to be either high or low. Bucket priority settings determine whether I/O tasks for a bucket must be queued in the low or high priority task queues. Threads in the global pool poll the high priority task queues more often than the low priority task queues. When a bucket has a high priority, its I/O tasks are picked up at a higher frequency and thus, processed faster than the I/O tasks belonging to a low priority bucket.</p>
-   <p>You can configure the bucket I/O priority settings during initial setup and change the
-    settings later, if needed. However, changing a bucket I/O priority after the initial setup
-    results in a restart of the bucket and the client connections are reset. <fig
-     id="fig_hvl_jq2_2t">
-     <title>Create bucket settings</title>
-     <image placement="break" href="./images/create-bucket-settings.png" width="600"
-      id="image_ivl_jq2_2t"/>
-    </fig></p>
-   <p>The previous versions of Couchbase Server, version 3.0 or earlier, required the I/O thread
-    allocation per bucket to be configured manually. However, when you upgrade from a 2.x version to
-    a 3.x or higher version, Couchbase Server converts an existing thread value to either a high or
-    low priority based on the following criteria: <ul>
-     <li>Buckets allocated six to eight (6-8) threads in Couchbase Server 2.x are marked high
-      priority in bucket setting after the upgrade to 3.x or later.</li>
-     <li>Buckets allocated three to five (3-5) threads in Couchbase Server 2.x are marked low
-      priority in bucket settings after the upgrade to 3.x or later.</li>
-    </ul></p>
+   <p>
+    A <i>tombstone</i> is a record of a deleted item. Each tombstone includes the item's key
+    and metadata. Tombstones are maintained in order to provide eventual consistency between
+    nodes and between clusters. 
+   </p>
+   
+   <p>
+    The <i>Metadata Purge Interval</i> establishes the frequency with which Couchbase Server <i>purges</i> 
+    itself of tombstones: which means, removes them finally and entirely.
+    The Metadata Purge Interval setting runs as part of auto-compaction.
+   </p>
+   
+   <p>
+    For more information, see
+    <xref href="../buckets-memory-and-storage/expiration.dita#bucket-expiration2/post-expiration-purging" scope="local" format="dita">Post-Expiration Purging</xref>.
+   </p>
    
   </section>
-  <section><title>Monitoring Scheduler</title>
-   <p>You can use the <cmdname>cbstats</cmdname> command with the <parmname>raw workload</parmname> option to view the status of the threads as shown in the following example.
-    <codeblock># cbstats 10.5.2.54:11210 -b default raw workload
-     
-     ep_workload:LowPrioQ_AuxIO:InQsize:   3
-     ep_workload:LowPrioQ_AuxIO:OutQsize:  0
-     ep_workload:LowPrioQ_NonIO:InQsize:   33
-     ep_workload:LowPrioQ_NonIO:OutQsize:  0
-     ep_workload:LowPrioQ_Reader:InQsize:  12
-     ep_workload:LowPrioQ_Reader:OutQsize: 0
-     ep_workload:LowPrioQ_Writer:InQsize:  15
-     ep_workload:LowPrioQ_Writer:OutQsize: 0
-     ep_workload:num_auxio:                1
-     ep_workload:num_nonio:                1
-     ep_workload:num_readers:              1
-     ep_workload:num_shards:               4
-     ep_workload:num_sleepers:             4
-     ep_workload:num_writers:              1
-     ep_workload:ready_tasks:              0
-     ep_workload:shard0_locked:            false
-     ep_workload:shard0_pendingTasks:      0
-     ep_workload:shard1_locked:            false
-     ep_workload:shard1_pendingTasks:      0
-     ep_workload:shard2_locked:            false
-     ep_workload:shard2_pendingTasks:      0
-     ep_workload:shard3_locked:            false
-     ep_workload:shard3_pendingTasks:      0 </codeblock> </p>
-  </section>
   
-  <section><title>High Performance Storage</title>
-   <p>The scheduler and the shared thread pool provide high performance storage to the Couchbase Server.</p>
-   <dl>
-    <dlentry>
-     <dt>Scheduler</dt>
-     <dd>The scheduler is responsible for managing a shared thread-pool and providing a fair
-      allocation of resources to the jobs waiting to execute in the vBucket engine. Shared thread
-      pool services requests across all buckets. <p>As an administrator, you can govern the
-       allocation of resources by configuring a bucket’s disk I/O prioritization setting to be
-       either high or low.</p></dd></dlentry>
-    <dlentry>
-     <dt>Shared thread pool</dt>
-     <dd>A shared thread pool is a collection of threads which are shared across multiple buckets for long running operations such as disk I/O. Each node in the cluster has a thread pool that is shared across multiple vBuckets on the node. Based on the number of CPU cores on a node, the database engine spawns and allocates threads when a node instance starts up.
-      <p>Using a shared thread pool provides the following benefits: <ul>
-       <li>Better parallelism for worker threads with more efficient I/O resource management. </li>
-       <li>Better system scalability with more buckets being serviced with fewer worker threads.</li>
-       <li>Availability of task priority if the disk bucket I/O priority setting is used.</li>
-      </ul></p></dd> </dlentry>
-   </dl>
+  <section>
+   
+   <title>
+    Disk I/O Priority
+   </title>
+   
+   <p>
+    <i>Disk I/O</i> &#8212; reading items from and writing them to disk &#8212; does not block client-interactions:
+    disk I/O is thus considered a <i>background task</i>. The priority of disk I/O (along with that of
+    other background tasks, such as item-paging and DCP stream-processing) is configurable
+    <i>per bucket</i>. This means, for example, that the disk I/O of one bucket is performed
+    with greater priority than that for another. 
+   </p>
+   
+   <p>
+    Each bucket has a <b>Bucket Priority</b> setting, which can be established at the bucket's 
+    set-up, and modified subsequently. For further information, see
+    <xref href="../../clustersetup/create-bucket.dita" scope="local" format="dita">Create a Bucket</xref>.
+   </p>
+   
   </section>
   
  </body>
