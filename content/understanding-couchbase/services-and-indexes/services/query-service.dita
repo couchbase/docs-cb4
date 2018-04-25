@@ -14,119 +14,88 @@
   <section>
    
    <title>
-    Understanding the Query Service
+    Query Service Architecture
    </title>
   
     <p>
-     The principal components of the <i>Query Service</i> are shown by the following illustration:
+     The architecture of the <i>Query Service</i> is shown by the following illustration:
     </p>
    
    <p>
-    <image href="./images/queryServiceArchitecture.png" id="query_service_architecture" align="left" width="780"/>
+    <image href="./images/queryServiceArchitecture.png" id="query_service_architecture" align="left" width="720"/>
    </p>
+   
+   <p>
+    The principal components are:
+   </p>
+   
+   <p>
+   </p>
+   
+   <ul>
+    <li>
+     <b>Listeners</b>: Concurrent query requests are received on ports 8093 and 18093 (for more information
+     on port-allocation, see
+     <xref href="../../../install/install-ports.dita" scope="local" format="dita">Network Configuration</xref>.
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <b>Query Processor</b>: Responsible for applying the <b>Parser</b> to incoming queries, in oder to 
+     determine whether each is a valid statement. Also employs the <b>Optimizer</b>, which evaluates available
+     execution paths, so determining the path of lowest latency; generates a query-execution plan that uses
+     the lowest-latency path; and assembles the plan into a series of operators. The <b>Execution Engine</b>
+     receives the operators, and executes them &#8212; in parallel where possible.
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <b>Data Stores</b>: Abstract access to various data sources. The <b>Couchbase Server</b> store is used to
+     access the data and indexes on Couchbase Server, and to handle authentication. Other data stores are also
+     included, such as the store for the local filesystem.
+     <p>
+      
+     </p>
+    </li>
+    
+   </ul>
   
   </section>
   
-  <p>
-   As N1QL query requests arrive on a node, the N1QL query engine parses the N1QL statement to be
-   executed and compiles an execution plan. The compiled execution plan is then executed by the
-   query engine and depending on the query execution plan, the query engine collaborates with the
-   index service and data service.</p>
-  <p>N1QL can be used to execute ad hoc queries on all buckets as long as there is a primary index
-   available on the bucket. N1QL query statements utilize the full power of SQL language. For
-   example, you can do the following and much more:<ul>
-    <li>Specify a list of attributes to be returned using the SELECT clause</li>
-    <li>Target multiple buckets using the FROM clause</li>
-    <li>Filter data based on powerful predicates and expressions using the WHERE clause</li>
-    <li>Aggregate results using GROUP BY</li>
-    <li>Order results using ORDER BY</li>
-   </ul></p>
-  <p>The REST API provides additional parameters to control and optimize the execution of the N1QL
-   query. Prepared statement execution enables repeating queries to skip the parsing and execution
-   planning phases of query execution. Additional consistency levels enable queries to set staleness
-   levels.</p>
-  <p>The following diagram shows the N1QL query engine components - listener, query processor, and
-   data stores. <fig id="fig_nqy_b4h_zs">
-    <title>Components of N1QL query engine</title>
-    <image placement="break" href="./images/n1ql-query-engine-components.png" width="570"
-     id="image_oqy_b4h_zs"/>
-   </fig>
-   <dl>
-    <dlentry>
-     <dt>Listener</dt>
-     <dd>N1QL query engine listener is responsible for receiving the concurrent query requests.</dd>
-    </dlentry>
-    <dlentry>
-     <dt>Query processor</dt>
-     <dd>N1QL query processor starts query execution by parsing the query. The parser ensures that
-      the submitted N1QL statement is a valid statement. The Optimizer evaluates the execution paths
-      available and decides on the lowest latency path for the execution. It generates an execution
-      plan for the query that optimizes the query execution path. The execution plan is assembled
-      into a series of operators. The Execution engine receives the execution plan from the
-      optimizer and executes the operators. Operators stream results processing various parts of the
-      query eventually coming up with the final result. </dd>
-    </dlentry>
-    <dlentry>
-     <dt>Data stores</dt>
-     <dd>Data stores abstract the access to variety of data sources. Couchbase Server data store is
-      used to access Couchbase Server data. The data stores module for Couchbase Server is
-      responsible for governing authentication and accessing both the data and index service. The
-      module also is required to collect the metadata to allow optimizing and execution of the query
-      from the store. There are other data stores such as the one that can access the local file
-      system.</dd>
-    </dlentry>
-   </dl></p>
-  <p>Once the parsing and planning is done, the operators are assembled into a plan and executed
-   based on the query as shown in the following diagram. The parallelization of the operators is
-   illustrated with the multiple stacked boxes under scan, fetch, join, filter, and other operators.
-    <fig id="fig_uwn_xnh_zs">
-    <title>Execution flow for N1QL queries</title>
-    <image placement="break" href="./images/n1ql-query-execution-flow.png" width="400"
-     id="image_vwn_xnh_zs"/>
-   </fig></p>
   <section>
-   <title>Prepared query execution</title>
-   <p>The N1QL parser parses and optimizes N1QL queries. The process of parsing and compiling
-    execution plans can be resource intensive. If similar queries are executed by the application
-    repeatedly, you can prepare statements and subsequently execute the prepared version of the
-    statement without having to bear the cost of parsing and planning.</p>
+   <title>
+    Query Execution
+   </title>
+   
+   <p>
+    The sequence whereby queries are executed is shown below:
+   </p>
+   
+   <p>
+    <image href="./images/querySequence.png" id="query_sequence" align="left" width="720"/>
+   </p>
+   
   </section>
-  <section id="query-consistency-with-n1ql">
-   <title>Query consistency with N1QL</title>
-   <p>N1QL can execute queries through Global Secondary Indexes (GSI) or map-reduce views. Both GSI
-    and view indexers process mutations as soon as they are received by the bucket. However,
-    mutations that arrive at the bucket do not block and wait for GSI or view indexing for the
-    mutation to complete. That is, GSI and views are eventually consistent with ongoing
-    mutations.</p>
-   <p>When querying with N1QL, as a developer, you may require varying consistency levels.
-    Consistency levels for any given N1QL query can be configured using the staleness parameter for
-    the query. The following consistency levels can be specified for the staleness parameter: <ul>
-     <li><b>scan_consistency=not_bounded</b>
-      <p>This level returns the query with the lowest latency as it is the most relaxed consistency
-       level. Selecting this option essentially means the query can return data that is currently
-       indexed and accessible by the index or the view. The query output can be arbitrarily
-       out-of-date if there are many pending mutations that have not been indexed by the index or
-       the view. This consistency level is useful for queries that favor low latency and do not need
-       precise and most up-to-date information. </p></li>
-     <li><b>scan_consistency=at_plus</b>
-      <p>This level provides the read-your-own-write consistency level and thus executes with higher
-       latencies compared to the unbounded consistency level. This consistency level requires
-       application to provide a scan_vector. Scan_vector is typically the logical timestamp acquired
-       with the most recent update to the data. Applications through the SDK maintain the
-       scan_vector and pass that in to the queries running with at_plus consistency level to achieve
-       just enough consistency to be able to read the write. A query submitted with at_plus
-       consistency level requires all mutations, up to the moment of the scan_vector (the logical
-       timestamp passed in with at_plus), to be processed before the query execution can
-      start.</p></li>
-     <li><b>scan_consistency=request_plus</b>
-      <p>This level provides the strictest consistency level and thus executes with higher latencies
-       than the other levels. This consistency level requires all mutations, up to the moment of the
-       query request, to be processed before the query execution can start. This ensures that any
-       writes that are done prior to issuing the query request, and maybe more recent mutations, are
-       indexed by the GSI or the view indexer, and will be returned by the N1QL query if it
-       qualifies for the resultset. This guarantee is important to applications that require
-       consistent reads or read-your-own-write semantics. </p></li>
-    </ul></p>
+  
+  <section>
+   
+   <title>
+    Using N1QL
+   </title>
+   
+   <p>
+    The Query Service supports queries made in the <i>N1QL</i> query language. As well as providing a rich
+    variety of query-options, N1QL allows statements to be <i>prepared</i>, so that the parsing
+    and compiling of plans is completed prior to execution; and permits consistency-levels to be
+    configured. For detailed information on how to use N1QL, see
+    <xref href="../../../sdk/n1ql-query.dita" scope="local" format="dita">Querying with N1QL</xref>.
+   </p>
+   
   </section>
+  
  </body>
 </topic>
