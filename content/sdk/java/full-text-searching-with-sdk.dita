@@ -1,108 +1,463 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="java-fts">
-    <title>Full Text Search (FTS) Using the Java SDK with Couchbase Server</title>
-    <titlealts><navtitle>Searching from the SDK</navtitle></titlealts>
-    <shortdesc>You can use the Full Text Search service (FTS) to create queryable full-text indexes in Couchbase Server.</shortdesc>
+    <title>
+        Searching from the SDK
+        
+    </title>
+    
+    <titlealts>
+        <navtitle>
+            Searching from the SDK
+        </navtitle>
+    </titlealts>
+    
+    <shortdesc>
+        The Java SDK provides an API that supports <i>Full Text Search</i>.
+    </shortdesc>
+    
+    
     <body>
-        <p>Couchbase offers Full-text search support, allowing you to search for documents that
-            contain certain words or phrases. In the Java SDK you can search full-text indexes by
-            using the <apiname>Bucket.query(SearchQuery)</apiname> API.</p>
-        <!-- <note conref="../shared/experimental-pars.dita#experimental/fts"/> -->
-        <p>Querying a FTS index through the Java client is performed through the <apiname>Bucket.query(SearchQuery q)</apiname>
-            method, providing a <apiname>SearchQuery</apiname>. Building a <apiname>SearchQuery</apiname> takes two
-            parameters, the index name to query and the actual search query itself (kind of a statement). Additional
-            search options may be specified by using the <apiname>SearchQuer</apiname> as a builder, chaining setters
-            for each relevant option.</p>
-        <p>This method returns a <apiname>SearchQueryResult</apiname> whose iterator yields the results of the query (in the
-            form of <apiname>SearchQueryRow</apiname> objects). It also exposes a <codeph>status()</codeph> for the request,
-            some execution <codeph>metrics()</codeph> and <codeph>facets()</codeph> results if some facets have been requested.
-            Instead of iterating directly on the result, you can access rows as a list through the <codeph>hits()</codeph> method,
-            and in case of execution errors you can inspect the error messages in the <codeph>errors()</codeph> method. Note that
-            partial results can happen in this case (and hits() will return them). Instead of getting partial results through
-            <codeph>hits()</codeph>, one can combine results and errors and get an exception through the use of <codeph>hitsOrFail()</codeph>.
-        </p>
-        <p>The <apiname>SearchQueryRow</apiname> object contains the <codeph>index</codeph>, <codeph>id</codeph> and
-            <codeph>score</codeph> properties, respectively identifying the exact FTS index that returned the hit, the id of the
-            document that matched and a decimal score for the match. It also contains optional sections depending on the request
-            and the availability of all relevant settings in the FTS mapping. Those are <codeph>explanation()</codeph> (an
-            explanation of the plan followed by the FTS index to execute the query), <codeph>locations()</codeph> (a map-like
-            listing of the location of all matching terms inside each relevant field that was queried), <codeph>fragments()</codeph>
-            (a map-like listing of occurrences of the search terms in each field, with the context of the terms) and
-            <codeph>fields()</codeph> (a map of the complete value of each requested field). Most of these need that the index be
-            configured to store the data of a searched field.
-<codeblock outputclass="language-java">Bucket bkt = CouchbaseCluster.create("192.168.33.101").openBucket("travel-sample");
-MatchQuery fts = SearchQuery.match("term");
-SearchQueryResult result = bkt.query(new SearchQuery("travel-search", fts));
-for (SearchQueryRow row : result) {
-    System.out.println(row);
-}</codeblock>
-        </p>
-
-        <section><title>Query Types</title>There are many different flavours of search queries, and each can be constructed
-            through static factory methods in the <apiname>SearchQuery</apiname> class. All of these types derive from the
-            <apiname>AbstractFtsQuery</apiname> and can be found in the
-            <codeph>com.couchbase.client.java.search.queries.AbstractFtsQuery</codeph> package. It contains query classes
-            corresponding to those enumerated in <xref href="../full-text-search-overview.dita#full-text-search">the FTS
-            generic documentation</xref>. <p>It is important to distinguish between <i>query options</i> and general <i>search
-            options</i>. Some options affect the search process in general (such as the <parmname>limit</parmname>, indicating how
-            many results to return) while others only affect a specific query (such as <parmname>fuzziness</parmname> for a given
-            query). Because multiple queries can be combined in a single search operation, <i>query specific options</i> can be
-            specified only in the query object itself, while <i>search options</i> are specified at the level of the
-            <apiname>SearchQuery</apiname> class, using builder methods.
-<codeblock outputclass="language-java">Bucket bkt = CouchbaseCluster.create("192.168.33.101").openBucket("travel-sample");
-MatchQuery fts = SearchQuery.match("term")
-    //query options:
-    .fuzziness(2).field("content");
-SearchQuery query = new SearchQuery("travel-search", fts)
-    //search options:
-    //will show value for activity and country fields
-    .fields("activity", "country")
-    //will have max 3 hits
-    .limit(3);
-
-SearchQueryResult result = bkt.query(query);
-for (SearchQueryRow row : result) {
-    System.out.println(row);
-}</codeblock></p>
-
-        <p>Here's some sample output for the previous query:</p>
-        <screen>DefaultSearchQueryRow{index='travel-search_33760129d0737bff_b7ff6b68', id='landmark_11778', score=0.0313815325019958, explanation={}, \
-locations=DefaultHitLocations{size=3, locations=[HitLocation{field='content', term='tea', pos=39, start=254, end=257},HitLocation{field='content', \
-term='teas', pos=56, start=353, end=357},HitLocation{field='content', term='tart', pos=17, start=95, end=99}]}, fragments={}, fields={activity=eat, \
-country=United States}}
-
-DefaultSearchQueryRow{index='travel-search_33760129d0737bff_b7ff6b68', id='landmark_25547', score=0.02536160834515202, explanation={}, \
-locations=DefaultHitLocations{size=3, locations=[HitLocation{field='content', term='tea', pos=33, start=191, end=194},HitLocation{field='content', \
-term='try', pos=30, start=177, end=180},HitLocation{field='content', term='per', pos=57, start=337, end=340}]}, fragments={}, fields={activity=eat, \
-country=United States}}
-
-DefaultSearchQueryRow{index='travel-search_33760129d0737bff_8b80958a', id='landmark_26854', score=0.02079624734659704, explanation={}, \
-locations=DefaultHitLocations{size=10, locations=[HitLocation{field='content', term='trim', pos=227, start=1255, end=1259},HitLocation{field='content', \
-term='steam', pos=7, start=41, end=46},HitLocation{field='content', term='steam', pos=38, start=213, end=218},HitLocation{field='content', \
-term='steam', pos=74, start=424, end=429},HitLocation{field='content', term='steam', pos=93, start=532, end=537},HitLocation{field='content', \
-term='steam', pos=114, start=651, end=656},HitLocation{field='content', term='steam', pos=126, start=715, end=720},HitLocation{field='content', \
-term='steam', pos=145, start=819, end=824},HitLocation{field='content', term='steam', pos=300, start=1611, end=1616},HitLocation{field='content', \
-term='team', pos=59, start=335, end=339}]}, fragments={}, fields={activity=see, country=United States}}</screen>
+        
+        <section id="using-full-text-search-from-the-java-sdk">
+            
+            <title>
+                Using Full Text Search from the Java SDK
+            </title>
+            
+            <p>
+                By means of the Java SDK, Full Text Search queries can be performed on
+                Full Text Indexes; and result-sets sorted.
+            </p>
+            
+            <p>
+                A general introduction to Full Text Search, with pointers to detailed descriptions of its
+                principal features, is provided in
+                <xref href="../../fts/full-text-intro.dita" scope="local" format="dita">Full Text Search: Fundamentals</xref>.
+            </p>
+            
+            <p>
+                The current page features a code example that demonstrates the Java SDK Full Text Search
+                API. The example assumes that Couchbase Server is running, and that 
+                the username <codeph>Administrator</codeph> and
+                the password <codeph>password</codeph> provide authorization for performing the searches. 
+                It also assumes that the <codeph>travel-sample</codeph> bucket
+                has been installed. 
+                For information on creating users and managing roles, see
+                <xref href="../../security/security-authorization.dita" scope="local" format="dita">Authorization</xref>.
+                For information on installing sample buckets, see
+                <xref href="../../settings/settings.dita" scope="local" format="dita">Settings</xref>. 
+            </p>
+            
+            <p>
+                The example also assumes the existence of three specific Full Text Indexes, defined on the
+                <codeph>travel-sample</codeph> bucket. These are:
+            </p>
+            
+            <ul>
+                <li>
+                    <codeph>travel-sample-index-unstored</codeph>: Uses only the default 
+                    settings.
+                
+                    <p>
+                        
+                    </p>
+                
+                </li>
+                
+                <li>
+                    <codeph>travel-sample-index-stored</codeph>: Uses default settings, with one exception: 
+                    dynamic fields are <i>stored</i>, for the whole index.
+                    
+                    <p>
+                        
+                    </p>
+                    
+                </li>
+                
+                <li>
+                    <codeph>travel-sample-index-hotel-description</codeph>: Indexes only the <codeph>description</codeph> 
+                    fields of <codeph>hotel</codeph>
+                    documents, and disables the <codeph>default</codeph> type mapping. The index 
+                    has a custom analyzer named <codeph>myUnicodeAnalyzer</codeph> defined on it: the analyzer's
+                    main characteristic is that it uses the <b>unicode</b> tokenizer. 
+                    
+                    <p>
+                        
+                    </p>
+                    
+                </li>
+            </ul>
+            
+            <p>
+                See
+                <xref href="../../fts/fts-creating-indexes.dita" scope="local" format="dita">Creating Indexes</xref>
+                for details on how to create these indexes: they can be created interactively, by 
+                means of the Couchbase Web Console; however, there may be greater efficiency 
+                in using the Couchbase REST 
+                API, as described 
+                in the section 
+                <xref href="../../fts/fts-creating-indexes.dita#topic_ksl_wwk_1v/index-creation-with-the-rest-api" scope="local" format="dita">Index Creation with the REST API</xref>.
+                The JSON objects that constitute index-definitions (for
+                inclusion as bodies to the index-creation REST calls), are provided in 
+                <xref href="../../fts/fts-demonstration-indexes.dita" scope="local" format="dita">Demonstration Indexes</xref>.
+            </p>
+            
+            <p>
+                The example features the following Full Text Searches on the 
+                <codeph>travel-sample</codeph> bucket, within Couchbase Server:
+            </p>
+            
+            <ul>
+                
+                <li>
+                    <i>Simple Text Query</i> on a single word, targeting an index with dynamic fields unstored.
+                    
+                    <p>
+                        
+                    </p>
+                </li>
+                
+                <li>
+                    <i>Simple Text Query on Non-Default Index</i>, specifying an index
+                    that consists only of content derived from a specific field from a
+                    specific document-type.
+                    
+                    <p>
+                        
+                    </p>
+                </li>
+                
+                <li>
+                    <i>Simple Text Query on Stored Field</i>, specifying the field to be searched; targeting an index with dynamic 
+                    fields stored, to ensure that field-content is included in the return object.
+                    
+                    <p>
+                        
+                    </p>
+                </li>
+                
+                <li>
+                    <i>Match Query with Facet</i>, showing how query-results can be displayed 
+                    either by row or by <i>hits</i>; 
+                    and demonstrating use of a <i>facet</i>, which provides aggregation-data.
+                    
+                    <p>
+                        
+                    </p>
+                </li>
+                
+                <li>
+                    <i>DocId Query</i>, showing results of a query on two document IDs.
+                    
+                    <p>
+                        
+                    </p>
+                </li>
+                
+                <li>
+                    <i>Unanalyzed Term Query with Fuzziness Level of 0</i>, demonstrating how to query on a term with no analysis. 
+                    <i>Zero fuzziness</i> is specified, to ensure
+                    that matches are exact.                     
+                    <p>
+                        
+                    </p>
+                </li>
+                
+                <li>
+                    <i>Unanalyzed Term Query with Fuzziness Level of 2</i>, which is almost identical to the immediately preceding query; but which this time
+                    specifies a <i>fuzziness</i> factor of 2, allowing partial matches
+                    to be made. The 
+                    output from this query can be compared to that of the one immediately preceding.
+                    <p>
+                        
+                    </p>
+                </li>
+                
+                <li>
+                    <i>Match Phrase Query, using Analysis</i>, for searching on a phrase.
+                    <p>
+                        
+                    </p>
+                </li>
+                
+                <li>
+                    <i>Phrase Query, without Analysis</i>, for searching on a phrase without analysis supported.
+                    <p>
+                        
+                    </p>
+                </li>
+                
+                <li>
+                    <i>Query String Query</i>, showing how a query string is specified as search-input. 
+                    <p>
+                        
+                    </p>
+                </li>
+                
+                <li>
+                    <i>Conjunction Query</i>, whereby two separate queries are defined and then run as part of the search,
+                    with only the matches returned by both included in the result-object. 
+                    <p>
+                        
+                    </p>
+                </li>
+               
+                
+                <li>
+                    <i>Wild Card Query</i>, whereby a wildcard is used in the string submitted for the search. 
+                    <p>
+                        
+                    </p>
+                </li>
+                
+                <li>
+                    <i>Numeric Range Query</i>, whereby minimum and maximum numbers are specified, and matches
+                    within the range returned. 
+                    <p>
+                        
+                    </p>
+                </li>
+                
+                <li>
+                    <i>Regexp Query</i>, whereby a <i>regular expression</i> is submitted, to generate the conditions for
+                    successful matches. 
+                    <p>
+                        
+                    </p>
+                </li>
+                
+            </ul>
         </section>
+        
+        <section id="java-fts-detailed-example">
+            
+            <title>
+                Detailed Example
+            </title>
+            
+            <p>
+                The following example demonstrates Full Text Search queries that
+                can be made with the Java SDK. 
+            </p>
+            
+            <codeblock outputclass="language-java">package com.couchbase.example.fts;
 
-        <section>
-            <title>Query Facets</title>
-            <p>Query <xref href="../full-text-search-overview.dita#facets">facets</xref> may also be
-            added to the <i>general search parameters</i> by using the <apiname>addFacet(String name, SearchFacet facet)</apiname>
-            builder method on <apiname>SearchQuery</apiname>. You can create facet queries by instantiating facets through factory
-            methods in the <apiname>SearchFacet</apiname> class.</p>
-            <codeblock outputclass="language-java">SearchQuery query = new SearchQuery("travel-search", fts)
-    //will have max 3 hits
-    .limit(3)
-    //will have a "category" facet on the top 3 countries in terms of hits
-    .addFacets(SearchFacet.term("countries", "country", 3));
-SearchQueryResult result = bkt.query(query);
-System.out.println(result.facets());</codeblock>
+import com.couchbase.client.java.Bucket;
+import com.couchbase.client.java.Cluster;
+import com.couchbase.client.java.CouchbaseCluster;
+import com.couchbase.client.java.search.SearchQuery;
+import com.couchbase.client.java.search.facet.SearchFacet;
+import com.couchbase.client.java.search.queries.*;
+import com.couchbase.client.java.search.result.SearchQueryResult;
+import com.couchbase.client.java.search.result.SearchQueryRow;
 
-            <p>Here is the facet part of the result from the query above:</p>
-            <screen>{countries=TermFacetResult{name='countries', field='country', total=451, missing=0, other=0, terms=[{name='United States', \
-                count=217}, {name='United Kingdom', count=188}, {name='France', count=46}]}}</screen>
+public class JavaFtsExamples {
+
+    public static void simpleTextQuery(Bucket bucket) {
+        String indexName = "travel-sample-index-unstored";
+        MatchQuery query = SearchQuery.match("swanky");
+
+        SearchQueryResult result = bucket.query(
+            new SearchQuery(indexName, query).limit(10));
+
+        printResult("Simple Text Query", result);
+    }
+
+    public static void simpleTextQueryOnStoredField(Bucket bucket) {
+        String indexName = "travel-sample-index-stored";
+        MatchQuery query = SearchQuery.match("MDG").field("destinationairport");
+
+        SearchQueryResult result = bucket.query(
+            new SearchQuery(indexName, query).limit(10).highlight());
+
+        printResult("Simple Text Query on Stored Field", result);
+    }
+
+    public static void simpleTextQueryOnNonDefaultIndex(Bucket bucket) {
+        String indexName = "travel-sample-index-hotel-description";
+        MatchQuery query = SearchQuery.match("swanky");
+
+        SearchQueryResult result = bucket.query(
+            new SearchQuery(indexName, query).limit(10));
+            
+            printResult("Simple Text Query on Non-Default Index", result);
+    }
+
+    public static void textQueryOnStoredFieldWithFacet(Bucket bucket) {
+        String indexName = "travel-sample-index-stored";
+        MatchQuery query = SearchQuery.match("La Rue Saint Denis!!")
+            .field("reviews.content");
+
+        SearchQueryResult result = bucket.query(
+        new SearchQuery(indexName, query).limit(10).highlight()
+            .addFacet("Countries Referenced", SearchFacet.term("country", 5)));
+
+        printResult("Match Query with Facet, Result by Row", result);
+
+        System.out.println();
+        System.out.println("Match Query with Facet, Result by hits:");
+        System.out.println(result.hits());
+
+        System.out.println();
+        System.out.println("Match Query with Facet, Result by facet: ");
+        System.out.println(result.facets());
+    }
+
+    public static void docIdQueryMethod(Bucket bucket) {
+        String indexName = "travel-sample-index-unstored";
+        DocIdQuery query = SearchQuery.docId("hotel_26223", "hotel_28960");
+
+        SearchQueryResult result = bucket.query(
+            new SearchQuery(indexName, query));
+
+        printResult("DocId Query", result);
+    }
+
+    public static void unAnalyzedTermQuery(Bucket bucket, int fuzzinessLevel) {
+        String indexName = "travel-sample-index-stored";
+        TermQuery query = SearchQuery.term("sushi").field("reviews.content")
+            .fuzziness(fuzzinessLevel);
+
+        SearchQueryResult result = bucket.query(
+            new SearchQuery(indexName, query).limit(50).highlight());
+
+        printResult("Unanalyzed Term Query with Fuzziness Level of " 
+            + fuzzinessLevel + ":", result);
+    }
+
+    public static void matchPhraseQueryOnStoredField(Bucket bucket) {
+        String indexName = "travel-sample-index-stored";
+        MatchPhraseQuery query = SearchQuery.matchPhrase("Eiffel Tower")
+            .field("description");
+
+        SearchQueryResult result = bucket.query(
+            new SearchQuery(indexName, query).limit(10).highlight());
+
+        printResult("Match Phrase Query, using Analysis", result);
+    }
+
+    public static void unAnalyzedPhraseQuery(Bucket bucket) {
+        String indexName = "travel-sample-index-stored";
+        PhraseQuery query = SearchQuery.phrase("dorm", "rooms")
+            .field("description");
+
+        SearchQueryResult result = bucket.query(
+            new SearchQuery(indexName, query).limit(10).highlight());
+
+        printResult("Phrase Query, without Analysis", result);
+    }
+
+    public static void conjunctionQueryMethod(Bucket bucket) {
+        String indexName = "travel-sample-index-stored";
+        MatchQuery firstQuery = SearchQuery.match("La Rue Saint Denis!!")
+            .field("reviews.content");
+        MatchQuery secondQuery = SearchQuery.match("boutique")
+            .field("description");
+
+        ConjunctionQuery conjunctionQuery = 
+            SearchQuery.conjuncts(firstQuery, secondQuery);
+
+        SearchQueryResult result = bucket.query(
+            new SearchQuery(indexName, conjunctionQuery).limit(10).highlight());
+
+        printResult("Conjunction Query", result);
+    }
+
+    public static void queryStringMethod(Bucket bucket) {
+        String indexName = "travel-sample-index-unstored";
+        QueryStringQuery query = SearchQuery.queryString("description: Imperial");
+
+        SearchQueryResult result = bucket.query(
+        new SearchQuery(indexName, query).limit(10));
+
+        printResult("Query String Query", result);
+    }
+
+    public static void wildCardQueryMethod(Bucket bucket) {
+        String indexName = "travel-sample-index-stored";
+        WildcardQuery query = SearchQuery.wildcard("bouti*ue").field("description");
+
+        SearchQueryResult result = bucket.query(
+        new SearchQuery(indexName, query).limit(10).highlight());
+
+        printResult("Wild Card Query", result);
+    }
+
+    public static void numericRangeQueryMethod(Bucket bucket) {
+        String indexName = "travel-sample-index-unstored";
+        NumericRangeQuery query = SearchQuery.numericRange().min(10100).max(10200)
+            .field("id");
+
+        SearchQueryResult result = bucket.query(
+            new SearchQuery(indexName, query).limit(10));
+
+        printResult("Numeric Range Query", result);
+    }
+
+    public static void regexpQueryMethod(Bucket bucket) {
+        String indexName = "travel-sample-index-stored";
+        RegexpQuery query = SearchQuery.regexp("[a-z]").field("description");
+
+        SearchQueryResult result = bucket.query(
+            new SearchQuery(indexName, query).limit(10).highlight());
+
+        printResult("Regexp Query", result);
+    }
+
+    private static void printResult(String label, SearchQueryResult resultObject) {
+        System.out.println();
+        System.out.println("= = = = = = = = = = = = = = = = = = = = = = =");
+        System.out.println("= = = = = = = = = = = = = = = = = = = = = = =");
+        System.out.println();
+        System.out.println(label);
+        System.out.println();
+        
+        for (SearchQueryRow row : resultObject) {
+            System.out.println(row);
+        }
+    }
+
+    public static void main(String[] args) {
+        // Access the cluster that is running on the local host, authenticating with
+        // the username and password of any user who has the "FTS Searcher" role
+        // for the "travel-sample" bucket...
+        //
+        Cluster cluster = CouchbaseCluster.create("localhost");
+        cluster.authenticate("Administrator", "password");
+        Bucket travelSample = cluster.openBucket("travel-sample");
+        
+        simpleTextQuery(travelSample);
+        
+        simpleTextQueryOnStoredField(travelSample);
+        
+        simpleTextQueryOnNonDefaultIndex(travelSample);
+        
+        textQueryOnStoredFieldWithFacet(travelSample);
+        
+        docIdQueryMethod(travelSample);
+        
+        unAnalyzedTermQuery(travelSample, 0);
+        
+        unAnalyzedTermQuery(travelSample, 2);
+        
+        matchPhraseQueryOnStoredField(travelSample);
+        
+        unAnalyzedPhraseQuery(travelSample);
+        
+        conjunctionQueryMethod(travelSample);
+        
+        queryStringMethod(travelSample);
+        
+        wildCardQueryMethod(travelSample);
+        
+        numericRangeQueryMethod(travelSample);
+        
+        regexpQueryMethod(travelSample);
+        
+        cluster.disconnect();
+    }
+}</codeblock>
         </section>
 
 	</body>

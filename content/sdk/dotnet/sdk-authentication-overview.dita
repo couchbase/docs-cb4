@@ -17,6 +17,9 @@
         <section conref="../shared/reusable/sdk-authentication-overview.dita#sdk_authentication/RBAC_and_the_SDK">
         </section>
         
+        <section conref="../shared/reusable/sdk-authentication-overview.dita#sdk_authentication/authenticating_with_legacy_sdk_versions">   
+        </section>
+        
         <section>
             
             <title>
@@ -24,15 +27,37 @@
             </title>
             
             <p>
-                The Couchbase SDK provides enhanced support for authentication. Exact procedures differ 
-                slightly, according to the language 
-                used. Code examples for .NET can be found in 
+                The most recent versions of the SDK are RBAC-enabled, and provide 
+                enhanced support for authentication. Code examples for .NET can be found in 
                 <xref href="./start-using-sdk.dita" scope="local" format="dita">Getting Started with the SDK</xref>,
                 and also as part of the
                 <xref href="./sdk-user-management-example.dita" scope="local" format="dita">Sample Code</xref>
                 provided to demonstrate user management.
             </p>
             
+        </section>
+        
+        <section id="dotnet_upgrading_to_rbac_sdk_versions">
+            <title>
+                Upgrading to RBAC-Enabled SDK-Versions
+            </title>
+            
+            <p>
+                The last pre-RBAC version of the .NET SDK was 2.4.2. The first 
+                RBAC-enabled 
+                version was
+                2.4.4. See the SDK 
+                <xref href="/server/other-products/release-notes-archives/dotnet-sdk" format="html" scope="peer">Release Notes</xref>
+                for more information.
+            </p>
+            
+            <p>
+                With the most recent versions of the SDK, the legacy authentication interface
+                and
+                the new, optimized authentication
+                interface can both be used: each supports access to buckets on Couchbase Servers
+                whose version is either 5.0 and beyond, or pre-5.0.
+            </p>
         </section>
         
         <section>
@@ -76,6 +101,126 @@
                 </li>
             </ul>
         </section>
+        
+        
+        <section>
+            <title>
+                Certificate-Based Authentication
+            </title>
+            
+            <p>
+                Couchbase Server supports the use of X.509 certificates to authenticate clients. This allows
+                authenticated users to access specific resources by means of the data service (no other service
+                is currently available to clients through this form of authentication). 
+            </p>
+            
+            <p>    
+                The process relies on a certificate
+                authority, for the issuing of certificates that validate identities. A certificate includes
+                information such as the name of the entity it identifies, an expiration date, the name of the authority
+                that issued the certificate, and the digital signature of the authority.
+                A client attempting to access Couchbase Server can present a certificate to the server, allowing
+                the server to check the validity of the certificate. If the certificate is valid, the user
+                under whose identity the client is running,
+                and the roles assigned that user, are verified. If the assigned roles are appropriate for
+                the level of access requested to the specified resource, access is granted.
+            </p>
+            
+            <p>
+                Note that this means that the explicit authentication process otherwise required by Couchbase <i>Role-Based
+                    Access Control</i> &#8212; whereby, in .NET, username and password are passed by means of the 
+                <codeph>authenticate</codeph> method on the <codeph>Cluster</codeph> object &#8212; is not needed.
+                (See
+                <xref href="./start-using-sdk.dita" scope="local" format="dita">Start Using the SDK</xref> for
+                an example of such standard authentication.)
+            </p>
+            
+            <p>
+                For a more detailed conceptual description of using certificates, see
+                <xref href="../../security/security-certs-auth.dita" scope="local" format="dita">Certificate-Based
+                    Authentication</xref>.
+            </p>
+            
+            <p>
+                For sample procedures whereby certificates can be generated and deployed, see
+                <xref href="../../security/security-x509certsintro.dita" scope="local" format="dita">X.509 for TLS</xref>.
+                Note that this page includes the steps whereby a Java keystore is created, to enable
+                certificate-based authentication by a Java client; for Windows there are a couple of more steps: 
+                you’ll need to generate a Personal Information Exchange (.PFX) file and store that in the Windows 
+                cert store.
+
+            </p>
+            
+        </section>
+        
+        <section>
+            <title>
+                Authenticating a .NET Client by Certificate
+            </title>
+            
+            <p>
+                To authenticate with Couchbase Server by means of a client certificate, you will need
+                a key - although the key can be generated following the instructions  on the 
+                <xref href="../../security/security-x509certsintro.dita" scope="local" format="dita">X.509 for TLS page</xref>,
+                you do not need a Java Key Store.
+            </p>
+            <p>Once you have generated the <codeph>.pem</codeph> file, for windows you'll need to use it to create a 
+                <codeph>.pfx</codeph>:
+                <codeblock outputclass="language-bash">openssl pkcs12 -export -in cert.cer -inkey key.pem -out certificate.pfx -certfile CA.cer
+                </codeblock></p>
+            <p>The .pfx is then stored in the Windows certificate store of the application server by copying it to that server and 
+                then right clicking on the file and selecting "Install Certificate" and following the steps (there are a couple 
+                of ways to do this, but this is the simplest).</p>
+            <p>Once the .pfx is installed, the client configuration will have to be changed to use cert as opposed to the 
+                usual Username and Password:
+                <codeblock outputclass="language-csharp">    var config = new ClientConfiguration
+            {
+                UseSsl = true
+            };
+ 
+            ClientConfiguration.IgnoreRemoteCertificateNameMismatch = true;//ignore for now
+ 
+            config.BucketConfigs["default"].EnableCertificateAuthentication = true;
+            config.BucketConfigs["default"].CertificateFactory = CertificateFactory.GetCertificatesByPathAndPassword(
+                new PathAndPasswordOptions
+                {
+                    Path = TestContext.CurrentContext.TestDirectory + "\\client.pfx",
+                    Password = "password"
+                });
+            var cluster = new Cluster(config);
+ 
+            var bucket = cluster.OpenBucket();
+                </codeblock></p>
+        </section>
+            
+        <section>
+            <title>
+                Using a Different Certificate Factory
+            </title>
+            
+            <p>Note that there is also a way to query the cert store directly by using a different certificate factory:
+                <codeblock outputclass="language-csharp">var config = new ClientConfiguration
+            {
+                UseSsl = true
+            };
+ 
+            ClientConfiguration.IgnoreRemoteCertificateNameMismatch = true;//ignore for now
+ 
+            config.BucketConfigs["default"].EnableCertificateAuthentication = true;
+            config.BucketConfigs["default"].CertificateFactory = CertificateFactory.GetCertificatesFromStore(
+                new CertificateStoreOptions
+                {
+                    StoreLocation = StoreLocation.LocalMachine,
+                    StoreName = StoreName.Root,
+                    X509FindType = X509FindType.FindByIssuerName,
+                    FindValue = "MyCompanyIntermediateCA"
+                });
+            var cluster = new Cluster(config);
+ 
+            var bucket = cluster.OpenBucket();</codeblock></p>
+                
+        </section>
+        
     </body>
         
 </topic>

@@ -69,5 +69,62 @@ Got a row
 Got a row
 All rows received. Metadata is {"requestID":"79914eb3-6204-4dc7-b9e6-b4680b6509a0","signature":{"*":"*"},"status":"success","metrics":{"elapsedTime":"8.631682ms","executionTime":"8.593926ms","resultCount":10,"resultSize":3002}}:</screen></p>
         </section>
-    </body>
+        <section>
+          <title>CAS via N1QL</title>
+            <p>For N1QL queries, the Node.js SDK accepts CAS values as strings. This is necessary as CAS values are 
+                too large to be represented by numerical values in JavaScript. The following example illustrates 
+                working with CAS values as strings.<codeblock>'use strict';
+
+var couchbase = require('couchbase');
+
+var cluster = new couchbase.Cluster('couchbase://localhost');
+cluster.authenticate('Administrator', 'password');
+
+
+var bucket = cluster.openBucket('travel-sample');
+
+// Insert a document with a random x value
+bucket.upsert('test-doc', {x: Math.round(Math.random()*10000000)}, function(err, res) {
+  if (err) {
+    throw err;
+  }
+
+  var qs = 'SELECT t.*, TOSTRING(META().cas) AS `_cas` FROM `travel-sample` t WHERE META().id="test-doc"';
+  var q = couchbase.N1qlQuery.fromString(qs);
+  q.consistency(couchbase.N1qlQuery.Consistency.REQUEST_PLUS);
+  bucket.query(q, function(err, rows) {
+    if (err) {
+      throw err;
+    }
+
+    if (rows.length !== 1) {
+      throw new Error('unexpected number of rows');
+    }
+
+    console.log('Query Result:', rows[0]);
+
+    var cas = rows[0]._cas;
+    var doc = rows[0];
+    delete(doc._cas);
+    doc.y = doc.x;
+
+    bucket.replace('test-doc', doc, {cas: cas}, function(err) {
+      if (err) {
+        throw err;
+      }
+
+      bucket.get('test-doc', function(err, res) {
+        if (err) {
+          throw err;
+        }
+
+        console.log('Updated:', res.value);
+
+        process.exit(0);
+      });
+    });
+  });
+});</codeblock></p>
+      </section>
+   </body>
 </topic>
