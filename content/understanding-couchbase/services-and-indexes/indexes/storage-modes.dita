@@ -22,34 +22,35 @@
         Memory-optimized index-storage allows high-speed maintenance and scanning; since the index is
         kept fully in memory at all times. A snapshot of the index is maintained
         on disk, to permit rapid recovery if node-failures are experienced. Memory-optimized index-storage
-        may be considered the better option, on nodes where the Index Service memory quota is sufficient
-        for the number and complexity of resident indexes, and the intensity with which they are
-        updated and scanned.
+        may be considered the better option when all nodes running the Index Service have a memory quota sufficient
+        for the number, size, and complexity of their resident indexes, and for the intensity with which the indexes will
+        be updated and scanned.
       </p>
       
       <p>
         However, memory-optimized index-storage may be problematic on nodes where memory is
         constrained:
         whenever 
-        the Index Service memory-quota is exceeded, indexes on the node become unable to
-        process changes, and an error-notification is provided. Though the indexes remain in
+        the Index Service memory-quota is exceeded, indexes on the node can neither be updated nor scanned, 
+        and an error-notification is provided. Though the indexes remain in
         <codeph>ONLINE</codeph> state, traffic is routed away from the node. In such cases,
-        memory needs to be freed.
+        memory needs to be freed for index-operations be resumed.
       </p>
       
       <p>
         In cases where an Index-Service node needs to be restarted, its resident memory-optimized indexes 
         are rebuilt from the snapshot retained on disk. 
         These indexes remain in the <codeph>BUILDING</codeph> state 
-        until all information has been read into memory: then, final updates occur with the indexes in ONLINE state.
+        until all information has been read into memory: then, final updates occur with the indexes in 
+        <codeph>ONLINE</codeph> state.
         From this point, queries with <codeph>consistency=request_plus</codeph> or
-        <codeph>consistency=at_plus</codeph> fail, if the timestamp specified exceeds the last
-        timestamp processed by the specific index on the node. However, queries with
+        <codeph>consistency=at_plus</codeph> fail, if the specified timestamp exceeds the last
+        timestamp processed by given index. However, queries with
         <codeph>consistency=unbounded</codeph> execute normally.
       </p>
       
       <p>
-        The following measures may be considered, in order to recover from an out-of-memory situation: 
+        The following procedures may assist in recovering from an out-of-memory situation: 
       </p>
       
       <p>
@@ -87,8 +88,8 @@
             
             <p>
               Note that attempting to delete bucket-data <i>selectively</i> during an out-of-memory condition does
-              not succeed in decreasing memory-usage: such requested deletions, given the absence of memory,
-              cannot be processed.
+              not succeed in decreasing memory-usage; since without memory, such requested deletions 
+              cannot themselves be processed.
             </p>
               
             <p>
@@ -107,7 +108,7 @@
       
       <p>
         <i>Standard</i> is the default storage-setting for Secondary Indexes: the indexes are
-        saved on disk; in a disk-optimized format that uses both memory and disk for index-maintenance
+        saved on disk; in a disk-optimized format that uses both memory and disk for index-update
         and scanning.
       </p>
       
@@ -117,31 +118,35 @@
         depends on overall I/O performance. Each index saved with the <i>standard</i> option
         has two write modes: 
       </p>
+      
+      <p>
+        
+      </p>
         
         <ul>
+
+          
           <li>
-            <b>Append-only Write Mode</b>: Similar to disk-writes
-            implemented in the data service. All changes are written to the
+            <b>Circular Write Mode</b>: Writes changes to the end of the index-file, until
+            the relative index fragmentation exceeds 65%. <i>Block reuse</i> is
+            then triggered: new data is written into stale blocks where possible,
+            rather than to the end of the file, optimizing I/O throughput.
+            Full compaction runs once daily, on each day specified in the
+            <i>circular mode time interval setting</i>: note, however, that the index-fragmentation
+            data-size typically remains constant.
+            
+            <p>
+            </p>
+            
+          </li>
+          
+          <li>
+            <b>Append-only Write Mode</b>: All changes are written to the
             end of the index-file, invalidating
             existing pages within the index file, and requiring frequent, full compaction.
             
             <p>
             </p>
-          </li>
-          
-          <li>
-            <b>Circular Write Mode</b>: Writes changes to the end of the index-file, until
-            the relative index fragmentation (<codeph>stale
-            data size</codeph> / <codeph>total file size</codeph>) exceeds 65%. <i>Block reuse</i> is
-            then triggered: which means that new data is written into stale blocks where possible,
-            rather than to the end of the file, optimizing I/O throughput.
-            Full compaction is run once a day on each of the days specified as part of the
-            <i>circular mode time interval setting</i>: note, however, that the index fragmentation
-            data size will likely not decrease.
-            
-            <p>
-            </p>
-            
           </li>
           
         </ul>
@@ -151,10 +156,6 @@
         Write Mode is provided for backward compatibility with previous versions.
       </p>
       
-      <p>
-        When assigning indexes to nodes, note the disk I/O bandwidth on the node;
-        as well as figures for CPU, memory, and other resources.
-      </p>
       
     </section>
     
@@ -162,19 +163,18 @@
     <section>
       
       <title>
-        Changing the Index Storage Setting
+        Changing Index Storage Settings
       </title>
       
       <p>
-        The <b>Index Storage Setting</b>
-        is a cluster-level setting, established at cluster-initialization for
-        all indexes on the cluster, across all buckets. The setting
-        cannot be changed dynamically. To change from one option to the other following
+        Settings
+        are established at cluster-initialization for
+        all indexes on the cluster, across all buckets. 
+        To change from one setting to the other following
         cluster-initialization, all nodes running the Index Service must be removed. If
         the cluster is single-node, this means uninstalling and reinstalling Couchbase
-        Server. When the cluster features multiple nodes, only a subset of which contain
-        the Index Service, the 
-        procedure is as follows:
+        Server. If the cluster is multi-node, and only some of the nodes contain
+        the Index Service, the procedure is as follows:
       </p>
       
       <p>
