@@ -1,150 +1,211 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_frt_5tr_zz">
-  <title>Index Storage Modes</title>
-  <shortdesc>A key feature of global secondary indexes is the ability to change the underlying
-    storage method to best suit your indexing needs. Both a memory-optimized storage engine and a
-    disk-optimized (standard) storage engine are available.</shortdesc>
+  
+  <title>
+    Index Storage Settings
+  </title>
+  
+  <shortdesc>
+    A Secondary Index can be saved in either of two ways: <i>standard</i>
+    or <i>memory-optmized</i>.    
+  </shortdesc>
+  
   <body>
-    <section id="memopt-gsi"><title>Memory-Optimized Global Indexes</title>
-      <p>Memory optimized global secondary indexes is an additional storage setting for Couchbase
-        Server clusters. Memory optimized global secondary indexes (also called memory optimized
-        indexes or MOI) can perform index maintenance and index scan faster at in-memory speeds.</p>
-      <p><b>Memory Optimized Global Secondary Index Performance</b></p>
-      <p>There are several performance advantages to using memory optimized global secondary
-        indexes: <ul>
-          <li>MOIs use a memory efficient index structure for a lock-free index
-            maintenance and index scan. Memory optimized indexes also provide a much more predictable 
-            latency with queries as they never reach into disk for index scans.</li>
-      <li>MOIs store a snapshot of the index on disk. However writes to storage
-        are done purely for crash recovery and is not in the critical path of latency of index
-        maintenance or index scans. The snapshots on disk are used to avoid rebuilding the whole index when
-        an index node experiences failure.</li>
-      <li>In short, MOIs run at in-memory speeds and perform an order of magnitude faster
-        in several cases compared to standard global secondary indexes.</li>
-        </ul></p>
-      <p>With memory optimized global secondary indexes, it is important to monitor memory usage
-        over time. Memory optimized indexes have to reside in memory. Indexes on a given node will
-        stop processing further mutations, if the node runs out of index RAM quota. The index
-        maintenance is paused until enough free memory becomes available on the node. 
-        There are two important metrics you need to monitor to detect the issues: <ul>
-          <li><codeph>MAX Index RAM Used %</codeph>: Reports the max ram quota used in percent (%) through the
-            cluster and on each node both real-time and with a history over minutes, hours, days,
-            weeks and more. </li>
-          <li><codeph>Remaining Index RAM</codeph>: Reports the free index RAM quota for the cluster as a total and
-            on each node both real-time and with a history over minutes, hours, days weeks and more.
-          </li>
-        </ul></p>
-      <p>If a node is approaching high percent usage of Index RAM Quota, a warning is displayed in the web console,
-        so that remedial action can be taken. Below are a few suggestions for steps which can be taken:<ul>
-        <li>You can increase the RAM quota for the index service on the node to give
-          indexes more RAM. </li>
-        <li>You can place some of the indexes on the node onto other index nodes with more RAM
-          available.</li>
-          <li>Drop few indexes from the index node which is in the Paused state.</li>
-          <li>Flush the bucket on which indexes of the Paused node are created.</li>
-        </ul></p>
-      <p><b>Handling Out-of-Memory Conditions</b></p>
-      <p>Memory-optimized global indexes reside in memory. When a node running the index service
-        runs out of configured Index RAM Quota on the node, indexes on the node can no longer
-        process additional changes to the indexes on the node that has run out of memory. The index
-        service logs an error in the Couchbase Server log indicating the condition. You can also
-        observe how much memory is available on each node running the index service using the index
-        statistic Max Index RAM Used % under "Server Resources" stat section of bucket
-        statistics.</p>
-      <p>Memory-optimized indexes on a node that has run out of memory continue to stay in the
-        ONLINE state. However, the round-robin logic routes traffic away from this index node. If an
-        index is in OFFLINE, DEFERRED, or BUILDING state, the index is not transitioned to the
-        ONLINE state. </p>
-      <p>When the node is restarted, the indexes stay in the BUILDING state until the last persisted
-        snapshot is read from disk into memory. The additional catchup is done in ONLINE state.
+    <section id="memopt-gsi2">
+      
+      <title>
+        Memory-Optimized Index Storage
+      </title>
+      
+      <p>
+        Memory-optimized storage allows high-speed maintenance and scanning; since the index is
+        kept fully in memory at all times. A snapshot of the index is maintained
+        on disk, to permit rapid recovery if node-failures are experienced.
+        
+      </p>
+      
+      <p>
+        Memory-optimized global indexes reside in memory. When a node running the index service
+        exceeds the index memory quota for the node, indexes on the node can no longer
+        process additional changes. The index
+        service logs an error, indicating the condition. Available memory for each Index Service-node
+        is provided on the <b>Statistics</b> screen, accessible from the <b>Buckets</b> page, in the Couchbase
+        Web Console, as the
+        <b>Max Index RAM Used %</b> statistic.
+      </p>
+      
+      <p>
+        When an Index Service-node has run out of memory, memory-optimized indexes continue in the
+        <codeph>ONLINE</codeph> state. However, traffic is routed away from this node. 
+      </p>
+      
+      <p>
+        When the node is restarted, the indexes stay in the <codeph>BUILDING</codeph> state until the last persisted
+        snapshot is read from disk into memory. Additional catch-up is done in ONLINE state.
         Queries with <codeph>consistency=request_plus</codeph> or
-          <codeph>consistency=at_plus</codeph> fail if the timestamp specified exceeds the last
+        <codeph>consistency=at_plus</codeph> fail if the timestamp specified exceeds the last
         timestamp processed by the specific index on the node. However, queries with
-          <codeph>consistency=unbounded</codeph> continue to execute normally.</p>
-      <p>To recover from an out-of-memory situation, use one or more of the following fixes: <ul
-        id="ul_aps_f5g_sw">
-        <li>Increase the Index RAM Quota sufficiently enough to give indexes the additional memory
-          to process requests.</li>
-        <li>Drop other indexes on the node to free up memory. On nodes with multiple indexes, drop
-          the unimportant indexes to free memory.</li>
-        <li>Drop buckets with indexes. Dropping a bucket automatically drops all the dependent
-          indexes and has the same effect as dropping all indexes on a bucket.</li>
-        <li>Flush buckets with indexes. Flushing a bucket deletes all data in a bucket. Even if
-          there are pending updates that are not processed, flushing a bucket causes all indexes
-          to drop their data. <note type="important">Deleting data selectively from buckets will
-            not decrease the memory usage in an out-of-memory condition. Mutations are processed
-            in sequence and indexes can not process mutations in an out-of-memory
-            condition.</note></li>
-      </ul></p>
+        <codeph>consistency=unbounded</codeph> continue to execute normally.
+      </p>
+      
+      <p>
+        To recover from an out-of-memory situation, one or more of the following can be used: 
+      </p>
+        
+        <ul id="ul_aps_f5g_sw2">
+          
+          <li>
+            Increase the index memory quota, to give indexes the additional memory
+            to process requests.
+          </li>
+          
+          <li>
+            Drop the less important indexes from the node, to free up memory. 
+          </li>
+          
+          <li>
+            Drop buckets with indexes. Dropping a bucket automatically drops all the dependent
+            indexes, and has the same effect as dropping all indexes on a bucket.
+          </li>
+          
+          <li>
+            Flush buckets with indexes. Flushing a bucket deletes all data in a bucket. Even if
+            there are pending updates that are not processed, flushing a bucket causes all indexes
+            to drop their data. 
+            
+            <note type="important">Deleting data selectively from buckets will
+              not decrease the memory usage in an out-of-memory condition. Mutations are processed
+              in sequence and indexes cannot process mutations in an out-of-memory
+              condition.</note>
+          </li>
+          
+        </ul>
+        
+ 
+      
     </section>
-    <section id="std-gsi"><title>Standard Global Secondary Indexes</title>
-      <p>Standard global secondary indexes is the default storage setting for Couchbase Server
-        clusters. Standard global secondary indexes can index larger data sets as long as there 
-        is disk space available to store the index.</p>
-      <p>Standard global secondary indexes use a disk optimized format that can utilize both memory
-        and persistent storage for index maintenance and index scans.</p>
-
-      <p><b>Standard Global Secondary Index Performance</b></p>
-      <p>Different from the memory-optimized storage setting for GSI, the performance of standard
-        GSIs depend heavily on the IO subsystem performance. Standard GSIs come with 2 write modes: <ul>
-          <li><b>Append-only Write Mode</b>: Append-only write mode is similar to the writes to
-            storage in the data service. In append-only write mode, all changes are written to the
-            end of the index file (or appended to the index file). Append-only writes invalidate
-            existing pages within the index file and require frequent full compaction.</li>
-          <li><b>Circular Write Mode</b>: Circular write mode optimizes the IO throughput (IOPS and
-            MB/sec) required to maintain the index on storage by reusing stale blocks in the file.
-            Stale blocks are areas of the file that contain data which is no longer relevant to the
-            index, as a more recent version of the same data has been written in another block.
-            Compaction needs to run less frequently under circular write mode as the storage engine
-            avoids appending new data to the end of the file. <p>In circular write mode, data is
-              appended to the end of the file until the relative index fragmentation (<codeph>stale
-                data size</codeph> / <codeph>total file size</codeph>) exceeds 65%. Block reuse is
-              then triggered which means that new data is written into stale blocks where possible,
-              rather than appended to the end of the file.</p><p>In addition to reusing stale
-              blocks, full compaction is run once a day on each of the days specified as part of the
-              circular mode time interval setting. This full compaction <b>does not</b> make use of
-              the fragmentation percent setting, unlike append-only write mode. Between full
-              compaction runs, the index fragmentation statistic will not decrease and will likely
-              display 65% most of the time, this particular metric is not relevant for indexes using
-              circular write mode.</p></li>
-        </ul>By default, Couchbase Server uses the circular write mode for standards GSIs. Append
-        only write mode is provided for backward compatibility with previous versions.</p>
-      <p>When placing indexes, it is important to note the disk IO "bandwidth" remaining on the node
-        as well as CPU, RAM and other resources.</p>
+    
+    <section id="std-gsi2">
+      
+      <title>
+        Standard Index Storage
+      </title>
+      
+      <p>
+        <i>Standard</i> is the default storage-setting for Secondary Indexes: the indexes are
+        saved on disk; in a disk-optimized format that uses both memory and disk for index-maintenance
+        and scanning.
+      </p>
+      
+      
+      <p>
+        The performance of standard index storage
+        depends on overall I/O performance. Each index saved with the <i>standard</i> option
+        has two write modes: 
+        
+        <ul>
+          <li>
+            <b>Append-only Write Mode</b>: Similar to disk-writes
+            implemented in the data service. All changes are written to the
+            end of the index-file, invalidating
+            existing pages within the index file, and requiring frequent, full compaction.
+            
+            <p>
+            </p>
+          </li>
+          
+          <li>
+            <b>Circular Write Mode</b>: Writes changes to the end of the index-file, until
+            the relative index fragmentation (<codeph>stale
+            data size</codeph> / <codeph>total file size</codeph>) exceeds 65%. <i>Block reuse</i> is
+            then triggered: which means that new data is written into stale blocks where possible,
+            rather than to the end of the file, optimizing I/O throughput.
+            Full compaction is run once a day on each of the days specified as part of the
+            <i>circular mode time interval setting</i>: note, however, that the index fragmentation
+            data size will likely not decrease.
+            
+            <p>
+            </p>
+            
+          </li>
+          
+        </ul>
+        
+        By default, Couchbase Server uses Circular Write Mode for standard index storage. Append-only
+        Write Mode is provided for backward compatibility with previous versions.
+      </p>
+      
+      <p>
+        When assigning indexes to nodes, note the disk I/O bandwidth on the node;
+        as well as figures for CPU, memory, and other resources.
+      </p>
+      
     </section>
     
 
-    <section><title>Changing the Global Secondary Index Storage Mode</title>
-      <p>Storage mode for GSI is a cluster-level setting. Currently, the storage mode option sets
-        the storage mode for all indexes on the cluster across all buckets. The storage mode option
-        cannot be changed dynamically either. To change from standard GSI to memory-optimized GSI or
-        vice versa, you need to remove all index service nodes in the cluster. Here is a
-        step-by-step guide to change the storage mode option: <ol>
-          <li>Identify the nodes that are running the index service. You can do this by simply
-            looking at the <uicontrol>Server Nodes</uicontrol> page on the Web Console. The
-              <uicontrol>Services</uicontrol> column displays the nodes that have the index service
-            enabled.</li>
-          <li>Click <uicontrol>Remove</uicontrol> on each of the nodes that has the index service
-            enabled and rebalance to remove the nodes from the cluster. <note>If you are running a
-              single node, the only way to change GSI storage mode setting is to uninstall and
-              install the server again.</note>As you remove all the index service nodes, all the
-            indexes in the system are dropped and the N1QL queries will fail. To maintain
-            availability, you can set up a new cluster with the desired storage mode option for GSI
-            and use cross datacenter replication (XDCR) to replicate the data to the new cluster. If
-            you don't have a spare cluster, you can also create all the indexes using the view
-            indexer. However, the view
-            indexer for N1QL provides different performance characteristics as it is a local index
-            to each data node and not a global index like GSI. For better availability when changing
-            the storage mode from MOI to GSI, use the XDCR approach as opposed to view indexes for
-            N1QL in production systems.</li>
-          <li>Once all the index service nodes are removed, visit the
-              <uicontrol>Settings</uicontrol> tab and <uicontrol>Cluster Settings</uicontrol> page
-            and change the Index Storage Mode to the desired new mode. You can also set this option
-            during the addition of the first node that has the index service enabled.</li>
-          <li>Add new nodes and confirm the new global secondary index storage mode. At this point,
-            all new GSIs will use the new storage mode setting from the cluster.</li>
-        </ol></p>
+    <section>
+      
+      <title>
+        Changing the Index Storage Setting
+      </title>
+      
+      <p>
+        The <b>Index Storage Setting</b>
+        is a cluster-level setting, established at cluster-initialization for
+        all indexes on the cluster, across all buckets. The setting
+        cannot be changed dynamically. To change from one option to the other following
+        cluster-initialization, all nodes running the Index Service must be removed. If
+        the cluster is single-node, this means uninstalling and reinstalling Couchbase
+        Server. When the cluster features multiple nodes, only a subset of which contain
+        the Index Service, the 
+        procedure is as follows:
+      </p>
+      
+      <p>
+        
+      </p>
+        
+        <ol>
+          <li>
+            Identify the nodes running the Index Service. 
+            
+            <p>
+            </p>
+          </li>
+          
+          <li>
+            Remove each of the nodes running the Index Service, and perform a cluster rebalance.
+            
+            <p>
+            </p>
+            
+            <p>
+            As Index-Service node are removed, so are the indexes they contain; and in consequence,
+            any ongoing queries fail. 
+           
+            </p>
+            
+            <p>
+            </p>
+          </li>
+          
+          <li>
+            Once all Index-Service nodes are removed, change the Index Storage Settings for the
+            cluster, by means of the <b>Settings</b> page in Couchbase Web Console.
+          </li>
+          
+          <li>
+            Add new Index-Service, nodes and confirm the revised storage mode. 
+            
+            <p>
+              
+            </p>
+          </li>
+          
+        </ol>
+
+      
     </section>
   </body>
 </topic>
