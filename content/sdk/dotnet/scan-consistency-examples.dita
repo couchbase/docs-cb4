@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="dot_net-at_plus">
+  <title>Scan Consistency Using the .NET SDK with Couchbase Server</title>
+  <titlealts><navtitle>Using Scan Consistency</navtitle></titlealts>
+  <shortdesc>You can balance performance against consistency in N1QL queries via the Couchbase .NET client and the AtPlus option.</shortdesc>
+  <conbody>
+    <section id="scan_consistency"><p>
+        Setting a <xref href="https://developer.couchbase.com/documentation/server/5.1/architecture/querying-data-with-n1ql.html#story-h2-2" 
+        format="html" scope="external">Scan Consistency</xref>, lets you choose between NotBounded (the default), for sharpest performance; RequestPlus, for strongest consistency; and AtPlus, for a good balance between increased performance and completeness of results.
+      </p>
+
+      <p>In order to use <codeph>at_plus</codeph>, you'll need to make sure that you explicitly set <codeph>UseEnhancedDurability</codeph> to <codeph>true</codeph> when setting up your <b>ClientConfiguration</b>:<codeblock>config.BucketConfigs = new Dictionary&lt;string, BucketConfiguration> {
+    {
+        "travel-sample", new BucketConfiguration
+        {
+            UseEnhancedDurability = true
+        }
+    }
+};</codeblock></p>
+
+      <p>In the example below, the N1QL query will wait only for the new document to be indexed.<codeblock  outputclass="language-csharp" spectitle="Setting at_plus consistency">private static void AtPlusExample()
+{
+    Console.WriteLine("========= AtPlus");
+
+    // get the current count
+    var getResult = _bucket.Query&lt;dynamic>("SELECT COUNT(1) as airportCount FROM `travel-sample` WHERE type=&apos;airport&apos;")
+            .Rows.First();
+    Console.WriteLine($"Initial count: {result1.airportCount}");
+
+    // insert a new airport
+    var doc = new Document&lt;dynamic>
+    {
+        Id = "ScanConsistency::airport::" + _random.Next(10000),
+        Content = new
+        {
+            type = "airport"
+        }
+    };
+    var insertResult = _bucket.Insert(doc);
+
+    // get the count again, creating mutation state from insert result
+    var state = MutationState.From(insertResult.Document);
+    var request = new QueryRequest("SELECT COUNT(1) as airportCount FROM `travel-sample` WHERE type=&apos;airport&apos;")
+        .ConsistentWith(state);
+    var queryResult = _bucket.Query&lt;dynamic>(t).Rows.First();
+    Console.WriteLine($"Count after insert with AtPlus: {result2.airportCount}");
+}</codeblock></p>
+    </section>
+
+  </conbody>
+</concept>
