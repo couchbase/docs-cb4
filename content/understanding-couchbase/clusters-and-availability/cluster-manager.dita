@@ -8,7 +8,7 @@
  
  <shortdesc>
   The Couchbase <i>Cluster Manager</i> runs on all the nodes of a cluster, 
-  orchestrating cluster-wide operations.
+  maintaining essential per-node processes, and coordinating cluster-wide operations.
  </shortdesc>
  
  <body>
@@ -28,7 +28,7 @@
    </p>
    
    <p>
-    As the above illustration shows, the Cluster Manager consists of two processes. The first, the
+    As shown, the Cluster Manager consists of two processes. The first, the
     <i>babysitter</i>, is responsible for maintaining a variety of Couchbase Server-processes,
     which includes the second Cluster Manager process, <i>ns-server</i>. The <i>babysitter</i> starts and monitors
     all the processes, logging their output to the file <codeph>babysitter.log</codeph>. (See
@@ -71,7 +71,7 @@
     
     <li>
      <i>xdcr</i>: The program for handling <i>Cross Data-Center Replication</i> (XDCR). This is always installed, but
-     runs as an OS-level process, separate from the Cluster Manager. See
+     runs as an independent OS-level process, separate from the Cluster Manager itself. See
      <xref href="../clusters-and-availability/replication-architecture.dita" scope="local" format="dita">Availability</xref>,
      for information.
      <p>
@@ -81,7 +81,7 @@
     
     <li>
      <i>view engine</i>: The program for handling <i>Views</i>. This is always installed, but
-     runs as an OS-level process, separate from the Cluster Manager. See
+     runs as an independent OS-level process, separate from the Cluster Manager itself. See
      <xref href="../views/views-intro.dita" scope="local" format="dita">Views</xref>, for more
      information.
      <p>
@@ -137,9 +137,9 @@
    </li>
     
     <li>
-     <i>Authentication</i>: Provides <i>Role-Based Access Control</i> for resources on the node. This is based
-     on credentials (usernames and passwords) associated with system-defined <i>roles</i>, each
-     of which is associated with a range of privileges. For detailed information, see
+     <i>Authentication</i>: Protects node-resources with <i>Role-Based Access Control</i>. This is based
+     on <i>credentials</i> (usernames and passwords) associated with system-defined <i>roles</i>, each
+     of which is associated with a range of <i>privileges</i>. For detailed information, see
      <xref href="../../security/security-authorization.dita" scope="local" format="dita">Authorization</xref>.
      
      <p>
@@ -154,7 +154,7 @@
     aggregation of statistical data. Note 
     that at any given time, only one of the instances of <i>Master Services</i>
     on a multi-node cluster is in charge: the instances having negotiated among themselves, to identify and elect the
-    instance. Should the elected instance subsequently become unavailable, another takes over. <i>Master Services</i>
+    instance. Should the elected instance subsequently become unavailable, another takes over. The <i>Master Services</i>
     are sometimes referred to as the <i>Orchestrator</i>.
     
     <p>
@@ -175,7 +175,7 @@
     
    <li>
     <b>Per Node Bucket Services</b>: Manages bucket-level operations for the current node; supporting replication,
-    fail-over, restart, and statistics' collection. 
+    fail-over, restart, and statistics-collection. 
     
     <p>
      
@@ -185,7 +185,7 @@
     
    <li>
     <b>Generic Local Facilities</b>: Provides local 
-    configuration management, libraries, workqueues, logging, clocks, ids, and events.
+    configuration-management, libraries, workqueues, logging, clocks, ids, and events.
     
     <p>
      
@@ -213,13 +213,8 @@
    
    <p>
     The elected <i>Master Services</i> of the Cluster Manager are responsible for cluster membership. When topology changes,
-    a set of carefully orchestrated operations is executed, 
-    to perform redistribution while continuing to handle existing workloads.
-   </p>
-   
-   <p>
-    The following sequence describes the high-level operations whereby a new node
-    running the Data Service is added to the cluster;
+    a set of operations is executed, 
+    to accomplish redistribution while continuing to handle existing workloads. This is as follows:
    </p>
    
    <p>
@@ -228,7 +223,7 @@
     <ol>
      
     <li>
-     The Cluster Manager updates the new nodes with the existing cluster
+     The <i>Master Services</i> update the new nodes with the existing cluster
      configuration.
      
      <p>
@@ -238,7 +233,7 @@
     </li>
      
     <li>
-     The Cluster Manager initiates rebalance, and recalculates the vBucket map. 
+     The <i>Master Services</i> initiate rebalance, and recalculate the vBucket map. 
      
      <p>
       
@@ -259,7 +254,7 @@
      
     <li>
      Incrementally &#8212; as each new vBucket is populated, the data is replicated, and indexes are  
-     updatedm &#8212; an <i>atomic switchover</i> takes place, from the old vBucket to the new vBucket.
+     updated &#8212; an <i>atomic switchover</i> takes place, from the old vBucket to the new vBucket.
      
      <p>
       
@@ -280,16 +275,16 @@
    </ol> 
 
    <p>
-    The process of <i>removing</i> one or more Data-Service nodes is similar to that of <i>adding</i>: new
-    vBuckets are created on the remaining cluster-nodes, and data is transitioned them off the vBuckets that reside 
-    on the nodes that are to 
-    be removed. When no more vBuckets remain assigned to a node, the node is removed from the cluster. 
+    The process of <i>removing</i> one or more Data-Service nodes is similar to that of <i>adding</i>:
+    vBuckets are created on nodes that are to be maintained, and data is copied to them from vBuckets resident
+    on nodes that are to be
+    removed. When no more vBuckets remain on a node, the node is removed from the cluster. 
    </p>
    
    <p>
     When adding or removing nodes that do not host the Data Service, no data is moved: therefore,
     nodes are added or removed from the cluster map without data-transition. Once the process is complete,
-    and a new cluster map exists, client SDKs automatically begin load-balancing 
+    and a new cluster map has been made available by the <i>Master Services</i>, client SDKs automatically begin load-balancing 
     across those services, using the new cluster map.
    </p>
    
@@ -315,12 +310,9 @@
    </p>
    
    <p dir="ltr">
-    For the purposes of auto-failover, one node is
-    designated as the <i>orchestrator</i> based on its election by the other nodes. This orchestrator is
-    responsible for keeping track of heartbeats received from all other nodes. If automatic
-    failover is enabled, after a period of time given by the automatic failover
-    timeout period, if no heartbeats have been received from a particular node, the orchestrator node 
-    may automatically fail the node over. 
+    The <i>Master Services</i> keep track of heartbeats received from all other nodes. If automatic
+    failover is enabled, and no heartbeats are received from a node for longer than the default
+    timeout period, the <i>Master Services</i> may automatically fail the node over. 
    </p>
    
    <p>
@@ -331,7 +323,7 @@
   </section>
   
   
-  <section id="RZA">
+  <section id="vbucket-distribution">
    
    <title>
     vBucket Distribution
