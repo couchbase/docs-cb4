@@ -13,7 +13,7 @@
  
  <body>
   
-  <section>
+  <section id="cluster-manager-architecture">
   
    <title>
     Cluster Manager Architecture
@@ -28,10 +28,12 @@
    </p>
    
    <p>
-    As the above illustration shows, the Cluster Manager consists of two processes. the first Cluster Manager, the
+    As the above illustration shows, the Cluster Manager consists of two processes. The first, the
     <i>babysitter</i>, is responsible for maintaining a variety of Couchbase Server-processes,
-    these include the second Cluster Manager process, <i>ns-server</i>. The <i>babysitter</i> starts and monitors
-    all the processes, logging their output to the file <codeph>babysitter.log</codeph>. If any of the
+    which includes the second Cluster Manager process, <i>ns-server</i>. The <i>babysitter</i> starts and monitors
+    all the processes, logging their output to the file <codeph>babysitter.log</codeph>. (See
+    <xref href="../../clustersetup/logging.dita" scope="local" format="dita">Logging</xref>, for information
+    on logfile-locations.) If any of the
     processes dies, the <i>babysitter</i> restarts it. The <i>babysitter</i> is not cluster-aware.
    </p>
    
@@ -41,7 +43,8 @@
    
    <ul>
     <li>
-     <i>ns-server</i>: Manages the node's participation in the cluster, as described below.
+     <i>ns-server</i>: Manages the node's participation in the cluster, as described in
+     <xref href="./cluster-manager.dita#concept_ydh_lmj_vs2/ns-server">ns-server</xref>, below.
      <p>
       
      </p>
@@ -97,7 +100,7 @@
    
   </section>
   
-  <section>
+  <section id="ns-server">
    
    <title>
     ns-server
@@ -149,9 +152,10 @@
     <i>Master Services</i>: Manages cluster-wide operations; such as master and replica 
     vBucket-placement, failover, node addition and subtraction, rebalance, cluster configuration-mapping, and 
     aggregation of statistical data. Note 
-    that at a given, only one of the instances of <i>Master Services</i>
+    that at any given time, only one of the instances of <i>Master Services</i>
     on a multi-node cluster is in charge: the instances having negotiated among themselves, to identify and elect the
-    instance. Should the elected instance subsequently become unavailable, another takes over.
+    instance. Should the elected instance subsequently become unavailable, another takes over. <i>Master Services</i>
+    are sometimes referred to as the <i>Orchestrator</i>.
     
     <p>
      
@@ -161,7 +165,7 @@
     
     <li>
      <b>Per Node Services</b>: Manages the health of the current node, and handles
-     the monitoring and restarting of its processes and services.
+     the monitoring and restart of its processes and services.
      
      <p>
       
@@ -179,8 +183,6 @@
    
    </li>
     
-   
-    
    <li>
     <b>Generic Local Facilities</b>: Provides local 
     configuration management, libraries, workqueues, logging, clocks, ids, and events.
@@ -192,7 +194,7 @@
    </li>
     
     <li>
-     <b>Generic Distributed Facilities</b>: Supports node-discovery, configuration messaging and alerts,
+     <b>Generic Distributed Facilities</b>: Supports node-discovery, configuration-messaging and alerts,
      replication, and heartbeat-transmission.
      
      <p>
@@ -210,9 +212,9 @@
    </title>
    
    <p>
-    The Cluster Manager is responsible for cluster membership. When topology changes,
-    the Cluster Manager walks through a set of carefully orchestrated operations, 
-    to redistribute the load while keeping the existing workload running.
+    The elected <i>Master Services</i> of the Cluster Manager are responsible for cluster membership. When topology changes,
+    a set of carefully orchestrated operations is executed, 
+    to perform redistribution while continuing to handle existing workloads.
    </p>
    
    <p>
@@ -236,7 +238,7 @@
     </li>
      
     <li>
-     The Cluster Manager initiates rebalance and recalculates the vBucket map. 
+     The Cluster Manager initiates rebalance, and recalculates the vBucket map. 
      
      <p>
       
@@ -246,7 +248,7 @@
      
     <li>
      The nodes that are to receive data initiate DCP replication-streams from the existing nodes for 
-     each vBucket, and begin building new copies of those vBuckets.  This occurs for both active and 
+     each vBucket, and begin building new copies of those vBuckets. This occurs for both active and 
      replica vBuckets, depending on the new vBucket map layout.
      
      <p>
@@ -256,8 +258,8 @@
     </li>
      
     <li>
-     Incrementally, as each new vBucket is populated, the data is replicated, and indexes are  
-     updated, an <i>atomic switchover</i> takes place, from the old vBucket to the new vBucket.
+     Incrementally &#8212; as each new vBucket is populated, the data is replicated, and indexes are  
+     updatedm &#8212; an <i>atomic switchover</i> takes place, from the old vBucket to the new vBucket.
      
      <p>
       
@@ -266,9 +268,9 @@
     </li>
      
     <li>
-     As the new vBuckets on the new nodes become active, the Cluster Manager ensures that the new vBucket 
-     map and cluster topology are communicated to all the existing nodes and clients. This process is repeated 
-     until the rebalance operation completes running. 
+     As new vBuckets on new nodes become active, the <i>Master Services</i> ensure that the new vBucket 
+     map and cluster topology are communicated to all nodes and clients. This process is repeated 
+     until rebalance is complete. 
      
      <p>
       
@@ -278,20 +280,29 @@
    </ol> 
 
    <p>
-    Removal of one or more nodes from the data service follows a similar process; by creating new 
-    vBuckets within the remaining nodes of the cluster, and transitioning them off the nodes that are to 
+    The process of <i>removing</i> one or more Data-Service nodes is similar to that of <i>adding</i>: new
+    vBuckets are created on the remaining cluster-nodes, and data is transitioned them off the vBuckets that reside 
+    on the nodes that are to 
     be removed. When no more vBuckets remain assigned to a node, the node is removed from the cluster. 
    </p>
    
    <p>
-    When adding or removing nodes that do not host the Data Service, no data is moved; and so the new
-    nodes are simply added or removed from the cluster map. Client SDKs automatically begin load balancing 
+    When adding or removing nodes that do not host the Data Service, no data is moved: therefore,
+    nodes are added or removed from the cluster map without data-transition. Once the process is complete,
+    and a new cluster map exists, client SDKs automatically begin load-balancing 
     across those services, using the new cluster map.
+   </p>
+   
+   <p>
+    For the practical steps to be following in adding and removing nodes, see
+    <xref href="../../clustersetup/adding-nodes.dita" scope="local" format="dita">Adding a Node</xref> and
+    <xref href="../../clustersetup/remove-nodes.dita" scope="local" format="dita">Removing a Node</xref>.
+    
    </p>
    
   </section>
   
-  <section id="section_sv4_jgz_pz">
+  <section id="section_sv4_jgz_pz2">
    
    <title>Node-Failure Detection</title>
    
@@ -309,73 +320,75 @@
     responsible for keeping track of heartbeats received from all other nodes. If automatic
     failover is enabled, after a period of time given by the automatic failover
     timeout period, if no heartbeats have been received from a particular node, the orchestrator node 
-    automatically fails the node over. This is dependent on other criteria being met as detailed on
-     <xref href="../../clustersetup/automatic-failover.dita#topic_fcf_chm_zs"/>, such as only a single
-    node being unhealthy.
+    may automatically fail the node over. 
    </p>
    
-   <p dir="ltr">
-    This approach is fairly brittle and susceptible to 'false
-    positives', that is a node being identified as offline even if the service on that node (e.g.
-    Query, Data etc) continues to serve traffic without issue. Additionally, as the orchestrator is
-    solely responsible for deciding which nodes to failover it is vulnerable to issues such as
-    network partitions. </p><p dir="ltr">To mitigate these issues, the monitoring of node health is
-    performed by a node monitor, which exists outside of the cluster management process, rather than
-    the cluster manager itself. This node monitor is responsible for monitoring the services which
-    are running on the node and including this information in heartbeats. The node monitor
-    heartbeats are similar to the cluster manager heartbeats in that they are exchanged between all
-    nodes, but these heartbeats contained much more detailed information. Each node then decides
-    whether a particular node is healthy based on the heartbeats that it receives from the node. A
-    node is only considered for automatic failover if every other node reports that it is
-    unhealthy.</p><p dir="ltr">Currently the following services are monitored:</p><ul
-    id="ul_kqm_kgz_pz">
-    <li dir="ltr">
-     <p dir="ltr"><b>Cluster Manager</b> - The cluster management process' health is assessed by
-      monitoring the basic heartbeating that the cluster manager performs. If the cluster manager is
-      not sending out its basic heartbeats to other nodes then it is considered unhealthy.</p>
-    </li>
-    <li dir="ltr">
-     <p dir="ltr"><b>Data Service</b> - The health of the Data service is monitored by inspecting
-      the DCP
-       traffic coming out of the node. If the memcached process is not sending data or no-ops
-      (internal keep-alives) along its connections then it is considered unhealthy.</p>
-    </li>
-   </ul>This monitoring is then used to more accurately inform the decision about whether to
-   automatically failover a node. By using specific service monitoring, the chance for 'false
-   positives' is greatly reduced, although it is still vulnerable to an unstable network. </section>
-  <section id="RZA"><title>Smart Data Placement with Rack and Zone Awareness</title>
-   <p>Couchbase Server buckets physically contain 1024 master and 0 or more replica vBuckets. The Cluster Manager master services module governs the placement of these vBuckets to maximize availability and rebalance performance.</p>
-   <p>The Cluster Manager master services module calculates a vBucket map with heuristics to maximize availability and rebalance performance. The vBucket map is recalculated whenever the cluster topology changes. The following rules govern the vBucket map calculation: <ul>
-    <li>Master and replica vBuckets are placed on separate nodes to protect against node failures. </li>
-    <li>If a bucket is configured with more than 1 replica vBucket, each additional replica vBucket is placed on a separate node to provide better protection against node failures. </li>
-    <li>If server groups are defined  for master vBuckets (such as rack and zone awareness capability),  the replica vBuckets are placed in a separate server group for better protection against rack or availability zone failures.</li>
-   </ul></p>
+   <p>
+    For detailed information on failover options, see
+    <xref href="../../clustersetup/failover.dita" scope="local" format="dita">Failing over a Node</xref>.
+   </p>
+   
   </section>
-  <section><title>Centralized Management, Statistics, and Logging</title>
-   <p>The Cluster Manager simplifies centralized management with centralized configuration management, statistics gathering and logging services. All configuration changes are managed by the orchestrator and pushed out to the other nodes to avoid configuration conflicts. </p>
+  
+  
+  <section id="RZA">
+   
+   <title>
+    vBucket Distribution
+   </title>
+   
+   <p>
+    Couchbase Server buckets physically contain 1024 master and 0 or more replica 
+    vBuckets. The Cluster Manager <i>Master Services</i> module governs the placement of 
+    these vBuckets, to maximize availability to and rebalance performance. The vBucket map 
+    is recalculated 
+    whenever the cluster topology changes, by means of the following rules: 
+   </p>
+   
+    <ul>
+     
+    <li>
+     Master and replica vBuckets are placed on separate nodes, to protect against node-failure. 
+    </li>
+     
+    <li>
+     If a bucket is configured with more than one replica, each additional replica vBucket is 
+     placed on a separate node, to provide better protection against node-failure. 
+    </li>
+     
+    <li>
+     If server groups are defined for master vBuckets (such as <i>rack and zone awareness</i> capability),  
+     the replica vBuckets are placed in a separate server group, for better protection against
+     rack or availability zone failures. See
+     <xref href="../../clustersetup/manage-groups.dita" scope="local" format="dita">Manage Server Groups</xref>, for
+     more information.
+    </li>
+     
+   </ul>
 
-   <p>In order to understand what your cluster is doing and how the cluster is performing, 
-    Couchbase Server incorporates a complete set of statistical and monitoring information. 
-    The statistics are accessible through all the administration interfaces - CLI ( cbstats tool), REST API, and the Couchbase Web Console.</p>
+  </section>
+  
+  <section>
+   
+   <title>
+    Centralized Management, Statistics, and Logging
+   </title>
+   
+   <p>
+    The Cluster Manager simplifies centralized management with centralized configuration-management, 
+    statistics-gathering, and logging services. All configuration-changes are managed by the 
+    <i>Master Services</i>, and are pushed out from the <i>Master Services</i> node to the other nodes. 
+   </p>
 
-   <p> The Couchbase Web Console provides a complete suite of statistics including the built-in real-time graphing and performance data. It gives great flexibility as you (as an Administrator) can aggregate the statistics for each bucket and choose to view the statistics for the whole cluster or per node. </p>
-   <p>The statistics information is grouped into categories, allowing you to identify different states and performance information within the cluster. <dl>
-    <dlentry>
-     <dt>Statistics on hardware resources</dt>
-     <dd>Node statistics show CPU, RAM and I/O numbers on each of the servers and across your cluster as a whole. This information is useful to identify performance and loading issues on a single server.</dd>
-    </dlentry>
-    <dlentry>
-     <dt>Statistics on vBuckets</dt>
-     <dd>The vBucket statistics shows the usage and performance numbers for the vBuckets. This is useful to determine whether you need to reconfigure your buckets or add servers to improve performance.
-     </dd>
-    </dlentry>
-    <dlentry>
-     <dt>Statistics on views and indexes</dt>
-     <dd>View statistics display information about individual views in your system such as number of reads from the index or view and its disk usage, so that you can monitor the effects and loading of a view on the Couchbase nodes. This information can indicate that your views need optimization, or that you need to consider defining views across multiple design documents.</dd>
-    </dlentry>
-    <dlentry>
-     <dt>Statistics on replication (DCP, TAP, and XDCR)</dt>
-     <dd>The Database Change Protocol (DCP) interface is used to monitor changes and updates to the database. DCP is widely used internally to replicate data between the nodes, for backups with <apiname>cbbackup</apiname>, to maintain views and indexes and to integrate with external products with connectors such as Elasticsearch connector, Kafka connector or the Sqoop connector. XDCR replicates data between clusters and uses DCP in conjunction with an agent that is tuned to replicate data under higher WAN latencies. <p>TAP is similar to DCP, but is a deprecated protocol. Legacy tools may still use the protocol and stats are still available through the console.</p><p>Given the central role of replication in a distributed system like Couchbase Server, identifying statistics on replication is critical. Statistics in replication help visualize the health of replication and bottlenecks in replication by displaying replication latency and pending items in replication streams. </p>
-     </dd> </dlentry></dl></p>  </section>
+   <p>
+    Statistics are accessible through all the Couchbase administration interfaces: The 
+    <xref href="../../cli/cli-intro.dita" scope="local" format="dita">Command Line Interface</xref>,
+    (specifically, the 
+    <xref href="../../cli/cbstats-intro.dita" scope="local" format="dita">cbstats</xref> tool), the 
+    <xref href="../../rest-api/rest-intro.dita" scope="local" format="dita">REST API</xref>, and 
+    <xref href="../../admin/ui-intro.dita" scope="local" format="dita">Couchbase Web Console</xref>.
+   </p>
+
+   </section>
  </body>
 </topic>
