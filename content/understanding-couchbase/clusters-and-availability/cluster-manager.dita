@@ -14,84 +14,104 @@
  <body>
   
   <section>
-   <title>
-    Understanding the Cluster Manager
-   </title>
-   
-   <p>
-    The <i>Cluster Manager</i> is responsible for the following:
-   </p>
-   
-   <p>
-    
-   </p>
-   
-   <ul>
-    <li>
-     Managing membership of the cluster: adding and removing nodes, discovering
-     and tracking topology
-     <p>
-      
-     </p>
-    </li>
-    
-    <li>
-     Maintaining cluster-wide layout of services 
-     <p>
-      
-     </p>
-    </li>
-    
-    <li>
-     Rebalancing loads, as cluster-topology changes
-     <p>
-      
-     </p>
-    </li>
-    
-    <li>
-     Monitoring the health of nodes, and handling failover
-     <p>
-      
-     </p>
-    </li>
-    
-    <li>
-     Data-placement: distributing original and replica data across the cluster
-     <p>
-      
-     </p>
-    </li>
-    
-    <li>
-     Gathering and aggregating statistics, and managing logging services
-     <p>
-      
-     </p>
-    </li>
-    
-    <li>
-     Authentication and role-based authorization.
-     <p>
-      
-     </p>
-    </li>
-   </ul>
-   
-  </section>
-  
-  <section>
   
    <title>
     Cluster Manager Architecture
    </title>
    
    <p>
-    The architecture of the Cluster Manager is illustrated as follows:
+    The architecture of the Cluster Manager is as follows:
    </p>
   
-   <image href="./images/clusterManagerArchitecture.png"  width="600" id="cluster_manager_architecture"/>
+   <p>
+    <image href="./images/clusterManagerArchitecture.png"  width="600" id="cluster_manager_architecture"/>
+   </p>
+   
+   <p>
+    As the above illustration shows, the Cluster Manager consists of two processes. the first Cluster Manager, the
+    <i>babysitter</i>, is responsible for maintaining a variety of Couchbase Server-processes,
+    these include the second Cluster Manager process, <i>ns-server</i>. The <i>babysitter</i> starts and monitors
+    all the processes, logging their output to the file <codeph>babysitter.log</codeph>. If any of the
+    processes dies, the <i>babysitter</i> restarts it. The <i>babysitter</i> is not cluster-aware.
+   </p>
+   
+   <p>
+    The processes for which the <i>babysitter</i> is responsible are:
+   </p>
+   
+   <ul>
+    <li>
+     <i>ns-server</i>: Manages the node's participation in the cluster, as described below.
+     <p>
+      
+     </p>
+    </li>
     
+    <li>
+     <i>kv engine</i>: Runs as part of the 
+     <xref href="../services-and-indexes/services/data-service.dita" scope="local" format="dita">Data Service</xref>, which
+     must be installed on at least one cluster-node. Provides access to 
+     <xref href="../data/data.dita" scope="local" format="dita">Data</xref>.
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>services</i>: One or more Couchbase 
+     <xref href="../services-and-indexes/services/services.dita" scope="local" format="dita">Services</xref> that
+     optionally run on the node.
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>xdcr</i>: The program for handling <i>Cross Data-Center Replication</i> (XDCR). This is always installed, but
+     runs as an OS-level process, separate from the Cluster Manager. See
+     <xref href="../clusters-and-availability/replication-architecture.dita" scope="local" format="dita">Availability</xref>,
+     for information.
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>view engine</i>: The program for handling <i>Views</i>. This is always installed, but
+     runs as an OS-level process, separate from the Cluster Manager. See
+     <xref href="../views/views-intro.dita" scope="local" format="dita">Views</xref>, for more
+     information.
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>other</i>: Various ancillary programs.
+     <p>
+      
+     </p>
+    </li>
+    
+   </ul>
+   
+  </section>
+  
+  <section>
+   
+   <title>
+    ns-server
+   </title>
+   
+   <p>
+    The principal Cluster-Manager process is <i>ns-server</i>, whose architecture is as follows:
+   </p>
+   
+   <p>
+    <image href="./images/nsServerArchitecture.png"  width="600" id="ns_server_architecture"/>
+   </p>
+   
+
    <p> 
     The modules are: 
    </p>
@@ -103,8 +123,8 @@
    <ul>
     
    <li>
-    <b>REST Administration (UI &amp; CLI)</b>: The principal administration interface for
-    Couchbase Server is handled by a REST API, which also underlies the user interface
+    <i>REST Administration (UI &amp; CLI)</i>: Supports administration of Couchbase Server, by means
+    of a REST API; which itself underlies both the user interface
     provided by <i>Couchbase Web Console</i>, and the <i>Couchbase Command-Line Interface</i>.
     
     <p>
@@ -114,9 +134,10 @@
    </li>
     
     <li>
-     <b>Authentication</b>: Supports <i>Role-Based Access Control</i> across the cluster, based
+     <i>Authentication</i>: Provides <i>Role-Based Access Control</i> for resources on the node. This is based
      on credentials (usernames and passwords) associated with system-defined <i>roles</i>, each
-     of which is associated with a range of privileges.
+     of which is associated with a range of privileges. For detailed information, see
+     <xref href="../../security/security-authorization.dita" scope="local" format="dita">Authorization</xref>.
      
      <p>
       
@@ -125,10 +146,12 @@
     </li>
     
    <li>
-    <b>Master-Only Services</b>: Manages cluster-wide operations; such as node-discovery, master and replica 
-    vBucket-placement, auto-failover, and rebalance. Interacts with other instances of the Cluster Manager, to
-    resolve which instance of <b>Master-Only Services</b> should take charge: if this instance ever becomes
-    unavailable, another takes over.
+    <i>Master Services</i>: Manages cluster-wide operations; such as master and replica 
+    vBucket-placement, failover, node addition and subtraction, rebalance, cluster configuration-mapping, and 
+    aggregation of statistical data. Note 
+    that at a given, only one of the instances of <i>Master Services</i>
+    on a multi-node cluster is in charge: the instances having negotiated among themselves, to identify and elect the
+    instance. Should the elected instance subsequently become unavailable, another takes over.
     
     <p>
      
@@ -147,7 +170,7 @@
     </li>
     
    <li>
-    <b>Per Node Bucket Services</b>: Manages bucket-level operations; supporting replication,
+    <b>Per Node Bucket Services</b>: Manages bucket-level operations for the current node; supporting replication,
     fail-over, restart, and statistics' collection. 
     
     <p>
@@ -159,14 +182,24 @@
    
     
    <li>
-    <b>Generic Local and Distributed Facilities</b>: Manage local and distributed 
-    configuration management, cluster-wide logging, and more.
+    <b>Generic Local Facilities</b>: Provides local 
+    configuration management, libraries, workqueues, logging, clocks, ids, and events.
     
     <p>
      
     </p>
    
    </li>
+    
+    <li>
+     <b>Generic Distributed Facilities</b>: Supports node-discovery, configuration messaging and alerts,
+     replication, and heartbeat-transmission.
+     
+     <p>
+      
+     </p>
+     
+    </li>
   </ul>
  
   </section>
@@ -258,18 +291,31 @@
    
   </section>
   
-  <section id="section_sv4_jgz_pz"><title>Node Failure Detection</title><p>Each node within a
-    Couchbase Server cluster communicates with one another via a heartbeating mechanism.
-    Traditionally, these heartbeats are sent between the cluster managers on all nodes at regular
-    intervals. The heartbeats contain basic statistics about the node, which are used to assess the
-    health of the node.</p><p dir="ltr">For the purposes of automatic failover, one node is
-    designated as the orchestrator based on an election by the other nodes. This orchestrator is
-    then responsible for keeping track of the heartbeats received from other nodes. If automatic
-    failover is enabled, then after a specified period of time given by the automatic failover
-    timeout period, if no heartbeats have been received from a node the orchestrator node will
-    automatically failover the node. This is dependent on other criteria being met as detailed on
-     <xref href="../../clustersetup/automatic-failover.dita#topic_fcf_chm_zs"/> such as only a single
-    node being unhealthy.</p><p dir="ltr">This approach is fairly brittle and susceptible to 'false
+  <section id="section_sv4_jgz_pz">
+   
+   <title>Node-Failure Detection</title>
+   
+   <p>
+    Nodes within a
+    Couchbase Server-cluster provide status on their health by means of a <i>heartbeat</i> mechanism.
+    Heartbeats are provided by all instances of the Cluster Manager, at regular
+    intervals. Each heartbeat contains basic statistics on the node, which are used to assess the
+    node's condition.
+   </p>
+   
+   <p dir="ltr">
+    For the purposes of auto-failover, one node is
+    designated as the <i>orchestrator</i> based on its election by the other nodes. This orchestrator is
+    responsible for keeping track of heartbeats received from all other nodes. If automatic
+    failover is enabled, after a period of time given by the automatic failover
+    timeout period, if no heartbeats have been received from a particular node, the orchestrator node 
+    automatically fails the node over. This is dependent on other criteria being met as detailed on
+     <xref href="../../clustersetup/automatic-failover.dita#topic_fcf_chm_zs"/>, such as only a single
+    node being unhealthy.
+   </p>
+   
+   <p dir="ltr">
+    This approach is fairly brittle and susceptible to 'false
     positives', that is a node being identified as offline even if the service on that node (e.g.
     Query, Data etc) continues to serve traffic without issue. Additionally, as the orchestrator is
     solely responsible for deciding which nodes to failover it is vulnerable to issues such as
