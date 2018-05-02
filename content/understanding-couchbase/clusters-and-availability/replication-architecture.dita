@@ -153,77 +153,149 @@
    </title>
    
    <p>
-    Database Change Protocol (DCP) is the protocol used to stream bucket level mutations. Given
-    the distributed nature of Couchbase Server, DCP sits at the heart of Couchbase Server
-    architecture. DCP is used for high speed replication of mutations to maintain replica vBuckets,
-    incremental MapReduce views and spatial views, Global Secondary Indexes (GSIs), cross datacenter
-    replication (XDCR), backups, and many other external connectors.
+    <i>Database Change Protocol</i> (DCP) is the protocol used to stream bucket-level mutations. 
+    DCP is used for high-speed replication of mutations; to maintain replica vBuckets,
+    incremental MapReduce and spatial views, Global Secondary Indexes (GSIs), XDCR, backups, 
+    and external connections.
    </p>
    
    <p>
-    DCP is a memory based replication protocol that is ordering, resumable, and consistent. DCP immediately 
-    streams any changes made to documents in memory to the destination. The memory based communication 
-    reduces latency and greatly boosts availability, prevents data loss, improves freshness of indexes, 
-    and more.
+    DCP is a memory-based replication protocol that is <i>ordering</i>, <i>resumable</i>, and 
+    <i>consistent</i>. DCP  
+    streams changes made in memory to items, by means of a <i>replication queue</i>. 
    </p>
    
    <p>
-    To work with DCP, you need to be familiar with the following concepts, which are listed in alphabetical order 
-    for convenience. 
+    DCP involves the following concepts:
+   </p>
+   
+   <p>
+   </p>
+   
+   <ul>
     
-    <dl>
-    <dlentry>
-     <dt>Application client</dt>
-     <dd>A normal client that transmits read, write, update, delete, and query requests to the server cluster, usually for an interactive web application.</dd>
-    </dlentry>
-    <dlentry>
-     <dt>DCP client</dt>
-     <dd>A special client that streams data from one or more Couchbase server nodes, for purposes of intra-cluster replication (to be a backup in case the master server fails), indexing (to answer queries in aggregate about the data in the whole cluster), XDCR (to replicate data from one cluster to another cluster, usually located in a separate data center), incremental backup, and any 3rd party component that wants to index, monitor, or analyze Couchbase data in near real time, or in batch mode on a schedule.</dd>
-    </dlentry>
-    <dlentry>
-     <dt>Failover log</dt>
-     <dd>A list of previously known vBucket versions for a vBucket. If a client connects to a server and was previously connected to a different version of a vBucket than that server is currently working with, the failure log is used to find a rollback point.</dd>
-    </dlentry>
-    <dlentry>
-     <dt>History branch</dt>
-     <dd>Whenever a node becomes the master node for a vBucket in the event of a failover or uncontrolled shutdown and restart, if it was not the farthest ahead of all processes watching events on that partition and starts taking mutations, it might reuse sequence numbers that other processes have already seen on this partition. This can be a history branch, and the new master must assign the vBucket a new vBucket version so that DCP clients in the distributed system can recognize that they are ahead of the new master and roll back changes at the point this happened in the stream. During a controlled handover from an old master to a new master, the sequence history cannot have branches, so there is no need to assign a new version to the vBucket being handed off. Controlled handovers occur in the case of a rebalance for elasticity (such as adding or removing a node) or a swap rebalance in the case of an upgrade (such as adding a new version of Couchbase Server to a cluster or removing an old version of Couchbase Server).</dd>
-    </dlentry>
-    <dlentry>
-     <dt>Mutation</dt>
-     <dd>A mutation is an event that deletes a key or changes the value a key points to. Mutations occur when transactions such as create, update, delete or expire are executed.</dd>
-    </dlentry>
-    <dlentry>
-     <dt>Rollback point</dt>
-     <dd>The server uses the failover log to find the first possible history branch between the last time a client was receiving mutations for a vBucket and now. The sequence number of that history branch is the rollback point that is sent to the client.</dd>
-    </dlentry>
-    <dlentry>
-     <dt>Sequence number</dt>
-     <dd>Each mutation that occurs on a vBucket is assigned a number, which strictly increases as events are assigned numbers (there is no harm in skipping numbers, but they must increase), that can be used to order that event against other mutations within the same vBucket. This does not give a cluster-wide ordering of events, but it does enable processes watching events on a vBucket to resume where they left off after a disconnect.</dd>
-    </dlentry>
-    <dlentry>
-     <dt>Server</dt>
-     <dd>A master or replica node that serves as the network storage component of a cluster. For a given partition, only one node can be master in the cluster. If that node fails or becomes unresponsive, the cluster selects a replica node to become the new master.</dd>
-    </dlentry>
-    <dlentry>
-     <dt>Snapshot</dt>
-     <dd>To send a client a consistent picture of the data it has, the server takes a snapshot of the state of its disk write queue or the state of its storage, depending on where it needs to read from to satisfy the client’s current requests. This snapshot represents the exact state of the mutations it contains at the time it was taken. Using this snapshot, the server can send the items that existed at the point in time the snapshot was taken, and only those items, in the state they were in when the snapshot was taken. Snapshots do not imply that everything is locked or copied into a new structure. In the current Couchbase storage subsystem, snapshots are essentially "free." The only cost is when a file is copy compacted to remove garbage and wasted space, the old file cannot be freed until all snapshot holders have released the old file. It’s also possible to "kick" a snapshot holder if the system determines the holder of the snapshot is taking too long. DCP clients that are kicked can reconnect and a new snapshot will be obtained, allowing it to restart from where it left off.</dd>
-    </dlentry>
-    <dlentry>
-     <dt>vBucket</dt>
-     <dd>Couchbase splits the key space into a fixed amount of vBuckets, usually 1024. Keys are deterministically assigned to a vBucket, and vBuckets are assigned to nodes to balance the load across the cluster.</dd>
-    </dlentry>
-    <dlentry>
-     <dt>vBucket stream</dt>
-     <dd>A grouping of messages related to receiving mutations for a specific vBucket. This includes mutation, deletion, and expiration messages and snapshot marker messages. The transport layer provides a way to separate and multiplex multiple streams of information for different vBuckets. All messages between snapshot marker messages are considered to be one snapshot. A snapshot contains only the recent update for any given key within the snapshot window. It might require several complete snapshots to get the current version of the document.</dd>
-    </dlentry>
-    <dlentry>
-     <dt>vBucket version</dt>
-     <dd>A universally unique identifier (UUID) and sequence number pair associated with a vBucket.
-       A new version is assigned to a vBucket by the new master node any time there might have been
-       a history branch. The UUID is a randomly generated number, and the sequence number is the
-       sequence number that vBucket last processed at the time the version was created. </dd>
-    </dlentry>
-   </dl></p>
+    <li>
+     <i>Application client</i>: A client external to the cluster. Transmits <i>read</i>, <i>write</i>, 
+     <i>update</i>, <i>delete</i>, and <i>query</i> requests to the server-cluster.
+     See
+     <xref href="../buckets-memory-and-storage/compression.dita" scope="local" format="dita">Compression</xref>,
+     for an illustration.
+
+     <p>
+      
+     </p>
+    </li>
+    
+     
+     <li>
+      <i>DCP client</i>: A Couchbase client that is either internal or external 
+       to the cluster. Streams data from one or more Couchbase Server-nodes, 
+       in support of intra-cluster replication, indexing, XDCR, services,
+       incremental backup, connectors, and mobile synchronicity. See
+       <xref href="../buckets-memory-and-storage/compression.dita" scope="local" format="dita">Compression</xref>,
+       for an illustration.
+      
+      <p>
+       
+      </p>
+     </li>
+     
+      <li>
+       <i>Failover log</i>: A list of previously known vBucket-versions, for a vBucket. If a client connects 
+       to a server, and was previously connected to a vBucket-version other than the current one,
+       the failure log is used to find a rollback point.
+
+       <p>
+        
+       </p>
+      </li>
+ 
+       <li>
+        <i>History branch</i>: If a replica vBucket does not contain the latest changes, but becomes active,
+        its record of changes (referred to as a <i>history branch</i>) is recognized by DCP clients; 
+        and the vBucket duly re-versioned and
+        updated. Such action, if required, must occur before any further major operation (such as a node addition 
+        or removal, or a swap-rebalance) can be performed.
+        
+        <p>
+         
+        </p>
+       </li>
+    
+    <li>
+     <i>Mutation</i>: An event that deletes a key, or changes the value to which a key points. Mutations 
+     occur when transactions such as <i>create</i>, <i>update</i>, <i>delete</i>, or <i>expire</i> are executed.
+
+     
+     
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>Rollback point</i>: The commencement of a recognized history branch, indicating
+     the point in the mutation-sequence from which a vBucket must be brought up to date.
+     
+     
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>Sequence number</i>: Given to each mutation to a vBucket, so that the sequence of mutations
+     is recorded, and can be referenced by interested processes. The later the mutation, the higher
+     the number. The sequence is strictly relevant to the vBucket, and does not provide a cluster-wide
+     ordering of events.
+     
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>Snapshot</i>: A representation of the exact state of mutations on either a write queue or
+     in storage, provided by Couchbase Server to an interested client.
+    
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>vBucket stream</i>: A grouping of messages related to receiving mutations for a specific vBucket. 
+     This includes mutation, deletion, expiration, and snapshot-marker messages. 
+     
+     
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>vBucket version</i>: A <i>Universally unique identifier</i> (UUID) and sequence-number pair associated 
+     with a vBucket. A new version is assigned to a vBucket by the new master-node whenever
+     a history branch is recognized. The UUID is a randomly generated number; and the sequence number is the
+     one last processed by the vBucket, at the time the version was created. 
+     
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     
+     
+     <p>
+      
+     </p>
+    </li>
+    
+    
+   </ul>
+    
+   
   </section>
  </body>
  <related-links>
