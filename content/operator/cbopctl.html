@@ -249,7 +249,7 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
     <button class="nav-toggle"></button>
     <span class="nav-text">Couchbase Operator User&#8217;s Guide</span>
 <ul class="nav-list">
-  <li class="nav-item is-current-page" data-depth="2">
+  <li class="nav-item" data-depth="2">
     <a class="nav-link" href="overview.html">Overview</a>
   </li>
   <li class="nav-item" data-depth="2">
@@ -285,7 +285,7 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
   </li>
 </ul>
   </li>
-  <li class="nav-item" data-depth="2">
+  <li class="nav-item is-current-page" data-depth="2">
     <a class="nav-link" href="cbopctl.html">Ensuring Valid CouchbaseCluster Configurations With cbopctl</a>
   </li>
   <li class="nav-item" data-depth="2">
@@ -369,90 +369,133 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
 <nav class="crumbs" role="navigation" aria-label="breadcrumbs">
   <ul>
     <li class="crumb">Couchbase Operator User&#8217;s Guide</li>
-    <li class="crumb"><a href="overview.html">Overview</a></li>
+    <li class="crumb"><a href="cbopctl.html">Ensuring Valid CouchbaseCluster Configurations With cbopctl</a></li>
   </ul>
 </nav>
 </div>
 <article class="doc">
 <div class="sect1">
-<h2 id="overview"><a class="anchor" href="#overview"></a>Overview</h2>
+<h2 id="ensuring-valid-couchbasecluster-configurations-with-cbopctl"><a class="anchor" href="#ensuring-valid-couchbasecluster-configurations-with-cbopctl"></a>Ensuring Valid CouchbaseCluster Configurations with cbopctl</h2>
 <div class="sectionbody">
 <div class="paragraph">
-<p>The Couchbase Operator is a Kubernetes native integration that enables
-you to automate the management of common Couchbase tasks such as the
-configuration, creation, and scaling of Couchbase clusters. By reducing
-the complexity of running a Couchbase cluster, it lets you focus on the
-desired configuration and not worry about the details of manual
-deployment and lifecycle management.</p>
-</div>
-<div class="sect2">
-<h3 id="how-it-works"><a class="anchor" href="#how-it-works"></a>How It Works</h3>
-<div class="paragraph">
-<p>The Couchbase Operator extends the Kubernetes API by creating a Custom
-Resource Definition(CRD) and registering a Couchbase specific
-controller(the Operator) to manage Couchbase clusters. The CRD allows
-you to define a configuration describing what a Couchbase cluster should
-look like. For example, a configuration might define a cluster with
-three nodes, one bucket, and 8GB of memory for the data service. Once
-the configuration is loaded into Kubernetes, the configuration is passed
-to the custom Couchbase controller which takes actions to ensure a
-Couchbase cluster with the specified configuration is provisioned. The
-controller can also detect updates to the configuration and reacts to
-changes that occur in the cluster itself. Like all Kubernetes standard
-built-in resources, the Couchbase Operator doesn’t just manage a single
-Couchbase cluster but multiple Couchbase clusters across an entire
-Kubernetes deployment.</p>
-</div>
-</div>
-<div class="sect2">
-<h3 id="why-not-just-use-statefulsets"><a class="anchor" href="#why-not-just-use-statefulsets"></a>Why Not Just Use StatefulSets</h3>
-<div class="paragraph">
-<p>StatefulSets are great for certain use cases, but they don’t work that
-well when running complex software like databases. This is because
-StatefulSets focus on creating and managing pods, not on managing the
-software running on them. For example, if you wanted a 4-nodes cluster
-and deployed Couchbase using StatefulSets, you would get 4 uninitialized
-Couchbase pods that don’t know about each other. It would then be up to
-you to cluster the nodes together, and this means extra operational
-tasks.</p>
+<p><code>cbopctl</code> is a command line tool that comes with the Couchbase Operator
+installation and implements a custom subset of the <code>kubectl</code> and <code>oc</code>
+commands to ensure that CouchbaseCluster objects are valid
+configurations before they are uploaded to Kubernetes. It is important
+to check that a configuration is valid before uploading it, because once
+a configuration is uploaded to Kubernetes, the Couchbase Operator is
+unable to handle configuration errors.</p>
 </div>
 <div class="paragraph">
-<p>By creating our own custom Couchbase controller, we can add Couchbase
-specific knowledge so that as each Couchbase pod is deployed we can
-properly configure it and join it with the other Couchbase pods in the
-cluster. It’s also important to keep in mind that provisioning a cluster
-is just one place where having a custom controller helps us to automate
-tasks. Node failure, ad-hoc scaling, and many other management tasks
-require Couchbase specific knowledge to manage Couchbase clusters.</p>
+<p>The following diagram shows the process of uploading a CouchbaseCluster
+configuration to Kubernetes using just <code>kubectl</code>:</p>
 </div>
-</div>
-<div class="sect2">
-<h3 id="what-it-supports"><a class="anchor" href="#what-it-supports"></a>What It Supports</h3>
 <div class="paragraph">
-<p>The goal of the Couchbase Operator is to fully manage one or more
-Couchbase deployments so that you as a developer/SRE don’t need to worry
-about the operational complexities of running Couchbase. This is,
-however, our 0.7 Beta release, so not all features have been added yet.
-Below is a list of the management tasks we currently support:</p>
+<p><span class="image"><img src="_images/images/cbopctl_figure_1.jpg" alt="Figure 1"></span></p>
 </div>
-<div class="ulist">
-<ul>
+<div class="olist arabic">
+<ol class="arabic">
 <li>
-<p>Cluster configuration</p>
+<p>The <code>kubectl</code> command is run and the CouchbaseCluster configuration
+is sent to the Kubernetes API Server.</p>
 </li>
 <li>
-<p>Cluster provisioning</p>
+<p>The CouchbaseCluster configuration undergoes partial validation by
+Kubernetes.</p>
 </li>
 <li>
-<p>Ad-hoc scalability</p>
+<p>If the CouchbaseCluster configuration is found to be valid by
+Kubernetes, it is inserted into <code>etcd</code>. If it is not valid, an error is
+returned to <code>kubectl</code>.</p>
 </li>
 <li>
-<p>Auto recovery</p>
+<p><code>etcd</code> acknowledges to the API Server that the CouchbaseCluster
+object was persisted.</p>
 </li>
 <li>
-<p>Logging</p>
+<p>A success message is returned to <code>kubectl</code>.</p>
 </li>
-</ul>
+<li>
+<p>The CouchbaseCluster object is sent to the Couchbase Operator.</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>Since Kubernetes can only do a partial validation, the only place to do
+full validation is in the API Server, because errors in the
+configuration must be caught before the CouchbaseCluster configuration
+makes it to <code>etcd</code>.</p>
+</div>
+<div class="paragraph">
+<p>Kubernetes is a constantly evolving project and the ability to validate
+Custom Resource Definitions is still being improved. In Kubernetes 1.8,
+for example, there is no ability to do validation. In Kubernetes 1.9,
+there is some CRD validation, but it is incomplete and doesn’t allow for
+the defaulting of configuration parameters. In Kubernetes 1.11,
+defaulting will be added, but there still won’t be support for more
+complex types of validation.</p>
+</div>
+<div class="paragraph">
+<p>Until Kubernetes provides full native validation, the Couchbase Operator
+needs to provide a way to validate that configurations are correct
+before submitting them to Kubernetes. The <code>cbopctl</code> command contains all
+of Couchbase’s validation code in one command line tool to ensure that
+invalid configurations can’t make it into Kubernetes.</p>
+</div>
+<div class="sect3">
+<h4 id="cbopctl-commands"><a class="anchor" href="#cbopctl-commands"></a>cbopctl commands</h4>
+<div class="paragraph">
+<p><code>cbopctl</code> implements the create, delete, and apply commands in a similar
+way to <code>kubectl</code> and <code>oc</code>.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ cbopctl
+cbopctl [&lt;command&gt;] [&lt;args&gt;]
+
+  apply    Update a Couchbase Cluster
+  create   Create a new Couchbase Cluster
+  delete   Delete a new Couchbase Cluster
+
+Optional Flags:
+
+     --version                Prints version information
+  -h,--help                   Prints the help message</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The <code>create</code> command should be used to create new CouchbaseClusters,
+<code>delete</code> can be used to delete CouchbaseClusters (although no validation
+takes place during a delete so this command is here for completeness),
+and <code>apply</code> should be used when updating a cluster.</p>
+</div>
+<div class="paragraph">
+<p>Each subcommand has three flags - one that is required and two that are
+optional.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">Required Flags:
+
+  -f,--filename               Filename or the resource to create
+
+Optional Flags:
+
+     --dry-run                If true, only print the object that would be sent,
+                              without sending it
+     --kubeconfig             The path to your kubernetes configuration
+  -h,--help                   Prints the help message</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Specifying the filename of a CouchbaseCluster configuration is required
+for all commands. The <code>dry-run</code> flag can be used to run validation on
+the specified configuration file without uploading it to Kubernetes.
+This is particularly useful if you want to use features in <code>kubectl</code>
+that are not in <code>cbopctl</code>, but you still want to validate the
+configuration before pushing it to Kubernetes. The <code>kubeconfig</code> flag is
+also available in case the configuration to your Kubernetes cluster is
+located on a non-default path.</p>
 </div>
 </div>
 </div>

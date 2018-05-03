@@ -249,7 +249,7 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
     <button class="nav-toggle"></button>
     <span class="nav-text">Couchbase Operator User&#8217;s Guide</span>
 <ul class="nav-list">
-  <li class="nav-item is-current-page" data-depth="2">
+  <li class="nav-item" data-depth="2">
     <a class="nav-link" href="overview.html">Overview</a>
   </li>
   <li class="nav-item" data-depth="2">
@@ -298,7 +298,7 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
   <li class="nav-item" data-depth="3">
     <a class="nav-link" href="couchbaseCliGuide.html">Using the Couchbase CLI</a>
   </li>
-  <li class="nav-item" data-depth="3">
+  <li class="nav-item is-current-page" data-depth="3">
     <a class="nav-link" href="couchbaseClients.html">Using Couchbase Clients</a>
   </li>
 </ul>
@@ -369,90 +369,113 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
 <nav class="crumbs" role="navigation" aria-label="breadcrumbs">
   <ul>
     <li class="crumb">Couchbase Operator User&#8217;s Guide</li>
-    <li class="crumb"><a href="overview.html">Overview</a></li>
+    <li class="crumb"><a href="accessingCouchbase.html">Accessing Couchbase</a></li>
+    <li class="crumb"><a href="couchbaseClients.html">Using Couchbase Clients</a></li>
   </ul>
 </nav>
 </div>
 <article class="doc">
 <div class="sect1">
-<h2 id="overview"><a class="anchor" href="#overview"></a>Overview</h2>
+<h2 id="using-couchbase-clients"><a class="anchor" href="#using-couchbase-clients"></a>Using Couchbase Clients</h2>
 <div class="sectionbody">
 <div class="paragraph">
-<p>The Couchbase Operator is a Kubernetes native integration that enables
-you to automate the management of common Couchbase tasks such as the
-configuration, creation, and scaling of Couchbase clusters. By reducing
-the complexity of running a Couchbase cluster, it lets you focus on the
-desired configuration and not worry about the details of manual
-deployment and lifecycle management.</p>
+<p>The Kubernetes networking model poses some challenges when interacting
+with a Couchbase cluster. This document outlines some of the ways that
+Couchbase clients can connect with the cluster.</p>
 </div>
 <div class="sect2">
-<h3 id="how-it-works"><a class="anchor" href="#how-it-works"></a>How It Works</h3>
+<h3 id="from-a-pod-in-the-same-kubernetes-cluster"><a class="anchor" href="#from-a-pod-in-the-same-kubernetes-cluster"></a>From a Pod in the Same Kubernetes Cluster</h3>
 <div class="paragraph">
-<p>The Couchbase Operator extends the Kubernetes API by creating a Custom
-Resource Definition(CRD) and registering a Couchbase specific
-controller(the Operator) to manage Couchbase clusters. The CRD allows
-you to define a configuration describing what a Couchbase cluster should
-look like. For example, a configuration might define a cluster with
-three nodes, one bucket, and 8GB of memory for the data service. Once
-the configuration is loaded into Kubernetes, the configuration is passed
-to the custom Couchbase controller which takes actions to ensure a
-Couchbase cluster with the specified configuration is provisioned. The
-controller can also detect updates to the configuration and reacts to
-changes that occur in the cluster itself. Like all Kubernetes standard
-built-in resources, the Couchbase Operator doesn’t just manage a single
-Couchbase cluster but multiple Couchbase clusters across an entire
-Kubernetes deployment.</p>
-</div>
-</div>
-<div class="sect2">
-<h3 id="why-not-just-use-statefulsets"><a class="anchor" href="#why-not-just-use-statefulsets"></a>Why Not Just Use StatefulSets</h3>
-<div class="paragraph">
-<p>StatefulSets are great for certain use cases, but they don’t work that
-well when running complex software like databases. This is because
-StatefulSets focus on creating and managing pods, not on managing the
-software running on them. For example, if you wanted a 4-nodes cluster
-and deployed Couchbase using StatefulSets, you would get 4 uninitialized
-Couchbase pods that don’t know about each other. It would then be up to
-you to cluster the nodes together, and this means extra operational
-tasks.</p>
+<p>The recommended network model also happens to be the simplest: Run the
+client from a pod in the same Kubernetes cluster.</p>
 </div>
 <div class="paragraph">
-<p>By creating our own custom Couchbase controller, we can add Couchbase
-specific knowledge so that as each Couchbase pod is deployed we can
-properly configure it and join it with the other Couchbase pods in the
-cluster. It’s also important to keep in mind that provisioning a cluster
-is just one place where having a custom controller helps us to automate
-tasks. Node failure, ad-hoc scaling, and many other management tasks
-require Couchbase specific knowledge to manage Couchbase clusters.</p>
+<p>When a new Couchbase cluster is created, the operator also creates a
+headless service which creates <em>A records</em> for each Couchbase node, and
+an <em>SRV record</em> for the cluster as a whole.</p>
+</div>
+<div class="paragraph">
+<p>See
+<a href="https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/">DNS
+for Services and Pods</a>.</p>
+</div>
+<div class="paragraph">
+<p>To create a connection to the cluster from within the overlay (as a pod
+in the same Kubernetes cluster) you should use the SRV record to perform
+service discovery:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-python hljs" data-lang="python">from couchbase.cluster import Cluster
+
+c = Cluster('couchbase://my-cluster.default.svc.cluster.local')</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Where the domain is composed of <code>my-cluster</code>, which is the name of the
+<code>CouchbaseCluster</code> resource and the super domain.</p>
 </div>
 </div>
 <div class="sect2">
-<h3 id="what-it-supports"><a class="anchor" href="#what-it-supports"></a>What It Supports</h3>
+<h3 id="from-an-external-address"><a class="anchor" href="#from-an-external-address"></a>From an External Address</h3>
 <div class="paragraph">
-<p>The goal of the Couchbase Operator is to fully manage one or more
-Couchbase deployments so that you as a developer/SRE don’t need to worry
-about the operational complexities of running Couchbase. This is,
-however, our 0.7 Beta release, so not all features have been added yet.
-Below is a list of the management tasks we currently support:</p>
+<p>Your ability to access the cluster from outside of the local Kubernetes
+environment is dependent on your network architecture or cloud provider.
+This is particularly important if you want to access Couchbase Server
+across the public internet, either from another cloud or from
+on-premises hardware.</p>
 </div>
-<div class="ulist">
-<ul>
-<li>
-<p>Cluster configuration</p>
-</li>
-<li>
-<p>Cluster provisioning</p>
-</li>
-<li>
-<p>Ad-hoc scalability</p>
-</li>
-<li>
-<p>Auto recovery</p>
-</li>
-<li>
-<p>Logging</p>
-</li>
-</ul>
+<div class="paragraph">
+<p>It is unlikely that DNS-based service discovery will be available due to
+the Kubernetes implementation, so you will need to gather a list of pod
+IP addresses for the clients to use. If you are able to direct DNS
+queries to the remote Kubernetes DNS service you can get a list of A
+records by looking up <code>my-cluster.default.svc.cluster.local</code>.</p>
+</div>
+<div class="paragraph">
+<p>Although not supported officially, the following sections aim to detail
+how to access the cluster in some example scenarios.</p>
+</div>
+<div class="sect3">
+<h4 id="routed-network"><a class="anchor" href="#routed-network"></a>Routed Network</h4>
+<div class="paragraph">
+<p>A routed network involves inter-pod communication to occur via a router
+as north-south traffic; for example, 10.0.0.0/24 and 10.0.1.0/24 are
+allocated as pod address prefixes on two Kubernetes nodes. Traffic
+between them is sent to the default router which then has a routing
+table entry for each prefix and forwards matching packets to the correct
+Kubernetes node.</p>
+</div>
+<div class="paragraph">
+<p>As a result, any traffic passing through the router can be forwarded
+directly to the target pod via its IP address. Clients could reside on
+the same subnet as the cluster, a separate subnet connected to the
+router, or peered with another network entirely via a VPN tunnel for
+example.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="overlay-network"><a class="anchor" href="#overlay-network"></a>Overlay Network</h4>
+<div class="paragraph">
+<p>An overlay network captures packets destined for another Kubernetes
+node, encapsulates it (e.g. GRE, VXLAN) then forwards it directly to the
+destination node via east-west traffic, where the packet is
+decapsulated. This relies on service discovery in order for nodes to
+know about their peer addresses and their pod network prefixes.</p>
+</div>
+<div class="paragraph">
+<p>The cluster cannot be accessed via node ports because clients do not
+support the concept of each node having different ports per service. As
+a result any traffic from clients must be tunneled into the Kubernetes
+cluster, either to the node or to a pod running in the overlay, then
+NATed to avoid asymmetric routing.</p>
+</div>
+<div class="paragraph">
+<p>A possible solution could involve a publicly addressable VPN gateway
+server which decapsulates remote traffic, forwards to a Kubernetes node
+via an IP-in-IP tunnel, which then performs source NAT after routing
+into the overlay.</p>
+</div>
 </div>
 </div>
 </div>
