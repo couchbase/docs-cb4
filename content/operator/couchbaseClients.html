@@ -265,7 +265,7 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
   <li class="nav-item" data-depth="3">
     <a class="nav-link" href="installOpenShift.html">OpenShift Setup</a>
   </li>
-  <li class="nav-item is-current-page" data-depth="3">
+  <li class="nav-item" data-depth="3">
     <a class="nav-link" href="operatorConfig.html">Couchbase Operator Configuration</a>
   </li>
 </ul>
@@ -298,7 +298,7 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
   <li class="nav-item" data-depth="3">
     <a class="nav-link" href="couchbaseCliGuide.html">Using the Couchbase CLI</a>
   </li>
-  <li class="nav-item" data-depth="3">
+  <li class="nav-item is-current-page" data-depth="3">
     <a class="nav-link" href="couchbaseClients.html">Using Couchbase Clients</a>
   </li>
 </ul>
@@ -436,8 +436,8 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
 <nav class="crumbs" role="navigation" aria-label="breadcrumbs">
   <ul>
     <li class="crumb">Couchbase Operator User&#8217;s Guide</li>
-    <li class="crumb"><a href="prerequisiteAndSetup.html">Prerequisites and Setup</a></li>
-    <li class="crumb"><a href="operatorConfig.html">Couchbase Operator Configuration</a></li>
+    <li class="crumb"><a href="accessingCouchbase.html">Accessing Couchbase</a></li>
+    <li class="crumb"><a href="couchbaseClients.html">Using Couchbase Clients</a></li>
   </ul>
 </nav>
 </div>
@@ -478,99 +478,107 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
 
 <article class="doc">
 <div class="sect1">
-<h2 id="couchbase-operator-configuration"><a class="anchor" href="#couchbase-operator-configuration"></a>Couchbase Operator Configuration</h2>
+<h2 id="using-couchbase-clients"><a class="anchor" href="#using-couchbase-clients"></a>Using Couchbase Clients</h2>
 <div class="sectionbody">
 <div class="paragraph">
-<p>The Couchbase Operator configuration is defined below. When loaded into
-Kubernetes, it downloads the Couchbase Operator Docker image, creates
-the CouchbaseCluster Custom Resource Definition(CRD), and starts
-listening for CouchbaseCluster events. The Operator is defined as a
-deployment to allow it to be restarted in the event of a pod or node
-failure.</p>
+<p>The Kubernetes networking model poses some challenges when interacting
+with a Couchbase cluster. This document outlines some of the ways that
+Couchbase clients can connect with the cluster.</p>
+</div>
+<div class="sect2">
+<h3 id="from-a-pod-in-the-same-kubernetes-cluster"><a class="anchor" href="#from-a-pod-in-the-same-kubernetes-cluster"></a>From a Pod in the Same Kubernetes Cluster</h3>
+<div class="paragraph">
+<p>The recommended network model also happens to be the simplest: Run the
+client from a pod in the same Kubernetes cluster.</p>
+</div>
+<div class="paragraph">
+<p>When a new Couchbase cluster is created, the operator also creates a
+headless service which creates <em>A records</em> for each Couchbase node, and
+an <em>SRV record</em> for the cluster as a whole.</p>
+</div>
+<div class="paragraph">
+<p>See
+<a href="https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/">DNS
+for Services and Pods</a>.</p>
+</div>
+<div class="paragraph">
+<p>To create a connection to the cluster from within the overlay (as a pod
+in the same Kubernetes cluster) you should use the SRV record to perform
+service discovery:</p>
 </div>
 <div class="listingblock">
 <div class="content">
-<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml">apiVersion: extensions/v1beta1
-kind: Deployment
-metadata:
-  name: couchbase-operator
-  namespace: default
-spec:
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        name: couchbase-operator
-    spec:
-      containers:
-      - name: couchbase-operator
-        image: couchbase/k8s-operator:0.8.0
-        command:
-        - couchbase-operator
-        args:
-        - -create-crd
-        env:
-        - name: MY_POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        - name: MY_POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        ports:
-          - name: readiness-port
-            containerPort: 8080
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: readiness-port
-          initialDelaySeconds: 3
-          periodSeconds: 3
-          failureThreshold: 19
-        serviceAccountName: couchbase-operator</code></pre>
+<pre class="highlightjs highlight"><code class="language-python hljs" data-lang="python">from couchbase.cluster import Cluster
+
+c = Cluster('couchbase://my-cluster.default.svc.cluster.local')</code></pre>
 </div>
 </div>
 <div class="paragraph">
-<p>Most fields in the Operator configuration should never be changed and we
-recommend using the configuration as is. Some exceptions are below.</p>
+<p>Where the domain is composed of <code>my-cluster</code>, which is the name of the
+<code>CouchbaseCluster</code> resource and the super domain.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="from-an-external-address"><a class="anchor" href="#from-an-external-address"></a>From an External Address</h3>
+<div class="paragraph">
+<p>Your ability to access the cluster from outside of the local Kubernetes
+environment is dependent on your network architecture or cloud provider.
+This is particularly important if you want to access Couchbase Server
+across the public internet, either from another cloud or from
+on-premises hardware.</p>
 </div>
 <div class="paragraph">
-<p><strong>Changing the Namespace</strong></p>
+<p>It is unlikely that DNS-based service discovery will be available due to
+the Kubernetes implementation, so you will need to gather a list of pod
+IP addresses for the clients to use. If you are able to direct DNS
+queries to the remote Kubernetes DNS service you can get a list of A
+records by looking up <code>my-cluster.default.svc.cluster.local</code>.</p>
 </div>
 <div class="paragraph">
-<p>The Operator manages clusters in the namespace that it is deployed in.
-If you want to deploy the Operator in a namespace other than the default
-namespace, then change the <code>metadata.namespace</code> field.</p>
+<p>Although not supported officially, the following sections aim to detail
+how to access the cluster in some example scenarios.</p>
+</div>
+<div class="sect3">
+<h4 id="routed-network"><a class="anchor" href="#routed-network"></a>Routed Network</h4>
+<div class="paragraph">
+<p>A routed network involves inter-pod communication to occur via a router
+as north-south traffic; for example, 10.0.0.0/24 and 10.0.1.0/24 are
+allocated as pod address prefixes on two Kubernetes nodes. Traffic
+between them is sent to the default router which then has a routing
+table entry for each prefix and forwards matching packets to the correct
+Kubernetes node.</p>
 </div>
 <div class="paragraph">
-<p><strong>Changing the Operator Container Image</strong></p>
+<p>As a result, any traffic passing through the router can be forwarded
+directly to the target pod via its IP address. Clients could reside on
+the same subnet as the cluster, a separate subnet connected to the
+router, or peered with another network entirely via a VPN tunnel for
+example.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="overlay-network"><a class="anchor" href="#overlay-network"></a>Overlay Network</h4>
+<div class="paragraph">
+<p>An overlay network captures packets destined for another Kubernetes
+node, encapsulates it (e.g. GRE, VXLAN) then forwards it directly to the
+destination node via east-west traffic, where the packet is
+decapsulated. This relies on service discovery in order for nodes to
+know about their peer addresses and their pod network prefixes.</p>
 </div>
 <div class="paragraph">
-<p>You should not need to change the Operator image unless you are pulling
-the image from somewhere other than the official Couchbase Docker
-repository. If you are pulling the image from somewhere else, change the
-<code>spec.spec.containers[0].image</code> field.</p>
+<p>The cluster cannot be accessed via node ports because clients do not
+support the concept of each node having different ports per service. As
+a result any traffic from clients must be tunneled into the Kubernetes
+cluster, either to the node or to a pod running in the overlay, then
+NATed to avoid asymmetric routing.</p>
 </div>
 <div class="paragraph">
-<p><strong>Changing the Name</strong></p>
+<p>A possible solution could involve a publicly addressable VPN gateway
+server which decapsulates remote traffic, forwards to a Kubernetes node
+via an IP-in-IP tunnel, which then performs source NAT after routing
+into the overlay.</p>
 </div>
-<div class="paragraph">
-<p>By default the name of the deployment created to maintain the Couchbase
-Operator is called couchbase-operator. We recommend keeping this name
-since it is used in all of our examples and tutorials. If you need to
-change it for some reason, ensure that you change the <code>metadata.name</code>,
-<code>spec.template.metadata.labels.name</code>, and <code>spec.spec.containers[0].name</code>
-fields. These fields also must all have the same value.</p>
 </div>
-<div class="paragraph">
-<p><strong>Changing the Service Account</strong></p>
-</div>
-<div class="paragraph">
-<p>We recommend using a ServiceAccount named couchbase-operator, but
-depending on your environment you may want to use a service account with
-a different name. Note that this field only takes effect if your
-Kubernetes environment has RBAC enabled.</p>
 </div>
 </div>
 </div>

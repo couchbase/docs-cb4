@@ -262,10 +262,10 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
   <li class="nav-item" data-depth="3">
     <a class="nav-link" href="installKubernetesNoRBAC.html">Kubernetes Setup (RBAC Disabled)</a>
   </li>
-  <li class="nav-item" data-depth="3">
+  <li class="nav-item is-current-page" data-depth="3">
     <a class="nav-link" href="installOpenShift.html">OpenShift Setup</a>
   </li>
-  <li class="nav-item is-current-page" data-depth="3">
+  <li class="nav-item" data-depth="3">
     <a class="nav-link" href="operatorConfig.html">Couchbase Operator Configuration</a>
   </li>
 </ul>
@@ -437,7 +437,7 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
   <ul>
     <li class="crumb">Couchbase Operator User&#8217;s Guide</li>
     <li class="crumb"><a href="prerequisiteAndSetup.html">Prerequisites and Setup</a></li>
-    <li class="crumb"><a href="operatorConfig.html">Couchbase Operator Configuration</a></li>
+    <li class="crumb"><a href="installOpenShift.html">OpenShift Setup</a></li>
   </ul>
 </nav>
 </div>
@@ -477,101 +477,286 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
       </style>
 
 <article class="doc">
-<div class="sect1">
-<h2 id="couchbase-operator-configuration"><a class="anchor" href="#couchbase-operator-configuration"></a>Couchbase Operator Configuration</h2>
-<div class="sectionbody">
+<div class="sect2">
+<h3 id="installing-on-openshift"><a class="anchor" href="#installing-on-openshift"></a>Installing on OpenShift</h3>
 <div class="paragraph">
-<p>The Couchbase Operator configuration is defined below. When loaded into
-Kubernetes, it downloads the Couchbase Operator Docker image, creates
-the CouchbaseCluster Custom Resource Definition(CRD), and starts
-listening for CouchbaseCluster events. The Operator is defined as a
-deployment to allow it to be restarted in the event of a pod or node
-failure.</p>
+<p>In this setup guide we will walk through the recommended procedure for
+setting up the Couchbase Operator in an OpenShift project. This guide
+assumes that you are installing on a new OpenShift cluster, that you
+have access to a user with cluster-admin privileges (<code>system:admin</code> in
+this guide), and that you have a standard user without cluster-admin
+privileges (<code>developer</code> in this guide). If you have an existing system
+and need to do a custom setup, then you should be able to modify a few
+of the parameters in the various commands and configuration files in
+order to install the Couchbase Operator.</p>
+</div>
+<div class="sect3">
+<h4 id="create-an-openshift-project"><a class="anchor" href="#create-an-openshift-project"></a>Create an OpenShift Project</h4>
+<div class="paragraph">
+<p>Before installing the Couchbase Operator into OpenShift, you should
+create a project with the <code>developer</code> user. For this guide we will
+create a project called <code>operator-example</code>, and later we will make sure
+that the <code>developer</code> user has the ability to manage the Couchbase
+Operator and Couchbase clusters in this project. To create a project,
+run the following commands:</p>
 </div>
 <div class="listingblock">
 <div class="content">
-<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml">apiVersion: extensions/v1beta1
-kind: Deployment
-metadata:
-  name: couchbase-operator
-  namespace: default
-spec:
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        name: couchbase-operator
-    spec:
-      containers:
-      - name: couchbase-operator
-        image: couchbase/k8s-operator:0.8.0
-        command:
-        - couchbase-operator
-        args:
-        - -create-crd
-        env:
-        - name: MY_POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        - name: MY_POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        ports:
-          - name: readiness-port
-            containerPort: 8080
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: readiness-port
-          initialDelaySeconds: 3
-          periodSeconds: 3
-          failureThreshold: 19
-        serviceAccountName: couchbase-operator</code></pre>
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ oc login -u developer
+$ oc new-project operator-example
+$ oc logout</code></pre>
+</div>
+</div>
+</div>
+<div class="sect3">
+<h4 id="crd-and-clusterrole-creation"><a class="anchor" href="#crd-and-clusterrole-creation"></a>CRD and ClusterRole Creation</h4>
+<div class="paragraph">
+<p>The next step in setting up the Couchbase Operator is to install the
+CouchbaseCluster Custom Resource Definition (CRD). The Couchbase
+Operator can do this for you automatically, but in OpenShift it’s better
+to do it manually since installing CRDs is a cluster-level operation and
+requires cluster-level permissions that should not be given to typical
+users.</p>
+</div>
+<div class="paragraph">
+<p>To install the CRD, log in as the system:admin user and run the
+following command:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ oc login -u system:admin
+$ oc create -f https://packages.couchbase.com/kubernetes/0.8.0-beta2/openshift/crd.yaml</code></pre>
 </div>
 </div>
 <div class="paragraph">
-<p>Most fields in the Operator configuration should never be changed and we
-recommend using the configuration as is. Some exceptions are below.</p>
+<p><em>Note</em>: You only need to install the CRD once. After that, the Couchbase
+Operator can be created in any OpenShift project.</p>
 </div>
 <div class="paragraph">
-<p><strong>Changing the Namespace</strong></p>
+<p>Once the CRD is installed, you need to create a role that allows the
+Operator to access the resources it needs to run. Since the Couchbase
+Operator might run in many different projects, it is best to create a
+<em>ClusterRole</em> because you can assign that role to a <em>ServiceAccount</em> in
+any OpenShift project.</p>
 </div>
 <div class="paragraph">
-<p>The Operator manages clusters in the namespace that it is deployed in.
-If you want to deploy the Operator in a namespace other than the default
-namespace, then change the <code>metadata.namespace</code> field.</p>
+<p>To create the ClusterRole for the Couchbase Operator, run the following
+command as the system:admin user:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ oc create -f https://packages.couchbase.com/kubernetes/0.8.0-beta2/openshift/cluster-role-sa.yaml</code></pre>
+</div>
 </div>
 <div class="paragraph">
-<p><strong>Changing the Operator Container Image</strong></p>
+<p><em>Note</em>: You only need to create the ClusterRole once.</p>
 </div>
 <div class="paragraph">
-<p>You should not need to change the Operator image unless you are pulling
-the image from somewhere other than the official Couchbase Docker
-repository. If you are pulling the image from somewhere else, change the
-<code>spec.spec.containers[0].image</code> field.</p>
+<p>Next, since the <code>developer</code> user needs to be able to create and delete
+the Couchbase cluster, you need to create another ClusterRole that gives
+permissions to handle management of the CouchbaseCluster resource.</p>
 </div>
 <div class="paragraph">
-<p><strong>Changing the Name</strong></p>
+<p>Run the following command to create the ClusterRole for <code>developer</code>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">oc create -f https://packages.couchbase.com/kubernetes/0.8.0-beta2/openshift/cluster-role-user.yaml</code></pre>
+</div>
+</div>
+</div>
+<div class="sect3">
+<h4 id="setting-up-rbac-for-an-openshift-project"><a class="anchor" href="#setting-up-rbac-for-an-openshift-project"></a>Setting Up RBAC for an OpenShift Project</h4>
+<div class="paragraph">
+<p>After the ClusterRole is created, you need to create a <em>ServiceAccount</em>
+in the project where you are installing the Couchbase Operator, and then
+assign the ClusterRole to that ServiceAccount using a <em>RoleBinding</em>. (A
+ServiceAccount is used as opposed to a User for the Couchbase Operator
+because ServiceAccounts are meant to be used for processes running in
+OpenShift.)</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ oc create serviceaccount couchbase-operator --namespace operator-example
+$ oc create rolebinding couchbase-operator --clusterrole couchbase-operator --serviceaccount operator-example:couchbase-operator</code></pre>
+</div>
 </div>
 <div class="paragraph">
-<p>By default the name of the deployment created to maintain the Couchbase
-Operator is called couchbase-operator. We recommend keeping this name
-since it is used in all of our examples and tutorials. If you need to
-change it for some reason, ensure that you change the <code>metadata.name</code>,
-<code>spec.template.metadata.labels.name</code>, and <code>spec.spec.containers[0].name</code>
-fields. These fields also must all have the same value.</p>
+<p>Couchbase Server containers must be run by the root user, so you need to
+set a policy on the ServiceAccount to allow Couchbase Server pods to be
+started by the Couchbase Operator. Use the following command to set the
+policy for the couchbase-operator ServiceAccount:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ oc adm policy add-scc-to-user anyuid system:serviceaccount:operator-example:couchbase-operator</code></pre>
+</div>
 </div>
 <div class="paragraph">
-<p><strong>Changing the Service Account</strong></p>
+<p>Now that the ServiceAccount that the Couchbase Operator uses to run has
+been set up, you need to allow the <code>developer</code> user to be able to manage
+the CouchbaseCluster resource in the <code>operator-example</code> project.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ oc create rolebinding couchbasecluster --clusterrole couchbasecluster --user developer --namespace operator-example</code></pre>
+</div>
 </div>
 <div class="paragraph">
-<p>We recommend using a ServiceAccount named couchbase-operator, but
-depending on your environment you may want to use a service account with
-a different name. Note that this field only takes effect if your
-Kubernetes environment has RBAC enabled.</p>
+<p>If you want the <code>developer</code> user to be able to manage CouchbaseCluster
+objects in all projects, then you can run the following command instead:</p>
 </div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">oc create clusterrolebinding couchbasecluster --clusterrole couchbasecluster --user developer</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><em>Note</em>: To set up a ServiceAccount for the operator in another OpenShift
+project, repeat the steps above.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="starting-the-operator"><a class="anchor" href="#starting-the-operator"></a>Starting the Operator</h4>
+<div class="paragraph">
+<p>At this point you can now create the Couchbase Operator with the
+<code>developer</code> user in the <code>operator-example</code> project. To start the
+Couchbase Operator, run the following command:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ oc create -f https://packages.couchbase.com/kubernetes/0.8.0-beta2/openshift/operator.yaml</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Running this command downloads the Couchbase Operator Docker image that
+is specified in the <code>operator.yaml</code> file and creates a <em>deployment</em>
+which manages a single instance of the Couchbase Operator. The Couchbase
+Operator uses a deployment so that it can restart if the pod it’s
+running in dies.</p>
+</div>
+<div class="paragraph">
+<p>After you run the <code>oc create</code> command, it generally takes less than 1
+minute for OpenShift to deploy the Operator and for the Operator to be
+ready to run. Using the following commands, you can check the status of
+the Operator and see the status of your deployment.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ oc get deployments -l app=couchbase-operator</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>If you run this command immediately after the operator is deployed, the
+output will look something like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">NAME                 DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+couchbase-operator   1         1         1            0           10s</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>In this case, the deployment is called ``couchbase-operator''. The
+DESIRED field in the output shows that this deployment will create 1 pod
+running the Couchbase Operator. The CURRENT field shows that 1 Couchbase
+Operator pod has been created. However, the AVAILABLE field indicates
+that that pod is not ready yet since its value is 0 and not 1. This
+means that the Operator is still establishing a connection to the
+Kubernetes master node to allow it to get updates on CouchbaseCluster
+objects. Once the Operator has completed this task it will be able to
+start managing Couchbase clusters and the status will be shown as
+AVAILABLE.</p>
+</div>
+<div class="paragraph">
+<p>You should continue to poll the status of the Operator until your output
+looks similar to the following output:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">NAME                 DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+couchbase-operator   1         1         1            1           47s</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>You can also verify that the Couchbase Operator has come up successfully
+using the following command:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">oc get pods -l app=couchbase-operator</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>If the Couchbase Operator is up and running successfully, the command
+returns an output where the READY field shows 1/1, such as:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">NAME                                  READY   STATUS   RESTARTS   AGE
+couchbase-operator-1917615544-t5mhp   1/1     Running  0          57s</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>You can also check the logs to confirm that the Couchbase Operator is up
+and running. Look for the message: ``starting couchbaseclusters
+controller''.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ oc logs couchbase-operator-1917615544-t5mhp
+time="2018-04-25T03:01:56Z" level=info msg="Obtaining resource lock" module=main
+time="2018-04-25T03:01:56Z" level=info msg="Starting event recorder" module=main
+time="2018-04-25T03:01:56Z" level=info msg="Attempting to be elected the couchbase-operator leader" module=main
+time="2018-04-25T03:02:13Z" level=info msg="I'm the leader, attempt to start the operator" module=main
+time="2018-04-25T03:02:13Z" level=info msg="Creating the couchbase-operator controller" module=main
+time="2018-04-25T03:02:13Z" level=info msg="Event(v1.ObjectReference{Kind:\"Endpoints\", Namespace:\"default\", Name:\"couchbase-operator\", UID:\"9b86c750-47e7-11e8-866e-080027b2a68d\", APIVersion:\"v1\", ResourceVersion:\"23482\", FieldPath:\"\"}): type: 'Normal' reason: 'LeaderElection' couchbase-operator-75ddfdbdb5-bz7ng became leader" module=event_recorder
+time="2018-04-25T03:02:13Z" level=info msg="starting couchbaseclusters controller"</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="uninstall"><a class="anchor" href="#uninstall"></a>Uninstall</h3>
+<div class="paragraph">
+<p>Uninstalling the Couchbase Operator is a two-step process.</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Delete the Couchbase Operator</p>
+<div class="paragraph">
+<p>You can delete the Couchbase Operator as the <code>developer</code> or
+<code>system:admin</code> user.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ kubectl delete deployment couchbase-operator</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><em>Note</em>: Deleting the Couchbase Operator from a namespace will not remove
+or affect any Couchbase pods in your Kubernetes cluster.</p>
+</div>
+</li>
+<li>
+<p>Delete the CRD</p>
+<div class="paragraph">
+<p>You can only delete the CRD as the <code>system:admin</code> user.</p>
+</div>
+<div class="paragraph">
+<p>Make sure the Couchbase Operator has been deleted from all other
+OpenShift projects in the cluster before you delete the CRD. Once the
+Couchbase Operator has been deleted, run the following command to delete
+the CRD:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ kubectl delete crd couchbaseclusters.couchbase.database.couchbase.com</code></pre>
+</div>
+</div>
+</li>
+</ol>
 </div>
 </div>
 </article>

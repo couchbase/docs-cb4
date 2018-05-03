@@ -265,7 +265,7 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
   <li class="nav-item" data-depth="3">
     <a class="nav-link" href="installOpenShift.html">OpenShift Setup</a>
   </li>
-  <li class="nav-item is-current-page" data-depth="3">
+  <li class="nav-item" data-depth="3">
     <a class="nav-link" href="operatorConfig.html">Couchbase Operator Configuration</a>
   </li>
 </ul>
@@ -435,9 +435,6 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
   <button class="navigation-toggle"></button>
 <nav class="crumbs" role="navigation" aria-label="breadcrumbs">
   <ul>
-    <li class="crumb">Couchbase Operator User&#8217;s Guide</li>
-    <li class="crumb"><a href="prerequisiteAndSetup.html">Prerequisites and Setup</a></li>
-    <li class="crumb"><a href="operatorConfig.html">Couchbase Operator Configuration</a></li>
   </ul>
 </nav>
 </div>
@@ -478,99 +475,117 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
 
 <article class="doc">
 <div class="sect1">
-<h2 id="couchbase-operator-configuration"><a class="anchor" href="#couchbase-operator-configuration"></a>Couchbase Operator Configuration</h2>
+<h2 id="using-openshift-templates-with-couchbase-operator"><a class="anchor" href="#using-openshift-templates-with-couchbase-operator"></a>Using OpenShift Templates with Couchbase Operator</h2>
 <div class="sectionbody">
 <div class="paragraph">
-<p>The Couchbase Operator configuration is defined below. When loaded into
-Kubernetes, it downloads the Couchbase Operator Docker image, creates
-the CouchbaseCluster Custom Resource Definition(CRD), and starts
-listening for CouchbaseCluster events. The Operator is defined as a
-deployment to allow it to be restarted in the event of a pod or node
-failure.</p>
+<p><strong>DISCLAIMER:</strong> The following automation should only be used in
+development clusters since it involves granting privileges to the
+operator that aren’t ideal in a production OpenShift cluster.</p>
+</div>
+<div class="sect3">
+<h4 id="about-openshift-templates"><a class="anchor" href="#about-openshift-templates"></a>About OpenShift Templates</h4>
+<div class="paragraph">
+<p>OpenShift offers an application catalog that provides templated
+deployment of applications into projects. By using templates to deploy
+applications, common configurations can be parameterized so that you can
+customize instances of your application directly from the user
+interface.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="bootstrapping-openshift-for-couchbase"><a class="anchor" href="#bootstrapping-openshift-for-couchbase"></a>Bootstrapping OpenShift for Couchbase</h3>
+<div class="paragraph">
+<p>Since templates can be imported using the standard <code>oc</code> cli tool, we’ve
+created a bootstrap script to assist with importing Couchbase templates
+into an OpenShift cluster.</p>
 </div>
 <div class="listingblock">
 <div class="content">
-<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml">apiVersion: extensions/v1beta1
-kind: Deployment
-metadata:
-  name: couchbase-operator
-  namespace: default
-spec:
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        name: couchbase-operator
-    spec:
-      containers:
-      - name: couchbase-operator
-        image: couchbase/k8s-operator:0.8.0
-        command:
-        - couchbase-operator
-        args:
-        - -create-crd
-        env:
-        - name: MY_POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        - name: MY_POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        ports:
-          - name: readiness-port
-            containerPort: 8080
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: readiness-port
-          initialDelaySeconds: 3
-          periodSeconds: 3
-          failureThreshold: 19
-        serviceAccountName: couchbase-operator</code></pre>
+<pre class="highlightjs highlight"><code class="language-console hljs" data-lang="console">$ wget https://packages.couchbase.com/kubernetes/0.8.0-beta2/openshift-bootstrap.zip
+$ tar xzf openshift-bootstrap.zip
+$ cd openshift-bootstrap
+$ chmod +x openshift-bootsrap.sh
+$ ./openshift-bootsrap.sh</code></pre>
 </div>
 </div>
 <div class="paragraph">
-<p>Most fields in the Operator configuration should never be changed and we
-recommend using the configuration as is. Some exceptions are below.</p>
+<p><em>Note</em>: The bootstrap will also create a utility project named
+<code>admin-ct-ctl</code>. This utility project consists of a controller that
+detects when a new Couchbase cluster is being created from your
+template, and ensures that there is an instance of the
+couchbase-operator within your clusters project.</p>
 </div>
 <div class="paragraph">
-<p><strong>Changing the Namespace</strong></p>
+<p>Refreshing the application catalog page should reveal a new Couchbase
+template in the catalog. Click the Couchbase template to deploy a
+cluster into a new or existing project. Upon completion, you will see a
+link to the Couchbase Server Web Console of the cluster that is being
+created. This link is also available in the clusters project under
+<strong>Resources &gt; Routes</strong> for future referencing.</p>
+</div>
+<div class="sect3">
+<h4 id="troubleshootingfaq"><a class="anchor" href="#troubleshootingfaq"></a>Troubleshooting/FAQ</h4>
+<div class="paragraph">
+<p>In general, it’s important to pay attention to the output from the
+bootstrap script, as any failures there indicate that something has gone
+wrong.</p>
+</div>
+<div class="sect4">
+<h5 id="the-template-doesnt-appear-in-the-catalog"><a class="anchor" href="#the-template-doesnt-appear-in-the-catalog"></a>The template doesn’t appear in the catalog</h5>
+<div class="paragraph">
+<p>Templates are stored in the OpenShift namespace. Try listing the
+templates to ensure that it exists:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">oc get template -n openshift | grep couchbase</code></pre>
+</div>
 </div>
 <div class="paragraph">
-<p>The Operator manages clusters in the namespace that it is deployed in.
-If you want to deploy the Operator in a namespace other than the default
-namespace, then change the <code>metadata.namespace</code> field.</p>
+<p>If the template is listed there, then you may need to wait for the
+catalog to sync. If not, then you may need to debug your
+<a href="https://docs.openshift.com/container-platform/3.6/architecture/service_catalog/template_service_broker.html">template
+service broker</a> for any issues.</p>
+</div>
+</div>
+<div class="sect4">
+<h5 id="the-couchbase-cluster-isnt-starting"><a class="anchor" href="#the-couchbase-cluster-isnt-starting"></a>The Couchbase cluster isn’t starting</h5>
+<div class="paragraph">
+<p>Make sure that the couchbase-operator was deployed in your project. You
+should see it in the overview page of your project within the OpenShift
+UI. If the operator exists, refer to the documentation about
+<a href="logsTroubleshooting.adoc">logs and troubleshooting</a> of the operator.
+If the operator does not exist, then check the <code>admin-ct-ctl</code> project.</p>
 </div>
 <div class="paragraph">
-<p><strong>Changing the Operator Container Image</strong></p>
+<p>As previously mentioned, <code>admin-ct-ctl</code> is the project that is
+responsible for deploying the operator into your project. Opening this
+project should show a deployment named
+<code>couchbase-operator-admin-controller</code>. Check the logs of its pod for
+debugging any errors that may occur. If you do not see the deployment
+there, then it’s possible that you did not have permissions to create
+new projects. Double check the output of the bootstrap script to
+confirm.</p>
+</div>
+</div>
+<div class="sect4">
+<h5 id="routing-to-the-couchbase-server-web-console-isnt-working"><a class="anchor" href="#routing-to-the-couchbase-server-web-console-isnt-working"></a>Routing to the Couchbase Server Web Console isn’t working</h5>
+<div class="paragraph">
+<p>In some cases, it can take a few minutes for the Couchbase pods to
+start, which will delay access to the Couchbase Server Web Console.
+Therefore, it’s best to check that the cluster pods are indeed up and
+running before assuming its availability. If the pods are running, then
+it’s possible that the IP being routed to is not actually publicly
+accessible, or that it is associated with the wrong interface.</p>
 </div>
 <div class="paragraph">
-<p>You should not need to change the Operator image unless you are pulling
-the image from somewhere other than the official Couchbase Docker
-repository. If you are pulling the image from somewhere else, change the
-<code>spec.spec.containers[0].image</code> field.</p>
+<p>Note that the IP address of the route is based on the response from
+<code>oc config</code>. If it has gathered the wrong IP address you will need to
+edit the route to your cluster via <strong>Resources &gt; Routes</strong> in the OpenSHift
+UI.</p>
 </div>
-<div class="paragraph">
-<p><strong>Changing the Name</strong></p>
 </div>
-<div class="paragraph">
-<p>By default the name of the deployment created to maintain the Couchbase
-Operator is called couchbase-operator. We recommend keeping this name
-since it is used in all of our examples and tutorials. If you need to
-change it for some reason, ensure that you change the <code>metadata.name</code>,
-<code>spec.template.metadata.labels.name</code>, and <code>spec.spec.containers[0].name</code>
-fields. These fields also must all have the same value.</p>
 </div>
-<div class="paragraph">
-<p><strong>Changing the Service Account</strong></p>
-</div>
-<div class="paragraph">
-<p>We recommend using a ServiceAccount named couchbase-operator, but
-depending on your environment you may want to use a service account with
-a different name. Note that this field only takes effect if your
-Kubernetes environment has RBAC enabled.</p>
 </div>
 </div>
 </div>

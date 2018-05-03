@@ -256,7 +256,7 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
     <button class="nav-toggle"></button>
     <a class="nav-link" href="prerequisiteAndSetup.html">Prerequisites and Setup</a>
 <ul class="nav-list">
-  <li class="nav-item" data-depth="3">
+  <li class="nav-item is-current-page" data-depth="3">
     <a class="nav-link" href="installKubernetes.html">Kubernetes Setup</a>
   </li>
   <li class="nav-item" data-depth="3">
@@ -265,7 +265,7 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
   <li class="nav-item" data-depth="3">
     <a class="nav-link" href="installOpenShift.html">OpenShift Setup</a>
   </li>
-  <li class="nav-item is-current-page" data-depth="3">
+  <li class="nav-item" data-depth="3">
     <a class="nav-link" href="operatorConfig.html">Couchbase Operator Configuration</a>
   </li>
 </ul>
@@ -437,7 +437,7 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
   <ul>
     <li class="crumb">Couchbase Operator User&#8217;s Guide</li>
     <li class="crumb"><a href="prerequisiteAndSetup.html">Prerequisites and Setup</a></li>
-    <li class="crumb"><a href="operatorConfig.html">Couchbase Operator Configuration</a></li>
+    <li class="crumb"><a href="installKubernetes.html">Kubernetes Setup</a></li>
   </ul>
 </nav>
 </div>
@@ -477,101 +477,192 @@ _______/ INCLUDE HEADER - BODY - FOOTER \_______________________________________
       </style>
 
 <article class="doc">
-<div class="sect1">
-<h2 id="couchbase-operator-configuration"><a class="anchor" href="#couchbase-operator-configuration"></a>Couchbase Operator Configuration</h2>
-<div class="sectionbody">
+<div class="sect2">
+<h3 id="installing-on-kubernetes-with-rbac"><a class="anchor" href="#installing-on-kubernetes-with-rbac"></a>Installing on Kubernetes With RBAC</h3>
 <div class="paragraph">
-<p>The Couchbase Operator configuration is defined below. When loaded into
-Kubernetes, it downloads the Couchbase Operator Docker image, creates
-the CouchbaseCluster Custom Resource Definition(CRD), and starts
-listening for CouchbaseCluster events. The Operator is defined as a
-deployment to allow it to be restarted in the event of a pod or node
-failure.</p>
+<p>In this setup guide we will walk through the recommended procedure for
+setting up the Couchbase Operator in a Kubernetes cluster that has RBAC
+enabled. This guide assumes that you are installing on a new Kubernetes
+cluster, but if you have an existing system and need to do a custom
+setup, then you should be able to modify a few of the parameters in the
+various commands and configuration files in order to install the
+Couchbase Operator.</p>
+</div>
+<div class="sect3">
+<h4 id="creating-a-clusterrole"><a class="anchor" href="#creating-a-clusterrole"></a>Creating a ClusterRole</h4>
+<div class="paragraph">
+<p>The first step for installing the Couchbase Operator is to create a
+<em>ClusterRole</em> that allows the Operator to access the resources it needs
+to run. Since the Couchbase Operator might run in many different
+namespaces, it is best to create a ClusterRole because you can assign
+that role to a <em>ServiceAccount</em> in any namespace.</p>
+</div>
+<div class="paragraph">
+<p>To create the ClusterRole for the Couchbase Operator, run the following
+command:</p>
 </div>
 <div class="listingblock">
 <div class="content">
-<pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml">apiVersion: extensions/v1beta1
-kind: Deployment
-metadata:
-  name: couchbase-operator
-  namespace: default
-spec:
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        name: couchbase-operator
-    spec:
-      containers:
-      - name: couchbase-operator
-        image: couchbase/k8s-operator:0.8.0
-        command:
-        - couchbase-operator
-        args:
-        - -create-crd
-        env:
-        - name: MY_POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        - name: MY_POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        ports:
-          - name: readiness-port
-            containerPort: 8080
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: readiness-port
-          initialDelaySeconds: 3
-          periodSeconds: 3
-          failureThreshold: 19
-        serviceAccountName: couchbase-operator</code></pre>
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ kubectl create -f https://packages.couchbase.com/kubernetes/0.8.0-beta2/k8s-rbac/cluster-role.yaml</code></pre>
 </div>
 </div>
 <div class="paragraph">
-<p>Most fields in the Operator configuration should never be changed and we
-recommend using the configuration as is. Some exceptions are below.</p>
+<p><em>Note</em>: This role only needs to be created once.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="creating-a-serviceaccount"><a class="anchor" href="#creating-a-serviceaccount"></a>Creating a ServiceAccount</h4>
+<div class="paragraph">
+<p>After the ClusterRole is created, you need to create a ServiceAccount in
+the namespace where you are installing the Couchbase Operator, and then
+assign the ClusterRole to that ServiceAccount using a
+<em>ClusterRoleBinding</em>. In this guide we will use the <code>default</code> namespace
+to create the ServiceAccount.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ kubectl create serviceaccount couchbase-operator --namespace default
+$ kubectl create clusterrolebinding couchbase-operator --clusterrole couchbase-operator --serviceaccount default:couchbase-operator</code></pre>
+</div>
 </div>
 <div class="paragraph">
-<p><strong>Changing the Namespace</strong></p>
+<p><em>Note</em>: If you would prefer to use a <em>RoleBinding</em> instead of a
+ClusterRoleBinding, then the CRD needs to be installed separately from
+the Couchbase Operator. This can be accomplished by removing the
+<code>-create-crd argument</code> from the <code>operator.yaml</code> file and uploading the
+CouchbaseCluster CRD separately.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="starting-the-operator"><a class="anchor" href="#starting-the-operator"></a>Starting the Operator</h4>
+<div class="paragraph">
+<p>Now that the ServiceAccount is set up with the appropriate permissions,
+you can start the Couchbase Operator by running the following command:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ kubectl create -f https://packages.couchbase.com/kubernetes/0.8.0-beta2/k8s-rbac/operator.yaml</code></pre>
+</div>
 </div>
 <div class="paragraph">
-<p>The Operator manages clusters in the namespace that it is deployed in.
-If you want to deploy the Operator in a namespace other than the default
-namespace, then change the <code>metadata.namespace</code> field.</p>
+<p>Running this command downloads the Couchbase Operator Docker image that
+is specified in the <code>operator.yaml</code> file and creates a <em>deployment</em>
+which manages a single instance of the Couchbase Operator. The Couchbase
+Operator uses a deployment so that it can restart if the pod it’s
+running in dies.</p>
 </div>
 <div class="paragraph">
-<p><strong>Changing the Operator Container Image</strong></p>
+<p>After you run the <code>kubectl create</code> command, it generally takes less than
+1 minute for Kubernetes to deploy the Operator and for the Operator to
+be ready to run. Using the following commands, you can check the status
+of the Operator and see the status of your deployment.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ kubectl get deployments -l app=couchbase-operator</code></pre>
+</div>
 </div>
 <div class="paragraph">
-<p>You should not need to change the Operator image unless you are pulling
-the image from somewhere other than the official Couchbase Docker
-repository. If you are pulling the image from somewhere else, change the
-<code>spec.spec.containers[0].image</code> field.</p>
+<p>If you run this command immediately after the operator is deployed, the
+output will look something like this:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">NAME                 DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+couchbase-operator   1         1         1            0           10s</code></pre>
+</div>
 </div>
 <div class="paragraph">
-<p><strong>Changing the Name</strong></p>
+<p>In this case, the deployment is called ``couchbase-operator''. The
+DESIRED field in the output shows that this deployment will create 1 pod
+running the Couchbase Operator. The CURRENT field shows that 1 Couchbase
+Operator pod has been created. However, the AVAILABLE field indicates
+that that pod is not ready yet since its value is 0 and not 1. This
+means that the Operator is still establishing a connection to the
+Kubernetes master node to allow it to get updates on CouchbaseCluster
+objects. Once the Operator has completed this task it will be able to
+start managing Couchbase clusters and the status will be shown as
+AVAILABLE.</p>
 </div>
 <div class="paragraph">
-<p>By default the name of the deployment created to maintain the Couchbase
-Operator is called couchbase-operator. We recommend keeping this name
-since it is used in all of our examples and tutorials. If you need to
-change it for some reason, ensure that you change the <code>metadata.name</code>,
-<code>spec.template.metadata.labels.name</code>, and <code>spec.spec.containers[0].name</code>
-fields. These fields also must all have the same value.</p>
+<p>You should continue to poll the status of the Operator until your output
+looks similar to the following output:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">NAME                 DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+couchbase-operator   1         1         1            1           47s</code></pre>
+</div>
 </div>
 <div class="paragraph">
-<p><strong>Changing the Service Account</strong></p>
+<p>You can also verify that the Couchbase Operator has come up successfully
+using the following command:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">kubectl get pods -l app=couchbase-operator</code></pre>
+</div>
 </div>
 <div class="paragraph">
-<p>We recommend using a ServiceAccount named couchbase-operator, but
-depending on your environment you may want to use a service account with
-a different name. Note that this field only takes effect if your
-Kubernetes environment has RBAC enabled.</p>
+<p>If the Couchbase Operator is up and running successfully, the command
+returns an output where the READY field shows 1/1, such as:</p>
 </div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">NAME                                  READY   STATUS   RESTARTS   AGE
+couchbase-operator-1917615544-t5mhp   1/1     Running  0          57s</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>You can also check the logs to confirm that the Couchbase Operator is up
+and running. Look for the message: ``CRD initialized, listening for
+events… module=controller''.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ kubectl logs couchbase-operator-1917615544-t5mhp
+time="2018-04-25T03:01:56Z" level=info msg="Obtaining resource lock" module=main
+time="2018-04-25T03:01:56Z" level=info msg="Starting event recorder" module=main
+time="2018-04-25T03:01:56Z" level=info msg="Attempting to be elected the couchbase-operator leader" module=main
+time="2018-04-25T03:02:13Z" level=info msg="I'm the leader, attempt to start the operator" module=main
+time="2018-04-25T03:02:13Z" level=info msg="Creating the couchbase-operator controller" module=main
+time="2018-04-25T03:02:13Z" level=info msg="Event(v1.ObjectReference{Kind:\"Endpoints\", Namespace:\"default\", Name:\"couchbase-operator\", UID:\"9b86c750-47e7-11e8-866e-080027b2a68d\", APIVersion:\"v1\", ResourceVersion:\"23482\", FieldPath:\"\"}): type: 'Normal' reason: 'LeaderElection' couchbase-operator-75ddfdbdb5-bz7ng became leader" module=event_recorder
+time="2018-04-25T03:02:13Z" level=info msg="CRD initialized, listening for events..." module=controller
+time="2018-04-25T03:02:13Z" level=info msg="starting couchbaseclusters controller"</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="uninstall"><a class="anchor" href="#uninstall"></a>Uninstall</h3>
+<div class="paragraph">
+<p>Uninstalling the Couchbase Operator is a two-step process.</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Delete the Couchbase Operator</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ kubectl delete deployment couchbase-operator</code></pre>
+</div>
+</div>
+</li>
+<li>
+<p>Delete the CRD</p>
+<div class="paragraph">
+<p>Make sure all instances of the Couchbase Operator have been deleted from
+the Kubernetes cluster before you delete the CRD. Once all instances of
+the Couchbase Operator have been deleted, run the following command to
+delete the CRD:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">$ kubectl delete crd couchbaseclusters.couchbase.database.couchbase.com</code></pre>
+</div>
+</div>
+</li>
+</ol>
 </div>
 </div>
 </article>
