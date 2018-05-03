@@ -21,7 +21,7 @@
     Memory-quota allocation on Couchbase Server occurs <i>per service</i> (except in the case
     of the <i>Query Service</i>, which does not require a specific allocation). This allows
     the availability of memory-resources to be tuned according to the assignment of services,
-    node by node. Note that the Data Service must run on every node; and that quotas for buckets,
+    node by node. Note that the Data Service must run on at least one node; and that quotas for buckets,
     specified at the time of bucket-creation, are subtracted 
     from the quota allocated to the <i>Data Service</i>.
    </p>
@@ -40,14 +40,7 @@
     Consequently, if a node's total available memory is 100 GB, any attempt to allocate memory beyond 80 GB produces
     an error. Therefore, when a cluster is being assembled, available memory resources should be carefully calculated
     and cross-referenced with anticipated
-    service-requirements. Note, for example, that if an initial cluster-node 
-    with 100 GB of memory is assigned 
-    the Data Service only, and the Data Service memory
-    allocation is specified as 80 GB, an error results from any attempt to add to the cluster a new
-    node with only 90 GB of total memory: since the Data Service is now bound to run with
-    a memory allocation of 80 GB on every node, and the new node is unable to accommodate this
-    allocation within 80% of its own available memory. (This situation might be resolved by lowering
-    the quota for the Data Service, by means of the <b>Service Memory Quotas</b> panel, described below.)
+    service-requirements. 
    </p>
    
    <p>
@@ -63,18 +56,17 @@
     the first node in the cluster, is available: this covers all configurable elements, including memory
     quotas. However, if insufficient memory for the default configuration is available on the new node,  
     the default configuration is prohibited: in such cases, settings
-    for the new node can be custom-configured instead; allowing a subset of services to be specified, such
-    as can be accommodated by the available memory of the new node. 
+    for the new node can be custom-configured instead; allowing an appropriate subset of services to be specified. 
    </p>
    
    <p>
     If, when the initial node of a cluster is set up, only a subset of services is assigned, additional
-    nodes might subsequently be added, in order to host additional services: in which case, each new service can be given
+    nodes can subsequently be added in order to host additional services: in which case, each new service can be given
     its initial memory allocation as its node is added.
    </p>
    
    <p>
-    Instructions on how to add a new node to a cluster, determine which services be retained, and
+    Instructions on how to add a new node to a cluster, determine which services be can be retained, and
     add new services, can
     be found in the section 
     <xref href="../../install/init-setup.dita#topic12527/join-an-existing-cluster" scope="local" format="dita">Join an Existing Cluster</xref>,
@@ -87,9 +79,7 @@
     services running on the cluster, and specifies
     the memory allocation for each.
     The panel is interactive, and allows the memory allocations to be changed and saved. If a modification
-    attemptedly goes above the maximum allocation supported by any node in the cluster, or below
-    minimum quotas that are either imposed by default (see below) or are the result of existing usage (as
-    might be the case with Data Service memory-resources, allocated to defined buckets),
+    attemptedly goes above maximum or minimum possible allocations,
     a notification 
     of the error is displayed, and the modification is disallowed. See 
     <xref href="../../settings/cluster-settings.dita" scope="local" format="dita">Configure Cluster Settings</xref> 
@@ -97,8 +87,7 @@
    </p>
    
    <p>
-    Each service (except the Query Service) has a minimum required memory-quota. These are
-    as follows:
+    Each service (except the Query Service) has a minimum required memory quota:
    </p>
    
    <table frame="all" rowsep="1" colsep="1" id="memory_quota_mimumums">
@@ -155,8 +144,8 @@
    
    <p>
     When Couchbase Server is restarted on a node, the node goes through a <i>warmup process</i> 
-    before it starts handling data requests again. During this warmup process, data 
-    on disk is sequentially reloaded into memory. The time required
+    before it restarts the handling of data requests. During this warmup process, data 
+    on disk is sequentially reloaded into memory. The time required for the reload
     depends on the size and configuration of the system, the amount of data persisted on
     the node, and the ejection policy configured for the buckets. 
    </p>
@@ -164,11 +153,12 @@
    <p>
     Frequently used items are
     identified via a scanner process, which examines an <i>access log</i>, and obtains the 
-    appropriate keys. The corresponding items are then loaded with priority. The scanner
+    appropriate keys. The corresponding items are then loaded with high priority. The scanner
     process is configurable, via the CLI utility <codeph>cbepctl flush_param</codeph>.
-    This utility also provides parameters, <codeph>warmup_min_memory_threshold</codeph> and 
+    This utility also provides the parameters <codeph>warmup_min_memory_threshold</codeph> and 
     <codeph>warmup_min_item_threshold</codeph>, which can be used to schedule the resumption of traffic
-    before all items have been reloaded into memory.
+    before all items have been reloaded into memory. See
+    <xref href="../../cli/cbepctl/set-flush_param.dita" scope="local" format="dita">set flush_param</xref>.
    </p>
    
   </section>
@@ -193,7 +183,7 @@
     <codeph>mem_low_wat</codeph> and <codeph>mem_high_wat</codeph>.
     If data is continuously loaded into the bucket, its quantity eventually 
     increases to the value indicated by the
-    <codeph>mem_low_wat</codeph> watermark. No action is yet taken. Then, as still more data has been
+    <codeph>mem_low_wat</codeph> watermark. No action is yet taken. Then, as still more data is
     loaded, its quantity 
     increases to the value indicated by the <codeph>mem_high_wat</codeph> watermark. 
     If, based on the bucket's configuration, items can be ejected from the bucket, 
@@ -201,8 +191,9 @@
     ejects items from the bucket until
     the quantity of data has decreased to the <codeph>mem_low_wat</codeph> watermark. 
     If the rate at which data continues to be loaded is greater than that at which it is being ejected, or
-    if ejection cannot be performed, the system provides notification of insufficient memory, until
-    sufficient memory becomes or is made available.
+    if ejection cannot be performed, the system disploays an <i>insufficient memory</i>
+    notification until
+    sufficient is available.
    </p> 
    
    <p>
@@ -212,6 +203,16 @@
     
     <p>
      <image href="./images/tunableMemory.png" width="400" id="tunable_memory"/>
+    </p>
+   
+    <p>
+     The default setting for <codeph>mem_low_wat</codeph> is 75%. The default setting for
+     <codeph>mem_high_wat</codeph> is 85%. These settings give items from <i>active</i>
+     vBuckets a 50% chance of eviction; and give items from <i>replica</i> vBuckets a
+     60% chance of eviction. The default settings can be changed by means of the
+     <codeph>cbepctl</codeph> utility. See
+     <xref href="../../cli/cbepctl/set-flush_param.dita" scope="local" format="dita">set flush_param</xref>.
+     
     </p>
    
   </section>
@@ -312,40 +313,8 @@
     The item pager runs periodically, to remove items from memory. When the amount of
     a bucket's memory that is
     used by its items reaches the high water mark, both active and replica data are
-    ejected, until memory usage for the bucket reaches the low water mark. Using the default settings,
-    active items have a 40% chance of eviction, while
-    replica items have a 60% chance of eviction. Both the high water mark and low water mark are
-    expressed as a percentage amount of memory, such as 80%. Settings can be
-    custom-specified. The following table shows the recommended, default values:
+    ejected, until memory usage for the bucket reaches the low water mark. 
    </p>
-   
-   <table>
-    <tgroup cols="3" align="left">
-     <colspec colname="c1" colnum="1"/>
-     <colspec colname="c2" colnum="2"/>
-     <colspec colname="c3" colnum="3"/>
-     <thead>
-      <row>
-       <entry>Version</entry>
-       <entry>High Water Mark</entry>
-       <entry>Low Water Mark</entry>
-      </row>
-     </thead>
-     <tbody>
-      <row>
-       <entry>2.0</entry>
-       <entry>75%</entry>
-       <entry>60%</entry>
-      </row>
-      <row>
-       <entry>2.0.1 and higher</entry>
-       <entry>85%</entry>
-       <entry>75%</entry>
-      </row>
-     </tbody>
-    </tgroup>
-   </table>
-   
    
    <p>
     The item pager ejects items in two phases: 
@@ -412,13 +381,13 @@
    </title>
    
    <p>
-    Over time, Couchbase Server memory can become 
+    Over time, Couchbase Server-memory can become 
     fragmented.
     Each page in memory is typically responsible for holding documents of a specific 
     size-range. Over time, if memory pages assigned to a specific size-range become sparsely populated 
-    (due to documents of that size being ejected, or items changing in size), the unused space in 
+    (due to documents of that size being ejected, or to items changing in size), the unused space in 
     those pages cannot be used for documents of other sizes, until a complete page is free, and that page 
-    is re-assigned to a new size. Such effects, which are highly workload dependent, may result in memory 
+    is re-assigned to a new size. Such effects, which are highly workload-dependent, may result in memory 
     that cannot be used efficiently. 
    </p> 
    
@@ -446,7 +415,7 @@
    </p>
    
    <p>
-    By means of a <i>Bloom Filter</i> an
+    By means of a <i>Bloom Filter</i>, an
     item can be determined <i>definitely not to be</i>, but cannot be determined <i>definitely to be</i>
     on disk. In consequence, the information provided by Bloom Filters can minimize but cannot absolutely 
     prevent on-disk searches for non-existent keys.
