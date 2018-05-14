@@ -86,5 +86,267 @@ foreach (var result in results)
     <p>We then call the <apiname>CouchbaseBucket.Query(SearchQuery query)</apiname> method and
       iterate over the <apiname>ISearchQueryResult</apiname> object which will gives the results of
       the query.</p>
+
+    <section id="dotnet-fts-detailed-example">
+      <title>
+        Detailed Example
+      </title>
+
+      <p>
+        The following example demonstrates Full Text Search queries that
+        can be made with the .NET SDK.
+      </p>
+
+      <codeblock outputclass="language-csharp">
+static void Main(string[] args)
+{
+    // Access the cluster that is running on the local host, authenticating with
+    // the username and password of any user who has the "FTS Searcher" role
+    // for the "travel-sample" bucket...
+    //
+
+    var config = new ClientConfiguration
+    {
+        Servers = new List&lt;Uri> {new Uri("couchbase://localhost")}
+    };
+
+    using (var cluster = new Cluster(config))
+    {
+        cluster.Authenticate("Administrator", "password");
+
+        var travelSample = cluster.OpenBucket("travel-sample");
+        SimpleTextQuery(travelSample);
+        SimpleTextQueryOnStoredField(travelSample);
+        SimpleTextQueryOnNonDefaultIndex(travelSample);
+        TextQueryOnStoredFieldWithFacet(travelSample);
+        DocIdQueryMethod(travelSample);
+        UnAnalyzedTermQuery(travelSample, 0);
+        UnAnalyzedTermQuery(travelSample, 2);
+        MatchPhraseQueryOnStoredField(travelSample);
+        UnAnalyzedPhraseQuery(travelSample);
+        ConjunctionQueryMethod(travelSample);
+        QueryStringMethod(travelSample);
+        WildCardQueryMethod(travelSample);
+        NumericRangeQueryMethod(travelSample);
+        RegexpQueryMethod(travelSample);
+    }
+}
+
+public static void SimpleTextQuery(IBucket bucket)
+{
+    var query = new SearchQuery
+        {
+            Index = "travel-sample-index-unstored",
+            Query = new MatchQuery("swanky")
+        }
+        .Limit(10);
+    var result = bucket.Query(query);
+
+    PrintResult("Simple Text Query", result);
+}
+
+public static void SimpleTextQueryOnStoredField(IBucket bucket)
+{
+    var query = new SearchQuery
+        {
+            Index = "travel-sample-index-stored",
+            Query = new MatchQuery("MDG").Field("destinationairport")
+        }
+        .Limit(10);
+
+    var result = bucket.Query(query);
+
+    PrintResult("Simple Text Query on Stored Field", result);
+}
+
+public static void SimpleTextQueryOnNonDefaultIndex(IBucket bucket)
+{
+    var query = new SearchQuery
+        {
+            Index = "travel-sample-index-hotel-description",
+            Query = new MatchQuery("swanky")
+        }
+        .Limit(10);
+
+    var result = bucket.Query(query);
+
+    PrintResult("Simple Text Query on Non-Default Index", result);
+}
+
+public static void TextQueryOnStoredFieldWithFacet(IBucket bucket)
+{
+    var query = new SearchQuery
+        {
+            Index = "travel-sample-index-stored",
+            Query = new MatchQuery("La Rue Saint Denis!!").Field("reviews.content")
+        }
+        .Limit(10)
+        .Highlighting(HighLightStyle.Ansi)
+        .Facets(new TermFacet("Countries Referenced", "country", 5));
+
+    var result = bucket.Query(query);
+
+    PrintResult("Match Query with Facet, Result by Row", result);
+
+    Console.WriteLine();
+    Console.WriteLine("Match Query with Facet, Result by hits:");
+    Console.WriteLine(result.Hits);
+
+    Console.WriteLine();
+    Console.WriteLine("Match Query with Facet, Result by facet: ");
+    Console.WriteLine(result.Facets);
+}
+
+public static void DocIdQueryMethod(IBucket bucket)
+{
+    var query = new SearchQuery
+    {
+        Index = "travel-sample-index-unstored",
+        Query = new DocIdQuery("hotel_26223", "hotel_28960")
+    };
+
+    var result = bucket.Query(query);
+
+    PrintResult("DocId Query", result);
+}
+
+public static void UnAnalyzedTermQuery(IBucket bucket, int fuzzinessLevel)
+{
+    var query = new SearchQuery
+        {
+            Index = "travel-sample-index-stored",
+            Query = new TermQuery("sushi").Field("reviews.content").Fuzziness(fuzzinessLevel)
+        }
+        .Limit(50)
+        .Highlighting(HighLightStyle.Ansi);
+
+    var result = bucket.Query(query);
+
+    PrintResult("Unanalyzed Term Query with Fuzziness Level of "
+        + fuzzinessLevel + ":", result);
+}
+
+public static void MatchPhraseQueryOnStoredField(IBucket bucket)
+{
+    var query = new SearchQuery
+        {
+            Index = "travel-sample-index-stored",
+            Query = new MatchQuery("Eiffel Tower").Field("description")
+        }
+        .Limit(10)
+        .Highlighting(HighLightStyle.Ansi);
+
+    var result = bucket.Query(query);
+
+    PrintResult("Match Phrase Query, using Analysis", result);
+}
+
+public static void UnAnalyzedPhraseQuery(IBucket bucket)
+{
+    var query = new SearchQuery
+        {
+            Index = "travel-sample-index-stored",
+            Query = new PhraseQuery("dorm", "rooms").Field("description")
+        }
+        .Limit(10)
+        .Highlighting(HighLightStyle.Ansi);
+
+    var result = bucket.Query(query);
+
+    PrintResult("Phrase Query, without Analysis", result);
+}
+
+public static void ConjunctionQueryMethod(IBucket bucket)
+{
+    var query = new SearchQuery
+        {
+            Index = "travel-sample-index-stored",
+            Query = new ConjunctionQuery(
+                new MatchQuery("La Rue Saint Denis!!").Field("reviews.content"),
+                new MatchQuery("boutique").Field("description")
+            )
+        }
+        .Limit(10)
+        .Highlighting(HighLightStyle.Ansi);
+
+    var result = bucket.Query(query);
+
+    PrintResult("Conjunction Query", result);
+}
+
+public static void QueryStringMethod(IBucket bucket)
+{
+    var query = new SearchQuery
+        {
+            Index = "travel-sample-index-unstored",
+            Query = new QueryStringQuery("description: Imperial")
+        }
+        .Limit(10);
+
+    var result = bucket.Query(query);
+
+    PrintResult("Query String Query", result);
+}
+
+public static void WildCardQueryMethod(IBucket bucket)
+{
+    var query = new SearchQuery
+        {
+            Index = "travel-sample-index-stored",
+            Query = new WildcardQuery("bouti*ue").Field("description")
+        }
+        .Limit(10)
+        .Highlighting(HighLightStyle.Ansi);
+
+    var result = bucket.Query(query);
+
+    PrintResult("Wild Card Query", result);
+}
+
+public static void NumericRangeQueryMethod(IBucket bucket)
+{
+    var query = new SearchQuery
+        {
+            Index = "travel-sample-index-unstored",
+            Query = new NumericRangeQuery().Min(10100).Max(10200).Field("id")
+        }
+        .Limit(10);
+
+    var result = bucket.Query(query);
+
+    PrintResult("Numeric Range Query", result);
+}
+
+public static void RegexpQueryMethod(IBucket bucket)
+{
+    var query = new SearchQuery
+        {
+            Index = "travel-sample-index-stored",
+            Query = new RegexpQuery("[a-z]").Field("description")
+        }
+        .Limit(10)
+        .Highlighting(HighLightStyle.Ansi);
+
+    var result = bucket.Query(query);
+
+    PrintResult("Regexp Query", result);
+}
+
+private static void PrintResult(string label, ISearchQueryResult resultObject)
+{
+    Console.WriteLine();
+    Console.WriteLine("= = = = = = = = = = = = = = = = = = = = = = =");
+    Console.WriteLine("= = = = = = = = = = = = = = = = = = = = = = =");
+    Console.WriteLine();
+    Console.WriteLine(label);
+    Console.WriteLine();
+
+    foreach (var row in resultObject)
+    {
+        Console.WriteLine(row);
+    }
+}
+      </codeblock>
+    </section>
   </body>
 </topic>
