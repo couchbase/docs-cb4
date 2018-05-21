@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="lcb-fle">
+  <title>Field Level Encryption from the C SDK</title>
+  <shortdesc>Field Level Encryption is available in Couchbase Data Platform 5.5, from C SDK (Libcouchbase) version 2.8.6.</shortdesc>
+  <conbody>
+        <p>
+        </p>
+
+
+        <section id="intro">
+            <title>Test Sample</title>
+            <p>Here is a brief example of the code to encrypt a field using libcouchbase, the C SDK..</p>
+        </section>
+
+
+        <section id="sample-code">
+            <title>Sample Code</title>
+            <p><codeblock outputclass="language-c" spectitle="Encrypt">static void store_encrypted(lcb_t instance, const char *key, const char *val)
+{
+    lcb_error_t err;
+    lcb_CMDSTORE cmd = {};
+    lcbcrypto_CMDENCRYPT ecmd = {};
+    lcbcrypto_FIELDSPEC field = {};
+
+    printf("KEY:    %s\n", key);
+    printf("PLAIN:  %s\n", val);
+
+    ecmd.version = 0;
+    ecmd.prefix = NULL;
+    ecmd.doc = val;
+    ecmd.ndoc = strlen(val);
+    ecmd.out = NULL;
+    ecmd.nout = 0;
+    ecmd.nfields = 1;
+    ecmd.fields = &amp;field;
+    field.name = "message";
+    field.alg = "AES-256-HMAC-SHA256";
+    field.kid = "mypublickey";
+
+    err = lcbcrypto_encrypt_document(instance, &amp;ecmd);
+    if (err != LCB_SUCCESS) {
+        die(instance, "Couldn't encrypt field 'message'", err);
+    }
+    printf("CIPHER: %s\n", ecmd.out);
+
+    LCB_CMD_SET_KEY(&amp;cmd, key, strlen(key));
+    LCB_CMD_SET_VALUE(&amp;cmd, ecmd.out, ecmd.nout);
+    cmd.operation = LCB_SET;
+    cmd.datatype = LCB_DATATYPE_JSON;
+
+    err = lcb_store3(instance, NULL, &amp;cmd);
+    free(ecmd.out); // NOTE: it should be compatible with what providers use to allocate memory
+    if (err != LCB_SUCCESS) {
+        die(instance, "Couldn't schedule storage operation", err);
+    }
+    lcb_wait(instance);
+}</codeblock></p>
+
+            <p>To decrypt the data again, use the following:<codeblock outputclass="language-c" spectitle="Decrypt">static void get_callback(lcb_t instance, int cbtype, const lcb_RESPBASE *rb)
+{
+    if (rb->rc == LCB_SUCCESS) {
+        const lcb_RESPGET *rg = (const lcb_RESPGET *)rb;
+        lcbcrypto_CMDDECRYPT dcmd = {};
+        lcb_error_t err;
+
+        printf("VALUE:  %.*s\n", (int)rg->nvalue, rg->value);
+        dcmd.version = 0;
+        dcmd.prefix = NULL;
+        dcmd.doc = rg->value;
+        dcmd.ndoc = rg->nvalue;
+        dcmd.out = NULL;
+        dcmd.nout = 0;
+        err = lcbcrypto_decrypt_document(instance, &amp;dcmd);
+        if (err != LCB_SUCCESS) {
+            die(instance, "Couldn't decrypt field 'message'", err);
+        }
+        if (dcmd.out == NULL) {
+            die(instance, "Crypto provider returned success, but document is NULL", LCB_EINVAL);
+        }
+        printf("PLAIN:  %.*s\n", (int)dcmd.nout, dcmd.out);
+        free(dcmd.out); // NOTE: it should be compatible with what providers use to allocate memory
+        printf("CAS:    0x%" PRIx64 "\n", rb->cas);
+    } else {
+        die(instance, lcb_strcbtype(cbtype), rb->rc);
+    }
+}
+
+static void get_encrypted(lcb_t instance, const char *key)
+{
+    lcb_CMDGET cmd = {};
+    lcb_error_t err;
+    LCB_CMD_SET_KEY(&amp;cmd, key, strlen(key));
+    printf("KEY:    %s\n", key);
+    err = lcb_get3(instance, NULL, &amp;cmd);
+    if (err != LCB_SUCCESS) {
+        die(instance, "Couldn't schedule get operation", err);
+    }
+    lcb_wait(instance);
+}</codeblock></p>
+       </section>
+
+  </conbody>
+</concept>
