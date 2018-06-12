@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_axj_xtr_zz2">
+  <title>Index Replication and High Availability</title>
+  <shortdesc>To provide the same level of high availability as the Data Service, GSIs also support
+    automatic replication between nodes. These index replicas can then also be used to provide automatic
+    load balancing for incoming N1QL queries.</shortdesc>
+  <body>
+    <section id="section_tnn_hbz_zz2"><title>Index Replication and High Availability with
+        N1QL</title><p>Individual GSIs can be automatically replicated to other nodes in the cluster
+        to achieve high availability, ensuring that an index continues to function even if a node
+        hosting the index is unavailable. Queries will load balance across the indexes and if one of
+        the indexes become unavailable, all requests are automatically rerouted to the available
+        remaining index without application or admin intervention. </p><p>Replica indexes can be
+        created in three different ways, each using the <codeph>CREATE INDEX</codeph> statement.
+        The first of these is to specify the nodes which the index should be located in the WITH
+        clause. The following example creates an index with two replicas, one on
+          <codeph>node2</codeph> and one on <codeph>node3</codeph>, with the active on
+          <codeph>node1</codeph>.</p><codeblock id="nodes-example2">CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
+       WHERE type="product" USING GSI 
+       WITH {"nodes":["node1:8091", "node2:8091", "node3:8091"]};</codeblock>
+      <!-- Referenced in createindex.dita --><p>It is also possible to create an index with replicas
+        without specifying which nodes the index should reside on. Adding
+          <varname>num_replica</varname> to the WITH clause creates an index with the specified
+        number of replicas, distributed across index nodes in the cluster. When creating an index
+        with replicas in this manner, the indexer will attempt to distribute the replicas based on
+        the server groups in use in the cluster where possible. This means that should an entire
+        server group go down, a replica of the index should still be available on one (or more) of
+        the nodes in another (or multiple) server group(s).</p><p>The following example creates an
+        index with two replicas without explicitly specifying which nodes they should reside
+        on:<codeblock>CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
+       WHERE type="product" USING GSI 
+       WITH {"num_replica": 2};</codeblock></p><p>If
+        both <varname>nodes</varname> and <varname>num_replica</varname> are specified in the WITH
+        clause, then the number of nodes specified must be one greater than
+          <varname>num_replica</varname>.</p><p>Finally, it is possible to create GSIs with replicas
+        without explicitly stating the number of replicas in the <apiname>CREATE INDEX</apiname>
+        statement. This is done by altering the number of replicas that the indexer will create,
+        which defaults to 0. Changing the default number of replicas can be done using the following
+        curl command and must be done by a full
+        administrator:<codeblock>curl -u &lt;username>:&lt;password> &lt;host>:9102/settings -d "{\"indexer.settings.num_replica\": &lt;num_replicas>}"</codeblock></p>If
+      manually specifying the number of replicas to create for a given index in the <apiname>CREATE
+        INDEX</apiname> statement, then this takes precedence over the default number of replicas
+      from the indexer.<note type="important">When using any of the three above methods, you must
+        ensure that the number of replicas being created is less than the number of index nodes in
+        your cluster, otherwise the index creation will fail. Once an index has been created with a
+        given number of replicas, if the number of index nodes in a cluster goes below the number of
+        nodes required then new replicas will be created on any incoming index nodes, until the
+        desired number of replicas exist for a given index.</note>Once an index with replicas has
+      been created, you will be able to see each of its replicas (and active) as individual entries
+      in the 'Index' tab in the web console. However, as the replicas are opaque to the query
+      service, you will not see these replicas in <codeph>system:indexes</codeph>.</section>
+  </body>
+</topic>
