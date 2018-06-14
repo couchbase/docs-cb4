@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="concept_exs_rrg_rn">
+ <title>Server Group Awareness</title>
+ <shortdesc>Couchbase Server provides the ability to specify that active and corresponding replica
+  vBuckets be placed on servers that are part of a separate rack, or in the case of cloud
+  environments, a separate availability zone.</shortdesc>
+  
+  <conbody>
+   <note type="attention">The Server Group Awareness feature is only available in Couchbase Server
+   Enterprise Edition.</note>
+   <p>By design, Couchbase Server evenly distributes active and replica vBuckets across the cluster
+   for performance and redundancy. For example, an active vBucket is never placed on the same node
+   as its replica. With Server Group Awareness, you can go one step further by creating logical
+   groupings of Couchbase Server nodes called <i>server groups</i>. When you <xref
+    href="../clustersetup/manage-groups.dita#mangage-server-groups">create server groups</xref>,
+   replica vBuckets for servers in one group are automatically distributed to servers in a second
+   group, and vice versa. If one of the servers becomes unavailable, or if an entire server group
+   goes down, data access is retained since the replicas are available on the second server
+   group.</p>
+  <p>Given that the purpose of Server Group Awareness is to keep the cluster available in the event
+   of large infrastructure failures, it is particularly important that you map server groups to the
+   physical distribution of the nodes. For example, a server group should only include the nodes
+   that are in a single server rack, or in the case of cloud deployments, a single availability
+   zone. That way, if the server rack or availability zone becomes unavailable due to a power or
+   network failure, the entire server group can fail over as a unit without the need to
+   rebalance.</p>
+  <p>When Server Group Awareness becomes active, the cluster automatically rebalances the replica
+   vBuckets to be evenly distributed between server groups. If an imbalance occurs where there is an
+   unequal number of nodes in one server group, the rebalance operation performs a "best effort" of
+   evenly distributing the replica vBuckets across the cluster.</p>
+  <p><b>General notes about Server Group Awareness:</b><ul id="ul_zj4_53m_d2b">
+    <li>Server Group Awareness only applies to the Data Service.</li>
+    <li>When you initialize a new Couchbase Server cluster, the first node is automatically placed
+     in a server group named Group 1. Server Group Awareness will automatically enable once you add
+     a second server group that contains at least one node.</li>
+    <li>There is no limit on the number of server groups that can be created. </li>
+   </ul></p>
+  <section>
+   <title>Distribution of vBuckets and Replica vBuckets</title>
+   <p>The following example shows how the Server Group Awareness functionality implements replica
+    vBuckets to provide redundancy. In this example, the cluster is made up of eight nodes that are
+    evenly distributed into two server groups (four nodes in each server group). Since there is an
+    equal number of nodes in each server group, the cluster is balanced, which guarantees that
+    replica vBuckets for one server group are on a different server group.</p>
+   <p>The following diagram shows the two server groups - Rack #1 and Rack #2 - with each group
+    containing four nodes.</p>
+    <ul>
+     <li>Group 1 has Servers 1, 2, 3, and 4.</li>
+     <li>Group 1 servers have their active vBuckets and replica vBuckets from Group 2.</li>
+     <li>Group 2 has Servers 5, 6, 7, and 8.</li>
+     <li>Group 2 servers have their active vBuckets and replica vBuckets from Group 1.</li>  
+    </ul>
+
+   <fig>
+    <title>Server Group Awareness</title>
+    <image href="images/RZASimple.png" align="left" width="680"/>
+   </fig> 
+  </section>
+  
+  <section>
+   <title>Distribution with Additional Server</title>
+   <p>The following example shows how Server Group Awareness functionality implements replica
+    vBuckets when an imbalance is caused by an additional server being added to one server group. In
+    this example, an additional server (Server 9) is added to one of the  server groups (Group 1).
+    An imbalance occurs because one server group has more servers than the other server group. In
+    this case, the rebalance operation performs a "best effort" of evenly distributing the replica
+    vBuckets of the additional server across the nodes on all of the racks in the cluster.</p>
+   <p>
+    <note type="note"> If the cluster becomes imbalanced, you should add servers to balance the
+     cluster. For optimal Server Group Awareness functionality, a balanced cluster is
+     recommended.</note>
+   </p>
+    <p>The following diagram shows the two server groups - Rack #1 and Rack #2 - where one group has
+    five nodes and the other group has four nodes.</p>
+   <ul>
+    <li>Group 1 has Servers 1, 2, 3, 4, and 9.</li>
+    <li>Group 1 servers have their active vBuckets and replica vBuckets from Group 2.</li>
+    <li>Group 1 Servers 1 - 4 also have replica vBuckets for Server 9.</li>
+    <li>Group 2 has Servers 5, 6, 7, and 8.</li>
+     <li>Group 2 servers have their active vBuckets and replica vBuckets from Group 1 including the replica vBuckets from Server 9 in Group 1.</li>  
+   </ul>
+   
+   <fig>
+    <title>Server Group Awareness with Additional Server</title>
+    <image href="images/RZAServerIN.png" align="left" width="680"/>
+   </fig>
+  </section>
+  
+  <section>
+   <title>Distribution with Unavailable Server</title>
+   <p>The following example shows how Server Group Awareness functionality implements replica
+    vBuckets when an imbalance is caused by a server being removed or becoming unavailable in a
+    server group. In this example, a server (Server 2) is unavailable to a server group (Group 1).
+    An imbalance occurs because one server group has fewer servers than the other server group. In
+    this case, the rebalance operation performs a "best effort" of evenly distributing the replica
+    vBuckets of the additional server across the nodes on all of the racks in the cluster</p>
+   
+   <note type="note"> If the cluster becomes imbalanced, you should add servers to balance the
+    cluster. For optimal Server Group Awareness functionality, a balanced cluster is
+    recommended.</note>
+   
+   <p>The following diagram shows the loss of a server resulting in an imbalance. In this case,
+    Server 2 (from Group 1) becomes unavailable. The replica vBuckets for Server 2 in Group 2 become
+    enabled and rebalancing occurs.</p>
+   <ul>
+    <li>Group 1 has Servers 1, 2, 3, and 4.</li>
+    <li>Group 1 servers have their active vBuckets and replica vBuckets from Group 2.</li>
+    <li>Group 1 Server 2 becomes unavailable.</li>
+    <li>Group 2 has Servers 5, 6, 7, and 8.</li>
+    <li>Group 2 servers have their active vBuckets and replica vBuckets from Group 1.</li>
+    <li>Group 2 server activates the replica vBuckets for Server 2 in Group 1.</li>  
+   </ul>
+   
+   <fig>
+    <title>Server Group Awareness with Unavailable Server</title>
+    <image href="images/RZAServerOUT.png" align="left" width="680"/>
+   </fig>
+  </section>
+ 
+ </conbody>
+ <related-links>
+  <linklist>
+   <desc>For instructions on adding server groups, see:</desc>
+   <link href="../clustersetup/manage-groups.dita"/>
+  </linklist>
+  <linklist>
+   <desc>For more information about how Couchbase Server manages clusters, see</desc>
+   <link href="cluster-manager.dita"/>
+  </linklist>
+ </related-links>
+</concept>
