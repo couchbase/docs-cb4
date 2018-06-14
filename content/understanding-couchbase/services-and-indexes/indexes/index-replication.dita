@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_axj_xtr_zz2">
+  
+  <title>
+    Index Availability and Performance
+  </title>
+  
+  <shortdesc>
+    The <i>Index Service</i> ensures availability and performance through <i>replication</i> and
+    <i>partitioning</i>. The <i>consistency</i> of query-results can be controlled per query.
+  </shortdesc>
+  
+  <body>
+    
+    <section id="section_tnn_hbz_zz2">
+      
+      <title>
+        Index Replication
+      </title>
+      
+      <p>
+        Secondary indexes can be replicated across cluster-nodes. This ensures:
+      </p>
+      
+      <p>
+      </p>
+      
+      <ul>
+        <li>
+            <i>Availability</i>: If one Index-Service node is lost, the other continues to provide
+            access to replicated indexes.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          <i>High Performance</i>: If original and replica copies
+          are available, incoming queries are load-balanced across them.
+          
+          <p>
+            
+          </p>
+        </li>
+      </ul>
+      
+      <p>
+        Index-replicas can be
+        created with the N1QL <codeph>CREATE INDEX</codeph> statement. Note that whenever
+        a given number of index-replicas is specified for creation, the number must be less than the number of cluster-nodes
+        currently running the 
+        <xref href="../../services-and-indexes/services/index-service.dita" scope="local" format="dita">Index Service</xref>.
+        If it is not, the index-creation fails. Note also that if, following creation of the maximum number of copies, 
+        the number of nodes running the Index Service 
+        decreases, Couchbase Server progressively assigns replacement 
+        index-replicas to any and all Index-Service nodes
+        subsequently be added to the cluster, until
+        the required number of index-replicas again exists for each replicated index.
+      </p>
+      
+      <p>
+        Index-replicas can be created as follows:
+      </p>
+      
+      <p>
+        
+      </p>
+      
+      <ul>
+        <li>
+          Specifying, by means of the <codeph>WITH</codeph> clause, the destination nodes. In the following example,
+          an index with two replicas is created. The active index is on <codeph>node1</codeph>, and the replicas
+          are on <codeph>node2</codeph> and <codeph>node3</codeph>:
+          
+          <codeblock id="nodes-example2">CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
+    WHERE type="product" USING GSI 
+    WITH {"nodes":["node1:8091", "node2:8091", "node3:8091"]};</codeblock>
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Specifying <i>no</i> destination nodes; but specifying instead, by means of the <codeph>WITH</codeph> clause
+          and the <codeph>num_replica</codeph> attribute,
+          only the <i>number</i> of replicas required. The replicas are automatically distributed across those nodes of the
+          cluster that are running the Index Service: the distribution-pattern is based on a projection of
+          optimal index-availability, given the number and disposition of Index-Service nodes across
+          defined server-groups.
+          
+          <p>
+            In the following example, an index is created with two replicas, with no destination-nodes
+            specified:
+          </p>
+          
+          <codeblock>CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
+    WHERE type="product" USING GSI 
+    WITH {"num_replica": 2};</codeblock>
+          
+          <p>
+            Note that if
+            <codeph>nodes</codeph> and <codeph>num_replica</codeph> are both specified in the <codeph>WITH</codeph>
+            clause, the specified number of nodes must be <i>one greater</i> than <codeph>num_replica</codeph>.
+          </p>
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Specifying a number of index-replicas to be created by the Index Service whenever <codeph>CREATE INDEX</codeph> is
+          invoked. The default is <codeph>0</codeph>. If the default is changed to, say, 
+          <codeph>2</codeph>, creation of a single index is henceforth
+          accompanied by the creation of two replicas, which are automatically distributed across the nodes of the cluster
+          running the Index Service. No explicit specification within the <codeph>CREATE INDEX</codeph> statement is
+          required. 
+          
+          <p>
+            With credentials that provide appropriate authorization, this default can be changed; by means of 
+            the <codeph>curl</codeph> command, as follows:
+          </p>
+          
+          <codeblock>curl -u &lt;username>:&lt;password> &lt;host>:9102/settings -d "{\"indexer.settings.num_replica\": &lt;num_replicas>}"</codeblock>
+          
+          <p>
+            Note, however, 
+            that whenever explicit specification of replica-numbers is made 
+            within the <codeph>CREATE INDEX</codeph> statement, this 
+            explicit specification takes
+            precedence over any established default.
+          </p>
+          
+          <p>
+            
+          </p>
+        </li>     
+        
+      </ul>
+      
+      <p>
+        For further information on using N1QL, see
+        <xref href="../../../sdk/n1ql-query.dita" scope="local" format="dita">Querying with N1QL</xref>.
+      </p>
+        
+    </section>
+    
+    <section>
+      
+      <title>
+        Index Partitioning
+      </title>
+      
+      <p>
+        As index-sizes and item-counts increase, individual indexes
+        may not fit on their assigned node. To remedy this, indexes can be <i>partitioned</i> (divided into two
+        or more segments) by means of the 
+        <codeph>WHERE</codeph> clause to <codeph>CREATE INDEX</codeph>: the resulting partitions
+        can be distributed across multiple, individually specified Index-Service nodes, under 
+        different index-names.
+        </p>
+      
+        <p>
+         In the following example, <i>ranges</i> are specified, to partition index-content
+         across two indexes:
+        </p>
+      
+              <codeblock>CREATE INDEX productName_index1 ON bucket_name(productName, ProductID) 
+    WHERE type="product" AND productName BETWEEN "A" AND "K" USING GSI 
+    WITH {"nodes":["node1:8091"]};
+    
+    CREATE INDEX productName_index2 ON bucket_name(productName, ProductID) 
+    WHERE type="product" AND productName BETWEEN "K" AND "Z" USING GSI 
+    WITH {"nodes":["node2:8091"]};</codeblock>
+      
+    </section>
+    
+    <section>
+      <title>
+        Index Consistency
+      </title>
+      
+      <p>
+        Whereas Couchbase Server handles data-mutations with <i>full consistency</i> &#8212;
+        all mutations to a given key are applied to the same vBucket, and become immediately
+        available &#8212; it maintains indexes with degrees of
+        <i>eventual consistency</i>, determined by means of the following query consistency-options,
+        specified per query:
+      </p>
+      
+        <ul id="ul_vzd_j1z_zz2">
+          
+          <li>
+            <codeph>not_bounded</codeph>: Executes the query
+            immediately, without requiring any consistency for the query. If index-maintenance is
+            running behind, out-of-date results may be returned. 
+            
+            <p>
+            </p>
+          </li>
+          
+          <li>
+            <codeph>at_plus</codeph>: Executes the query, requiring
+            indexes first to be updated to the timestamp of the last update. If
+            index-maintenance is running behind, the query waits for it to catch up. 
+            
+            <p>
+              
+            </p>
+            
+          </li>
+          
+          <li>
+            <codeph>request_plus</codeph>: Executes the query, requiring the indexes first to be updated 
+            to the timestamp of the current
+            query-request. If
+            index-maintenance is running behind, the query waits for it to catch up.
+            
+            <p>
+            </p>
+          
+          </li>
+          
+        </ul>
+      
+      <p>
+        For N1QL, the default consistency is <codeph>not_bounded</codeph>.
+      </p>
+      
+    </section>
+    
+
+  </body>
+</topic>

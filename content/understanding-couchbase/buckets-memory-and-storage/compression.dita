@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!DOCTYPE topic
+  PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+  
+<topic xml:lang="en-us" id="compression">
+ 
+ <title>
+  Compression
+ </title>
+ 
+ <shortdesc>
+  Couchbase Server supports <i>data compression</i> in its communications
+  with internal and external clients, and in its internal handling of items.
+ </shortdesc>
+ 
+ <body>
+  
+  <section id="data-compression-overview">
+   
+   <title>
+    Overview
+   </title>
+   
+   <p>
+    The compression of data allows RAM and disk-space to be used with increased efficiency. It may
+    also reduce consumption of network bandwidth. Higher consumption of CPU resources may result.
+   </p>
+   
+   <p>
+    Compression, provided by the open-source library
+    <xref href="http://en.wikipedia.org/wiki/Snappy_(compression)" scope="external" format="html">Snappy</xref>,
+    is applied to items based both on the client's capabilities and on the compression <i>mode</i> established
+    by the user for the given bucket.
+   </p>
+   
+   <p>
+    Compression is available only in Couchbase Enterprise Edition, and can be applied only to Couchbase and 
+    Ephemeral buckets. Compression applies to both binary and JSON items.
+   </p>
+   
+  </section>
+  
+  <section id="where-data-compression-can-be-used">
+   
+   <title>
+    Where Compression is Used
+   </title>
+   
+   <p>
+    <image href="./images/compressionDiagram.png" id="compression-diagram" align="left" width="600" />
+   </p>
+   
+   <p>
+    Clients based on the Couchbase SDK (<b>1</b>), nodes within a cluster that participate
+    in intra-cluster replication (<b>4</b>), internal Couchbase Services (<b>5</b>),
+    external DCP clients (<b>6</b>), and remote clusters that participate in Cross Data-Center
+    Replication (<b>7</b>) communicate their ability to send and receive compressed
+    items by using the <codeph>HELO</codeph> command, with a flag that confirms support of the <i>Snappy
+     Compression</i> data type. 
+   </p>
+   
+   <p>
+    Couchbase Server may (depending on the mode of the bucket) store items in compressed form in 
+    memory (<b>2</b>). The server always compresses
+    items when storing them on disk (<b>3</b>).
+   </p>
+   
+  </section>
+  
+  <section id="compression-modes">
+   
+   <title>
+    Compression Modes
+   </title>
+   
+   <p>
+    Each bucket
+    is configured to support one of three <i>modes</i>. After a client has communicated
+    its ability to send and receive compressed data, the server's running of compression and decompression routines 
+    depends on the
+    mode supported by the specified bucket. The modes are as follows:
+   </p>
+   
+   <p>
+    
+   </p>
+   
+   <ul>
+    
+    <li>
+
+     <b>Off</b>: Provides the
+     behavior of Couchbase Server pre-5.5. On receipt of a compressed item,
+     Couchbase Server decompresses the item when storing in memory; and recompresses it
+     when storing on disk. Couchbase Server
+     sends the item in uncompressed form.  
+     This mode is assigned by default to buckets <i>upgraded</i> from a previous
+     version of Couchbase Server.
+     The mode is recommended for use where clients cannot benefit from compression, and
+     where neither memory-resources nor network-bandwidth will be negatively impacted by the size and
+     quantity of items to be handled. Note also that this is the only mode under which Memcached buckets
+     operate.
+     
+
+    </li>
+    
+    <li>
+      <b>Passive</b>: On receipt of a compressed item,
+      Couchbase Server stores it in compressed form both in memory
+      and on disk. Couchbase Server
+      sends the item back to the client in compressed form if this is requested by the client; otherwise,
+      it sends the item back in uncompressed form.
+      On receipt of an uncompressed item, Couchbase Server
+      stores it in memory in uncompressed form, and stores it on disk in compressed form. 
+      It returns the item to the client in uncompressed form.
+      This mode is assigned by default to <i>new</i> buckets, in
+      Couchbase Server 5.5 and beyond. It supports clients that themselves handle compresion, and
+      additionally allows Couchbase Server to
+      to limit its use of memory-resources and network-bandwidth. At the same time, it does not force 
+      Couchbase Server to use CPU
+      resources for the compression and decompression of items that clients do not
+      themselves require in compressed form.
+     
+     
+    </li>
+    
+    <li>
+       <b>Active</b>: Couchbase Server actively compresses items for storage in memory
+       and on disk, even if the items are received in uncompressed form. 
+       Items are decompressed before being sent back to those clients that do not
+       support the receiving of compressed data. Items are sent
+       in compressed form to clients that do support the receiving of compressed data, even if those
+       clients originally sent the
+       items to the server in uncompressed form.
+       This mode allows the server to practice the maximum conservation of memory-resources 
+       and network-bandwith. Consequently, more items can be held in memory simultaneously, and thereby
+       accessed with improved, overall efficiency (since the processing-time required for compression and
+       decompression is significantly less than that required for fetching data from disk). Nevertheless, in some circumstances,
+       clients that do not themselves require the compression and decompression of items may be negatively affected by 
+       the compression and decompression performed by the server on items resident in memory.
+    </li>
+    
+   </ul>
+   
+  </section>
+
+  
+  <section id="switching-between-data-compression-modes">
+   
+   <title>
+    Switching Between Compression Modes
+   </title>
+   
+   <p>
+    Buckets can be switched between modes. The following behavior-changes
+    should be noted:
+   </p>
+   
+   <ul>
+    
+    <li>
+     When a bucket formerly in Passive mode has been switched to Off mode,
+     any compressed item that Couchbase Server receives for that bucket
+     is stored in memory in uncompressed form. If the server
+     needs to send from the bucket an item that is currently compressed, the server decompresses
+     the item before sending: however, to preserve 
+     memory-efficiency, the
+     item remains compressed in memory.
+     
+     <p>
+      
+     </p>
+     
+    </li>
+    
+    <li>
+     When a bucket has been switched from Passive to Active mode, it
+     periodically runs a task that compresses uncompressed items.
+     
+     <p>
+      
+     </p>
+     
+    </li>
+    
+    <li>
+     When a bucket formerly in Active mode is switched to Off mode,
+     this disables 
+     the task that was periodically run to compress uncompressed items.
+     Compressed items can continue to be received for the bucket, and are
+     decompressed for storage in memory. Compressed items within the bucket are
+     decompressed before sending: however, to ensure continued 
+     memory-efficiency, the
+     item remains compressed in memory.
+     
+     <p>
+      
+     </p>
+     
+    </li>
+    
+   </ul>
+   
+  </section>
+  
+  
+  
+  <section id="enabling-compression">
+   
+   <title>
+    Enabling Compression
+   </title>
+   
+   <p>
+    Couchbase Server allows authorized users to configure 
+    compression by means of the following.
+   </p>
+   
+   <ul>
+    
+    <li>
+      <p>
+       The Couchbase Web Console, 
+       the Couchbase CLI, and the Couchbase REST API, which allow buckets each to be assigned a compression mode; and which allow 
+       Cross Data-Center Replication (XDCR) to handle compressed items.
+      </p>
+     
+      <p>
+       For information on using the Couchbase Web Console to create buckets, see
+       <xref href="../../clustersetup/create-bucket.dita" scope="local" format="dita">Create a Bucket</xref>; and
+       for information on using it to set up XDCR, see
+       <xref href="../../xdcr/xdcr-create.dita" scope="local" format="dita">Managing XDCR</xref>
+      </p>
+     
+     <p>
+      
+     </p>
+    </li>
+    
+    
+    <li>
+     <p>
+      The <codeph>cbbackup</codeph>, <codeph>cbrestore</codeph>, and 
+      associated tools, which allow
+      compressed items to be requested in the backup stream.
+     </p>
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <p>
+      The Couchbase SDK, which can elect to send and receive compressed items.
+     </p>
+     <p>
+      
+     </p>
+    </li>
+    
+   </ul>
+   
+   <p>
+    For information on roles that allow modification of bucket-settings, see
+    <xref href="../../security/security-authorization.dita" scope="local" format="dita">Authorization</xref>.
+   </p>
+   
+  </section>
+  
+ </body>
+ 
+</topic>

@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="buckets_memory_and_storage">
+  
+  <title>
+    Memory and Storage
+  </title>
+  
+  <shortdesc>
+    To facilitate high-speed data-access, Couchbase Server provides a caching layer and tunable disk I/O
+    priorities. 
+  </shortdesc>
+  
+  <body>
+    
+    <section>
+      
+      <title>
+        Caching and Persistence
+      </title>
+      
+      <p>
+        Couchbase Server provides a fully integrated <i>caching layer</i>, which provides high-speed data-access. Couchbase
+        Server automatically manages the caching layer, ensuring that sufficient memory is available in relation
+        to occupied disk-space, in order to maintain optimal performance. Data associated with <i>Couchbase</i> 
+        (as opposed to <i>Ephemeral</i>) buckets
+        is also maintained <i>persistently</i>, on disk.
+        Such items, when they come into the caching layer, are 
+        placed on the disk queue, to be written to disk; and at the same time, if appropriate, are placed on a
+        replication queue, so that one or more replica buckets can be created or updated.
+      </p>
+        
+      <p>
+        Memory quotas, established by the Full Administrator when the server is configured, are automatically managed
+        by Couchbase Server with reference to <i>watermarks</i>, which specify how much free memory should be
+        consistently maintained within the caching layer. Consequently, infrequently used items are written to disk; and are 
+        then removed from memory in order to free up space. This process, referred to
+        as <i>ejection</i>, is managed asynchronously, while the server continues to service active requests. 
+        Items ejected from <i>Couchbase</i> buckets can subsequently be re-acquired from disk, as necessary.
+        A <i>working-set</i> of most frequently used data is tracked and maintained, and the items kept in memory to ensure high 
+        performance. The priority of disk I/O is configurable per bucket.
+      </p>
+      
+    </section>
+    
+    <section>
+      
+      <title>
+        Saving New Items
+      </title>
+      
+      <p>
+        When a new item, such as a document, is saved by an application, it is
+        saved in memory only, if the item is contained by an <i>Ephemeral</i> bucket;
+        and is saved both in memory and on disk, if the item is contained by a
+        <i>Couchbase</i> bucket. If the bucket (either Ephemeral or Couchbase) has
+        been <i>replicated</i> one or more times, a copy of the new item is saved
+        in each replica.
+      </p>
+      
+      <p>
+        The following sequence illustrates how a new document is created by an application
+        and saved in a Couchbase bucket. It is assumed that the bucket has at least one
+        replica on the cluster.
+      </p>
+      
+      <p>
+      </p>
+      
+      <ol>
+        <li>
+          The application creates a new document.
+          
+          <p>
+            <image href="./images/createDocSequence1.png" id="create-doc-sequence-1" align="left" width="460" />
+          </p>
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          The application saves the document on Couchbase Server. The document is received in memory.
+          
+          <p>
+            <image href="./images/createDocSequence2.png" id="create-doc-sequence-2" align="left" width="460" />
+          </p>
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Couchbase Server places a compressed copy of the document onto the <i>Disk Queue</i> so that
+          the document can be written to the disk; and a further copy onto the <i>Replication Queue</i>,
+          so that the document can be written to the replica bucket. (The copy placed on
+          the Replication Queue may or may not be compressed, depending on the <i>compression
+          mode</i> configured for the bucket.)
+          
+          <p>
+            <image href="./images/createDocSequence3.png" id="create-doc-sequence-3" align="left" width="460" />
+          </p>
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Once written, the new document resides both in the memory and on the disk of the
+          node. It will also reside in the memory and on the disk of whichever other 
+          nodes maintain the replicas of its buckets.
+          
+          <p>
+            <image href="./images/createDocSequence4.png" id="create-doc-sequence-4" align="left" width="460" />
+          </p>
+          
+          <p>
+            On each node containing the bucket or a replica, the document remains in memory; 
+            unless it is <i>ejected</i> at some point, after which it remains on disk.
+          </p>
+          <p>
+            
+          </p>
+        </li>
+        
+      </ol>
+      
+    </section>
+    
+    <section>
+      <title>
+        Updating Items
+      </title>
+      
+      <p>
+        Items that reside in the memory of Couchbase Server can be updated. If the item
+        belongs to a Couchbase bucket, the item is also updated on disk. If the item is
+        not currently in memory, but resides on disk, Couchbase Server retrieves the item,
+        so that it can be updated. This is demonstrated by the following sequence.
+      </p>
+      
+      <p>
+      </p>
+      
+      <ol>
+        <li>
+          The application provides an update to an existing document.
+          
+          <p>
+            <image href="./images/updateDocSequence1.png" id="update-doc-sequence-1" align="left" width="460" />
+          </p>
+          
+          <p>
+            
+          </p>
+          
+        </li>
+        
+        <li>
+          Since the document is not currently in memory, Couchbase Server seeks it
+          on disk, where is resides in compressed form.
+          
+          <p>
+            <image href="./images/updateDocSequence2.png" id="update-doc-sequence-2" align="left" width="460" />
+          </p>
+          
+          <p>
+            
+          </p>
+          
+        </li>
+        
+        <li>
+          The compressed document is retrieved, brought into memory, and decompressed.
+          
+          <p>
+            <image href="./images/updateDocSequence3.png" id="update-doc-sequence-3" align="left" width="460" />
+          </p>
+          
+          <p>
+            
+          </p>
+          
+        </li>
+        
+        <li>
+          The application's updates are applied to the uncompressed document.
+          
+          <p>
+            <image href="./images/updateDocSequence4.png" id="update-doc-sequence-4" align="left" width="460" />
+          </p>
+          
+          <p>
+            
+          </p>
+          
+        </li>
+        
+        <li>
+          The updated document is placed (in either compressed or uncompressed form, as appropriate) on 
+          the replication queue, so that replicas
+          can be updated. The updated document is also re-compressed, and written to disk
+          locally.
+          
+          <p>
+            <image href="./images/updateDocSequence5.png" id="update-doc-sequence-5" align="left" width="460" />
+          </p>
+          
+          <p>
+            
+          </p>
+          
+        </li>
+        
+        <li>
+          The updated document is now retained locally on disk and in memory. The document
+          remains in memory unless it is ejected at some point, after which it
+          continues to reside on disk.
+          
+          <p>
+            <image href="./images/updateDocSequence6.png" id="update-doc-sequence-6" align="left" width="460" />
+          </p>
+          
+          <p>
+            
+          </p>
+          
+        </li>
+        
+      </ol>
+      
+      
+    </section>
+    
+    
+    
+  </body>
+  
+</topic>
