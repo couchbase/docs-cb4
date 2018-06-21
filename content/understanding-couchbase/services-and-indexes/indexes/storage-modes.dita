@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="topic_frt_5tr_zz">
+  
+  <title>
+    Index Storage Settings
+  </title>
+  
+  <shortdesc>
+    A Secondary Index can be saved in either of two ways: <i>standard</i>
+    or <i>memory-optmized</i>.    
+  </shortdesc>
+  
+  <body>
+    <section id="memopt-gsi2">
+      
+      <title>
+        Memory-Optimized Index Storage
+      </title>
+      
+      <p>
+        Memory-optimized index-storage allows high-speed maintenance and scanning; since the index is
+        kept fully in memory at all times. A snapshot of the index is maintained
+        on disk, to permit rapid recovery if node-failures are experienced. To be consistently beneficial, 
+        memory-optimized index-storage
+        requires that all nodes running the Index Service have a memory quota sufficient
+        for the number and size of their resident indexes, and for the frequency with which the indexes will
+        be updated and scanned.
+      </p>
+      
+      <p>
+        Memory-optimized index-storage may be less suitable for nodes where memory is 
+        constrained; since whenever 
+        the Index Service memory-quota is exceeded, indexes on the node can neither be updated nor scanned.
+        In such circumstances, an error-notification is provided; and although the indexes remain in
+        <codeph>ONLINE</codeph> state, traffic is routed away from the node. 
+        Before index-operations can resume, memory must be freed.
+      </p>
+      
+      <p>
+        In cases where recovery requires an Index-Service node to be restarted, the node's resident memory-optimized indexes 
+        are rebuilt from the snapshots retained on disk. 
+        Following the node's restart, these indexes remain in the <codeph>BUILDING</codeph> state 
+        until all information has been read into memory: then, final updates are made with the indexes in 
+        <codeph>ONLINE</codeph> state.
+        Note that once a rebuilt index is thus available,
+        queries with <codeph>consistency=request_plus</codeph> or
+        <codeph>consistency=at_plus</codeph> fail, if the specified timestamp exceeds the last
+        timestamp processed by given index. However, queries with
+        <codeph>consistency=unbounded</codeph> execute normally. For information on these settings, see
+        <xref href="./index-replication.dita" scope="local" format="dita">Index Availability and Performance</xref>.
+      </p>
+      
+      <p>
+        To rescue a node from an out-of-memory 
+        situation, consider taking one or more of the following actions: 
+      </p>
+      
+      <p>
+      </p>
+        
+        <ul id="ul_aps_f5g_sw2">
+          
+          <li>
+            Increase the index-memory quota, to give indexes additional memory
+            for request-processing.
+            
+            <p>
+            </p>
+          </li>
+          
+          <li>
+            Remove less important indexes from the node, to free up memory. 
+            
+            <p>
+            </p>
+          </li>
+          
+          <li>
+            Remove buckets with indexes: removing a bucket automatically removes all the dependent
+            indexes.
+            
+            <p>
+            </p>
+          </li>
+          
+          <li>
+            Flush buckets that have indexes: flushing a bucket deletes all data in a bucket; and even if
+            there are pending updates not yet processed, flushing causes all indexes
+            to drop their own data. 
+            
+            <p>
+              Note that attempting to delete bucket-data <i>selectively</i> during an out-of-memory condition does
+              not succeed in decreasing memory-usage; since without memory, such requested deletions 
+              cannot themselves be processed.
+            </p>
+              
+            <p>
+            </p>
+          </li>
+          
+        </ul>
+        
+    </section>
+    
+    <section id="std-gsi2">
+      
+      <title>
+        Standard Index Storage
+      </title>
+      
+      <p>
+        <i>Standard</i> is the default storage-setting for Secondary Indexes: the indexes are
+        saved on disk; in a disk-optimized format that uses both memory and disk for index-update
+        and scanning.
+      </p>
+      
+      
+      <p>
+        The performance of standard index storage
+        depends on overall I/O performance. Each index saved with the <i>standard</i> option
+        has two write modes: 
+      </p>
+      
+      <p>
+        
+      </p>
+        
+        <ul>
+
+          
+          <li>
+            <b>Circular Write Mode</b>: Writes changes to the end of the index-file, until
+            the relative index fragmentation exceeds 65%. <i>Block reuse</i> is
+            then triggered: new data is written into stale blocks where possible,
+            rather than to the end of the file, so as to optimize I/O throughput.
+            Full compaction runs in accordance with the value of the
+            <b>Circular write mode with day + time interval trigger</b> setting: see
+            <xref href="../../../settings/configure-compact-settings.dita#topic_w5q_sqn_vs/index-fragmentation" scope="local" format="dita">Index Fragmentation</xref>.
+            Note, however, that the index-fragmentation data-size is not significantly changed by compaction. 
+            
+            <p>
+            </p>
+            
+          </li>
+          
+          <li>
+            <b>Append-only Write Mode</b>: Writes changes to the
+            end of the index-file, invalidating
+            existing pages within the index file, and requiring frequent, full compaction.
+            
+            <p>
+            </p>
+          </li>
+          
+        </ul>
+      
+       <p>
+        By default, Couchbase Server uses Circular Write Mode for standard index storage. Append-only
+        Write Mode is provided for backwards compatibility with previous versions. These and other
+        storage-settings are described in detail in 
+         <xref href="../../../settings/configure-compact-settings.dita" scope="local" format="dita">Configuring Auto-Compaction</xref>.
+      </p>
+      
+      
+    </section>
+    
+
+    <section>
+      
+      <title>
+        Changing Index-Storage Settings
+      </title>
+      
+      <p>
+        Settings
+        are established at cluster-initialization for
+        all indexes on the cluster, across all buckets. 
+        Following
+        cluster-initialization, to change from one setting to the other, 
+        all nodes running the Index Service must be removed. If
+        the cluster is single-node, uninstall and reinstall Couchbase
+        Server. If the cluster is multi-node, and only some of the nodes host
+        the Index Service, proceed as follows:
+      </p>
+      
+      <p>
+        
+      </p>
+        
+        <ol>
+          <li>
+            Identify the nodes running the Index Service. 
+            
+            <p>
+            </p>
+          </li>
+          
+          <li>
+            Remove each of the nodes running the Index Service.
+            Note that as Index-Service nodes are removed, so are the indexes they contain; and in consequence,
+            any ongoing queries fail. 
+            
+            
+            <p>
+            </p>
+          </li>
+          
+          <li>
+            Perform a rebalance.
+            
+            <p>
+            </p>
+          </li>
+          
+          <li>
+            Change the Index-Storage Settings for the
+            cluster.
+            
+            <p>
+            </p>
+          </li>
+          
+          <li>
+            Add new Index-Service nodes, and confirm the revised storage mode. 
+            
+            <p>
+              
+            </p>
+          </li>
+          
+        </ol>
+      
+      <p>
+        For information on adding and removing nodes, and on rebalancing a cluster, see
+        <xref href="../../../clustersetup/server-setup.dita" scope="local" format="dita">Cluster Operations</xref>.
+      </p>
+
+      
+    </section>
+  </body>
+</topic>
