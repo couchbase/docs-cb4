@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="java-fle">
+  <title>Field Level Encryption from the Go SDK</title>
+  <shortdesc>Field Level Encryption is available in Couchbase Data Platform 5.5, from .NET SDK version 2.6.0.</shortdesc>
+  <conbody>
+        <section id="package">
+          <title>Packaging</title>
+            <p>The Couchbase Go SDK uses the <i>gocbencryption</i> library to provide functionality for encryption and decryption of json []byte data.<codeblock outputclass="language-go">go get github.com/couchbase/gocbencryption</codeblock></p>
+
+    <p>The Couchbase Go Field Level Encryption (FLE) library uses struct tags to specify which field(s) to apply encryption to and which algorithm to use. The struct tag key is <i>cbcrypt</i> and the value is of the form <codeph>"algorithm,publickey,signingkey"</codeph>. Here’s an example struct definition:<codeblock outputclass="language-go">type PersonAddress struct {
+    HouseName    string `json:"houseName"`
+    StreetName   string `json:"streetName"`
+}
+ 
+type Person struct {
+    FirstName string        `json:"firstName"`
+    LastName  string        `json:"lastName"`
+    Password  string        `json:"password" cbcrypt:"aes256,mypublickey,myhmackey"`
+    Address   PersonAddress `json:"address" cbcrypt:"aes256,mypublickey,myhmackey"`
+}</codeblock></p>
+        </section>
+
+
+        <section id="encryption_configuration">
+          <title>Configuration</title>
+    <p>After installing the dependency, create a configuration to connect to your Couchbase cluster and configure the Key Store to use (note that the key names must match the struct tags):<codeblock outputclass="language-go">keyStore := &amp;gocbfieldcrypt.InsecureKeystore{
+    Keys: map[string][]byte{
+       "mypublickey": []byte("!mysecretkey#9^5usdk39d&amp;dlf)03sL"),
+       "myhmackey":   []byte("myauthpassword"),
+    },
+}
+ 
+cluster, _ := gocb.Connect("…")
+cluster.Authenticate(…)
+bucket, _ := cluster.openBucket("…", "")</codeblock></p>
+
+    <p>To apply encryption to the struct use the `gocbfieldcrypt.EncryptJsonStruct([]byte, reflect.Type, KeyProvider) ([]byte, error)` function. For example to create a new person, apply encryption and then upsert the document:<codeblock>    person := Person{
+        FirstName: "Barry",
+        LastName:  "Sheen",
+        Password:  "bang!",
+        Address: PersonAddress{
+            HouseName:  "my house",
+            StreetName: "my street",
+        },
+    }
+ 
+    bytes, _ := json.Marshal(person)
+    encBytes, _ := gocbfieldcrypt.EncryptJsonStruct(bytes, reflect.TypeOf(person), keyStore)
+ 
+    bucket.Upsert("p1", encBytes, 0)</codeblock></p>
+        </section>
+
+
+        <section id="decryption">
+          <title>Decryption</title>
+    <p>To decrypt use the <codeph>gocbfieldcrypt.DecryptJsonStruct([]byte, reflect.Type, KeyProvider) ([]byte, error)</codeph> function. For example to get a document and parse it into a struct:<codeblock outputclass="language-go">    var p1Bytes []byte
+    bucket.Get("p1", &amp;p1Bytes)
+ 
+    var p1 Person
+    decBytes, _ := gocbfieldcrypt.DecryptJsonStruct(p1Bytes, reflect.TypeOf(p1), keyStore)
+    json.Unmarshal(decBytes, &amp;p2)</codeblock></p>
+        </section>
+
+
+
+  </conbody>
+</concept>
