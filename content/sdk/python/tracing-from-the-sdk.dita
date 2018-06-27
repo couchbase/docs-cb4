@@ -3,96 +3,255 @@
 
 <!--  **Change for Python**  -->
 
-<topic id="java-tracing-howto">
-  <title>Tracing from the Java SDK with Couchbase Server</title>
+<topic id="python-tracing-howto">
+  <title>Tracing from the Python SDK with Couchbase Server</title>
   <titlealts><navtitle>Tracing from the SDK</navtitle></titlealts>
   <shortdesc>Use tracing from the SDK to discover timeouts and bottlenecks across the network and cluster.</shortdesc>
   <body>
-    <p>For our example, we will customize the threshold logging tracer settings with <apiname>CouchbaseEnvironment.Builder</apiname>.  By default it 
+    <p>For our example, we will customize the threshold logging tracer settings with <apiname>couchbase.Bucket</apiname>.  By default it
       will log every minute (if something is found) and only sample the top 10 slowest operations. The default threshold for key/value operation is 500 milliseconds. We shall
-      set them so low that almost everything gets logged - not something you should do in production!<codeblock outputclass="language-java">Tracer tracer = ThresholdLogTracer.create(ThresholdLogReporter.builder()
-  .kvThreshold(1, TimeUnit.MICROSECONDS) // 1 microsecond
-  .logInterval(1, TimeUnit.SECONDS) // log every second
-  .sampleSize(Integer.MAX_VALUE)
-  .pretty(true) // pretty print the json output in the logs
-  .build());</codeblock>This will set our threshold for key/value operations to one microsecond, log the found operations every second, and set the sample size to a very large value so everything will be logged.</p>
-
-    <p>With these configs in place we are ready to run some operations. Below, we read some documentss from the travel-sample bucket and, if found, write them back with an <codeph>upsert</codeph> - giving us both read and write operations to log.<codeblock outputclass="language-java">// Connect
-CouchbaseEnvironment env = DefaultCouchbaseEnvironment.builder()
-    .tracer(tracer)
-    .build();
-Cluster cluster = CouchbaseCluster.create(env, "127.0.0.1");
+      set them so low that almost everything gets logged - not something you should do in production!<codeblock outputclass="language-python">
+options = dict(bucket="default", enable_tracing="yes")
+hostname ="localhost"
+cluster = Cluster("couchbase://{hostname}".format(hostname=hostname));
 cluster.authenticate("username", "password");
+bucket = cluster.open_bucket(**options)
+queue_size=100000000
+bucket.tracing_threshold_kv=1
+bucket.threshold_logging_tracer_interval=1e9
+bucket.tracing_threshold_queue_size=queue_size
+bucket.tracing_orphaned_queue_size=queue_size
+</codeblock>This will set our threshold for key/value operations to one microsecond, log the found operations every second, and set the sample size to a very large value so everything will be logged.</p>
 
- 
-Bucket bucket = cluster.openBucket("travel-sample");
+    <p>With these configs in place we are ready to run some operations. Below, we read some documentss from the travel-sample bucket and, if found, write them back with an <codeph>upsert</codeph> - giving us both read and write operations to log.<codeblock outputclass="language-python">// Connect
+
  
 // Load a couple of docs and write them back
-for(int i = 0; i &lt; 5; i++) {
-  JsonDocument doc = bucket.get("airline_1" + i);
-  if (doc != null) {
-    bucket.upsert(doc);
-  }
-}
- 
-Thread.sleep(TimeUnit.MINUTES.toMillis(1));</codeblock></p>
+for i in range(0,5):
+    doc = bucket.get("airline_1" + str(i));
+    if doc:
+        bucket.upsert(doc);
+
+time.sleep(60)</codeblock></p>
 
     <p>Run the code, and you will see something like the following in the logs:<codeblock outputclass="language-json">Apr 04, 2018 9:42:57 AM com.couchbase.client.core.tracing.ThresholdLogReporter logOverThreshold
-WARNING: Operations over threshold: [ {
-  "top" : [ {
-    "server_us" : 8,
-    "last_local_id" : "41837B87B9B1C5D1/000000004746B9AA",
-    "last_local_address" : "127.0.0.1:55011",
-    "last_operation_id" : "get:0x6",
-    "last_dispatch_us" : 315,
-    "last_remote_address" : "127.0.0.1:11210",
-    "total_us" : 576
-  }, {
-    "server_us" : 8,
-    "last_local_id" : "41837B87B9B1C5D1/000000004746B9AA",
-    "last_local_address" : "127.0.0.1:55011",
-    "last_operation_id" : "get:0x5",
-    "last_dispatch_us" : 319,
-    "last_remote_address" : "127.0.0.1:11210",
-    "total_us" : 599
-  }, {
-    "server_us" : 8,
-    "last_local_id" : "41837B87B9B1C5D1/000000004746B9AA",
-    "last_local_address" : "127.0.0.1:55011",
-    "last_operation_id" : "get:0x4",
-    "last_dispatch_us" : 332,
-    "last_remote_address" : "127.0.0.1:11210",
-    "total_us" : 632
-  }, {
-    "server_us" : 11,
-    "last_local_id" : "41837B87B9B1C5D1/000000004746B9AA",
-    "last_local_address" : "127.0.0.1:55011",
-    "last_operation_id" : "get:0x3",
-    "last_dispatch_us" : 392,
-    "last_remote_address" : "127.0.0.1:11210",
-    "total_us" : 762
-  }, {
-    "server_us" : 23,
-    "last_local_id" : "41837B87B9B1C5D1/000000004746B9AA",
-    "last_local_address" : "127.0.0.1:55011",
-    "last_operation_id" : "get:0x1",
-    "decode_us" : 9579,
-    "last_dispatch_us" : 947,
-    "last_remote_address" : "127.0.0.1:11210",
-    "total_us" : 16533
-  }, {
-    "server_us" : 56,
-    "encode_us" : 12296,
-    "last_local_id" : "41837B87B9B1C5D1/000000004746B9AA",
-    "last_local_address" : "127.0.0.1:55011",
-    "last_operation_id" : "upsert:0x2",
-    "last_dispatch_us" : 1280,
-    "last_remote_address" : "127.0.0.1:11210",
-    "total_us" : 20935
-  } ],
-  "service" : "kv",
-  "count" : 6
-} ]</codeblock>For each service (only kv-based on this workload), the threshold log reporter will show you the total number of recorded ops (through count), and give you the top slowest ops sorted by their latency. Since only airline_10 exists in the bucket you will see five document fetches but only one mutation.</p>
+[4141233127] Operations over threshold:
+{
+    "count": 99,
+    "service": "kv",
+    "top": [
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1ca4",
+                "operation_name": "upsert",
+                "server_us": 19,
+                "total_us": 8898
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1ca7",
+                "operation_name": "upsert",
+                "server_us": 8,
+                "total_us": 10334
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1caa",
+                "operation_name": "upsert",
+                "server_us": 6,
+                "total_us": 11273
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cb0",
+                "operation_name": "upsert",
+                "server_us": 6,
+                "total_us": 11746
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cb4",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 12232
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cb6",
+                "operation_name": "upsert",
+                "server_us": 6,
+                "total_us": 12750
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cb9",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 13241
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cbd",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 13687
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cbf",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 14292
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cc4",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 14764
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cc8",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 15346
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cc9",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 16046
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1ccd",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 16602
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cd7",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 17054
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cdb",
+                "operation_name": "upsert",
+                "server_us": 6,
+                "total_us": 17622
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cdf",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 18123
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1ce8",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 18531
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cef",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 18987
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cf4",
+                "operation_name": "upsert",
+                "server_us": 6,
+                "total_us": 19523
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cfc",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 19894
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cfe",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 20497
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1cff",
+                "operation_name": "upsert",
+                "server_us": 3,
+                "total_us": 21137
+            },
+            {
+                "last_local_address": "192.168.99.1:49414",
+                "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+                "last_remote_address": "192.168.99.1:49398",
+                "operation_id": "0x1d01",
+                "operation_name": "upsert",
+                "server_us": 2,
+                "total_us": 21838
+            },
+        ...,
+    "total_us":69233
+}
+
+    </codeblock>For each service (only kv-based on this workload), the threshold log reporter will show you the total number of recorded ops (through count), and give you the top slowest ops sorted by their latency. Since only airline_10 exists in the bucket you will see five document fetches but only one mutation.</p>
 
 
         <section id="threshold_log_reporter_output_fields">
@@ -100,23 +259,23 @@ WARNING: Operations over threshold: [ {
                 Output fields in detail.
             </title>
     <p>Let's highlight a single operation, and explain each field in a little more detail:<codeblock outputclass="language-json">{
-	"server_us" : 23,
-	"last_local_id" : "41837B87B9B1C5D1/000000004746B9AA",
-	"last_local_address" : "127.0.0.1:55011",
-	"last_operation_id" : "get:0x1",
-	"decode_us" : 1203,
-	"last_dispatch_us" : 947,
-	"last_remote_address" : "127.0.0.1:11210",
-	"total_us" : 1525
+        {
+        "last_local_address": "192.168.99.1:49414",
+        "last_local_id": "00000000f6d633e7/1816c785a1ee1ffe",
+        "last_remote_address": "192.168.99.1:49398",
+        "operation_id": "0x1d01",
+        "operation_name": "upsert",
+        "server_us": 2,
+        "total_us": 21838
+        }
 }</codeblock></p>
     <p>This tells us the following:<ul>
-      <li><b>total_us:</b> The total time it took to perform the full operation: here around 1.5 milliseconds</li>
-      <li><b>server_us:</b> The server reported that its work performed took 23 microseconds (this does not include network time or time in the buffer before picked up at the cluster)</li>
-      <li><b>decode_us:</b> Decoding the response took the client 1.2 milliseconds</li>
-      <li><b>last_dispatch_us:</b> The time when the client sent the request and got the response took around 1 millisecond.</li>
+      <li><b>total_us:</b> The total time it took to perform the full operation: here around 21.8 milliseconds</li>
+      <li><b>server_us:</b> The server reported that its work performed took 2 microseconds (this does not include network time or time in the buffer before picked up at the cluster)</li>
       <li><b>last_local_address:</b> The local socket used for this operation.</li>
       <li><b>last_remote_address:</b> The remote socket on the server used for this operation. Useful to figure out which node is affected.</li>
-      <li><b>last_operation_id:</b> A combination of type of operation and id (in this case the opaque value), useful for diagnosing and troubleshooting in combination with the last_local_id.</li>
+      <li><b>operation_id:</b> The id (in this case the opaque value), useful for diagnosing and troubleshooting in combination with the last_local_id.</li>
+      <li><b>operation_name:</b> The operation name, useful for diagnosing and troubleshooting in combination with the last_local_id.</li>
       <li><b>last_local_id:</b> With Server 5.5 and later, this id is negotiated with the server and can be used to correlate logging information on both sides in a simpler fashion.</li></ul></p>
     <note type="note">The exact format of this log is still a bit in flux and will change between dp1 and beta / GA releases.</note>
     <p>You can see that if the thresholds are set the right way based on production requirements, without much effort slow operations can be logged and pinpointed more easily than before.</p>
@@ -127,28 +286,9 @@ WARNING: Operations over threshold: [ {
             <title>
                 Timeout Visibility.
             </title>
-    <p>Previously, when an operation takes longer than the timeout specified allows, a <codeph>TimeoutException</codeph> is thrown. It usually looks like this:.<codeblock outputclass="language-java">Exception in thread "main" java.lang.RuntimeException: java.util.concurrent.TimeoutException: {"b":"travel-sample","r":"127.0.0.1:11210","s":"kv","c":"30893646E8E78A3E/FFFFFFFFDE1ED905","t":10000,"i":"0x1","l":"127.0.0.1:55821"}
-	at rx.exceptions.Exceptions.propagate(Exceptions.java:57)
-	at rx.observables.BlockingObservable.blockForSingle(BlockingObservable.java:463)
-	at rx.observables.BlockingObservable.singleOrDefault(BlockingObservable.java:372)
-	at com.couchbase.client.java.CouchbaseBucket.get(CouchbaseBucket.java:131)
-	at Main.main(Main.java:53)
-Caused by: java.util.concurrent.TimeoutException: {"b":"travel-sample","r":"127.0.0.1:11210","s":"kv","c":"30893646E8E78A3E/FFFFFFFFDE1ED905","t":10000,"i":"0x1","l":"127.0.0.1:55821"}
-	at com.couchbase.client.java.bucket.api.Utils$1.call(Utils.java:131)
-	at com.couchbase.client.java.bucket.api.Utils$1.call(Utils.java:127)
-	at rx.internal.operators.OperatorOnErrorResumeNextViaFunction$4.onError(OperatorOnErrorResumeNextViaFunction.java:140)
-	at rx.internal.operators.OnSubscribeTimeoutTimedWithFallback$TimeoutMainSubscriber.onTimeout(OnSubscribeTimeoutTimedWithFallback.java:166)
-	at rx.internal.operators.OnSubscribeTimeoutTimedWithFallback$TimeoutMainSubscriber$TimeoutTask.call(OnSubscribeTimeoutTimedWithFallback.java:191)
-	at rx.internal.schedulers.ScheduledAction.run(ScheduledAction.java:55)
-	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:511)
-	at java.util.concurrent.FutureTask.run(FutureTask.java:266)
-	at java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.access$201(ScheduledThreadPoolExecutor.java:180)
-	at java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:293)
-	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)
-	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)
-	at java.lang.Thread.run(Thread.java:745)</codeblock>Now the timeout itself provides you valuable information like the local and remote sockets, and the operation id, as well as the timeout set and the local ID used for troubleshooting. You can take this information and correlate it to the top slow operations in the threshold log.</p>
+    <p>Previously, when an operation takes longer than the timeout specified allows, a <codeph>TimeoutError</codeph> is thrown. It usually looks like this:.<codeblock outputclass="language-python">root: ERROR: Got exception [&lt;Key='key', RC=0x17[Client-Side timeout exceeded for operation. Inspect network conditions or increase the timeout], Operational Error, Results=1, C Source=(src/multiresult.c,316), Tracing Output={"key": {"s": "kv:get", "c": "00000000d5ba1b67/360fbfab17ec265c", "i": 18232203239736973189, "b": "default", "l": "10.143.180.1:57847", "r": "10.143.180.1:57834", "t": 900}}>]</codeblock>Now the timeout itself provides you valuable information like the local and remote sockets, and the operation id, as well as the timeout set and the local ID used for troubleshooting. You can take this information and correlate it to the top slow operations in the threshold log.</p>
 
-    <p>The <apiname>TimeoutException</apiname> now provides you more information into <i>what</i> went wrong and then you can go look at the log to figure out <i>why</i> it was slow.
+    <p>The <apiname>TimeoutError</apiname> now provides you more information into <i>what</i> went wrong and then you can go look at the log to figure out <i>why</i> it was slow.
     </p>
     </section>
   </body>
