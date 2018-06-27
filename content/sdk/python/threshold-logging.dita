@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="threshold-logging">
+  <title>Threshold Logging Tracing through the SDK</title>
+  <titlealts><navtitle>Threshold Logging</navtitle></titlealts>
+    <shortdesc conref="../shared/tracing.dita#tracing/shortdesc"/>
+
+    <body>
+        <section conref="../shared/tracing.dita#tracing/why_tracing">
+        </section>
+
+        <section conref="../shared/tracing.dita#tracing/open_tracing">
+        </section>
+        
+        <section id="threshold_configuration">
+            <title>Threshold Configuration Settings</title>
+            <p>The threshold tracer receives completed spans and verifies if an operation has exceeded the 
+                given threshold for the operation type. Operations that exceed the threshold are periodically 
+                logged with a total count and a sample of the slowest ones. The following are Python SDK configuration properties.</p>
+            <table frame="all" rowsep="1" colsep="1" id="threshold-logging-tracer-ref">
+                <title>Threshold Logging Tracer Properties</title>
+                <tgroup cols="3">
+                    <colspec colname="name" colnum="1" colwidth="3*"/>
+                    <colspec colname="bname" colnum="2" colwidth="3*"/>
+                    <colspec colname="bname" colnum="3" colwidth="1*"/>
+                    <thead>
+                        <row>
+                            <entry>Property Name</entry>
+                            <entry>Description</entry>
+                            <entry>Default Value</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry><codeph>threshold_logging_tracer_interval</codeph></entry>
+                            <entry>The interval between executions that processes the collected operation spans.
+                                Expressed in milliseconds.
+                            </entry>
+                            <entry>10,000 (10 seconds)</entry>
+                        </row>
+
+                        <row>
+                            <entry><codeph>tracing_threshold_queue_size</codeph></entry>
+                            <entry>The maximum number of items to log per service.</entry>
+                            <entry>10</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>tracing_threshold_kv</codeph></entry>
+                            <entry>The KV operation operation threshold. Expressed in microseconds.</entry>
+                            <entry>500,000 (500 milliseconds)</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>tracing_threshold_view</codeph></entry>
+                            <entry>The View query operation threshold. Expressed in microseconds.</entry>
+                            <entry>1,000,000 (1 second)</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>tracing_threshold_n1ql</codeph></entry>
+                            <entry>The N1QL query operation threshold. Expressed in microseconds.</entry>
+                            <entry>1,000,000 (1 second)</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>tracing_threshold_fts</codeph></entry>
+                            <entry>The FTS query operation threshold. Expressed in microseconds.</entry>
+                            <entry>1,000,000 (1 second)</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>tracing_threshold_analytics</codeph></entry>
+                            <entry>The Analytics query operation threshold. Expressed in microseconds.</entry>
+                            <entry>1,000,000 (1 second)</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>tracing_orphaned_queue_flush_interval</codeph></entry>
+                            <entry>The interval used to flush orphaned response information to the log. Expressed in microseconds.</entry>
+                            <entry>10,000 (10 seconds)</entry>
+                        </row>
+                        <row>
+                            <entry><codeph>tracing_orphaned_queue_size</codeph></entry>
+                            <entry>The number of sample orphaned responses whose to log additional information for per execution.</entry>
+                            <entry>10</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+        </table>
+
+            
+        </section>
+    
+
+        <section id="tracing_python">
+            <title>
+                Threshold Logging in Python
+            </title>
+
+            <p>
+              Threshold tracing is enabled by default. It can be disabled explicitly by adding <codeph>enable_tracing=false</codeph>
+                to the connection string/open_bucket options. 
+                Here is the code to override the default values of the tracer:<codeblock outputclass="language-python">options = dict(hostname="localhost",bucket="default")
+bucket = Bucket("couchbase://{hostname}/{bucket}".format(**options))
+bucket.tracing_threshold_queue_flush_interval = 5000 # 5 seconds
+bucket.tracing_threshold_queue_size = 5
+bucket.tracing_threshold_kv = 500000 # 500 ms
+bucket.tracing_threshold_n1ql = 1000000 # 1 second
+bucket.tracing_threshold_view = 1000000 # 1 second
+bucket.tracing_threshold_fts = 1000000 # 1 second
+bucket.tracing_threshold_analytics = 1000000 # 1 second</codeblock></p>
+
+            <p>
+In order to see warnings from the threshold tracer, you will need to enable logging:<codeblock outputclass="language-python">import couchbase
+import logging
+couchbase.enable_logging() # allows us to see warnings for slow/orphaned operations
+
+# set logging to WARNING level so we can see warnings
+ch = logging.StreamHandler()
+ch.setLevel(logging.WARNING)
+logging.getLogger().addHandler(ch)</codeblock></p>
+            <p>
+            One can also pass in an OpenTracing tracer in the Bucket options, e.g.:<codeblock outputclass="language-python">from opentracing_pyzipkin.tracer import Tracer
+import requests
+
+def http_transport(encoded_span):
+    # The collector expects a thrift-encoded list of spans.
+    requests.post('http://localhost:9411/api/v1/spans',
+        data=encoded_span,
+        headers={'Content-Type': 'application/x-thrift'})
+
+def jaeger_tracer(service, port = 9414, **kwargs ):
+    port = 9411
+    tracer= Tracer("My Tracer Name", 100, http_transport, port)
+    return tracer
+
+options = dict(hostname="localhost",bucket="default")
+bucket = Bucket("couchbase://{hostname}/{bucket}".format(**options), tracer = jaeger_tracer())</codeblock>This will also log spans to the provided tracer. At present the interface does not populate
+                the 'parent' field in the <codeph>start_span</codeph> function, so hierarchical information is lost. This
+                feature will be added in an upcoming Python SDK release.
+            </p>
+        </section>
+    </body>
+</topic>
