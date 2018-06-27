@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="threshold-logging">
+  <title>Threshold Logging Tracing through the SDK</title>
+  <titlealts><navtitle>Threshold Logging</navtitle></titlealts>
+    <shortdesc conref="../shared/tracing.dita#tracing/shortdesc"/>
+
+    <body>
+        <section conref="../shared/tracing.dita#tracing/why_tracing">
+        </section>
+
+        <section conref="../shared/tracing.dita#tracing/open_tracing">
+        </section>
+
+        <section conref="tracing.dita#tracing/threshold_configuration">
+        </section>
+
+
+        <section id="tracing_python">
+            <title>
+                Threshold Logging in Python
+            </title>
+
+            <p>
+                Threshold tracing is enabled by default. It can be disabled explicitly by adding "enable_tracing=false"
+                to the connection string/open_bucket options.
+              Here is the code to override the default values of the tracer:
+<codeblock>
+options = dict(hostname="localhost",bucket="default")
+bucket = Bucket("couchbase://{hostname}/{bucket}".format(**options))
+bucket.tracing_threshold_queue_flush_interval = 5000 # 5 seconds
+bucket.tracing_threshold_queue_size = 5
+bucket.tracing_threshold_kv = 500000 # 500 ms
+bucket.tracing_threshold_n1ql = 1000000 # 1 second
+bucket.tracing_threshold_view = 1000000 # 1 second
+bucket.tracing_threshold_fts = 1000000 # 1 second
+bucket.tracing_threshold_analytics = 1000000 # 1 second
+</codeblock>
+In order to see warnings from the threshold tracer, you will need to enable logging:
+<codeblock>
+import couchbase
+import logging
+couchbase.enable_logging() # allows us to see warnings for slow/orphaned operations
+
+# set logging to WARNING level so we can see warnings
+ch = logging.StreamHandler()
+ch.setLevel(logging.WARNING)
+logging.getLogger().addHandler(ch)
+</codeblock>
+            One can also pass in an OpenTracing tracer in the Bucket options, e.g.
+<codeblock>
+from opentracing_pyzipkin.tracer import Tracer
+import requests
+
+def http_transport(encoded_span):
+    # The collector expects a thrift-encoded list of spans.
+    requests.post('http://localhost:9411/api/v1/spans',
+        data=encoded_span,
+        headers={'Content-Type': 'application/x-thrift'})
+
+def jaeger_tracer(service, port = 9414, **kwargs ):
+    port = 9411
+    tracer= Tracer("My Tracer Name", 100, http_transport, port)
+    return tracer
+
+options = dict(hostname="localhost",bucket="default")
+bucket = Bucket("couchbase://{hostname}/{bucket}".format(**options), tracer = jaeger_tracer())
+</codeblock>
+                This will also log spans to the provided tracer. At present the interface does not populate
+                the 'parent' field in the start_span function, so hierarchical information is lost.
+                This omission is planned to be fixed in future.
+            </p>
+        </section>
+    </body>
+</topic>
