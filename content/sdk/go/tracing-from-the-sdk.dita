@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="go-tracing-howto">
+  <title>Tracing from the Go SDK with Couchbase Server</title>
+  <titlealts><navtitle>Tracing from the SDK</navtitle></titlealts>
+  <shortdesc>Use tracing from the SDK to discover timeouts and bottlenecks across the netowrk and cluster.</shortdesc>
+  <body>
+    <p>For our example, we will customize the threshold logging tracer settings with <apiname>CouchbaseEnvironment.Builder</apiname>.  By default it 
+      will log every minute (if something is found) and only sample the top 10 slowest operations. The default threshold for key/value operation is 500 milliseconds. We shall
+      set them so low that almost everything gets logged - not something you should do in production!<codeblock outputclass="language-go">tracer := gocb.ThresholdLoggingTracer{}
+tracer.Interval = 1 * time.Second // log every second
+tracer.KvThreshold = 1 * time.Microsecond
+Tracer.SampleSize = 100000 // log everything</codeblock>This will set our threshold for key/value operations to one microsecond, log the found operations every second, and set the sample size to a very large value so everything will be logged.</p>
+
+    <p>With these configs in place we are ready to run some operations. Below, we read some documents from the travel-sample bucket and, if found, write them back with an <codeph>upsert</codeph> - giving us both read and write operations to log.<codeblock outputclass="language-go">// Set the logger so that we see the output
+gocb.SetLogger(gocb.DefaultStdioLogger())
+
+// Connect
+cluster, _ := gocb.Connect("couchbase://localhost”)
+cluster.Authenticate(gocb.PasswordAuthenticator{
+    Username: username,
+    Password: password,
+})
+
+cluster.SetTracer(&amp;tracer)
+bucket, _ := cluster.OpenBucket(“travel-sample”, “”)
+
+// Loads some docs and write them back
+for i := 0; i &lt; 5; i++ {
+    airline := struct {
+        Type string `json:"type"`
+        ID   uint   `json:"id"`
+    }{}
+
+    key := fmt.Sprintf("airline_1%d", i)
+    cas, err := bucket.Get(key, &amp;airline)
+    if err == nil {
+        bucket.Replace(key, airline, cas, 0)
+    }
+}
+
+// Leave a bit of time for the logger to output
+time.Sleep(5 * time.Second)</codeblock></p>
+
+    <p>Run the code, and you will see something like the following in the logs:<codeblock outputclass="language-json">{
+  "service": "kv",
+  "count": 6,
+  "top": [
+    {
+      "operation_name": "Get",
+      "total_us": 31903,
+      "server_us": 22,
+      "decode_us": 91,
+      "last_operation_id": "0x5”,
+      "last_local_id": "2f87cf1799fe15fd\/cda32b624efa3e53"
+    },
+    {
+      "operation_name": "Get",
+      "total_us": 1204,
+      "server_us": 8,
+      "last_operation_id": "0x7",
+      "last_local_id": "2f87cf1799fe15fd\/cda32b624efa3e53"
+    },
+    {
+      "operation_name": "Get",
+      "total_us": 1166,
+      "server_us": 14,
+      "last_operation_id": "0xa",
+      "last_local_id": "2f87cf1799fe15fd\/cda32b624efa3e53"
+    },
+    {
+      "operation_name": "Replace",
+      "total_us": 422,
+      "encode_us": 15,
+      "server_us": 49,
+      "last_operation_id": "0x6",
+      "last_local_id": "2f87cf1799fe15fd\/cda32b624efa3e53"
+    },
+    {
+      "operation_name": "Get",
+      "total_us": 407,
+      "server_us": 8,
+      "last_operation_id": "0x9",
+      "last_local_id": "2f87cf1799fe15fd\/cda32b624efa3e53"
+    },
+    {
+      "operation_name": "Get",
+      "total_us": 385,
+      "server_us": 8,
+      "last_operation_id": "0x8",
+      "last_local_id": "2f87cf1799fe15fd\/cda32b624efa3e53"
+    }
+  ]
+}</codeblock>For each service (only kv-based on this workload), the threshold log reporter will show you the total number of recorded ops (through count), and give you the top slowest ops sorted by their latency. Since only airline_10 exists in the bucket you will see five document fetches but only one mutation.</p>
+
+
+        <section id="threshold_log_reporter_output_fields">
+            <title>
+                Output fields in detail.
+            </title>
+    <p>Let's highlight a single operation, and explain each field in a little more detail:<codeblock outputclass="language-json">{
+      "operation_name": "Get",
+      "total_us": 31903,
+      "server_us": 22,
+      "decode_us": 91,
+      "last_operation_id": "0x5”,
+      "last_local_id": "2f87cf1799fe15fd\/cda32b624efa3e53"
+}</codeblock></p>
+    <p>This tells us the following:<ul>
+      <li><b>total_us:</b> The total time it took to perform the full operation: here around 32 milliseconds</li>
+      <li><b>server_us:</b> The server reported that its work performed took 22 microseconds (this does not include network time or time in the buffer before picked up at the cluster)</li>
+      <li><b>decode_us:</b> Decoding the response took the client 91 microseconds</li>
+      <li><b>last_operation_id:</b> A combination of type of operation and id (in this case the opaque value), useful for diagnosing and troubleshooting in combination with the last_local_id.</li>
+      <li><b>last_local_id:</b> With Server 5.5 and later, this id is negotiated with the server and can be used to correlate logging information on both sides in a simpler fashion.</li></ul></p>
+    <note type="note">The exact format of this log is still a bit in flux and will change between dp1 and beta / GA releases.</note>
+    <p>You can see that if the thresholds are set the right way based on production requirements, without much effort slow operations can be logged and pinpointed more easily than before.</p>
+        </section>
+
+  </body>
+</topic>
