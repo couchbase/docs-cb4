@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="java-tracing-howto">
+  <title>Tracing from the .NET SDK with Couchbase Server</title>
+  <titlealts><navtitle>Tracing from the SDK</navtitle></titlealts>
+  <shortdesc>Use tracing from the SDK to discover timeouts and bottlenecks across the network and cluster.</shortdesc>
+  <body>
+    <p>For our example, we will customize the threshold logging tracer settings in the <apiname>ClientConfiguration</apiname>.  By default it
+      will log every minute (if something is found) and only sample the top 10 slowest operations. The default threshold for key/value operation is 500 milliseconds. We shall
+      set them so low that almost everything gets logged - not something you should do in production!<codeblock outputclass="language-csharp">var tracer = new ThresholdLoggingTracer
+            {
+                KvThreshold = 1, // 1 microsecond
+                SampleSize = int.MaxValue,
+                Interval = 1000 // 1 second
+            };
+            </codeblock>This will set our threshold for key/value operations to one microsecond, log the found operations every second, and set the sample size to a very large value so everything will be logged.</p>
+
+    <p>With these configs in place we are ready to run some operations. Below, we read some documentss from the travel-sample bucket and, if found, write them back with an <codeph>upsert</codeph> - giving us both read and write operations to log.<codeblock outputclass="language-csharp">// Connect
+    var config = new ClientConfiguration();
+    config.Tracer = tracer;
+
+    var cluster = new Cluster(); // connects to cluster using localhost
+    cluster.Authenticate("username", "password");
+
+    // Load a couple of docs and write them back
+    var bucket = cluster.OpenBucket("travel-sample");
+    for (var i = 0; i &lt; 5; i++)
+    {
+        var result = bucket.Get<dynamic>("airline_1" + i);
+        if (result.Success)
+        {
+            bucket.Upsert(result.Id, result.Value);
+        }
+    }
+
+    Thread.Sleep(TimeSpan.FromMinutes(1));</codeblock></p>
+
+    <p>Run the code, and you will see something like the following in the logs:<codeblock outputclass="language-json">27 11:51:09,129 [4] INFO Couchbase.Tracing.ThresholdLoggingTracer - Operations that exceeded service threshold:
+[
+  {
+    "service":"kv",
+    "count":5,
+    "top":[
+      {
+        "operation_name":"Set",
+        "last_operaion_id":"0x9",
+        "last_local_address":"10.211.55.3:58679",
+        "last_remote_address":"10.112.181.101:11210",
+        "last_local_id":"8fe25176f5cb5068/7a424b9f2ab5e6a8",
+        "last_dispatch_us":31153,
+        "total_us":39299,
+        "encode_us":6791,
+        "dispatch_us":31153,
+        "server_us":17290,
+        "decode_us":909
+      },
+      {
+        "operation_name":"Get",
+        "last_operaion_id":"0xa",
+        "last_local_address":"10.211.55.3:58678",
+        "last_remote_address":"10.112.181.101:11210",
+        "last_local_id":"8fe25176f5cb5068/1ca98582755c6f19",
+        "last_dispatch_us":18205,
+        "total_us":23802,
+        "encode_us":7,
+        "dispatch_us":18205,
+        "server_us":280,
+        "decode_us":1653
+      },
+      {
+        "operation_name":"Get",
+        "last_operaion_id":"0xb",
+        "last_local_address":"10.211.55.3:58679",
+        "last_remote_address":"10.112.181.101:11210",
+        "last_local_id":"8fe25176f5cb5068/7a424b9f2ab5e6a8",
+        "last_dispatch_us":1657,
+        "total_us":1830,
+        "encode_us":3,
+        "dispatch_us":1657,
+        "server_us":135,
+        "decode_us":29
+      },
+      {
+        "operation_name":"Get",
+        "last_operaion_id":"0xc",
+        "last_local_address":"10.211.55.3:58678",
+        "last_remote_address":"10.112.181.101:11210",
+        "last_local_id":"8fe25176f5cb5068/1ca98582755c6f19",
+        "last_dispatch_us":1373,
+        "total_us":1481,
+        "encode_us":2,
+        "dispatch_us":1373,
+        "server_us":22,
+        "decode_us":12
+      },
+      {
+        "operation_name":"Get",
+        "last_operaion_id":"0xd",
+        "last_local_address":"10.211.55.3:58679",
+        "last_remote_address":"10.112.181.101:11210",
+        "last_local_id":"8fe25176f5cb5068/7a424b9f2ab5e6a8",
+        "last_dispatch_us":4876,
+        "total_us":5086,
+        "encode_us":8,
+        "dispatch_us":4876,
+        "server_us":14,
+        "decode_us":8
+      }
+    ]
+  }
+]</codeblock>For each service (only kv-based on this workload), the threshold log reporter will show you the total number of recorded ops (through count), and give you the top slowest ops sorted by their latency. Since only airline_10 exists in the bucket you will see five document fetches but only one mutation.</p>
+
+
+        <section id="threshold_log_reporter_output_fields">
+            <title>
+                Output fields in detail.
+            </title>
+    <p>Let's highlight a single operation, and explain each field in a little more detail:<codeblock outputclass="language-json">{
+        "operation_name":"Get",
+        "last_operaion_id":"0xc",
+        "last_local_address":"10.211.55.3:58678",
+        "last_remote_address":"10.112.181.101:11210",
+        "last_local_id":"8fe25176f5cb5068/1ca98582755c6f19",
+        "last_dispatch_us":1373,
+        "total_us":1481,
+        "dispatch_us":1373,
+        "server_us":22,
+        "decode_us":12
+}</codeblock></p>
+    <p>This tells us the following:<ul>
+      <li><b>operation_name:<b> The operation type, eg for KV it is the command type 'Get'</li>
+      <li><b>last_operation_id:</b> The last unique ID for the opeation (in this case the opaque value), useful for diagnosing and troubleshooting in combination with the last_local_id.</li>
+      <li><b>last_local_address:</b> The local socket used for this operation.</li>
+      <li><b>last_remote_address:</b> The remote socket on the server used for this operation. Useful to figure out which node is affected.</li>
+      <li><b>last_local_id:</b> With Server 5.5 and later, this id is negotiated with the server and can be used to correlate logging information on both sides in a simpler fashion.</li></ul></p>
+      <li><b>last_dispatch_us:</b> The time when the client sent the request and got the response took around 1 millisecond.</li>
+      <li><b>total_us:</b> The total time it took to perform the full operation: here around 1.5 milliseconds</li>
+      <li><b>dispatch_us:</b> The amount of time observed between sending the request over the network to when a response was received</li>
+      <li><b>server_us:</b> The server reported that its work performed took 22 microseconds (this does not include network time or time in the buffer before picked up at the cluster)</li>
+      <li><b>decode_us:</b> Decoding the response took the client 12 microseconds</li>
+    <note type="note">The exact format of this log is still a bit in flux and will change between dp1 and beta / GA releases.</note>
+    <p>You can see that if the thresholds are set the right way based on production requirements, without much effort slow operations can be logged and pinpointed more easily than before.</p>
+        </section>
+
+
+        <section id="timeout_visibility">
+            <title>
+                Timeout Visibility.
+            </title>
+    <p>Previously, when an operation takes longer than the timeout specified allows, a <codeph>TimeoutException</codeph> is thrown. It usually looks like this:.<codeblock outputclass="language-csharp">2018-06-27 12:26:13,755 [Worker#STA_NP] WARN Couchbase.IO.ConnectionBase - Couchbase.IO.SendTimeoutExpiredException: The operation has timed out. {"s":"kv","i":"0x1","c":"8d063f1e0b70ebb8/cd65184a378ae5fc","b":"travel-sample","l":"10.211.55.3:58754","r":"10.112.181.101:11210","t":5000}
+   at Couchbase.IO.MultiplexingConnection.Send(Byte[] request)
+   at Couchbase.IO.Services.IOServiceBase.Execute[T](IOperation`1 operation, IConnection connection)
+   at Couchbase.IO.Services.IOServiceBase.EnableServerFeatures(IConnection connection)
+   at Couchbase.IO.Services.IOServiceBase.CheckEnabledServerFeatures(IConnection connection)
+   at Couchbase.IO.Services.PooledIOService..ctor(IConnectionPool connectionPool)
+   at Couchbase.IO.Services.SharedPooledIOService..ctor(IConnectionPool connectionPool)
+   at Couchbase.IO.IOServiceFactory.<>c__DisplayClass0_0.<GetFactory>b__0(IConnectionPool pool)
+   at Couchbase.Configuration.Server.Providers.CarrierPublication.CarrierPublicationProvider.GetConfig(String bucketName, String username, String password)</codeblock>Now the timeout itself provides you valuable information like the local and remote sockets, and the operation id, as well as the timeout set and the local ID used for troubleshooting. You can take this information and correlate it to the top slow operations in the threshold log.</p>
+
+    <p>The <apiname>TimeoutException</apiname> now provides you more information into <i>what</i> went wrong and then you can go look at the log to figure out <i>why</i> it was slow.
+    </p>
+    </section>
+  </body>
+</topic>
