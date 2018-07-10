@@ -1,0 +1,726 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="n1ql-auditing">
+    <title>
+        N1QL Auditing
+    </title>
+    <shortdesc>
+        N1QL-related activities can be audited, by Couchbase Server.
+    </shortdesc>
+    
+    <body>
+        
+        <section id="section_ycp_mfg_wcb">
+            
+            <title>
+                Understanding N1QL Auditing
+            </title>
+            
+            <p>
+                This section provides specific information on Couchbase Server auditing
+                as it relates to N1QL. For a general description of configuring auditing
+                with Couchbase Web Console, see
+                <xref href="../../security/security-auditing.dita" scope="local" format="dita">Auditing</xref>.
+            </p>
+            
+            <p>
+                Couchbase Server provides auditing for N1QL-related
+                activities such as the following:
+            </p>
+                
+                <ul id="ul_q1p_wfg_wcb">
+                    <li>Authenticating</li>
+                    <li>Starting and stopping the Query Service</li>
+                    <li>Editing Query Service settings</li>
+                    <li>Executing N1QL statements</li>
+                    <li>Non-query API requests</li>
+                </ul>
+            
+            <p>
+                N1QL-related activities are logged whether they are executed
+                by a person or by an application running on behalf of a person. Auditing
+                occurs at the level of <i>requests</i>, rather than of <i>operations</i>. Thus,
+                when a
+                request arrives with a SELECT query, only the SELECT query itself is logged: the
+                associated subsidiary operations performed by the Data and Index Services are
+                <i>not</i> logged. 
+            </p>
+            
+            <p>
+                Auditing causes a reduction in N1QL query-performance. This is in the range of
+                9% to 17% of queries performed per second: the exact reduction depends 
+                on query-size, and on the amount of auditing that has been enabled. Large queries
+                and minimal auditing cause less performance-reduction.
+            </p>
+            
+            <p>
+                Auditing can be configured by means of Couchbase Web Console: see the information provided
+                in
+                <xref href="../../security/security-auditing.dita" scope="local" format="dita">Auditing</xref>.
+                To capture N1QL-related events, use the <b>Query and Index Service</b> panel. Events available
+                to be audited include ones issued through the SDK, the Query workbench, and the Query Shell.
+            </p>
+            
+            
+        </section>
+        
+        <section id="section_vsh_4gg_wcb"><title>Audit Log Format</title><p>The audit records are
+                written in JSON format to match the format used for Admin Auditing to allow easy
+                integration with downstream auditing tools for audit log analysis. The syslog format
+                will allow for integration with third party SIEM tools, such as
+                QRadar.</p><p>Required auditing fields for executed statements: <table frame="all"
+                    rowsep="1" colsep="1" id="table_nfr_j1m_wcb">
+                    <tgroup cols="3" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="4*"/>
+                        <colspec colname="c3" colnum="3" colwidth="4*"/>
+                        <thead>
+                            <row>
+                                <entry>Field</entry>
+                                <entry>Description</entry>
+                                <entry>Example</entry>
+                            </row>
+                        </thead>
+                        <tbody>
+                            <row>
+                                <entry><codeph><b>timestamp</b></codeph></entry>
+                                <entry>Exact date and time of the access event in UTC
+                                    format.</entry>
+                                <entry><codeph>2018-02-09T14:52:35.163-08:00</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>real_userid</b></codeph></entry>
+                                <entry>Source/User from basic authentication fields of
+                                    request.</entry>
+                                <entry><codeph>"source":"local",</codeph><p><codeph>"user":"Administrator"</codeph></p></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>requestId</b></codeph></entry>
+                                <entry>UUID of request, generated by the N1QL server.</entry>
+                                <entry><codeph>aee53bf0-d009-4015-8a1d-efec74f2cd74</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>statement</b></codeph></entry>
+                                <entry>The actual N1QL query that was executed.</entry>
+                                <entry><codeph>SELECT * FROM `travel-sample`</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>isAdHoc</b></codeph></entry>
+                                <entry><codeph>TRUE</codeph> for statements made
+                                            directly.<p><codeph>FALSE</codeph> for prepared
+                                        statements.</p></entry>
+                                <entry><codeph>TRUE</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>userAgent</b></codeph></entry>
+                                <entry>To identify the type of user by a combination of the
+                                    User-Agent and CB-User-Agent headers in one of the four
+                                        formats:<p>1) CURL request</p><p/><p>2) Query
+                                        Workbench</p><p/><p>3) CBQ shell</p><p/><p>4)
+                                    SDK</p></entry>
+                                <entry>1) <codeph>curl/7.43.0</codeph><p>2) <codeph>Mozilla/5.0
+                                            (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36
+                                            (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36
+                                            (Couchbase Query Workbench
+                                            (5.1.0-1434-enterprise))</codeph></p><p>3)
+                                            <codeph>Go-http-client/1.1 (CBQ/2.0)</codeph></p><p>4)
+                                            <codeph>couchbase-java-client/2.5.2 (git: 2.5.2, core:
+                                            1.5.2) (Mac OS X/10.11.6 x86_64; Java HotSpot(TM) 64-Bit
+                                            Server VM 1.8.0_101-b13)</codeph></p></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>node</b></codeph></entry>
+                                <entry>Assigned name (IP address) of the server where the request
+                                            ran.<p><codeph>local</codeph> for unclustered
+                                    nodes.</p></entry>
+                                <entry><codeph>local</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>status</b></codeph></entry>
+                                <entry>Status of the request, as <codeph>success</codeph> or
+                                        <codeph>failed</codeph> or <codeph>stopped</codeph>.</entry>
+                                <entry><codeph>success</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>metrics</b></codeph></entry>
+                                <entry>The elapsed time (ms), execution time (ms), result count, and
+                                    result size (MB).</entry>
+                                <entry><codeph>"elapsedTime":"7.599684ms",</codeph><p><codeph>"executionTime":"7.507755ms",</codeph></p><p><codeph>"resultCount":0,</codeph></p><p><codeph>"resultSize":0</codeph></p></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>id</b></codeph></entry>
+                                <entry>Number for the <xref
+                                        href="#n1ql-auditing/section_nyb_jsh_wcb" format="dita"
+                                        >audit event type</xref>.</entry>
+                                <entry><codeph>28672</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>name</b></codeph></entry>
+                                <entry>The N1QL command or REST API request type.</entry>
+                                <entry><codeph>SELECT</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>description</b></codeph></entry>
+                                <entry>Description of the event type.</entry>
+                                <entry><codeph>A N1QL SELECT statement was executed</codeph></entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table></p>Optional auditing fields for statements:<table frame="all" rowsep="1"
+                colsep="1" id="table_i1z_ckg_wcb">
+                <tgroup cols="3" align="left">
+                    <colspec colname="c1" colnum="1" colwidth="1*"/>
+                    <colspec colname="c2" colnum="2" colwidth="2.5*"/>
+                    <colspec colname="c3" colnum="3" colwidth="2.5*"/>
+                    <thead>
+                        <row>
+                            <entry>Field</entry>
+                            <entry>Description</entry>
+                            <entry>Example</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry><codeph><b>namedArgs</b></codeph></entry>
+                            <entry>Names and values of name arguments.</entry>
+                            <entry><codeph>$val </codeph>and<codeph> $user</codeph></entry>
+                        </row>
+                        <row>
+                            <entry><codeph><b>positionalArgs</b></codeph></entry>
+                            <entry>Array of values of positional arguments.</entry>
+                            <entry><codeph>$1 </codeph>and<codeph> ?</codeph></entry>
+                        </row>
+                        <row>
+                            <entry><codeph><b>clientContextId</b></codeph></entry>
+                            <entry>Captured from the <codeph>client_context_id</codeph> parameter of
+                                the N1QL query API. <p>May be used to distinguish between
+                                    user-generated queries and UI-generated queries from the Query
+                                    WorkBench.</p>UI-generated queries have the prefix
+                                    <codeph>INTERNAL-</codeph> in this field. <note>The client
+                                    context ID has no security guarantees. The parameter can be set
+                                    by any user in any request and is not verified in the server, so
+                                    it should not be relied upon for security
+                                purposes.</note></entry>
+                            <entry/>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table><p>Required auditing fields for API requests:<table frame="all" rowsep="1"
+                    colsep="1" id="table_arb_ykg_wcb">
+                    <tgroup cols="3" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="2.5*"/>
+                        <colspec colname="c3" colnum="3" colwidth="2.5*"/>
+                        <thead>
+                            <row>
+                                <entry>Field</entry>
+                                <entry>Description</entry>
+                                <entry>Example</entry>
+                            </row>
+                        </thead>
+                        <tbody>
+                            <row>
+                                <entry><codeph><b>timestamp</b></codeph></entry>
+                                <entry>Exact date and time of the access event in UTC
+                                    format.</entry>
+                                <entry><codeph>2018-02-09T14:52:35.163-08:00</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>real_userid</b></codeph></entry>
+                                <entry>Source/User from basic authentication fields of
+                                    request.</entry>
+                                <entry><codeph>"source":"local","user":"Administrator"</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>httpMethod</b></codeph></entry>
+                                <entry>The API method call, either <codeph>GET, PUT, DELETE,
+                                        POST</codeph></entry>
+                                <entry><codeph>GET</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>httpResultCode</b></codeph></entry>
+                                <entry>The number representing the API result.</entry>
+                                <entry><codeph>200</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>errorMessage</b></codeph></entry>
+                                <entry>If an error occurred, this will contain information on the
+                                    error.</entry>
+                                <entry><codeph>User does not have credentials to run queries
+                                        accessing the system tables.</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>id</b></codeph></entry>
+                                <entry>Number for the <xref
+                                        href="#n1ql-auditing/section_cmd_lyh_wcb" format="dita">API
+                                        auditing code</xref>.</entry>
+                                <entry><codeph>28689</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>name</b></codeph></entry>
+                                <entry>The API request location.</entry>
+                                <entry><codeph>/admin/ping</codeph></entry>
+                            </row>
+                            <row>
+                                <entry><codeph><b>description</b></codeph></entry>
+                                <entry>Description of the event type.</entry>
+                                <entry><codeph>An HTTP request was made to the API at
+                                        /admin/ping.</codeph></entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table></p></section>
+        <section id="section_dwh_bmg_wcb"><title>Examples</title><p>To reduce disk usage and improve
+                performance, the log files are as compact as possible.</p><p>When viewed through
+                Query Workbench, the logs are formatted and indented for easier
+                    reading.</p><p><b>Example 1:</b> Execute <codeph>SELECT * FROM orders</codeph>
+                via a CURL
+                statement.</p><p><codeblock>{"timestamp":"2018-02-09T14:52:35.163-08:00","real_userid":{"source":"local","user":"Administrator"},"requestId":"aee53bf0-d009-4015-8a1d-efec74f2cd74","statement":"<b>SELECT * FROM orders</b>","isAdHoc":true,"userAgent":"<b>curl/7.43.0</b>","node":"local_node","status":"success","metrics":{"elapsedTime":"7.599684ms","executionTime":"7.507755ms","resultCount":0,"resultSize":0},"id":28672,"name":"SELECT statement","description":"A N1QL SELECT statement was executed”}</codeblock>To
+                make the log entry easier-to-read:<ol id="ol_abd_d1m_wcb">
+                    <li>Copy the log entry to the clipboard</li>
+                    <li>Open Query Workbench</li>
+                    <li>Type <codeph>SELECT</codeph></li>
+                    <li>Paste the query from the clipboard</li>
+                    <li>Click the <b>Execute</b> button</li>
+                </ol><codeblock>[
+  {
+    "$1": {
+      "description": "A N1QL SELECT statement was executed",
+      "id": 28672,
+      "isAdHoc": true,
+      "metrics": {
+        "elapsedTime": "7.599684ms",
+        "executionTime": "7.507755ms",
+        "resultCount": 0,
+        "resultSize": 0
+      },
+      "name": "SELECT statement",
+      "node": "local_node",
+      "real_userid": {
+        "source": "local",
+        "user": "Administrator"
+      },
+      "requestId": "aee53bf0-d009-4015-8a1d-efec74f2cd74",
+      "statement": "<b>SELECT * FROM orders</b>",
+      "status": "success",
+      "timestamp": "2018-02-09T14:52:35.163-08:00",
+      "userAgent": "<b>curl/7.43.0</b>"
+    }
+  }
+]
+</codeblock></p><b>Example
+                2:</b> Execute <codeph>DELETE FROM orders WHERE priority = 6</codeph> via a CURL statement<p>
+                <codeblock>{"timestamp":"2018-02-09T14:52:55.786-08:00","real_userid":{"source":"local","user":"Administrator"},"requestId":"ded68ae3-d964-4d87-b1c2-70cf72041c6b","statement":"DELETE FROM orders WHERE priority = 6","isAdHoc":true,"userAgent":"curl/7.43.0","node":"local_node","status":"success","metrics":{"elapsedTime":"8.884558ms","executionTime":"8.853976ms","resultCount":0,"resultSize":0},"id":28678,"name":"DELETE statement","description":"A N1QL DELETE statement was executed"}</codeblock>
+            </p><codeblock>[
+  {
+    "$1": {
+      "description": "A N1QL DELETE statement was executed",
+      "id": 28678,
+      "isAdHoc": true,
+      "metrics": {
+        "elapsedTime": "8.884558ms",
+        "executionTime": "8.853976ms",
+        "resultCount": 0,
+        "resultSize": 0
+      },
+      "name": "DELETE statement",
+      "node": "local_node",
+      "real_userid": {
+        "source": "local",
+        "user": "Administrator"
+      },
+      "requestId": "ded68ae3-d964-4d87-b1c2-70cf72041c6b",
+      "statement": "<b>DELETE FROM orders WHERE priority = 6</b>",
+      "status": "success",
+      "timestamp": "2018-02-09T14:52:55.786-08:00",
+      "userAgent": "<b>curl/7.43.0</b>"
+    }
+  }
+]
+</codeblock><p><b>Example
+                    3: </b>Make an HTTP <codeph>GET</codeph> method from an
+                    <codeph>/admin/ping</codeph> API
+                request.<codeblock>{"timestamp":"2018-02-09T14:53:10.856-08:00","real_userid":{"source":"internal","user":"unknown"},"httpMethod":"<b>GET</b>","httpResultCode":200,"errorMessage":"","id":28697,"name":"<b>/admin/ping API request</b>","description":"An HTTP request was made to the API at /admin/ping."}</codeblock><codeblock>[
+  {
+    "$1": {
+      "description": "An HTTP request was made to the API at /admin/ping.",
+      "errorMessage": "",
+      "httpMethod": "<b>GET</b>",
+      "httpResultCode": 200,
+      "id": 28697,
+      "name": "<b>/admin/ping API request</b>",
+      "real_userid": {
+        "source": "internal",
+        "user": "unknown"
+      },
+      "timestamp": "2018-02-09T14:53:10.856-08:00"
+    }
+  }
+]
+</codeblock></p></section>
+        
+        <section id="section_bb1_krh_wcb">
+            <title>Audit Rotation</title>
+            <p>The auditing Rotation parameters can be only one of the following:</p>
+            <p>
+                <table frame="all" rowsep="1" colsep="1" id="table_l34_nrh_wcb">
+                    <tgroup cols="2" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="3*"/>
+                        <thead>
+                            <row>
+                                <entry>Audit Log Rotation Type</entry>
+                                <entry>Examples</entry>
+                            </row>
+                        </thead>
+                        <tbody>
+                            <row>
+                                <entry>Time-based (days)</entry>
+                                <entry>7 (for weekly); 30 (for monthly).</entry>
+                            </row>
+                            <row>
+                                <entry>Size-based (MB)</entry>
+                                <entry>10 (for 10 MB); 10000 (for 10 GB).</entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table>
+            </p>
+        </section>
+        <section id="section_wqk_5rh_wcb">
+            <title>Audit Failure Semantics</title>
+            <p>When the audit target fails, the auditing system can be set to one of the
+                    following:<table frame="all" rowsep="1" colsep="1" id="table_ezj_wrh_wcb">
+                    <tgroup cols="2" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="3*"/>
+                        <thead>
+                            <row>
+                                <entry>Failure Response Type</entry>
+                                <entry>Description</entry>
+                            </row>
+                        </thead>
+                        <tbody>
+                            <row>
+                                <entry>Ignore</entry>
+                                <entry>Continue the action without firing an audit record.</entry>
+                            </row>
+                            <row>
+                                <entry>Block</entry>
+                                <entry>Cancel the operation.</entry>
+                            </row>
+                            <row>
+                                <entry>Log Reuse</entry>
+                                <entry>This option is for out-of-space failures:<ul
+                                        id="ul_qyd_csh_wcb">
+                                        <li><b>Time-Based</b>: Limit audit logs to the specified
+                                            number of recent days.</li>
+                                        <li><b>Size-Based</b>: Limit audit log size to the specified
+                                            number of megabytes.</li>
+                                    </ul></entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table>If an audit record attempt fails in the query engine, an error message will
+                be printed to the <codeph>query.log</codeph> file.</p>
+        </section>
+        <section id="section_jb3_fsh_wcb">
+            <title>Audit Trail Protection</title>
+            <p>To prevent unauthorized modification of the audit service configuration, the auditing
+                system restricts access to configuring only to Full and Security Administrators.</p>
+            <p>Audit records are immutable since the auditing system prevents changes of audit event
+                records once written.</p>
+            <p>Once archived, audit data is deleted from Couchbase, and the file space is recovered. </p>
+            <p>
+                The 
+                <xref href="../../cli/cbcollect-info-tool.dita" scope="local" format="dita">cbcollect_info</xref>
+                utility does not collect audit logs.
+            </p>
+        </section>
+        <section id="section_nyb_jsh_wcb">
+            <title>Audit Event Types</title>
+            <p>Below is the list of all events that are captured in the audit logs.<ol
+                    id="ol_gkp_vsh_wcb">
+                    <li>System clock modifications as captured in the operating system audit
+                        log</li>
+                    <li>Disabling Auditing</li>
+                    <li>Enabling Auditing, with audit settings written</li>
+                    <li>Login, both Success and Failure</li>
+                    <li>Logout, both Success and Failure</li>
+                    <li>Data access operations<table frame="all" rowsep="1" colsep="1"
+                            id="table_ojp_r5h_wcb">
+                            <tgroup cols="2" align="left">
+                                <colspec colname="c1" colnum="1" colwidth="1*"/>
+                                <colspec colname="c2" colnum="2" colwidth="1*"/>
+                                <thead>
+                                    <row>
+                                        <entry>a. Query Service</entry>
+                                        <entry>Event ID</entry>
+                                    </row>
+                                </thead>
+                                <tbody>
+                                    <row>
+                                        <entry><codeph>ALTER INDEX </codeph></entry>
+                                        <entry>28683</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>BUILD INDEX </codeph></entry>
+                                        <entry>28684</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>CREATE INDEX </codeph></entry>
+                                        <entry>28681</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>CREATE PRIMARY INDEX </codeph></entry>
+                                        <entry>28688</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>DELETE </codeph></entry>
+                                        <entry>28678</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>DROP INDEX </codeph></entry>
+                                        <entry>28682</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>EXPLAIN </codeph></entry>
+                                        <entry>28673</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>GRANT </codeph></entry>
+                                        <entry>28685</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>INFER </codeph></entry>
+                                        <entry>28675</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>INSERT </codeph></entry>
+                                        <entry>28676</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>MERGE </codeph></entry>
+                                        <entry>28680</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>PREPARE </codeph></entry>
+                                        <entry>28674</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>REVOKE </codeph></entry>
+                                        <entry>28686</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>SELECT </codeph></entry>
+                                        <entry>28672</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>UNRECOGNIZED </codeph></entry>
+                                        <entry>28687</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>UPDATE</codeph>
+                                        </entry>
+                                        <entry>28679</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>UPSERT</codeph>
+                                        </entry>
+                                        <entry>28677</entry>
+                                    </row>
+                                </tbody>
+                            </tgroup>
+                        </table><table frame="all" rowsep="1" colsep="1" id="table_pgv_vvh_wcb">
+                            <tgroup cols="2" align="left">
+                                <colspec colname="c1" colnum="1" colwidth="1*"/>
+                                <colspec colname="c2" colnum="2" colwidth="1*"/>
+                                <thead>
+                                    <row>
+                                        <entry>b. API Request</entry>
+                                        <entry>Event ID</entry>
+                                    </row>
+                                </thead>
+                                <tbody>
+                                    <row>
+                                        <entry><codeph>/admin/active_requests</codeph></entry>
+                                        <entry>28692</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>/admin/clusters</codeph></entry>
+                                        <entry>28701</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>/admin/completed_requests</codeph></entry>
+                                        <entry>28702</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>/admin/config</codeph></entry>
+                                        <entry>28698</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>/admin/indexes/active_requests</codeph></entry>
+                                        <entry>28694</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>/admin/indexes/completed_requests</codeph></entry>
+                                        <entry>28702</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>/admin/indexes/prepareds</codeph></entry>
+                                        <entry>28693</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>/admin/ping</codeph></entry>
+                                        <entry>28697</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>/admin/prepareds</codeph></entry>
+                                        <entry>28691</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>/admin/settings</codeph></entry>
+                                        <entry>28700</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>/admin/ssl_cert</codeph></entry>
+                                        <entry>28699</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>/admin/stats</codeph></entry>
+                                        <entry>28689</entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>/admin/vitals</codeph></entry>
+                                        <entry>28690</entry>
+                                    </row>
+                                </tbody>
+                            </tgroup>
+                        </table></li>
+                    <li>Audit-Archive</li>
+                    <li>System-Backup</li>
+                    <li>Data service<ol id="ol_dgl_jvh_wcb">
+                            <li>Read</li>
+                            <li>Write</li>
+                            <li>DCP-Read</li>
+                            <li>DCP-Write</li>
+                        </ol></li>
+                    <li>FTS Service<ol id="ol_tj5_lvh_wcb">
+                            <li>FTS-Read</li>
+                        </ol></li>
+                    <li>Analytics audit events<p>Items that will not be captured in the audit
+                                logs:<ul id="ul_xk1_3yh_wcb">
+                                <li>API calls that are not statements</li>
+                                <li>API requests sent to URLs the query engine does not service</li>
+                                <li>API requests which are handled by the autonomic functionality of
+                                    the HTTP server</li>
+                            </ul></p></li>
+                </ol></p>
+        </section>
+        <section id="section_cmd_lyh_wcb">
+            <title>API Auditing Codes</title>
+            <p>Audit records will be issued by the query engine for requests to its secondary APIs.
+                This does not include the main URL used for queries (/query/service) but does
+                include all other URLs the query engine listens to.</p>
+            <p>There will be a separate audit record code for each registered URL. The mapping from
+                URLs to audit record codes is given below. Some URLs require extra fields, as
+                    noted.<table frame="all" rowsep="1" colsep="1" id="table_o1j_nyh_wcb">
+                    <tgroup cols="3" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*" align="center"/>
+                        <colspec colname="c2" colnum="2" colwidth="4*"/>
+                        <colspec colname="c3" colnum="3" colwidth="5*"/>
+                        <thead>
+                            <row>
+                                <entry>Audit Code</entry>
+                                <entry>API</entry>
+                                <entry>Remarks</entry>
+                            </row>
+                        </thead>
+                        <tbody>
+                            <row>
+                                <entry>28689</entry>
+                                <entry><codeph>/admin/stats
+                                            </codeph><p><codeph>/admin/stats/{stat}</codeph></p></entry>
+                                <entry>Field "stat": optional, string, for input parameter {stat} if
+                                    present.</entry>
+                            </row>
+                            <row>
+                                <entry>28690</entry>
+                                <entry><codeph>/admin/vitals</codeph></entry>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry>28691</entry>
+                                <entry><codeph>/admin/prepareds
+                                            </codeph><p><codeph>/admin/prepareds/{name}</codeph></p></entry>
+                                <entry>Field "name": optional, string, for input parameter {name} if
+                                        present.<p>Do not audit POST requests.</p></entry>
+                            </row>
+                            <row>
+                                <entry>28692</entry>
+                                <entry><codeph>/admin/active_requests
+                                            </codeph><p><codeph>/admin/active_requests/{request}</codeph></p></entry>
+                                <entry>Field "request": optional, string, for input parameter
+                                    {request} if present.<p>Do not audit POST requests.</p></entry>
+                            </row>
+                            <row>
+                                <entry>28693</entry>
+                                <entry><codeph>/admin/indexes/prepareds</codeph></entry>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry>28694</entry>
+                                <entry><codeph>/admin/indexes/active_requests</codeph></entry>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry>28695</entry>
+                                <entry><codeph>/admin/indexes/completed_requests</codeph></entry>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry>28696</entry>
+                                <entry><codeph>/debug/vars</codeph></entry>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry>28697</entry>
+                                <entry><codeph>/admin/ping</codeph></entry>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry>28698</entry>
+                                <entry><codeph>/admin/config</codeph></entry>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry>28699</entry>
+                                <entry><codeph>/admin/ssl_cert</codeph></entry>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry>28700</entry>
+                                <entry><codeph>/admin/settings</codeph></entry>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry>28701</entry>
+                                <entry><codeph>/admin/clusters</codeph><p><codeph>/admin/clusters/{cluster}</codeph></p><p><codeph>/admin/clusters/{cluster}/nodes</codeph></p><p><codeph>/admin/clusters/{cluster}/nodes/{node}</codeph></p></entry>
+                                <entry>Field "cluster": optional, string, for input parameter
+                                    {cluster} if present.<p>Field "node": optional, string, for
+                                        input parameter {node} if present.</p><p>Field "body":
+                                        PUT/POST only, JSON representation of cluster or node from
+                                        request body.</p></entry>
+                            </row>
+                            <row>
+                                <entry>28702</entry>
+                                <entry><codeph>/admin/completed_requests</codeph><p><codeph>/admin/completed_requests/{request}</codeph></p></entry>
+                                <entry>Field "request": optional, string, for input parameter
+                                    {request} if present.<p>Do not audit POST requests.</p></entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table></p>
+        </section>
+    </body>
+</topic>

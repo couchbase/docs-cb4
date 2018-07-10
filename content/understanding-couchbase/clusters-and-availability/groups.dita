@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="groups">
+ 
+ <title>Server Group Awareness</title>
+ 
+ <shortdesc>
+  Individual server-nodes can be assigned to specific <i>groups</i>, within
+  a Couchbase Cluster. This allows <i>active</i> vBuckets to be maintained on a different group
+  from that of their corresponding <i>replica</i> vBuckets; so that
+  if a group goes offline, bucket-data remains available on another group.
+ </shortdesc>
+ 
+ <body>
+  <note type="attention">Server groups and the Server Group Awareness feature are only available in
+   Couchbase Server Enterprise Edition.</note>
+  <p>
+   <i>Server Group Awareness</i> provides enhanced availability. Specifically, it protects a cluster
+   from large-scale infrastructure failure, through the definition of <i>groups</i>. Each group is
+   created by an appropriately authorized administrator, and specified to contain a subset of the
+   nodes within a Couchbase Cluster. Following group-definition and rebalance, the active vBuckets
+   for any defined bucket are located on one group, while the corresponding replicas are located on
+   another group. This allows <i>Group Failover</i> to be enabled, so that if an entire group goes
+   offline, its replica vBuckets, which remain available on another group, can be automatically
+   promoted to active status. </p>
+  <p> Groups should be defined in accordance with the physical distribution of cluster-nodes. For
+   example, a group should only include the nodes that are in a single <i>server rack</i>, or in the
+   case of cloud deployments, a single <i>availability zone</i>. Thus, if the server rack or
+   availability zone becomes unavailable due to a power or network failure, Group Failover, if
+   enabled, allows continued access to the affected data. </p>
+  <p> Data-protection is optimal when groups are assigned <i>equal numbers of nodes</i>, and
+   vBuckets are therefore distributed such that none ever occupies the same group as its associated
+   active vBucket. By contrast, when groups are <i>not</i> assigned equal numbers of nodes,
+   rebalance can only produce a <i>best effort</i> redistribution of replica vBuckets: this may
+   result in replica vBuckets occupying the same group as their associated active vBuckets; meaning
+   that data may be lost if such a group becomes unavailable. </p>
+  <p><b>General notes about Server Group Awareness:</b><ul id="ul_zj4_53m_d2b">
+    <li>Server Group Awareness only applies to the Data Service.</li>
+    <li>If a cluster contains only one node, or only one group of nodes, enabling Group Failover has
+     no effect; meaning that failover can only be performed on a per-node basis. </li>
+    <li>Failover should be enabled for server groups only if three or more server groups have been
+     established, and sufficient capacity exists to absorb the load of any failed-over group. </li>
+    <li>When you initialize a new Couchbase Server cluster, the first node, and all subsequent
+     nodes, are automatically placed in a server group named Group 1. Once you create additional
+     server groups, you are required to specify a server group when adding additional cluster
+     nodes.</li>
+   </ul></p>
+  <p> For information on failing over individual nodes, see <xref
+    href="../../clustersetup/failover.dita" scope="local" format="dita">Failing over a Node</xref>. </p>
+  <p> For information on vBuckets, see <xref
+    href="../../understanding-couchbase/buckets-memory-and-storage/buckets.dita" scope="local"
+    format="dita">Buckets</xref>. </p>
+  <p> For information on the standard (non-Group-based) distribution of replica vBuckets across a
+   cluster, see <xref
+    href="../../understanding-couchbase/clusters-and-availability/replication-architecture.dita"
+    scope="local" format="dita">Availability</xref>.</p>
+  <section id="vbucket-distribution-across-equal-groups">
+   <title> Equal Groups </title>
+   <p> The following illustration shows how vBuckets are distributed across two groups; each group
+    containing four of its cluster's eight nodes. </p>
+   <p>
+    <image href="./images/groups-two-equal.png" width="720" align="left" id="groups_two_equal"/>
+   </p>
+   <p> Note that Group 2 contains all the replica vBuckets that correspond to active vBuckets on
+    Group 1; while conversely, Group 1 contains all the replica vBuckets that correspond to active
+    vBuckets on Group 2. </p>
+  </section>
+  <section id="vbucket-distribution-across-unequal-groups">
+   <title> Unequal Groups </title>
+   <p> The following illustration shows how vBuckets are distributed across two groups: Group 1
+    contains four nodes, while Group 2 contains five. </p>
+   <p>
+    <image href="./images/groups-two-unequal.png" width="720" align="left" id="groups_two_unequal"/>
+   </p>
+   <p> Group 1 contains all the replica vBuckets that correspond to active vBuckets on Group 2.
+    However, since the groups contain unequal number of nodes, Group 2 not only contains all the
+    replica vBuckets that correspond to active vBuckets on Group 1, but also contains all the
+    replica vBuckets for its own additional node, Server 9 &#8212; the replicas for Server 9 being
+    distributed across the other Group 2 nodes; which are Servers 5, 6, 7, and 8. Server 9 contains
+    its own active vBuckets, plus replica vBuckets for Group 1. </p>
+   <p> This means that if Group 2 were to go offline, <i>Group Failover</i> would not preserve the
+    replica vBuckets for Server 9, since these only existed on Group 2 itself. </p>
+  </section>
+  <section id="node-failover-across-groups">
+   <title> Node-Failover Across Groups </title>
+   <p> When an individual node within a group goes offline, rebalance provides a <i>best effort</i>
+    redistribution of replica vBuckets. This keeps all data available, but results in some data
+    being no longer protected by the Groups mechanism. This is shown by the following illustration,
+    in which Server 2, in Group 1, has gone offline, and a rebalance and failover have occurred. </p>
+   <p>
+    <image href="./images/groups-two-failover-one-node.png" width="720" align="left"
+     id="groups_two_failover_one_node"/>
+   </p>
+   <p> With the active vBuckets on Server 2 no longer accessible, the replica vBuckets for Server 2
+    have been promoted to active status, on the servers of Group 2. The data originally active on
+    Server 2 is thereby kept available. Note, however, that if Group 2 were now to go offline, the
+    data originally active on Server 2 would be lost, since it now exists only on Group 2 servers.
+   </p>
+  </section>
+  <section id="defining-groups-and-enabling-group-failover">
+   <title> Defining Groups and Enabling Group Failover </title>
+   <p> To define and manage groups: </p>
+   <ul>
+    <li> With Couchbase Web Console, see <xref href="../../clustersetup/manage-groups.dita"
+      scope="local" format="dita">Manage Server Groups</xref>. <p> </p>
+    </li>
+    <li> With CLI, see <xref href="../../cli/cbcli/couchbase-cli-group-manage.dita" scope="local"
+      format="dita">group-manage</xref>. <p> </p>
+    </li>
+    <li> With the REST API, see <xref href="../../rest-api/rest-rza.dita" scope="local"
+      format="dita">Server Groups API</xref>. </li>
+   </ul>
+   <p> To enable Group Failover: </p>
+   <ul>
+    <li> With Couchbase Web Console, see <xref href="../../settings/change-failover-settings.dita"
+      scope="local" format="dita">Node Availability</xref>. <p> </p>
+    </li>
+    <li> With CLI, see <xref href="../../cli/cbcli/couchbase-cli-setting-autofailover.dita"
+      scope="local" format="dita">setting-autofailover</xref>. <p> </p>
+    </li>
+    <li> With the REST API, see <xref href="../../rest-api/rest-cluster-autofailover-enable.dita"
+      scope="local" format="dita">Enabling and Disabling Auto-Failover</xref>. <p> </p>
+    </li>
+   </ul>
+  </section>
+ </body>
+ 
+</topic>

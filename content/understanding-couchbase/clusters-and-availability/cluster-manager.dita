@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="cluster-manager">
+ 
+ <title>
+  Cluster Manager
+ </title>
+ 
+ <shortdesc>
+  The Couchbase <i>Cluster Manager</i> runs on all the nodes of a cluster, 
+  maintaining essential per-node processes, and coordinating cluster-wide operations.
+ </shortdesc>
+ 
+ <body>
+  
+  <section id="cluster-manager-architecture">
+  
+   <title>
+    Cluster Manager Architecture
+   </title>
+   
+   <p>
+    The architecture of the Cluster Manager is as follows:
+   </p>
+  
+   <p>
+    <image href="./images/clusterManagerArchitecture2.png"  width="600" id="cluster_manager_architecture"/>
+   </p>
+   
+   <p>
+    As shown, the Cluster Manager consists of two processes. The first, the
+    <i>babysitter</i>, is responsible for maintaining a variety of Couchbase Server-processes,
+    which indeed include the second Cluster Manager process, <i>ns-server</i>. The <i>babysitter</i> starts and monitors
+    all of these processes, logging their output to the file <codeph>babysitter.log</codeph> (see
+    <xref href="../../clustersetup/logging.dita" scope="local" format="dita">Logging</xref>, for information
+    on logfile-locations). If any of the
+    processes dies, the <i>babysitter</i> restarts it. The <i>babysitter</i> is not cluster-aware.
+   </p>
+   
+   <p>
+    The processes for which the <i>babysitter</i> is responsible are:
+   </p>
+   
+   <ul>
+    <li>
+     <i>ns-server</i>: Manages the node's participation in the cluster, as described in
+     <xref href="./cluster-manager.dita#concept_ydh_lmj_vs2/ns-server">ns-server</xref>, below.
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>kv engine</i>: Runs as part of the 
+     <xref href="../services-and-indexes/services/data-service.dita" scope="local" format="dita">Data Service</xref>, which
+     must be installed on at least one cluster-node. Provides access to 
+     <xref href="../data/data.dita" scope="local" format="dita">Data</xref>.
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>services</i>: One or more Couchbase 
+     <xref href="../services-and-indexes/services/services.dita" scope="local" format="dita">Services</xref> that
+     optionally run on the node.
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>xdcr</i>: The program for handling <i>Cross Data-Center Replication</i> (XDCR). This is installed with
+     the Data Service, but
+     runs as an independent OS-level process, separate from the Cluster Manager itself. See
+     <xref href="../clusters-and-availability/replication-architecture.dita" scope="local" format="dita">Availability</xref>,
+     for information.
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>view engine</i>: The program for handling <i>Views</i>. This is installed with the Data Service, but
+     runs as an independent OS-level process, separate from the Cluster Manager itself. See
+     <xref href="../views/views-intro.dita" scope="local" format="dita">Views</xref>, for more
+     information.
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>other</i>: Various ancillary programs.
+     <p>
+      
+     </p>
+    </li>
+    
+   </ul>
+   
+  </section>
+  
+  <section id="ns-server">
+   
+   <title>
+    ns-server
+   </title>
+   
+   <p>
+    The principal Cluster-Manager process is <i>ns-server</i>, whose architecture is as follows:
+   </p>
+   
+   <p>
+    <image href="./images/nsServerArchitecture2.png"  width="600" id="ns_server_architecture"/>
+   </p>
+   
+
+   <p> 
+    The modules are: 
+   </p>
+   
+   <p>
+    
+   </p>
+     
+   <ul>
+    
+   <li>
+    <i>REST Administration (UI &amp; CLI)</i>: Supports administration of Couchbase Server, by means
+    of a REST API; which itself underlies both the user interface
+    provided by <i>Couchbase Web Console</i>, and the <i>Couchbase Command-Line Interface</i>.
+    
+    <p>
+     
+    </p>
+   
+   </li>
+    
+    <li>
+     <i>Authentication</i>: Protects node-resources with <i>Role-Based Access Control</i>. This is based
+     on <i>credentials</i> (usernames and passwords) associated with system-defined <i>roles</i>, each
+     of which is associated with a range of <i>privileges</i>. For detailed information, see
+     <xref href="../../security/security-authorization.dita" scope="local" format="dita">Authorization</xref>.
+     
+     <p>
+      
+     </p>
+     
+    </li>
+    
+   <li>
+    <i>Master Services</i>: Manages cluster-wide operations; such as master and replica 
+    vBucket-placement, failover, node addition and subtraction, rebalance, cluster configuration-mapping, and 
+    aggregation of statistical data. Note 
+    that at any given time, only one of the instances of <i>Master Services</i>
+    on a multi-node cluster is in charge: the instances having negotiated among themselves, to identify and elect the
+    instance. Should the elected instance subsequently become unavailable, another takes over. The <i>Master Services</i>
+    are sometimes referred to as the <i>Orchestrator</i>.
+    
+    <p>
+     
+    </p>
+   
+   </li>
+    
+    <li>
+     <i>Per Node Services</i>: Manages the health of the current node, and handles
+     the monitoring and restart of its processes and services.
+     
+     <p>
+      
+     </p>
+     
+    </li>
+    
+   <li>
+    <i>Per Node Bucket Services</i>: Manages bucket-level operations for the current node; supporting replication,
+    fail-over, restart, and statistics-collection. 
+    
+    <p>
+     
+    </p>
+   
+   </li>
+    
+   <li>
+    <i>Generic Local Facilities</i>: Provides local 
+    configuration-management, libraries, workqueues, logging, clocks, ids, and events.
+    
+    <p>
+     
+    </p>
+   
+   </li>
+    
+    <li>
+     <i>Generic Distributed Facilities</i>: Supports node-discovery, configuration-messaging and alerts,
+     replication, and heartbeat-transmission.
+     
+     <p>
+      
+     </p>
+     
+    </li>
+  </ul>
+ 
+  </section>
+
+  <section id="adding-and-removing-nodes">
+   <title>
+    Adding and Removing Nodes
+   </title>
+   
+   <p>
+    The elected <i>Master Services</i> of the Cluster Manager are responsible for cluster membership. When topology changes,
+    a set of operations is executed, 
+    to accomplish redistribution while continuing to handle existing workloads. This is as follows:
+   </p>
+   
+   <p>
+   </p>
+    
+    <ol>
+     
+    <li>
+     The <i>Master Services</i> update the new nodes with the existing cluster
+     configuration.
+     
+     <p>
+      
+     </p>
+    
+    </li>
+     
+    <li>
+     The <i>Master Services</i> initiate rebalance, and recalculate the vBucket map. 
+     
+     <p>
+      
+     </p>
+    
+    </li>
+     
+    <li>
+     The nodes that are to receive data initiate DCP replication-streams from the existing nodes for 
+     each vBucket, and begin building new copies of those vBuckets. This occurs for both active and 
+     replica vBuckets, depending on the new vBucket map layout.
+     
+     <p>
+      
+     </p>
+    
+    </li>
+     
+    <li>
+     Incrementally &#8212; as each new vBucket is populated, the data is replicated, and indexes are  
+     updated &#8212; an <i>atomic switchover</i> takes place, from the old vBucket to the new vBucket.
+     
+     <p>
+      
+     </p>
+    
+    </li>
+     
+    <li>
+     As new vBuckets on new nodes become active, the <i>Master Services</i> ensure that the new vBucket 
+     map and cluster topology are communicated to all nodes and clients. This process is repeated 
+     until rebalance is complete. 
+     
+     <p>
+      
+     </p>
+    
+    </li>
+   </ol> 
+
+   <p>
+    The process of <i>removing</i> one or more Data-Service nodes is similar to that of <i>adding</i>:
+    vBuckets are created on nodes that are to be maintained, and data is copied to them from vBuckets resident
+    on nodes that are to be
+    removed. When no more vBuckets remain on a node, the node is removed from the cluster. 
+   </p>
+   
+   <p>
+    When adding or removing nodes that do not host the Data Service, no data is moved: therefore,
+    nodes are added or removed from the cluster map without data-transition. 
+   </p>
+   
+   <p>
+    Once the process of adding or removing is complete,
+    and a new cluster map has been made available by the <i>Master Services</i>, client SDKs automatically begin load-balancing 
+    across those services, using the new cluster map.
+   </p>
+   
+   <p>
+    For the practical steps to be following in adding and removing nodes, see
+    <xref href="../../clustersetup/adding-nodes.dita" scope="local" format="dita">Adding a Node</xref> and
+    <xref href="../../clustersetup/remove-nodes.dita" scope="local" format="dita">Removing a Node</xref>.
+    
+   </p>
+   
+  </section>
+  
+  <section id="section_sv4_jgz_pz2">
+   
+   <title>Node-Failure Detection</title>
+   
+   <p>
+    Nodes within a
+    Couchbase Server-cluster provide status on their health by means of a <i>heartbeat</i> mechanism.
+    Heartbeats are provided by all instances of the Cluster Manager, at regular
+    intervals. Each heartbeat contains basic statistics on the node, which are used to assess the
+    node's condition.
+   </p>
+   
+   <p dir="ltr">
+    The <i>Master Services</i> keep track of heartbeats received from all other nodes. If automatic
+    failover is enabled, and no heartbeats are received from a node for longer than the default
+    timeout period, the <i>Master Services</i> may automatically fail the node over. 
+   </p>
+   
+   <p>
+    For detailed information on failover options, see
+    <xref href="../../clustersetup/failover.dita" scope="local" format="dita">Failing over a Node</xref>.
+   </p>
+   
+  </section>
+  
+  
+  <section id="vbucket-distribution">
+   
+   <title>
+    vBucket Distribution
+   </title>
+   
+   <p>
+    Couchbase Server buckets physically contain 1024 master and 0 or more replica 
+    vBuckets. The <i>Master Services</i> govern the placement of 
+    these vBuckets, to maximize availability to and rebalance performance. The vBucket map 
+    is recalculated 
+    whenever the cluster topology changes, by means of the following rules: 
+   </p>
+   
+    <ul>
+     
+    <li>
+     Master and replica vBuckets are placed on separate nodes. 
+    </li>
+     
+    <li>
+     If a bucket is configured with more than one replica, each additional replica vBucket is 
+     placed on a separate. 
+    </li>
+     
+    <li> If <i>Server Groups</i> are defined for master vBuckets, the replica vBuckets are placed in
+     a separate groups. See <xref href="groups.dita#groups"/>, for more information. </li>
+     
+   </ul>
+
+  </section>
+  
+  <section>
+   
+   <title>
+    Centralized Management, Statistics, and Logging
+   </title>
+   
+   <p>
+    The Cluster Manager simplifies centralized management with centralized configuration-management, 
+    statistics-gathering, and logging services. All configuration-changes are managed by the 
+    <i>Master Services</i>, and are pushed out from the <i>Master Services</i> node to the other nodes. 
+   </p>
+
+   <p>
+    Statistics are accessible through all the Couchbase administration interfaces: The 
+    <xref href="../../cli/cli-intro.dita" scope="local" format="dita">Command Line Interface</xref>,
+    (specifically, the 
+    <xref href="../../cli/cbstats-intro.dita" scope="local" format="dita">cbstats</xref> tool), the 
+    <xref href="../../rest-api/rest-intro.dita" scope="local" format="dita">REST API</xref>, and 
+    <xref href="../../admin/ui-intro.dita" scope="local" format="dita">Couchbase Web Console</xref>.
+   </p>
+
+   </section>
+ </body>
+</topic>

@@ -15,6 +15,11 @@
 to execute DDL statements (Admin, Cluster Admin, or Analytics Manager).
 </div>
 
+<div class="note note"><span class="notetitle">Note:</span> No `CREATE`/`DROP` or `CONNECT`/`DISCONNECT` statement can
+be executed while the cluster topology changes (e.g. during rebalance). The evaluation of such DDL statements will fail
+and it can be reattempted after the topology change has completed.
+</div>
+
 <h2 id="statements"><a id="Statements">Statements</a></h2>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>Statement       ::= ( ( SingleStatement )? ( ";" )+ )* &lt;EOF&gt;
@@ -27,7 +32,7 @@ SingleStatement ::= CreateStatement
 </div>
 
 <p>In addition to queries, the Couchbase Analytics implementation of SQL++ supports statements for data definition and to
-connect Couchbase Analytics to Couchbase buckets.</p>
+connect Couchbase Analytics to Data Service buckets.</p>
 
 <h2 id="creating-and-dropping"><a id="Creating_and_dropping">Creating and Dropping</a></h2>
 
@@ -40,7 +45,7 @@ DoubleQualifiedName ::= Identifier "." Identifier ( "." Identifier )?
 </code></pre>
 </div>
 
-<p>The CREATE statement is used to create (Analytics) buckets, shadow datasets, and indexes.</p>
+<p>The CREATE statement is used to create (Analytics) buckets, datasets, and indexes.</p>
 
 <h3 id="buckets"><a id="Buckets">Buckets</a></h3>
 
@@ -56,57 +61,62 @@ IfNotExists ::= "IF" "NOT" "EXISTS"
 </div>
 
 <div class="note note"><span class="notetitle">Note:</span> For Bucket DDL statments, in addition to having one of the
-roles required to execute DDL statements, a user must also have bucket data read permission on the data service bucket.
+roles required to execute DDL statements, a user must also have bucket data read permission on the Data Service bucket.
 </div>
 
-<p>A (Analytics) bucket is a proxy for a bucket on a cluster of Data service nodes.
+<p>A (Analytics) bucket is a proxy for a bucket on a cluster of Data Service nodes.
 It represents this bucket in all other DDL operations.
 The <code class="highlighter-rouge">CREATE BUCKET</code> statement creates such a (Analytics) bucket.
 Parameters for the bucket can be provided though a parameter object.
 Currently 2 parameters are supported:</p>
 
 <ul>
-  <li><code class="highlighter-rouge">name</code> a string for the name of the bucket used on the Data service nodes and</li>
-  <li><code class="highlighter-rouge">nodes</code> an array or IP addresses or node names for the Data service nodes. However, you should not pass
-this parameter to the statement if the bucket resides in the same Couchbase instance.</li>
+  <li><code class="highlighter-rouge">name</code> a string for the name of the bucket used on the Data Service nodes and</li>
+  <li><code class="highlighter-rouge">nodes</code> an array or IP addresses or node names for the Data Service nodes. However, you should not pass
+  this parameter to the statement if the bucket resides in the same Couchbase instance.</li>
 </ul>
 
 <p>Both parameters are optional - the default <code class="highlighter-rouge">name</code> is the name of the bucket and the default value for <code class="highlighter-rouge">nodes</code>
-are the Data service nodes of the same Couchbase instance.</p>
+are the Data Service nodes of the same Couchbase instance.</p>
 
-<h5 id="example">Example</h5>
+<h5 id="examples">Examples</h5>
 
-<div class="highlighter-rouge"><pre class="highlight"><code>CREATE BUCKET beerbucket WITH {
+<div class="highlighter-rouge"><pre class="highlight"><code>CREATE BUCKET `beer-sample`;
+
+CREATE BUCKET beerbucket WITH {
   "name": "beer-sample",
-  "nodes": ["localhost"]
+  "nodes": "192.168.1.1"
 };
 </code></pre>
 </div>
 
-<p>This example creates a new (Analytics) bucket <code class="highlighter-rouge">beerbucket</code> that represents the bucket <code class="highlighter-rouge">beer-sample</code> on the Data service node running on <code class="highlighter-rouge">localhost</code>.</p>
+<p>The first example creates a new (Analytics) bucket that represents the bucket <code class="highlighter-rouge">beer-sample</code> on the Data Service of the
+same Couchbase instance.
+The second example creates a new bucket <code class="highlighter-rouge">beerbucket</code> that represents the bucket <code class="highlighter-rouge">beer-sample</code> on the Data Service of a
+Couchbase instance that can be found on <code class="highlighter-rouge">192.168.1.1</code>.</p>
 
-<h3 id="shadow-datasets"><a id="Shadow_datasets">Shadow Datasets</a></h3>
+<h3 id="datasets"><a id="Datasets">Datasets</a></h3>
 
-<div class="highlighter-rouge"><pre class="highlight"><code>DatasetSpecification ::= "SHADOW" "DATASET" ( IfNotExists )? ( QualifiedName )?
+<div class="highlighter-rouge"><pre class="highlight"><code>DatasetSpecification ::= "DATASET" ( IfNotExists )? ( QualifiedName )?
                          "ON" Identifier ( "WHERE" Expression )?
 </code></pre>
 </div>
 
-<p>Shadow datasets contain a shadow of the data of a bucket.
+<p>Datasets contain a shadow of the data of a bucket.
 They are connected to a bucket and are updated as the bucket gets updated.
-A Shadow dataset can contain the full content of the dataset or a filtered subset.
-Multiple shadow datasets can shadow the same bucket.
-A shadow dataset is created <code class="highlighter-rouge">ON</code> a previously created <code class="highlighter-rouge">BUCKET</code> with an optional filter expression.
+A dataset can contain the full content of the bucket or a filtered subset.
+Multiple datasets can shadow the same bucket.
+A dataset is created <code class="highlighter-rouge">ON</code> a previously created <code class="highlighter-rouge">BUCKET</code> with an optional filter expression.
 The name of the dataset is optional and defaults to the name of the bucket.</p>
 
-<h5 id="examples">Examples</h5>
+<h5 id="examples-1">Examples</h5>
 
-<div class="highlighter-rouge"><pre class="highlight"><code>CREATE SHADOW DATASET beers ON beerbucket WHERE type = "beer";
-CREATE SHADOW DATASET breweries ON beerbucket WHERE type = "brewery";
+<div class="highlighter-rouge"><pre class="highlight"><code>CREATE DATASET beers ON `beer-sample` WHERE type = "beer";
+CREATE DATASET breweries ON `beer-sample` WHERE type = "brewery";
 </code></pre>
 </div>
 
-<p>This example creates 2 shadow datasets <code class="highlighter-rouge">beers</code> and <code class="highlighter-rouge">breweries</code> on the previously created <code class="highlighter-rouge">beerbucket</code> and filters
+<p>This example creates 2 datasets <code class="highlighter-rouge">beers</code> and <code class="highlighter-rouge">breweries</code> on the previously created <code class="highlighter-rouge">beer-sample</code> bucket and filters
 the content for each dataset by the value of the <code class="highlighter-rouge">type</code> field of the record.</p>
 
 <h3 id="indexes"><a id="Indexes">Indexes</a></h3>
@@ -121,14 +131,14 @@ FieldSpecification ::= QualifiedName : "STRING"|"BIGINT"|"DOUBLE"
 The <code class="highlighter-rouge">QualifiedName</code> in the <code class="highlighter-rouge">IndexSpecification</code> identifies the dataset on which the index is built.
 The <code class="highlighter-rouge">FieldSpecification</code>s consist of a <code class="highlighter-rouge">QualifiedName</code> that specifies a field path into the
 indexed JSON document and a type identifier.
-To create an index on a shadow dataset,
-the bucket corresponding to the shadow dataset must be in the disconnected state.
-There may be more than one secondary index created on the same shadow dataset.
+To create an index on a dataset,
+the bucket corresponding to the dataset must be in the disconnected state.
+There may be more than one secondary index created on the same dataset.
 Each index name must be unique within a dataset.
 Creating index fails if there is an existing index with the same name
 in the target dataset and ‘IF NOT EXISTS’ is not specified.</p>
 
-<p>For each JSON document ingested into a shadow dataset, the system computes the indexed key for each index.
+<p>For each JSON document ingested into a dataset, the system computes the indexed key for each index.
 The index key of a secondary index is computed as follows:</p>
 
 <ul>
@@ -148,7 +158,7 @@ In case the index key cannot be built, there is no entry made in the index for t
 (i.e., when their corresponding buckets are connected and data are flowing into the system).
 In addition, they are automatically rebalanced when their shadow datasets are rebalanced.</p>
 
-<h5 id="examples-1">Examples</h5>
+<h5 id="examples-2">Examples</h5>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>CREATE INDEX beers_name_idx on beers (name: string);
 CREATE INDEX breweries_name_idx on breweries (name: string);
@@ -170,11 +180,11 @@ IfExists      ::= ( "IF" "EXISTS" )?
 </div>
 
 <p>The DROP statement in SQL++ is the inverse of the CREATE statement.
-It can be used to drop buckets, shadow datasets, and indexes.</p>
+It can be used to drop (Analytics) buckets, datasets, and indexes.</p>
 
 <p>The following examples illustrate some uses of the DROP statement.</p>
 
-<h5 id="examples-2">Examples</h5>
+<h5 id="examples-3">Examples</h5>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>DROP INDEX beers.beers_name_idx;
 DROP INDEX breweries.breweries_name_idx;
@@ -184,7 +194,7 @@ DROP INDEX breweries.breweries_loc_idx;
 
 <p>drops the indexes.</p>
 
-<h5 id="examples-3">Examples</h5>
+<h5 id="examples-4">Examples</h5>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>DROP DATASET beers;
 DROP DATASET breweries;
@@ -193,9 +203,9 @@ DROP DATASET breweries;
 
 <p>removes the dataset and all contained data.</p>
 
-<h5 id="example-1">Example</h5>
+<h5 id="example">Example</h5>
 
-<div class="highlighter-rouge"><pre class="highlight"><code>DROP BUCKET beerbucket;
+<div class="highlighter-rouge"><pre class="highlight"><code>DROP BUCKET `beer-sample`;
 </code></pre>
 </div>
 
@@ -207,23 +217,25 @@ DROP DATASET breweries;
 </code></pre>
 </div>
 
-<p>The CONNECT statement connects a bucket to Analytics and starts shadowing all datasets that are created on the bucket.
+<p>The CONNECT statement connects a Data Service bucket to Analytics and starts shadowing all datasets that are created on the bucket.
 Parameters for the connection can be provided though a <code class="highlighter-rouge">parameter</code> object after <code class="highlighter-rouge">WITH</code>.</p>
 
 <p>The <code class="highlighter-rouge">parameter</code> object contains key-value pairs, one for each parameter.
-Different parameters are used for different bucket settings. We list three cases with regard to where the bucket is:</p>
-<ul>
-  <li>Case 1: Couchbase Analytics Developer Preview 4 (internal). The Analytics service connects to a bucket within the same Couchbase instance;</li>
-  <li>Case 2: Couchbase 5.x (external). The Analytics service connects to a bucket in a separately installed Couchbase 5.x instance;</li>
-  <li>Case 3: Couchbase 4.x (external). The Analytics service connects to a bucket in a separately installed Couchbase 4.x (x&gt;=5) instance.</li>
-</ul>
-
-<p>For all three cases, the <code class="highlighter-rouge">timeout</code> parameter (optional) is supported:</p>
+Different parameters are used for different bucket settings.
+We list two cases with regard to where the Data Service bucket is:</p>
 
 <ul>
-  <li><code class="highlighter-rouge">timeout</code>: a connection timeout in ms when connecting to the Data service nodes.
-The default <code class="highlighter-rouge">timeout</code> is the connect timeout used by the Couchbase Java Client.</li>
+  <li>Case 1: Internal - same Couchbase instance;</li>
+  <li>Case 2: External - separately installed Couchbase 5.x instance;</li>
 </ul>
+
+<p>For both cases, the <code class="highlighter-rouge">timeout</code> parameter (optional) is supported:</p>
+
+<ul>
+  <li><code class="highlighter-rouge">timeout</code>: a connection timeout in ms when connecting to the Data Service nodes.</li>
+</ul>
+
+<p>The default <code class="highlighter-rouge">timeout</code> is the connect timeout used by the Couchbase Java Client.</p>
 
 <p>For case 1, no other parameters can be passed to the statement.</p>
 
@@ -234,17 +246,14 @@ The default <code class="highlighter-rouge">timeout</code> is the connect timeou
   <li><code class="highlighter-rouge">password</code> (mandatory): the corresponding password for the username.</li>
 </ul>
 
-<p>For case 3, <code class="highlighter-rouge">password</code> is required if the bucket requires a password while <code class="highlighter-rouge">username</code> should not be provided.
-The default <code class="highlighter-rouge">password</code> is the empty string.</p>
+<h5 id="example-1">Example</h5>
 
-<h5 id="example-2">Example</h5>
-
-<div class="highlighter-rouge"><pre class="highlight"><code>CONNECT BUCKET beerbucket WITH { "timeout": 2500 };
+<div class="highlighter-rouge"><pre class="highlight"><code>CONNECT BUCKET `beer-sample` WITH { "timeout": 2500 };
 </code></pre>
 </div>
 
-<p>This example connects all shadow datasets that were previously created on bucket <code class="highlighter-rouge">beerbucket</code> to the Data service
-nodes using <code class="highlighter-rouge">!@#</code> as the <code class="highlighter-rouge">password</code> and a <code class="highlighter-rouge">timeout</code> of 2500 ms.</p>
+<p>This example connects all datasets that were previously created on bucket <code class="highlighter-rouge">beer-sample</code> to the Data Service
+nodes using a <code class="highlighter-rouge">timeout</code> of 2500 ms.</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>DisconnectStatement ::= "DISCONNECT" "BUCKET" QualifiedName  ( "IF" "CONNECTED" )?
 </code></pre>
@@ -253,13 +262,14 @@ nodes using <code class="highlighter-rouge">!@#</code> as the <code class="highl
 <p>The DISCONNECT statement is the inverse of the CONNECT statement.
 It stops shadowing all datasets that were created on a BUCKET and disconnects the bucket.</p>
 
-<h5 id="example-3">Example</h5>
+<h5 id="example-2">Example</h5>
 
-<div class="highlighter-rouge"><pre class="highlight"><code>DISCONNECT BUCKET beerbucket IF CONNECTED;
+<div class="highlighter-rouge"><pre class="highlight"><code>DISCONNECT BUCKET `beer-sample` IF CONNECTED;
 </code></pre>
 </div>
 
-<p>This example stops shadowing all datasets that were created on the bucket <code class="highlighter-rouge">beerbucket</code> and disconnects the bucket if the bucket is connected.</p>
+<p>This example stops shadowing all datasets that were created on the bucket <code class="highlighter-rouge">beer-sample</code> and disconnects the bucket if
+the bucket is connected.</p>
 
 <!--
 ###Extension: Typed datasets

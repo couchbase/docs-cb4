@@ -93,7 +93,7 @@ FromTerm           ::= Expression (( &lt;AS&gt; )? Variable)?
                        ( ( JoinType )? ( JoinClause | UnnestClause ) )*
 
 JoinClause         ::= &lt;JOIN&gt; Expression (( &lt;AS&gt; )? Variable)? &lt;ON&gt; Expression
-UnnestClause       ::= ( &lt;UNNEST&gt; | &lt;CORRELATE&gt; | &lt;FLATTEN&gt; ) Expression
+UnnestClause       ::= ( &lt;UNNEST&gt; ) Expression
                        ( &lt;AS&gt; )? Variable ( &lt;AT&gt; Variable )?
 JoinType           ::= ( &lt;INNER&gt; | &lt;LEFT&gt; ( &lt;OUTER&gt; )? )
 
@@ -107,8 +107,8 @@ WhereClause        ::= &lt;WHERE&gt; Expression
 GroupbyClause      ::= &lt;GROUP&gt; &lt;BY&gt; Expression ( ( (&lt;AS&gt;)? Variable )?
                        ( "," Expression ( (&lt;AS&gt;)? Variable )? )* )
                        ( &lt;GROUP&gt; &lt;AS&gt; Variable
-                         ("(" Variable &lt;AS&gt; VariableReference
-                         ("," Variable &lt;AS&gt; VariableReference )* ")")?
+                         ("(" VariableReference &lt;AS&gt; Identifier
+                         ("," VariableReference &lt;AS&gt; Identifier )* ")")?
                        )?
 HavingClause       ::= &lt;HAVING&gt; Expression
 
@@ -531,7 +531,7 @@ WHERE user.id = 1;
 <p>In the result, <code class="highlighter-rouge">$1</code> is the generated name for <code class="highlighter-rouge">substr(user.name, 1)</code>, while <code class="highlighter-rouge">alias</code> is the generated name for <code class="highlighter-rouge">user.alias</code>.</p>
 
 <h3 id="abbreviated-field-access-expressions"><a id="Abbreviated_field_access_expressions">Abbreviated Field Access Expressions</a></h3>
-<p>As in standard SQL, SQL++ field access expressions can be abbreviated (not recommended) when there is no ambiguity. In the next example, the variable <code class="highlighter-rouge">user</code> is the only possible variable reference for fields <code class="highlighter-rouge">id</code>, <code class="highlighter-rouge">name</code> and <code class="highlighter-rouge">alias</code> and thus could be omitted in the query.</p>
+<p>As in standard SQL, SQL++ field access expressions can be abbreviated (not recommended!) when there is no ambiguity. In the next example, the variable <code class="highlighter-rouge">user</code> is the only possible variable reference for fields <code class="highlighter-rouge">id</code>, <code class="highlighter-rouge">name</code> and <code class="highlighter-rouge">alias</code> and thus could be omitted in the query. More information on abbbreviated field access can be found in the appendix section on Variable Resolution.</p>
 
 <h5 id="example-9">Example</h5>
 
@@ -781,6 +781,8 @@ FROM GleambookUsers,
 </code></pre>
 </div>
 
+<p>More information on implicit binding variables can be found in the appendix section on Variable Resolution.</p>
+
 <h2 id="join-clauses"><a id="Join_clauses">JOIN Clauses</a></h2>
 <p>The join clause in SQL++ supports both inner joins and left outer joins from standard SQL.</p>
 
@@ -854,7 +856,7 @@ LEFT OUTER UNNEST (
 <p>In a <code class="highlighter-rouge">GROUP BY</code> clause, in addition to the binding variable(s) defined for the grouping key(s), SQL++ allows a user to define a <em>group variable</em> by using the clause's <code class="highlighter-rouge">GROUP AS</code> extension to denote the resulting group.
 After grouping, then, the query's in-scope variables include the grouping key's binding variables as well as this group variable which will be bound to one collection value for each group. This per-group collection (i.e., multiset) value will be a set of nested objects in which each field of the object is the result of a renamed variable defined in parentheses following the group variable's name. The <code class="highlighter-rouge">GROUP AS</code> syntax is as follows:</p>
 
-<div class="highlighter-rouge"><pre class="highlight"><code>&lt;GROUP&gt; &lt;AS&gt; Variable ("(" Variable &lt;AS&gt; VariableReference ("," Variable &lt;AS&gt; VariableReference )* ")")?
+<div class="highlighter-rouge"><pre class="highlight"><code>&lt;GROUP&gt; &lt;AS&gt; Variable ("(" VariableReference &lt;AS&gt; Identifier ("," VariableReference &lt;AS&gt; Identifier )* ")")?
 </code></pre>
 </div>
 
@@ -1462,6 +1464,7 @@ Note that if the condition expression evaluates to <code class="highlighter-roug
 <p>The <code class="highlighter-rouge">ORDER BY</code> clause is used to globally sort data in either ascending order (i.e., <code class="highlighter-rouge">ASC</code>) or descending order (i.e., <code class="highlighter-rouge">DESC</code>).
 During ordering, <code class="highlighter-rouge">MISSING</code> and <code class="highlighter-rouge">NULL</code> are treated as being smaller than any other value if they are encountered
 in the ordering key(s). <code class="highlighter-rouge">MISSING</code> is treated as smaller than <code class="highlighter-rouge">NULL</code> if both occur in the data being sorted.
+The ordering of values of a given type is consistent with its type's &lt;= ordering; the ordering of values across types is implementation-defined but stable.
 The following example returns all <code class="highlighter-rouge">GleambookUsers</code> in descending order by their number of friends.</p>
 
 <h5 id="example-31">Example</h5>
@@ -1893,7 +1896,7 @@ within a query the subquery occurs – and again, its result is never automatica
       <td>SELECT list</td>
       <td>order not preserved</td>
       <td>order preserved</td>
-      <td>Fields in a JSON object is not ordered</td>
+      <td>Fields in a JSON object are not ordered</td>
     </tr>
     <tr>
       <td>Subquery</td>
@@ -1905,7 +1908,7 @@ within a query the subquery occurs – and again, its result is never automatica
       <td>LEFT OUTER JOIN</td>
       <td>Fills in <code class="highlighter-rouge">MISSING</code>(s) for non-matches</td>
       <td>Fills in <code class="highlighter-rouge">NULL</code>(s) for non-matches</td>
-      <td>"Absence" is more appropriate than "unknown" here.</td>
+      <td>"Absence" is more appropriate than "unknown" here</td>
     </tr>
     <tr>
       <td>UNION ALL</td>
@@ -1934,20 +1937,18 @@ within a query the subquery occurs – and again, its result is never automatica
   </tbody>
 </table>
 
-<p>The following SQL-92 features are not implemented yet. However, SQL++ does not conflict those features:</p>
+<p>The following SQL-92 features are not implemented yet. However, SQL++ does not conflict with these features:</p>
 
 <ul>
   <li>CROSS JOIN, NATURAL JOIN, UNION JOIN</li>
   <li>RIGHT and FULL OUTER JOIN</li>
   <li>INTERSECT, EXCEPT, UNION with set semantics</li>
   <li>CAST expression</li>
-  <li>NULLIF expression</li>
   <li>COALESCE expression</li>
   <li>ALL and SOME predicates for linking to subqueries</li>
   <li>UNIQUE predicate (tests a collection for duplicates)</li>
   <li>MATCH predicate (tests for referential integrity)</li>
   <li>Row and Table constructors</li>
-  <li>DISTINCT aggregates</li>
   <li>Preserved order for expressions in a SELECT list</li>
 </ul>
 
