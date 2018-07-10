@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="php-fle">
+  <title>Field Level Encryption from the PHP SDK</title>
+  <shortdesc>Field Level Encryption is available in Couchbase Data Platform 5.5, from PHP SDK version 2.4.6.</shortdesc>
+  <conbody>
+    <p>Having <xref href="../encryption.dita" scope="local">examined the concepts behind Field Level Encryption</xref>, let's see some example code to encrypt some data with the PHP SDK.</p>
+
+
+        <section id="installation">
+          <title>Installing</title>
+            <p>You can download the PHP ecryption API for Couchbase from <xref href="https://packagist.org/packages/couchbase/couchbase-encryption" scope="external" format="html">Packagist</xref>. Use <codeph>composer require couchbase/couchbase-encryption</codeph> or install automatically with the demo.</p>
+
+            <p>The demo examples are at <xref href="https://github.com/couchbaselabs/devguide-examples/tree/master/php/encryption" scope="external" format="html" />, install with:<codeblock outputclass="language-php">pecl install couchbase # make sure couchbase 2.4.6+ SDK installed
+composer install
+composer demo-symmetric
+composer demo-asymmetric</codeblock></p>
+        </section>
+
+
+        <section id="demo">
+          <title>Encryption in Action</title>
+            <p>Here is the first sample, which shows an AES-256 encryption of a single field:<codeblock outputclass="language-php">&lt;?php
+require __DIR__ . '/vendor/autoload.php';
+use Couchbase\Aes256HmacSha256Provider;
+use Couchbase\KeyProvider;
+use Couchbase\Cluster;
+use Couchbase\Bucket;
+final class InsecureKeyProvider implements KeyProvider
+{
+    public function getKey(string $id)
+    {
+        switch ($id) {
+        case 'mypublickey':
+            return "!mysecretkey#9^5usdk39d&amp;dlf)03sL";
+        case 'HMAC_KEY_ID':
+            return 'myauthpassword';
+        default:
+            throw new InvalidArgumentException("Unknown key '$id");
+        }
+    }
+}
+$cluster = new Cluster('couchbase://localhost');
+$cluster->authenticateAs('Administrator', 'password');
+$bucket = $cluster->openBucket('default');
+$bucket->registerCryptoProvider(
+    'AES-256-HMAC-SHA256',
+    new Aes256HmacSha256Provider(new InsecureKeyProvider(), "mypublickey", "HMAC_KEY_ID")
+);
+// source document, which contains some sensitive data
+$document = [
+    'message' => 'The old grey goose jumped over the wrickety gate.'
+];
+// let's encrypt everything stored in the 'message' property using a key with ID
+// 'mypublickey' and our crypto provider.
+$encrypted = $bucket->encryptFields(
+    $document,
+    [
+        [
+            'name' => 'message',
+            'alg' => 'AES-256-HMAC-SHA256'
+        ]
+    ]
+);
+// now we are ready to persist document with encrypted field using regular APIs
+$bucket->upsert('secret-1', $encrypted);
+// the database does not have our encryption keys, and cannot see the plain contents
+$document = $bucket->get('secret-1')->value;
+var_dump($document);
+// the output should be similar to following:
+// => object(stdClass)#9 (1) {
+//      ["__crypt_message"]=>
+//      object(stdClass)#8 (5) {
+//        ["alg"]=>
+//        string(19) "AES-256-HMAC-SHA256"
+//        ["ciphertext"]=>
+//        string(88) "aK1RxvZkP4YWyMapQTpiRKvAG6V1MsFWUJwNfY7TXh3d5DdFO3jwmQu3rFMN6p98Y4ziM+pQNkrB/Cc7GP9/yw=="
+//        ["iv"]=>
+//        string(24) "1tzdgObtNJmNOrgSImzdKg=="
+//        ["kid"]=>
+//        string(11) "mypublickey"
+//        ["sig"]=>
+//        string(44) "qStQ7U28A05nz/ZP5SKDSMQuMofy1K9QHX8nYALLwOo="
+//      }
+//    }
+$decrypted = $bucket->decryptFields(
+    $document,
+    [
+        [
+            'name' => 'message',
+            'alg' => 'AES-256-HMAC-SHA256'
+        ]
+    ]
+);
+var_dump($decrypted);
+// now we have our document readable
+// => array(1) {
+//      ["message"]=>
+//      string(49) "The old grey goose jumped over the wrickety gate."
+//    }</codeblock>Try the other demo example at <xref href="https://github.com/couchbaselabs/devguide-examples/tree/master/php/encryption" scope="external" format="html" />.</p>
+        </section>
+
+  </conbody>
+</concept>
