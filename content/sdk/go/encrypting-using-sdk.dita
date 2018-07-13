@@ -17,53 +17,52 @@
 type Person struct {
     FirstName string        `json:"firstName"`
     LastName  string        `json:"lastName"`
-    Password  string        `json:"password" cbcrypt:"aes256,mypublickey,myhmackey"`
-    Address   PersonAddress `json:"address" cbcrypt:"aes256,mypublickey,myhmackey"`
+    Password  string        `json:"password" cbcrypt:"myAESProvider"`
+    Address   PersonAddress `json:"address" cbcrypt:"myAESProvider"``
 }</codeblock></p>
         </section>
 
 
         <section id="encryption_configuration">
           <title>Configuration</title>
-    <p>After installing the dependency, create a configuration to connect to your Couchbase cluster and configure the Key Store to use (note that the key names must match the struct tags):<codeblock outputclass="language-go">keyStore := &amp;gocbfieldcrypt.InsecureKeystore{
+    <p>You need to create a Key Store, a Provider, and a Transcoder. The provider is used to perform encyption/decryption and the transcoder is responsible for using the provider during operations. You can register multiple (uniquely aliased) providers with a transcoder. After installing the dependency you need to set up your Key Store, Provider, and Transcoder (note that the alias name of the provider matches the struct tags):<codeblock outputclass="language-go">keyStore := &amp;gocbfieldcrypt.InsecureKeystore{
     Keys: map[string][]byte{
        "mypublickey": []byte("!mysecretkey#9^5usdk39d&amp;dlf)03sL"),
        "myhmackey":   []byte("myauthpassword"),
     },
 }
- 
-cluster, _ := gocb.Connect("…")
+
+aesProvider := &amp;gocbfieldcrypt.AesCryptoProvider{
+	Alias:    "myAESProvider",
+	KeyStore: keyStore,
+	Key:      "mypublickey",
+	HmacKey:  "myhmackey",
+}
+
+coder := gocbfieldcrypt.Transcoder{}
+coder.Register("myAESProvider", aesProvider)</codeblock></p>
+
+    <p>Next you need to create a configuration to connect to your cluster and set your transcoder on the bucket:<codeblock outputclass="language-go">cluster, _ := gocb.Connect("…")
 cluster.Authenticate(…)
-bucket, _ := cluster.openBucket("…", "")</codeblock></p>
-
-    <p>To apply encryption to the struct use the <codeph>gocbfieldcrypt.EncryptJsonStruct([]byte, reflect.Type, KeyProvider) ([]byte, error)</codeph> function. For example to create a new person, apply encryption and then upsert the document:<codeblock>    person := Person{
-        FirstName: "Barry",
-        LastName:  "Sheen",
-        Password:  "bang!",
-        Address: PersonAddress{
-            HouseName:  "my house",
-            StreetName: "my street",
-        },
-    }
- 
-    bytes, _ := json.Marshal(person)
-    encBytes, _ := gocbfieldcrypt.EncryptJsonStruct(bytes, reflect.TypeOf(person), keyStore)
- 
-    bucket.Upsert("p1", encBytes, 0)</codeblock></p>
+bucket, _ := cluster.openBucket("…", "")
+bucket.SetTranscoder(&amp;coder)</codeblock></p>
         </section>
 
 
-        <section id="decryption">
-          <title>Decryption</title>
-    <p>To decrypt use the <codeph>gocbfieldcrypt.DecryptJsonStruct([]byte, reflect.Type, KeyProvider) ([]byte, error)</codeph> function. For example to get a document and parse it into a struct:<codeblock outputclass="language-go">    var p1Bytes []byte
-    bucket.Get("p1", &amp;p1Bytes)
- 
-    var p1 Person
-    decBytes, _ := gocbfieldcrypt.DecryptJsonStruct(p1Bytes, reflect.TypeOf(p1), keyStore)
-    json.Unmarshal(decBytes, &amp;p1)</codeblock></p>
+        <section id="encryption">
+          <title>Transparent operation</title>
+    <p>You can then perform KV operations as usual and your data will be encrypted/decrypted automatically:<codeblock outputclass="language-go">person := Person{
+    FirstName: "Barry",
+    LastName:  "Sheen",
+    Password:  "bang!",
+    Address: PersonAddress{
+        HouseName:  "my house",
+        StreetName: "my street",
+    },
+}
+
+bucket.Upsert("p1", person, 0)</codeblock></p>
         </section>
-
-
 
   </conbody>
 </concept>
