@@ -64,18 +64,71 @@ val spark = SparkSession
       .builder()
       .appName("KeyValueExample")
       .master("local[*]") // use the JVM as the master, great for testing
-      .config("spark.couchbase.nodes", "127.0.0.1") // connect to couchbase on localhost
-      .config("spark.couchbase.bucket.travel-sample", "") // open the travel-sample bucket with empty password
+      .config("spark.couchbase.nodes", "127.0.0.1") // connect to Couchbase Server on localhost
+      .config("spark.couchbase.username", "Administrator") // with given credentials
+      .config("spark.couchbase.password", "password")
+      .config("spark.couchbase.bucket.travel-sample", "") // open the travel-sample bucket
       .getOrCreate()
 
 // The SparkContext for easy access
 val sc = spark.sparkContext]]></codeblock>
+
+            <p>The above example assumes Couchbase Server 5.X+ is being used, and hence a username and password
+            are required.  If using an earlier version of Couchbase Server, the username and password lines
+            should be omitted and a non-empty bucket password may be required.</p>
 
 			<p>By default, the Spark Connector connects to the <codeph>default</codeph> bucket. However, this
 				example uses actual data from the <codeph>travel-sample</codeph> bucket that ships with
 				Couchbase Server, so the code connects to that bucket. The Couchbase Spark connector
 				also supports opening more buckets in parallel.</p>
 
+		</section>
+
+        <section>
+			<title>Creating a JAR for use with spark-submit</title>
+
+			<p>By compiling the application into a JAR file, it can be run with the standard Spark tool
+			<codeph>spark-submit</codeph>.</p>
+
+            <p>In this case, the Spark dependencies can be declared as <codeph>provided</codeph>, as they will be
+            supplied by <codeph>spark-submit</codeph>:</p>
+
+<codeblock outputclass="language-scala"><![CDATA[name := "my-first-couchbase-spark-project"
+
+organization := "my.organization"
+
+version := "1.0.0-SNAPSHOT"
+
+scalaVersion := "2.11.8"
+
+libraryDependencies ++= Seq(
+  "org.apache.spark" %% "spark-core" % "2.2.0" % "provided",
+  "org.apache.spark" %% "spark-streaming" % "2.2.0" % "provided",
+  "org.apache.spark" %% "spark-sql" % "2.2.0" % "provided",
+  "com.couchbase.client" %% "spark-connector" % "2.2.0"
+)
+]]></codeblock>
+
+            <p><codeph>spark-submit</codeph> allows the Spark session's configuration to be supplied on the command line,
+            so the Quickstart example above can be simplified to:</p>
+
+<codeblock outputclass="language-scala"><![CDATA[// Configure Spark
+val spark = SparkSession
+      .builder()
+      .appName("KeyValueExample")
+      .getOrCreate()]]></codeblock>
+
+            <p>The next step is to build a 'fat JAR' containing all the application's dependencies so it can easily be
+            run with <codeph>spark-submit</codeph>.  One good option is to use the
+            <xref href="https://github.com/sbt/sbt-assembly" format="html" scope="external">sbt-assembly plugin</xref>.</p>
+
+            <p>Finally, the created JAR can be run, supplying the required Couchbase configuration options:</p>
+
+<codeblock outputclass="language-bash"><![CDATA[spark-submit --master local[*]
+                     --conf spark.couchbase.username=Administrator
+                     --conf spark.couchbase.password=password
+                     --conf spark.couchbase.bucket.travel-sample=""
+                     --class Quickstart target/scala-2.11/quickstart-assembly-0.1.jar]]></codeblock>
 		</section>
 
 		<section>

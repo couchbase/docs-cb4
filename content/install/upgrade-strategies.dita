@@ -8,56 +8,57 @@
       Which way is best for your cluster will depend on a few factors in your architecture and company organization (e.g. SLAs). 
       On this and subsequent pages of this section we will discuss not just the mechanics of an upgrade, but why each may or may work best for you.</p>   
     
-    <section><title>Option #1 - Rolling Online Upgrade</title>
+    <section id="online-upgrade"><title>Option #1 - Rolling Online Upgrade</title>
       <p>A rolling online upgrade is the recommended upgrade process for a Couchbase Server cluster and should be chosen unless you 
-        have special circumstances that would rule it out. As an online upgrade, this method avoids downtime for the database and 
-        applications because all data operations continue normally throughout the process. Rolling upgrades involve using the 
-        rebalance feature of Couchbase to redistribute the data amongst the nodes in the cluster running the Data Service, 
-        thus keeping the data accessible for the duration of the upgrade. As long as you keep some nodes from the Index and Query Services</p>  
-      <p>As Couchbase Server is specifically designed to provide fully online upgrades 
-        If you find this is not the case, please report a bug.</p>
+        have special circumstances that would rule it out. This method avoids downtime for the database and 
+        applications because all operations continue normally and high availability can be maintained. Rolling upgrades use Couchbase's 
+        rebalance capability to redistribute the data amongst the nodes of a cluster, keeping it available for the duration of the upgrade. 
+        Prior to version 5.0, special care should be taken when upgrading nodes running the index service.</p>  
+      <p>Couchbase Server is specifically designed to provide fully online upgrades.  If you find this is not the case, please open a support ticket or 
+        report a bug.</p>
       <p>There are three options for rolling online upgrades:</p> 
       
       <dl>
         <dlentry>
           <dt>Swap Rebalance</dt>
           <dd>This method entails introducing new nodes into a Couchbase Server cluster as you remove an equal number of nodes to be upgraded. 
-            It uses a feature called Swap Rebalance to move vBuckets efficiently 
-            from an existing node running the Data Service to a new node that will run the Data Service, without involving other nodes in the cluster. 
+            It uses a feature called Swap Rebalance to move data efficiently 
+            from the existing nodes to the new nodes, without involving other nodes in the cluster. 
           </dd>
-          <dd>As long as you swap an equal number of nodes (e.g. one for one, two for two, etc.), a Swap Rebalance will be used. 
+          <dd>As long as you swap an equal number of nodes (e.g. one for one, two for two, etc.), a Swap Rebalance will be triggered. 
             This also keeps the cluster capacity consistent so as to not interfere with the load running on the cluster.
             
-            While this method is the safest and provides the most availability, one downside to this option is the overall duration of a 
-            cluster upgrade may be longer as compared to other options. 
-            If the speed of an upgrade is a primary concern for your cluster, as it might be if you have a tight maintenance window, see <xref
+            While this method is the safest and provides the most availability, it may require multiple rebalances and therefore be longer as compared to other upgrade options. 
+            If the speed of an upgrade is a primary concern for your cluster, see <xref
               href="../clustersetup/setup-failover-graceful.dita#topic_ysk_ycm_zs">Graceful
               Failover</xref> or <xref href="upgrade-offline.dita#topic_q11_1my_p4"/>.</dd>
         </dlentry>
       </dl>
       <dl>
         <dlentry>
-          <dt>Regular Rebalance</dt>
-          <dd>This method is suitable when you must complete the upgrade using only the nodes currently in the cluster. 
-            It involves removing at least one running node from the cluster, 
-            upgrading the node, and then adding it back in. This upgrade method reduces the capacity of the cluster during the upgrade process.</dd>
+          <dt>Remove and Rebalance</dt>
+          <dd>This method is suitable when you must complete the upgrade using only the nodes currently in the cluster but want to maintain High Availability during the upgrade process.
+            Since this will reduce the capacity of the cluster, it is important to ensure that there is enough spare capacity across 
+            all necessary resources (disk, CPU, RAM, etc) during the upgrade process.
+          This process involves removing one running node from the cluster and rebalancing.  That node can then be upgraded and used in the Swap Rebalance
+          upgrade procedure above.  When the last node has been upgraded, it can be rebalanced back into the cluster to return to full capacity.</dd>
           <dd>Like a swap rebalance upgrade, this style will require multiple rebalances to
             complete.</dd>
         </dlentry>
       </dl>  
       <dl>
         <dlentry id="graceful">
-          <dt>Graceful Failover</dt>
+          <dt>Graceful Failover and Delta Recovery</dt>
           <dd>This option involves performing a rolling online upgrade using a <xref
               href="../clustersetup/setup-failover-graceful.dita#topic_ysk_ycm_zs">Graceful
-            Failover</xref> instead of the full addition and removal of nodes in option #1. 
-            It is typically faster and less resource intensive because vBuckets do not need to be moved between nodes. 
-            With this process, there is a cluster rebalance but it is only to synchronize the vBuckets on the upgraded 
-            node when each node returns to the cluster. 
+            Failover</xref> followed by <xref href="../clustersetup/rejoin-cluster.html#story-h2-2" scope="external" format="html"> Delta Recovery</xref> 
+            instead of the full addition and removal of nodes in a Swap Rebalance. 
+            It is typically faster and less resource intensive because data does not need to be completely moved between nodes, rather 
+            the replicas are synchronized and activated during the failover and the data resynchronized when the node returns following the upgrade. 
             Another advantage compared to the other online upgrades is that this method preserves the global secondary 
             indexes and doesn’t need to rebuild them. </dd>
-          <dd>The primary downside to this option is increased risk as replicas are used for faster failover and not recreated 
-            until a rebalance occurs. This option is not available when choosing to upgrade with net-new systems 
+          <dd>The primary downside to this option is decreased high availability as replicas are used for faster failover and not recreated 
+            until the node is returned. This option is not available when choosing to upgrade with net-new systems 
             (as in the case of many cloud deployments) since those new nodes would not have the previous nodes’ 
             data in place. Use Option #1 when upgrading with net-new systems.
         </dd>
@@ -65,32 +66,27 @@
       </dl>
       
     </section>
-    <section id="intercluster"><title>Option #2 - Upgrade Using Inter-cluster Replication</title>
-      <p>For this option, another Couchbase Server cluster is created or already exists and then
-        inter-cluster replication is enabled via the Cross Datacenter Replication (<xref
-          href="../xdcr/xdcr-intro.dita#topic1500">XDCR</xref>) built-in feature of Couchbase
-        Server. The administrator then transitions the application to use the new cluster as part of
-        the upgrade process. While this upgrade process is relatively straightforward to set up, it
+    <section id="intercluster"><title>Option #2 - Upgrade Using XDCR</title>
+      <p>For this option, another Couchbase Server cluster is created (or already exists) and connected via 
+        Cross Datacenter Replication (<xref href="../xdcr/xdcr-intro.dita#topic1500">XDCR</xref>). 
+        The application is transitioned to use one cluster while the other(s) is/are upgraded. 
+        While this upgrade process is relatively straightforward to set up, it
         requires more investment in servers/instances and networking, as well as a change to the
-        application so that it uses the newly upgraded cluster. It is best used when an
-        administrator needs an immediate rollback position or does not want to tinker with the
-        original cluster for some reason. This method is recommended when an existing XDCR
-        connection is already in place. </p>  
-      <p>Some people modify their application, to make this can be a zero downtime upgrade by having
-        their application aware of both clusters and can failover between them automatically. If you
-        do this, keep in mind that unlike regular operations against the Data Service, XDCR is
-        eventually consistent. Most people treat this as an offline upgrade and will roll the
-        application over with the new cluster configurations. Which solution is best will depend on
-        your SLA requirements. </p> 
-      
+        application so that it can switch between clusters. It is best used when an existing XDCR connection is already in 
+        place, the application needs a live rollback option or the original cluster cannot be upgraded online for some reason.
+      </p>  
+      <p>Keep in mind that XDCR is eventually consistent between clusters and so care should be taken when 
+        switching the application from one to the other.</p>
+      <p>For the fastest upgrade, the unused cluster(s) can be upgraded following the offline upgrade steps below
+        (if not installed anew)</p> 
     </section>
     <section id="offline"><title>Option #3 - Offline Upgrade</title>
       <p>Choose an offline upgrade when the situation calls for an easy and fast upgrade method as well as when the database can incur a controlled outage. 
         The offline upgrade is more likely to succeed in situations where an online upgrade option might fail, but also the rare time a cluster is unstable 
         and has been determined that a Couchbase Server upgrade will fix a specific issue.</p>
-      <p>The offline upgrade is the best choice in situations where an online upgrade option might fail, such as the rare times a cluster 
-        is unstable and it has been determined that an upgrade will fix the issue.</p>
-      
+      <p>This procedure involves upgrading one or more nodes without removing them from the cluster.  In some cases the whole cluster
+        may be shut down, upgraded and restarted.</p>
+      <p>It is recommended to disable auto-failover before using this method and to re-enable it once complete.</p>
       
     </section>
     <section><title>Choosing the Upgrade Strategy</title>
@@ -98,21 +94,24 @@
       <p>Both the online and offline upgrade processes have trade-offs. The following table
       illustrates some important aspects of the two upgrade strategies.</p>
     <table frame="all" rowsep="1" colsep="1" id="table_shv_yr2_zs">
-      <title>Differences between online and offline upgrades</title>
-      <tgroup cols="3">
+      <title>Differences between upgrades</title>
+      <tgroup cols="4">
         <colspec colname="c1" colnum="1" colwidth="1.0*"/>
         <colspec colname="c2" colnum="2" colwidth="1.0*"/>
         <colspec colname="c3" colnum="3" colwidth="1.0*"/>
+        <colspec colname="c4" colnum="4" colwidth="1.0*"/>
         <thead>
           <row>
             <entry>Feature</entry>
             <entry>Online upgrade</entry>
+            <entry>XDCR upgrade</entry>
             <entry>Offline upgrade</entry>
           </row>
         </thead>
         <tbody>
           <row>
             <entry>Applications remain available</entry>
+            <entry>Yes</entry>
             <entry>Yes</entry>
             <entry>No</entry>
            
@@ -121,16 +120,19 @@
             <entry>Cluster stays in operation</entry>
             <entry>Yes</entry>
             <entry>No</entry>
+            <entry>No</entry>
           </row>
           <row>
             <entry>Cluster must be shut down</entry>
             <entry>No</entry>
             <entry>Yes</entry>
+            <entry>Yes</entry>
           </row>
           <row>
-            <entry>Typically required steps</entry>
-            <entry>Rebalance, upgrade, rebalance per node</entry>
-            <entry>All cluster nodes are upgraded at once.</entry>
+            <entry>Typical steps</entry>
+            <entry>Rebalance, upgrade, rebalance</entry>
+            <entry>Switch to XDCR cluster, upgrade, switch back</entry>
+            <entry>Upgrade one or more nodes without removing from cluster.</entry>
           </row>
         </tbody>
       </tgroup>
