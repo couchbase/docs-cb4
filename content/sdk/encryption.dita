@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="encryption">
+    <title>Field Level Encryption</title>
+    <shortdesc>Fields within a document can be securely encrypted by the SDK, to support FIPS-140-2 compliance.</shortdesc>
+    <prolog>
+        <metadata>
+            <othermeta name="langSelector" content="hidden"/>
+        </metadata>
+    </prolog>
+    <conbody>
+        <section id="architecture">
+            <title>Overview</title>
+              <fig id="field_level_encryption--architecture.png">
+                <title>Actors &amp; Resposibilities in Field Level Encryption</title>
+                <image placement="break" href="./shared/images/field_level_encryption--architecture.png" />
+              </fig>
+            <p>This is a client-side implementation, with key management and initialization of data encryption done during configuration of the SDK, which then exposes the API during runtime, for normal read/write operations.</p>
+        </section>
+
+        <section id="algorithm">
+            <title>Algorithm and Key Store</title>
+            <p>In Couchbase Data Platform 5.5, AES-256, AES-128, and RSA are all supported. Native Keystores (including Java Key Store and Windows Certificate Store) are supported, as well as an in-memory keystore for development and testing. More options for key stores and encryption algorithms may appear in future SDK releases.</p>
+            <p>Here is an example of an in-memory store for development and testing called the “InsecureKeyStore”, to reflect its lack of security:<codeblock>public class InsecureKeyProvider : IKeyProvider
+{
+    private readonly Dictionary&lt;string, string> _keys = new Dictionary&lt;string, string>();
+
+    public string GetKey(string keyname)
+    {
+        return _keys[keyname];
+    }
+
+    public void StoreKey(string keyname, string key)
+    {
+        _keys[keyname] = key;
+    }
+}</codeblock>The keys are stored by name in a dictionary and retrieved using the same name. See the <xref href="./java/encrypting-using-sdk.dita" format="dita" scope="local">sample code page</xref> for more secure code.</p>
+        </section>
+
+        <section id="format">
+            <title>Field Encryption Format</title>
+            <p>Behind the API, the following format is used internally to encompass both the temporary field name used to hold the encrypted value, plus the additional metadata associated with the algorithm used and the public key:<codeblock>__[PREFIX]_[FIELDNAME]” : {
+	“kid” : “[KEY_IDENTIFIER]”,
+	“alg”: “[ALGORITHM”],
+	“ciphertext”: “[BASE64_ENCRYPTED_DATA]”,
+	“sig”: “[BASE64_HMAC_SIGNATURE]”,
+	“Iv” : [“INITIALIZATION_VECTOR”]
+}</codeblock>This is how Couchbase stores the JSON internally, but it is exposed to the developer as a public API. For your preferred SDK, an API reference is available, linked from<xref href="./java/start-using-sdk.dita" scope="local" /> as well as <xref href="./java/encrypting-using-sdk.dita" format="dita" scope="local">sample code</xref>.</p>
+        </section>
+
+        <section id="field-types">
+            <title>Field Types</title>
+              <p>The encryption <i>payload</i> can be any object that comes after a key in a JSON document.</p>
+              <table frame="all" rowsep="1" colsep="1" id="sprtd-field-types">
+                <title>Supported Field Types</title>
+                  <tgroup cols="3">
+                    <colspec colname="type" colnum="1" colwidth="1*"/>
+                    <colspec colname="example" colnum="2" colwidth="4*"/>
+                    <colspec colname="payload" colnum="3" colwidth="3*"/>
+                    <thead>
+                        <row>
+                            <entry>Type</entry>
+                            <entry>Example</entry>
+                            <entry>Payload</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry><i>string</i></entry>
+                            <entry><codeph>"magicWord":"xyzzy"</codeph></entry>
+                            <entry><codeph>"xyzzy"</codeph></entry>
+                        </row>
+                        <row>
+                            <entry><i>object</i></entry>
+                            <entry><codeph>"score":{"dance":10,"presentation":3}</codeph></entry>
+                            <entry><codeph>{"dance":10,"presentation":3}</codeph></entry>
+                        </row>
+                        <row>
+                            <entry><i>numeric</i></entry>
+                            <entry><codeph>"myint":10</codeph></entry>
+                            <entry><codeph>10</codeph></entry>
+                        </row>
+                        <row>
+                            <entry><i>null</i></entry>
+                            <entry><codeph>"isnull":null</codeph></entry>
+                            <entry><codeph>null</codeph></entry>
+                        </row>
+                    </tbody>
+                  </tgroup>
+              </table>
+        </section>
+
+        <section id="auditing">
+            <title>Auditing</title>
+            <p>For auditing purposes, the encrypted fields must be discoverable, for example via N1QL.</p>
+        </section>
+
+        <section id="error">
+            <title>Data Safeguards</title>
+            <p>Under error conditions, to prevent data loss, an error in decryption or encrytpion in any part of an operation will cause the whole operation to fail with an exception, to prevent unnoticed loss of data.</p>
+        </section>
+
+        <section conref="./interface-stability-pars.dita#toplevel/interface-stability-section">In the SDK, the stability of an interface is listed in its API documentation 
+          as well as in the headers themselves.</section>
+
+    </conbody>
+</concept>
