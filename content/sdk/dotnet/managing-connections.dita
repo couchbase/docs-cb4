@@ -14,16 +14,25 @@
         initialized, followed by one or more calls to <apiname>OpenBucket()</apiname> or
           <apiname>GetBucket(..)</apiname>:</p>
       <codeblock outputclass="language-csharp"><![CDATA[var cluster = Cluster();
+var credentials = new PasswordAuthenticator("Administrator", "password");
+cluster.Authenticate(credentials);
 var bucket = cluster.OpenBucket("default");
 
 //or alternately
-ClusterHelper.Initialize();
+ClusterHelper.Initialize(new ClientConfiguration(), credentials);
 var bucket = ClusterHelper.GetBucket("default");]]></codeblock>
-      <p><note>The <apiname>ClusterHelper</apiname> is a singleton/multiton that makes it easier to manage resources
-          and instances in server runtime environments such as ASP.NET and Owin/Katana. A
-        <apiname>ClusterHelper</apiname> will make a singleton instance of a <apiname>Cluster</apiname> object and configuration and
-        store references to opened <apiname>IBucket</apiname> objects that can be reused throughout the lifespan of
-          an application.</note>If no further arguments are applied, this code connects to
+      <p><note>The <apiname>ClusterHelper</apiname> is a singleton/multiton that makes it easier to
+          manage resources and instances in server runtime environments such as ASP.NET and
+          Owin/Katana. A <apiname>ClusterHelper</apiname> will make a singleton instance of a
+            <apiname>Cluster</apiname> object and configuration and store references to opened
+            <apiname>IBucket</apiname> objects that can be reused throughout the lifespan of an
+          application.</note><note>The <apiname>PasswordAuthenticator</apiname> is used for
+          connecting to Couchbase Server 5.0 and greater using RBAC (Role Based Access Control). In
+          this case we are using the administrator account, however, <b>a more secure way to connect
+            is to create a user with minimal privileges and a unique password</b>. If you are
+          connecting to an older server version that does not use RBAC then you would omit the
+            <apiname>PasswordAuthenticator</apiname> and instead pass the bucket password into the <apiname>OpenBucket</apiname>
+          method.</note>If no further arguments are applied, this code connects to
           <codeph>localhost</codeph> and opens the <i>default</i> bucket. While this is suitable for
         development, you most probably want to connect to a remote cluster and also a different
         bucket (with a password), to do this you create a <apiname>ClientConfiguration</apiname>
@@ -36,13 +45,17 @@ var config = new ClientConfiguration {
    }
 };
 
-//create the cluster and open the new bucket
+//create the cluster and pass in the RBAC user
 var cluster = new Cluster(config);
-var bucket = cluster.OpenBucket("mybucket", "mybucketpassword");
+var credentials = new PasswordAuthenticator("Administrator", "password");
+cluster.Authenticate(credentials);
+
+//open the new bucket
+var bucket = cluster.OpenBucket("mybucket");
 
 //or alternately
-ClusterHelper.Initialize(config);
-var bucket = ClusterHelper.GetBucket("mybucket", "mybucketpassword");]]></codeblock>
+ClusterHelper.Initialize(config, credentials);
+var bucket = ClusterHelper.GetBucket("mybucket");]]></codeblock>
       <p>The ClientConfiguration object also exposes per bucket configuration settings, for
         example:</p>
       <codeblock outputclass="language-csharp"><![CDATA[var config = new ClientConfiguration{
@@ -52,19 +65,20 @@ var bucket = ClusterHelper.GetBucket("mybucket", "mybucketpassword");]]></codebl
     },
     BucketConfigs = new Dictionary<string, BucketConfiguration> {{
             "mybucket", new BucketConfiguration{
-                BucketName = "mybucket",
-                Password = "mybucketpassword"
+                BucketName = "mybucket"
             }
         }
      }
   };
+//create the authenticator for passing in the user and password for RBAC
+var credentials = new PasswordAuthenticator("Administrator", "password");
 
 //create the cluster and open the new bucket
-var cluster = new Cluster(config);
+var cluster = new Cluster(config, credentials);
 var bucket = cluster.OpenBucket("mybucket");
 
 //or alternately
-ClusterHelper.Initialize(config);
+ClusterHelper.Initialize(config, credentials);
 var bucket = ClusterHelper.GetBucket("mybucket");]]></codeblock>
       <p>It is very important in a production setup to pass in at least two or three nodes of the
         cluster because if the first one in the list fails the other ones can be tried. After
@@ -72,7 +86,8 @@ var bucket = ClusterHelper.GetBucket("mybucket");]]></codeblock>
         with a list provided by the server (which contains all nodes of the cluster).</p>
       <p>As an alternative to programmatic configuration, the SDK also supports configuration via
         config file and soon will support JSON config files. Here is an example of an App.Config
-        that is equivalent to the configuration above:<codeblock outputclass="language-xml"><![CDATA[<?xml version="1.0" encoding="utf-8"?>
+        that is equivalent to the configuration above and assumes that you  are connecting to
+        Couchbase Server 5.0 or greater using RBAC:<codeblock outputclass="language-xml"><![CDATA[<?xml version="1.0" encoding="utf-8"?>
 <configuration>
   <configSections>
     <sectionGroup name="couchbaseClients">
@@ -80,7 +95,7 @@ var bucket = ClusterHelper.GetBucket("mybucket");]]></codeblock>
     </sectionGroup>
   </configSections>
   <couchbaseClients>
-    <couchbase>
+    <couchbase username="Administrator" password="password">
       <servers>
         <add uri="http://192.168.56.101:8091"></add>
         <add uri="http://192.168.56.102:8091"></add>
@@ -98,8 +113,8 @@ var bucket = cluster.OpenBucket("mybucket");]]>
 ClusterHelper.Initialize("couchbaseClients/couchbase");
 <![CDATA[var bucket = cluster.OpenBucket("mybucket");]]></codeblock></p>
       <p>More buckets can be open at the same time if needed:</p>
-      <codeblock outputclass="language-csharp"><![CDATA[var bucket1 = cluster.OpenBucket("bucket1", "password");
-var bucket2 = cluster.OpenBucket("bucket2", "password");]]></codeblock>
+      <codeblock outputclass="language-csharp"><![CDATA[var bucket1 = cluster.OpenBucket("bucket1");
+var bucket2 = cluster.OpenBucket("bucket2");]]></codeblock>
       <p>If more than one bucket is open at a time, the underlying internals of the client makes
         sure to utilize the resources as best as possible, that is sharing sockets, thread pools and
         so on.</p>
