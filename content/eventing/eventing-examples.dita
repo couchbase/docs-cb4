@@ -6,871 +6,401 @@
     Examples
   </title>
   
-  <shortdesc>
-    Examples of how to use the Eventing Service.
-  </shortdesc>
+  <shortdesc> This page contains examples of how to use the Eventing Service, using the Couchbase
+    Web Console. </shortdesc>
   
   <body>
-    
-    <section id="eventing_examples_preparations">
-      
-      <title>
-        Preparations
-      </title>
-      
-      <p>
-        This page contains examples of how to use the Eventing Service, by means of the Couchbase Web Console. 
-        The examples require the creation of three buckets.(Note that detailed 
-        information on creating buckets, is provided in
-        <xref href="../clustersetup/create-bucket.dita" scope="local" format="dita">Create a Bucket</xref>.)
-      </p>
-      
-      <p>
-        Proceed as follows:
-      </p>
-      
-      <ol>
-        <li>
-          <p>
-            Create a <i>Metadata bucket</i>: Each Eventing function requires  
-            a <i>metadata</i> bucket to be defined on
-            the cluster. This bucket is used for the storage of artifacts and checkpoint information,
-            generated during the course of execution. You must
-            create or reference such a bucket explicitly, for each Eventing function that you define. 
-            Ideally, no metadata bucket should be used for storing information from any other 
-            application, though a single metadata bucket may be used by multiple Eventing functions.
-          </p>
-          
-          <p>
-            The examples on this page refer to a metadata bucket named <codeph>metadata</codeph>. Therefore, to 
-            create such a bucket:
-          </p>
-            
-            <ol>
-              
-              <li>
-                Access the <b>Buckets</b> screen, by left-clicking on the <b>Buckets</b> tab, 
-                in the left-hand navigation panel.
-                
-                <p>
-                  
-                </p>
-              </li>
-              
-              <li>
-                On the <b>Buckets</b> screen, left-click on the <b>Add Bucket</b> tab, at the upper right.
-                
-                <p>
-                  
-                </p>
-              </li>
-              
-              <li>
-                When the <b>Add Data Bucket</b> dialog appears, specify <codeph>metdata</codeph> as the bucket-name, and
-                specify an appropriate <b>Memory Quota</b> for the bucket. All other settings can be left with
-                their default value. Then,
-                left-click on the <uicontrol>Add Bucket</uicontrol> button.
-                
-                <p>
-                  
-                </p>
-              </li>
+    <section id="section_jm1_1sy_m2b"><title>Example 1</title><p dir="ltr"><b>Goal</b>: A document
+        contains attributes whose form makes them difficult to search on. Therefore, on the
+        document's creation or modification, a new attribute should be created to accompany each
+        original attribute; this new attribute being instantiated with a value that directly
+        corresponds to that of its associated, original attribute; but takes a different form,
+        thereby becoming more supportive of search. Original attributes are subsequently retrievable
+        based on successful searches performed on new attributes.</p><b><i>Implementation</i></b>:
+      Create a JavaScript function that contains an <b>OnUpdate</b> handler. The handler listens for
+      data-changes within a specified, source bucket. When any document within the bucket is created
+      or mutated, the handler executes a user-defined routine. In this example, if the created or
+      mutated document contains two specifically named fields containing IP addresses (these
+      respectively corresponding to the beginning and end of an address-range), the handler-routine
+      converts each IP address to an integer. A new document is created in a specified, target
+      bucket: this new document is identical to the old, except that it has two additional fields,
+      which contain integers that correspond to the IP addresses. The original document, in the
+      source bucket, is not changed.</section>
+    <section id="section_shs_csy_m2b">
+      <title>Preparations</title>
+      <p>This example requires the creation of three buckets: metadata, target and source buckets. </p>
+      <p dir="ltr">Proceed as follows:</p>
+      <ol id="ol_ers_gsy_m2b">
+        <li>Create a target bucket. To create a bucket named <b>target</b>, refer to Create a
+          Bucket, {x-ref}. The target bucket contains documents that will be created by the
+          Function. Don’t add any documents explicitly to this bucket.</li>
+        <li>Create metadata and source buckets. In the Source bucket screen:<p>
+            <ol id="ol_cs2_zsy_m2b">
+              <li>Click <b>Add Document</b>. </li>
+              <li id="li_z4k_fty_m2b">In the <b>Add Document</b> window, specify the name
+                    <b><i>SampleDocument</i></b> as the <b>New</b><b>Document ID</b></li>
+              <li>Click <b>Save</b>.</li>
+              <li>In the <b>Edit Document</b> dialog, paste the following within the edit panel.<p>
+                  <table id="table_dcp_wsy_m2b">
+                    <tgroup cols="1">
+                      <colspec colnum="1" colname="col1"/>
+                      <tbody>
+                        <row>
+                          <entry>
+                            <p dir="ltr">{</p>
+                            <p dir="ltr"> "country": "AD",</p>
+                            <p dir="ltr"> "ip_end": "5.62.60.9",</p>
+                            <p dir="ltr"> "ip_start": "5.62.60.1"</p>
+                            <p dir="ltr">}</p>
+                          </entry>
+                        </row>
+                      </tbody>
+                    </tgroup>
+                  </table>
+                </p></li>
+              <li>Click <b>Save</b>. This step concludes all required preparations.</li>
             </ol>
-          
-          <p>
-            The <codeph>metadata</codeph> bucket now appears on the <b>Buckets</b> screen. 
-          </p>
-          
-          <p>
-            
-          </p>
-        </li>
-        
-        <li>
-          <p>
-            Create a <i>Source bucket</i>: This is a bucket that will contain a source document, updates to which
-            cause execution of the function you define. You must create both the bucket and
-            the source document. (For a detailed explanation of the user-interface components
-            on the <b>Buckets</b> and <b>Documents</b> screens, see the
-            page
-            <xref href="../getting-started/look-at-the-results.dita" scope="local" format="dita">Look at the Results</xref>,
-            within the Couchbase Server <i>Getting Started</i> sequence.)
-          </p>
-          
-          <p>
-            Proceed as follows:
-          </p>
-          
-          <p>
-          
-          <ol>
-            <li>
-              Using the procedure described immediately
-              above for the <codeph>metadata</codeph> bucket, create a bucket named
-              <codeph>source</codeph>.
-              
-              <p>
-                
-              </p>
-            </li>
-            
-            <li>
-              When the <codeph>source</codeph> bucket appears on the <b>Buckets</b> screen, left-click on the
-              <uicontrol>Documents</uicontrol> tab, towards the right-hand side of the <codeph>source</codeph>
-              bucket's row. This brings up the
-              <b>Documents</b> screen. 
-              
-              <p>
-                
-              </p>
-            </li>
-            
-            <li>
-              When the <b>Add Document</b> dialog appears, specify the name <codeph>SampleDocument</codeph> for the new
-              document. Then, left-click on the <uicontrol>Save</uicontrol> button. This brings up the
-              <b>Edit Document</b> dialog.
-              
-              <p>
-                
-              </p>
-            </li>
-            
-            <li>
-              Within the edit panel of the <b>Edit Document</b> dialog, paste the following:
-              
-              <p>
-              </p>
-              
-              <codeblock outputclass="language-javascript">{
-  "country": "AD",
-  "ip_end": "5.62.60.9",
-  "ip_start": "5.62.60.1"
-}</codeblock>
-              
-              Left-click on the <uicontrol>Save</uicontrol> button.
-              
-            </li>
-          </ol>
-            
-          </p>
-            
-          
-          <p>
-            
-          </p>
-          
-        </li>
-        
-        <li>
-          Create a <i>Target bucket</i>: This is a bucket that will contain a new document, created by a function
-          you will add to the Eventing Service. 
-          Using Couchbase Web Console, create a bucket named <codeph>target</codeph>, using the procedure described
-          above for the <codeph>metadata</codeph> bucket. No document need explicitly be added to this bucket.
-        </li>
-        
+          </p></li>
       </ol>
-      
-      <p>
-        This concludes all required preparations.
-      </p>
-      
     </section>
-    
-    <section id="example-1">
-      
-      <title>
-        Example 1
-      </title>
-      
-      <p>
-        <i>Goal</i>: A document contains attributes whose form makes them difficult to search on. Therefore,
-        on the document's creation or modification, a new attribute should be created to accompany each
-        original attribute; this new attribute being instantiated with a value that directly corresponds to
-        that of its associated, original attribute;
-        but takes a different form, thereby becoming more supportive of search.
-        Original attributes are subsequently retrievable based on successful searches performed on new.
-      </p>         
-      
-      <p>
-        <i>Implementation</i>: Create a JavaScript function that contains an <codeph>OnUpdate</codeph> handler.
-        The handler listens for data-changes within a specified, source bucket. When any document within the bucket
-        is created or mutated, the handler executes a user-defined routine. In this example, if the 
-        created or mutated document contains two
-        specifically named fields containing IP addresses (these respectively corresponding to the
-        beginning and ending of an address-range), the handler-routine converts each IP address to an integer. A new 
-        document is created
-        in a specified, target bucket: this new document is identical to the old, except that it has two additional
-        fields, which contain integers that correspond to the IP addresses. The
-        original document, in the source bucket, is not changed.
-      </p>
-      
-      <p>
-        Proceed as follows:
-      </p>
-      
-      <ol>
-        <li>
-          <p>
-            Access the <b>Eventing</b> screen, by left-clicking on the <uicontrol>Eventing</uicontrol> tab, in the navigation
-            panel at the left-hand side of the Couchbase Web Console:
-          </p>
-          
-          <p>
-            <image href="./images/eventingTab.png" id="eventing_tab" align="left" width="100"/>
-          </p>
-          
-          <p>
-            The <b>Eventing</b> screen now appears. This shows all currently defined functions, and so is
-            initially empty. 
-          </p>
-          
-          <p>
-            <image href="./images/eventingScreenInitial.png" id="eventing_screen_initial" align="left" width="680"/>
-          </p>
-          
-          <p>
-          </p>
-          
-        </li>
-        
-        <li>
-          <p>
-            Elect to add a function, by left-clicking on the <uicontrol>Add Function</uicontrol> button,
-            at the upper right:
-          </p>
-          
-          <p>
-            <image href="./images/addFunctionButton.png" id="add_function_button" align="left" width="164"/>
-          </p>
-          
-          <p>
-            This brings up the <b>Add Function</b> dialog:
-          </p>
-          
-          <p>
-            <image href="./images/addFunctionDialog.png" id="add_function_dialog" align="left" width="400"/>
-          </p>
-          
-          <p>
-            The elements within the dialog are as follows:
-          </p>
-          
-          <ul>
-            <li>
-              <p>
-                <b>Source Bucket</b>: The name of a bucket currently defined on the cluster.
-                The function you define listens to changes made to the contents of
-                this bucket &#8212; such as the creation or mutation of a document. The
-                bucket must be of type <i>Couchbase</i> or <i>Ephemeral</i>: buckets of
-                type <i>Memcached</i> are not supported. Use the arrows control at the
-                right-hand side of the field to select from currently defined buckets:
-              </p>
-              
-              <p>
-                <image href="./images/selectSourceBucket.png" id="select_source_bucket" align="left" width="430"/>
-              </p>
-              
-              <p>
-                For the current example, select the bucket you already created for this purpose, <codeph>source</codeph>.
-              </p>
-              
-              <p>
-                
-              </p>
-            </li>
-            
-            <li>
-              <b>Metadata Bucket</b>: The name of a bucket currently defined on the cluster. This bucket
-              will be used to store artifacts and checkpoint information. The
-              bucket must be of type <i>Couchbase</i> or <i>Ephemeral</i>: buckets of
-              type <i>Memcached</i> are not supported. Use the arrows control at the
-              right-hand side of the field to select from currently defined buckets.
-              
-              <p>
-                For this example, select the bucket you already created for this purpose, <codeph>metadata</codeph>.
-              </p>
-              <p>
-                
-              </p>
-            </li>
-            
-            <li>
-              <b>Function Name</b>: A name, for the function you are creating. For the current example,
-              use <codeph>enrich_ip_nums</codeph>.
-              
-              <p>
-                
-              </p>
-            </li>
-            
-            <li>
-              <b>Description</b>: A description of the function you are creating. This is optional. For
-              the current example, specify <codeph>Enrich a document, converts IP Strings to Integers
-              that are stored in new attributes.</codeph>
-              
-              <p>
-                
-              </p>
-            </li>
-            
-            <li>
-              <p>
-                <b>Settings</b>: Left-click on the arrow control, to display the subpanel:
-              </p>
-              
-              <p>
-                <image href="./images/settingsSubPanel.png" id="settings_sub_panel" align="left" width="390"/>
-              </p>
-              
-              <p>
-                The available settings are as follows. (For the current example, use the
-                default values.)
-              </p>
-              
-              <ul>
-                <li>
-                  <b>Log Level</b>: The granularity at which messages are logged. The options (available from the
-                  arrows control at the right of the field) are <b>Info</b>, <b>Error</b>, <b>Warning</b>, <b>Debug</b>, 
-                  and (the default) <b>Trace</b>.
-                  <p>
-                    
-                  </p>
-                </li>
-                
-                <li>
-                  <b>Workers</b>: The number of worker threads to be allocated to the function. The default is
-                  <codeph>3</codeph>.
-                  <p>
-                    
-                  </p>
-                </li>
-                
-                <li>
-                  <b>Script Timeout</b>: The number of seconds that should elapse before the script times
-                  out. The default is <codeph>1</codeph>.
-                  <p>
-                    
-                  </p>
-                </li>
-              </ul>
-              
-              <p>
-                
-              </p>
-            </li>
-            
-            <li>
-              <p>
-                <b>Bindings</b>: One or more strings, each of which will be used as a reference to 
-                an existing bucket, from within the JavaScript
-                code of your function. One binding-<b>type</b> is currently available, which is <codeph>Alias</codeph>.
-                This associates the <b>name</b> of a defined bucket (selected from the menu accessed from
-                the arrow controls) with the string you enter into the <b>value</b> field. This string can
-                be used as an alias for the named bucket, in your function.
-              </p>
-              
-              <p>
-                To add multiple bindings, left-click on the <b>+</b> control, at the upper right of the
-                panel. To remove a binding, left-click on the <b>-</b> control.
-              </p>
-              
-              <p>
-                For the current example, specify <codeph>target</codeph> as the <b>name</b> of the
-                bucket; and specify <codeph>tgt</codeph> as the associated <b>value</b>.
-              </p>
-              
-              <p>
-              </p>
-            </li>
-          </ul>
-          
-        </li>
-        
-        <li>
-          <p>
-            When all the appropriate fields of the <b>Add Function</b> dialog have
-            been completed, left-click on the <b>Next: Add Code</b> button, at the lower-right: 
-          </p>
-
-          <p>
-            <image href="./images/nextAddCodeButton.png" id="next_add_code_button" align="left" width="140"/>
-          </p>
-          
-          <p>
-            This brings up the <b>enrich_ip_nums</b> screen, which appears as follows:
-          </p>
-          
-          <p>
-            <image href="./images/addCodePage.png" id="add_code_page" align="left" width="680"/>
-          </p>
-          
-          <p>
-            The main panel of this page initially contains place-holder code. You will substitute
-            your actual <codeph>enrich_ip_nums</codeph> code for this.
-          </p>
-
-        </li>
-
-        
-        <li>
-          <p>
-            Copy the following function, and paste it over the place-holder function in the main
-            panel of the <b>enrich_ip_nums</b> screen:
-          </p>
-          
-          <codeblock outputclass="language-javascript">function OnUpdate(doc, meta) {
-  log('document', doc);
-  doc["ip_num_start"] = get_numip_first_3_octets(doc["ip_start"]);
-  doc["ip_num_end"]   = get_numip_first_3_octets(doc["ip_end"]);
-  tgt[meta.id]=doc;
-}
-
-function get_numip_first_3_octets(ip)
-{
-  var return_val = 0;
-  if (ip)
-  {
-    var parts = ip.split('.');
-
-    //IP Number = A x (256*256*256) + B x (256*256) + C x 256 + D 
-    return_val = (parts[0]*(256*256*256)) + (parts[1]*(256*256)) + (parts[2]*256) + parseInt(parts[3]);
-    return return_val;
-  }
-}</codeblock>
-
-          <p>
-            After the paste, the screen appears approximately as follows:
-          </p>
-          
-          <p>
-            <image href="./images/pastedFunction.png" id="pasted_function" align="left" width="660"/>
-          </p>
-          
-          <p>
-            The <codeph>OnUpdate</codeph> routine specifies that when a change occurs to data
-            within the bucket, the routine <codeph>get_numip_first_3_octets</codeph> is
-            run on each document that contains <codeph>ip_start</codeph> and <codeph>ip_end</codeph>.
-            A new document is created whose data and metadata are based on those of the document on which 
-            <codeph>get_numip_first_3_octets</codeph> is run; but with the addition of 
-            <codeph>ip_num_start</codeph> and <codeph>ip_num_end</codeph> data-fields, which contain the numeric values
-            returned by <codeph>get_numip_first_3_octets</codeph>.
-          </p>
-          
-          <p>
-            The <codeph>get_numip_first_3_octets</codeph> routine splits the IP address it finds, converts
-            each fragment to a numeral, and adds the numerals together, to form a single value; which
-            it returns.
-          </p>
-          
-          <p>
-            Left-click on the <b>Save</b> button, at the lower right, to save.
-          </p>
-          
-          <p>
-            
-          </p>
-        </li>
-
-        <li>
-          <p>
-            Return to the <b>Eventing</b> screen, by left-clicking on the
-            <uicontrol>Eventing</uicontrol> tab, in the navigation bar at the left. The main panel now
-            appears as follows:
-          </p>
-          
-          <p>
-            <image href="./images/functionAddedInitial.png" id="function_added_initial" align="left" width="600"/>
-          </p>
-          
-          <p>
-            The function <codeph>enrich_ip_nums</codeph> is now listed as a defined function. As yet, it is listed
-            as <b>undeployed</b> and <b>paused</b>.
-          </p>
-          
-          <p>
-            
-          </p>
-        </li>
-        
-        <li>
-          <p>
-            Left-click on the row for <codeph>enrich_ip_nums</codeph>. Additional controls are now displayed:
-          </p>
-          
-          <p>
-            <image href="./images/functionAddedWithControls.png" id="function_added_with_controls" align="left" width="600"/>
-          </p>
-          
-          <p>
-            The controls are:
-          </p>
-          
-          <ul>
-            <li>
-              <b>Delete</b>: Deletes the function from the system.
-              <p>
-                
-              </p>
-            </li>
-            
-            <li>
-              <b>Export</b>: Exports the function as a JSON document. For sample output based on the
-              <codeph>enrich_ip_nums</codeph> function, see
-              <xref href="./eventing-function-export.dita" scope="local" format="dita">Eventing Function Export</xref>.
-              <p>
-                
-              </p>
-            </li>
-            
-            <li>
-              <b>Deploy</b>: Deploys the function, making it active across the cluster. 
-              
-              <p>
-                
-              </p>
-            </li>
-            
-            <li>
-              <b>Edit JavaScript</b>: Allows edits to be made on the function, in an edit dialog.
-              
-              <p>
-                
-              </p>
-            </li>
-          </ul>
-          
-        </li>
-          
-        <li>
-          <p>
-            Left-click on the <uicontrol>Deploy</uicontrol> button. This displays the <b>Confirm Deploy Function</b> dialog:
-          </p>
-              
-          <p>
-            <image href="./images/confirmDeployFunctionDialog.png" id="confirm_deploy_function_dialog" align="left" width="320"/>
-          </p>
-          
-          <p>
-            The <b>Feed Boundary</b> determines whether documents previously in existence should be included in the
-            function's activities: the options are <b>Everything</b> and <b>From now</b>. For the current example,
-            select <b>Everything</b>. A cleanup operation on existing artifacts can be executed by checking the
-            <b>Cleanup artifacts?</b> checkbox. For the current example, leave this unchecked.
-          </p>
-          
-        </li>
-          
-        <li>
-          <p>
-            Left-click on <b>Deploy Function</b>. This deploys the function, and returns you to the main <b>Eventing</b>
-            screen, which now appears as follows:
-          </p>
-
-          <p>
-            <image href="./images/confirmDeployFunctionDialogDeployed.png" id="confirm_deploy_function_dialog_deployed" align="left" width="720"/>
-          </p>
-          
-          <p>
-            The display indicates that the function is now <b>deployed</b> and <b>running</b>. Note also that the
-            <b>Deploy</b> button has been changed to <b>Undeploy</b>.
-          </p>
-          
-          <p>
-            From this point, your defined function will run, first, on all existing documents; and subsequently, 
-            whenever a creation or mutation occurs.
-          </p>
-
-        </li>
-        
-        <li>
-          <p>
-            To check the effects of deploying the function, 
-            access the <b>Buckets</b> screen, by left-clicking on the <b>Buckets</b> tab, in the navigation panel
-            at the left. Then, left-click on the <b>Documents</b> tab on the row for the <codeph>target</codeph>
-            bucket. This displays the following:
-          </p>
-
-          <p>
-            <image href="./images/targetBucketAfterEvent.png" id="target_bucket_after_event" align="left" width="880"/>
-          </p>
-          
-          <p>
-            As this shows, a version of <codeph>SampleDocument</codeph> has been added to the <codeph>target</codeph> 
-            bucket. It contains all the attributes of the original document, with the addition of <codeph>ip_num_start</codeph>
-            and <codeph>ip_num_end</codeph>; which contain the numeric values that correspond to
-            <codeph>ip_start</codeph> and <codeph>ip_end</codeph>, respectively.
-          </p>
-          
-          <p>
-            Additional documents added to the <codeph>source</codeph> bucket, which share the <codeph>ip_start</codeph>
-            and <codeph>ip_end</codeph> attributes, will be similarly handled by the defined function: creating
-            such a document, and changing any attribute in such a document both cause the function's execution.
-          </p>
-
-        </li>
-
+    <section id="section_qkq_gty_m2b">
+      <title/>
+      <p dir="ltr">Proceed as follows:</p>
+      <ol id="ol_pzd_mty_m2b">
+        <li>From the <b>Couchbase Web Console</b> > <b>Eventing </b>page, click <b>ADD FUNCTION</b>,
+          to add a new Function.</li>
+        <li>In the <b>ADD FUNCTION</b> dialog, for individual Function elements provide the below information:<p>
+            <ul>
+              <li>For the Source Bucket drop-down, select the <b><i>source </i></b><i>option
+                </i>that was created for this purpose.</li>
+              <li>For the Metadata Bucket drop-down, select the <b>metadata </b><i>option </i>that
+                was created for this purpose.</li>
+              <li>Enter <b>enrich_ip_nums</b> as the name of the Function you are creating in the
+                  <b>Function</b><b>Name</b> text-box.</li>
+              <li>Enter <b>Enrich a document, converts IP Strings to Integers that are stored in new
+                  attributes,</b> in the <b>Description</b> text-box.</li>
+              <li>For the <b>Settings</b> option, use the default values.</li>
+              <li>For the Bindings option, specify <b>target</b> as the name of the bucket, and
+                specify <b>tgt</b> as the associated value. </li>
+            </ul>
+          </p></li>
+        <li>After providing all the required information in the <b>ADD FUNCTION </b>dialog, click
+            <b>Next</b>:<b> Add Code</b>. The <b>enrich_ip_nums</b> dialog appears. The
+            <b>enrich_ip_nums</b> dialog initially contains a placeholder code block. You will
+          substitute your actual <b>enrich_ip_nums </b>code in this block.<p>&lt;image></p></li>
+        <li>Copy the following Function, and paste it in the placeholder code block of the
+            <b>enrich_ip_nums</b> dialog:<p><table id="table_jhs_3ty_m2b">
+              <tgroup cols="1">
+                <colspec colnum="1" colname="col1"/>
+                <tbody>
+                  <row>
+                    <entry>
+                      <p> function OnUpdate(doc, meta) {</p>
+                      <p> log('document', doc);</p>
+                      <p> doc["ip_num_start"] = get_numip_first_3_octets(doc["ip_start"]);</p>
+                      <p> doc["ip_num_end"] = get_numip_first_3_octets(doc["ip_end"]);</p>
+                      <p> tgt[meta.id]=doc;</p>
+                      <p>}</p>
+                      <p>function get_numip_first_3_octets(ip)</p>
+                      <p>{</p>
+                      <p> var return_val = 0;</p>
+                      <p> if (ip)</p>
+                      <p> {</p>
+                      <p> var parts = ip.split('.');</p>
+                      <p> //IP Number = A x (256*256*256) + B x (256*256) + C x 256 + D </p>
+                      <p> return_val = (parts[0]*(256*256*256)) + (parts[1]*(256*256)) +
+                        (parts[2]*256) + parseInt(parts[3]);</p>
+                      <p> return return_val;</p>
+                      <p> }</p>
+                      <p>}</p>
+                    </entry>
+                  </row>
+                </tbody>
+              </tgroup>
+            </table>After pasting, the screen appears as displayed below:</p><p>&lt;image></p>The
+            <b>OnUpdate</b> routine specifies that when a change occurs to data within the bucket,
+          the routine<b> get_numip_first_3_octets</b> is run on each document that contains
+            <b>ip_start</b> and <b>ip_end</b>. A new document is created whose data and metadata are
+          based on those of the document on which <b>get_numip_first_3_octets</b> is run; but with
+          the addition of <b>ip_num_start</b> and <b>ip_num_end data-fields</b>, which contain the
+          numeric values returned by <b>get_numip_first_3_octets</b>. The
+            <b>get_numip_first_3_octets</b> routine splits the IP address, converts each fragment to
+          a numeral, and adds the numerals together, to form a single value; which it returns.</li>
+        <li>Click <b>Save</b>.</li>
+        <li>To return to the Eventing screen, click <b>Eventing</b> and click on the newly created
+          Function name. The Function <b>enrich_ip_nums </b>is listed as a defined Function. </li>
+        <li>Click <b>Deploy</b>.</li>
+        <li>From the <b>Confirm Deploy Function</b> dialog, click <b>Deploy Function</b>.
+            <p>&lt;image></p>From this point, the defined Function is executed on all existing
+          documents and on subsequent mutations.</li>
+        <li>To check results of the deployed Function, click the <b>Documents </b>tab.</li>
+        <li>Select <b>target</b> bucket from the <b>Bucket</b> drop-down.<p/>As this shows, a
+          version of <b>SampleDocument</b> has been added to the <b>target</b> bucket. It contains
+          all the attributes of the original document, with the addition of <b>ip_num_start</b> and
+            <b>ip_num_end</b>; which contain the numeric values that correspond to <b>ip_start</b>
+          and <b>ip_end</b>, respectively.Additional documents added to the <b>source</b> bucket,
+          which share the <b>ip_start</b> and <b>ip_end</b> attributes, will be similarly handled by
+          the defined Function: creating such a document, and changing any attribute in such a
+          document both cause the Function's execution.</li>
       </ol>
-      
     </section>
-    
-    <section id="example_2">
-      
-      <title>
-        Example 2
-      </title>
-      
-      <p>
-        <i>Goal</i>: When a document in an existing bucket is about to expire, ideally,
-        one or more of its attributes become archived, in a newly created bucket. 
-      </p>
-        
-      <p>
-        (For information on bucket expiration, see
-        the <i>Item Deletion</i> section of 
-        <xref href="../understanding-couchbase/buckets-memory-and-storage/expiration.dita" scope="local" format="dita">Expiration</xref>.)
-      </p>
-      
-      <p>
-        <i>Implementation</i>: Write an <codeph>OnUpdate</codeph> handler, which runs whenever a document is
-        created or mutated. The handler calls a <codeph>docTimer</codeph> routine, which itself executes
-        a callback function, two minutes prior to any document's established expiration: this function
-        retrieves a specified value from the document, and stores it in a document of the same name, in
-        a specified target bucket. The original document in the source bucket is not changed. 
-      </p>
-      <p>
-        <note type="important">
-          <p>The Timers construct is still in development and may have some rough edges and bugs,
-            and may change significantly before the final GA release. </p>
-        </note>
-      </p>
-      
-      <p>
-        For this example, Example 2, the buckets used in the previous example, Example 1, are reused: <codeph>source</codeph>,
-        <codeph>target</codeph>, and <codeph>metadata</codeph>. A new document is created within
-        the <codeph>source</codeph> bucket: this document has its expiration 
-        &#8212; or <i>Time To Live</i> (<i>TTL</i>) &#8212; set to occur <i>ten minutes after the
-        document's creation</i>. Note that a document's expiration cannot be established 
-        by means of the Couchbase Web Console: the standard procedure for establishing or modifying
-        document-expiration is provided by the Couchbase SDK. The following Python script, based on the
-        Couchbase SDK Python client, illustrates this; and will be used in this example:
-      </p>
-      
-      <codeblock outputclass="language-python">from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
-import time
-cluster = Cluster('couchbase://localhost:8091')
-authenticator = PasswordAuthenticator('Administrator', 'password')
-cluster.authenticate(authenticator)
-
-cb = cluster.open_bucket('source')
-cb.upsert('SampleDocument2', {'a_key': 'a_value'})
-cb.touch('SampleDocument2', ttl=10*60)</codeblock>
-      
-      <p>
-        This script imports a Couchbase <codeph>cluster</codeph> object, and authenticates
-        against it, using (for demonstration purposes) the Full Administrator username and
-        password (the cluster is assumed to be accessible on <codeph>localhost</codeph>).
-        The script then opens the existing <codeph>source</codeph> bucket, and inserts a new
-        document, named <codeph>SampleDocument2</codeph>, whose body is <codeph>{'a_key': 'a_value'}</codeph>.
-      </p>
-      
-      <p>
-        Information on installing the Couchbase Python SDK can be found in
-        <xref href="../sdk/python/start-using-sdk.dita" scope="local" format="dita">Start Using the SDK</xref>.
-        Information on using the Couchbase Python SDK to establish bucket-expiration can be found in 
-        <xref href="../sdk/python/document-operations.dita" scope="local" format="dita">Document Operations</xref>.
-      </p>
-      
-      <p>
-        Proceed as follows:
-      </p>
-      
-      <ol>
-        
-        <li>
-          <p>
-            Install the Couchbase SDK Python client, and, from the appropriate folder, start Python.
-          </p>
-          
-          <codeblock outputclass="language-bourne">./python</codeblock>
-          
-          <p>
-            
-          </p>
-        </li>
-        
-        <li>
-          <p>
-            At the Python prompt, enter the code given above. The session should appear as follows:
-          </p>
-          
-          <codeblock outputclass="language-bourne">>>> from couchbase.cluster import Cluster
->>> from couchbase.cluster import PasswordAuthenticator
->>> import time
->>> cluster = Cluster('couchbase://localhost:8091')
->>> authenticator = PasswordAuthenticator('Administrator', 'password')
->>> cluster.authenticate(authenticator)
->>> cb = cluster.open_bucket('source')
->>> cb.upsert('SampleDocument2', {'a_key': 'a_value'})
-OperationResult&lt;rc=0x0, key='SampleDocument2', cas=0x1519ec8cdee90000&gt;
->>> cb.touch('SampleDocument2', ttl=10*60)
-OperationResult&lt;rc=0x0, key='SampleDocument2', cas=0x1519ec8e686c0000&gt;
->>></codeblock> 
-          
-          <p>
-            
-          </p>
-              
-        </li>
-        
-        <li>
-          <p>
-            As a further check that the document has been created,
-            access the <b>Buckets</b> screen of Couchbase Web Console, and left-click on the <b>Document</b>
-            tab of the <codeph>source</codeph> bucket. This should appear as follows, with the new document
-            displayed:
-          </p>
-          
-          <p>
-            <image href="./images/ex2sourceBucketSubsequent.png" id="ex2_source_bucket_subsequent" align="left" width="880"/>
-          </p>
-          
-          <p>
-            Note that by left-clicking on a document's <b>id</b>, its metadata is displayed:
-          </p>
-          
-          <p>
-            <image href="./images/ex2metaDataDisplay.png" id="ex2_meta_data_display" align="left" width="300"/>
-          </p>
-          
-          <p>
-            This pop-up confirms the established document expiration-time.
-          </p>
-          
-          <p>
-            
-          </p>
-        </li>
-        
-        <li>
-          <p>
-           Access the <b>Eventing</b> screen, by left-clicking on the <uicontrol>Eventing</uicontrol> tab, in the
-           left-hand navigation panel.
-           Then, when the <b>Eventing</b> screen is displayed, 
-           click on the <uicontrol>Add Function</uicontrol> tab, at the upper right. 
-          </p>
-          
-          <p>  
-            When the <b>Add Function</b>
-            dialog appears, specify <codeph>source</codeph> as the <b>Source Bucket</b>, and <codeph>metadata</codeph> as
-            the <b>Metadata Bucket</b>. Then, specify <codeph>add_timer_before_expiry</codeph> as the function-name. Optionally,
-            add a function-description. Leave the <b>Settings</b> at default, for all values. In <b>Bindings</b>, specify
-            <codeph>tgt</codeph> as the <b>value</b> for the <b>name</b> <codeph>target</codeph>, and specify
-            <codeph>src</codeph> as the <b>value</b> for the <b>name</b> <codeph>source</codeph>. The completed dialog should appear
-            approximately as follows: 
-          </p>
-          
-          <p>
-            <image href="./images/ex2AddFunctionDialogComplete.png" id="ex2add_function_dialog_complete.png" align="left" width="440"/>
-          </p>
-          
-          <p>
-            
-          </p>
-
-        </li>
-        
-        <li>
-          <p>
-            Left-click on the <uicontrol>Next: Add Code</uicontrol> button, at the lower right of the <b>Add Function</b> dialog. The
-            dialog disappears, and the <b>add_timer_before_expiry</b> screen is displayed. 
-            Copy the following JavaScript routine, and paste it over the place-holder code that
-            appears in the main, interactive panel:
-          </p>
-          
-          <codeblock outputclass="language-javascript">function OnUpdate(doc, meta) {
-  if (meta.expiration > 0 ) //do only for those documents that have a non-zero TTL
-  {
-    //have to x by 1000, as timestamp in secs; and for Date operations need in milli-secs
-    var expiry = new Date(meta.expiration*1000); 
-    // Compute 2 minutes from the TTL timestamp        
-    var twoMinsPrior =  Math.round(expiry.setMinutes(expiry.getMinutes()-2)/1000); 
-    docTimer(DocTimerCallback, meta.id, twoMinsPrior);  //create the docTimer
-    log('Added Doc Timer to DocId:', meta.id);
-  }
-}
-
-function DocTimerCallback(docid, expiry) {
-  log('DocTimerCallback Executed for DocId:', String(docid));
-  tgt[docid] = "To Be Expired Key's Value is:" + JSON.stringify(src[docid]);
-  log('Doc Timer Executed for DocId', String(docid));
-}</codeblock>
- 
-        
-        <p>
-          The interactive panel now appears as follows:
-        </p>
-          
-          <p>
-            <image href="./images/addTimerBeforeExpiryCode.png" id="ex2add_timer_before_expiry_code.png" align="left" width="660"/>
-          </p>
-          
-          <p>
-            The <codeph>OnUpdate</codeph> routine, for each document with a non-zero expiration-time, computes
-            a <codeph>docTimer</codeph> execution-time that is two minutes prior to the document expiration-time. The
-            callback for the <codeph>docTimer</codeph> creates a new document in the <codeph>tgt</codeph> bucket,
-            with the same <codeph>docid</codeph> as the original document; and makes the value of the new document
-            a modified version of the original.
-          </p>
-          
-          <p>
-            
-          </p>
-          
-        </li>
-        
-        <li>
-          Left-click on the <uicontrol>Save</uicontrol> button, at the lower right. Then, return to the <b>Eventing</b> screen:
-          when it
-          reappears, left-click
-          on the <uicontrol>Deploy</uicontrol> button for the <codeph>add_timer_before_expiry</codeph> function. When the 
-          <b>Confirm Deploy Function</b> dialog appears, select <codeph>Everything</codeph> from the
-          <b>Feed boundary</b> menu, and leave <uicontrol>Cleanup artifacts?</uicontrol> unchecked. Then,
-          left-click on the <uicontrol>Deploy Function</uicontrol> button. The function should be 
-          confirmed as <b>deployed</b> and <b>running</b> within a few seconds.
-
-          <p>
-            
-          </p>
-        </li>
-        
-        <li>
-          <p>
-            The new document will be created two minutes before the expiration-time of the original. Therefore, when sufficient
-            time has elapsed, access the <b>Buckets</b> screen, and examine the documents currently within the <codeph>target</codeph>
-            bucket. Eventually, the display will be as follows:
-          </p>
-          
-          <p>
-            <image href="./images/ex2targetBucketSubsequent.png" id="ex2target_bucket_subsequent.png" align="left" width="880"/>
-          </p>
-          
-          <p>
-            This indicates that the new document &#8212; like the original, named
-            <codeph>SourceDocument2</codeph> &#8212; has been created, with a value based on that of the original. 
-            
-            After ten minutes
-            have elapsed, check the documents within the <codeph>source</codeph> bucket: the original <codeph>SourceDocument2</codeph>
-            is no longer visible, having been removed at its defined expiration-time.
-          </p>
-          
-          
-          <p>
-            
-          </p>
-        </li>
-
+    <section id="section_njv_p5y_m2b">
+      <title><b>Example 2</b></title>
+      <p dir="ltr"><b>Goal</b>: This example illustrates how to leverage Eventing Service in the
+        Banking and Financial domain. When a credit card transaction exceeds the user’s available
+        credit limit, to indicate a high-risk transaction, an alert can be generated.</p>
+      <p dir="ltr">This example requires you to create four buckets: <b><i>flagged_transactions,
+            users, metadata</i></b><i>and </i><b><i>transactions</i></b><i>buckets</i>. For steps on
+        how to create buckets, see <xref
+          href="https://developer.couchbase.com/documentation/server/5.1/clustersetup/create-bucket.html"
+          format="html" scope="external"><u>Create Bucket</u></xref>.</p>
+      <p dir="ltr"><b>Implementation</b>: Create a JavaScript Function that contains an
+          <b>OnUpdate</b> handler. The handler listens to data-changes within a specified,
+            <b><i>transactions</i></b> source bucket. When a document within the source bucket is
+        created or mutated, the handler executes a user-defined routine. In this example, if the
+        created or mutated document contains a high-risk transaction, a new document gets created in
+        a specified, <b><i>flagged_transactions</i></b> bucket.</p>
+      <p dir="ltr">Proceed as follows:</p>
+      <ol id="ol_q43_lvy_m2b">
+        <li>From the <b>Couchbase Web Console</b> > <b>Eventing </b>page, click <b>ADD
+          FUNCTION</b>,to add a new Function. The <b>ADD FUNCTION</b> dialog appears.</li>
+        <li>In the <b>ADD FUNCTION</b> dialog, for individual Function elements provide the below
+          information: <p>
+            <ul id="ul_ezg_y5y_m2b">
+              <li>For the Source Bucket drop-down, select <b><i>transactions </i></b>that was
+                created for this purpose.</li>
+              <li>For the Metadata Bucket drop-down, select <b>metadata</b> that was created for
+                this purpose.</li>
+              <li>Enter <b><i>high_risks_transactions </i></b>as the name of the Function you are
+                creating in the <b>Function</b><b>Name</b> text-box.</li>
+              <li>Enter <b>Functions that computes risky transaction and flags them, </b>in the
+                  <b>Description </b>text-box.</li>
+              <li>For the <b>Settings</b> option, use the default values.</li>
+              <li>For the <b>Bindings</b> option, add two bindings. For the first binding specify
+                  <b>users</b> as the <b>name</b> of the bucket, and specify <b>user</b> as the
+                associated <b>value</b>. For the second binding, specify
+                    <b><i>flagged_transactions</i></b> as the <b>name</b> of the bucket, and specify
+                    <b><i>high_risk</i></b> as the associated <b>value</b>.</li>
+            </ul>
+          </p></li>
+        <li>After providing all the required information in the <b>ADD FUNCTION </b>dialog, click
+            <b>Next</b>:<b> Add Code</b>. The <b><i>high_risks_transactions</i></b> dialog appears.
+          <p/>The <b><i>high_risks_transactions</i></b> dialog initially contains a placeholder code
+          block. You will substitute your actual <b><i>high_risks_transactions</i></b> code in this
+            block.<p>&lt;image></p></li>
+        <li>Copy the following Function, and paste it in the placeholder code block of the
+              <b><i>high_risks_transactions</i></b> dialog:<p/><table id="table_uc3_r5y_m2b">
+            <tgroup cols="1">
+              <colspec colnum="1" colname="col1"/>
+              <tbody>
+                <row>
+                  <entry>
+                    <p dir="ltr">function OnUpdate(doc, meta) {</p>
+                    <p dir="ltr"> try </p>
+                    <p dir="ltr"> { </p>
+                    <p dir="ltr"> //log('txn id:', meta.id, '; user_id:', doc.user_id , ',
+                      doc.amount:', doc.amount);</p>
+                    <p dir="ltr"> var this_user = getUser(doc.user_id);</p>
+                    <p dir="ltr"> if (this_user)</p>
+                    <p dir="ltr"> {</p>
+                    <p dir="ltr"> if(this_user['creditlimit'] &lt; doc.amount)</p>
+                    <p dir="ltr"> {</p>
+                    <p dir="ltr"> log('Txn['+String(meta.id)+']*****High Risk Transaction as Txn
+                      Amount:'+ String(doc.amount)+' exceeds Credit
+                      Limit:',this_user['creditlimit']);</p>
+                    <p dir="ltr"> doc["comments"] = "High Risk Transaction as Txn Amount exceeds
+                      Credit Limit " +String(this_user['creditlimit']);</p>
+                    <p dir="ltr"> doc["reason_code"] = "X-CREDIT";</p>
+                    <p dir="ltr"> high_risk[meta.id] = doc;</p>
+                    <p dir="ltr"> return;</p>
+                    <p dir="ltr"> }</p>
+                    <p dir="ltr"> else</p>
+                    <p dir="ltr"> {</p>
+                    <p dir="ltr"> if(doc.txn_currency != this_user['currency'])</p>
+                    <p dir="ltr"> {</p>
+                    <p dir="ltr"> log('Txn['+ String(meta.id) +']*****High Risk Transaction -
+                      Currency Mismatch:'+ this_user['currency']);</p>
+                    <p dir="ltr"> doc["comments"] = "High Risk Transaction - Currency Mismatch:" +
+                      this_user['currency'];</p>
+                    <p dir="ltr"> doc["reason_code"] = "XE-MISMATCH";</p>
+                    <p dir="ltr"> high_risk[meta.id] = doc;</p>
+                    <p dir="ltr"> return;</p>
+                    <p dir="ltr"> }</p>
+                    <p dir="ltr"> }</p>
+                    <p dir="ltr"> //log('Acceptable Transaction:',doc.amount, ' for Credit Limit:',
+                      this_user['creditlimit']);</p>
+                    <p dir="ltr"> }</p>
+                    <p dir="ltr"> else</p>
+                    <p dir="ltr"> {</p>
+                    <p dir="ltr"> log('Txn['+ String(meta.id) + "] User Does not Exist:" +
+                      String(doc.user_id) );</p>
+                    <p dir="ltr"> }</p>
+                    <p dir="ltr"> }</p>
+                    <p dir="ltr"> catch (e) </p>
+                    <p dir="ltr"> {</p>
+                    <p dir="ltr"> log('Error OnUpdate :', String(meta.id), e);</p>
+                    <p dir="ltr"> }</p>
+                    <p dir="ltr">}</p>
+                    <p dir="ltr">function OnDelete(meta) {</p>
+                    <p dir="ltr"> log('Document OnDelete:', meta.id);</p>
+                    <p dir="ltr">}</p>
+                    <p dir="ltr">function getUser(userId)</p>
+                    <p dir="ltr">{</p>
+                    <p dir="ltr"> try</p>
+                    <p dir="ltr"> {</p>
+                    <p dir="ltr"> if(userId != null)</p>
+                    <p dir="ltr"> {</p>
+                    <p dir="ltr"> return user[userId];</p>
+                    <p dir="ltr"> }</p>
+                    <p dir="ltr"> }</p>
+                    <p dir="ltr"> catch (e) </p>
+                    <p dir="ltr"> {</p>
+                    <p dir="ltr"> log('Error getUser :', userId,'; Exception:', e);</p>
+                    <p dir="ltr"> }</p>
+                    <p dir="ltr"> return null;</p>
+                    <p dir="ltr">}</p>
+                  </entry>
+                </row>
+              </tbody>
+            </tgroup>
+          </table><p dir="ltr">After pasting, the screen appears as displayed below: </p><p
+            dir="ltr">&lt;image></p><p dir="ltr">The OnUpdate handler is triggered for every
+            transaction. The handler checks if the transaction amount is less than the user’s
+            available credit limit. When this condition is breached, then this transaction is
+            flagged as a high-risk transaction. The Function <b><i>high_risks_transactions</i></b>
+            then moves this transaction to a different bucket, <b><i>flagged_transactions
+            </i></b>bucket. When the transaction is moved to a new bucket, the handler enriches the
+            document with predefined <b><i>comments</i></b> and also provides a <b><i>reason
+                code</i></b><b>. </b> In the last part, the handler performs a currency validation
+            step. If the transaction currency is other than the preconfigured home currency of the
+            user, then the handler flags the transactions and moves it to a different
+          bucket.</p></li>
+        <li>Click <b>Save</b>. </li>
+        <li>To return to the Eventing screen, click <b>Eventing</b>. <p dir="ltr">&lt;image></p><p
+            dir="ltr">The Function <b><i>high_risks_transactions</i></b>is listed as a defined
+            Function. Currently, it is listed as <b>Undeployed</b> and <b>Paused</b>.</p></li>
+        <li>Click <b>Deploy</b>. </li>
+        <li>From the <b>Confirm Deploy Function</b> dialog, click <b>Deploy Function</b>. This
+          deploys the Function and displays the main <b>Eventing</b> screen. From this point, the
+          defined Function is executed on all existing documents and on subsequent mutations.</li>
+        <li>To check results of the deployed Function, after a sufficient time elapse, from the
+            <b>Couchbase Web Console</b> > <b>Eventing </b>page, click <b>Buckets</b>.</li>
+        <li>Click <b><i>flagged_transactions</i></b>bucket. All documents available in this bucket
+          are transactions that are flagged as high-risk transactions.<p dir="ltr">&lt;image></p><p
+            dir="ltr">This indicates that transactions which were flagged as high risk gets moved to
+            the <b><i>flagged_transactions </i></b>bucket.</p></li>
+        <li>From the <b>Couchbase Web Console</b> > <b>Query </b>page, execute the below N1QL
+            query:<p dir="ltr"><b><i>N1QL Query: </i></b><i>select reason_code, count(1) num_txns,
+              sum(amount) amount from `flagged_transactions` group by
+            reason_code;</i></p><p>&lt;image></p><p/></li>
       </ol>
-
+    </section>
+    <section id="section_jsw_jwy_m2b">
+      <title><b><b>Example 3</b></b></title>
+      <p dir="ltr"><b>Goal</b>: This example illustrates how to leverage the Eventing Service to
+        perform a cascade delete operation. When a user is deleted, Couchbase Functions provide a
+        reliable method to delete all the associated documents with the deleted user.</p>
+      <p dir="ltr">This example requires you to create three buckets: users, metadata and
+        transactions buckets. </p>
+      <p dir="ltr">For steps to create buckets, see <xref
+          href="https://developer.couchbase.com/documentation/server/5.1/clustersetup/create-bucket.html"
+          format="html" scope="external"><u>Create Bucket</u></xref>.</p>
+      <p dir="ltr"><b>Implementation</b>: Create a JavaScript Function that contains an
+          <b>OnDelete</b> handler. The handler listens to data-changes within a specified,
+            <b><i>users</i></b> source bucket. When a user within the source bucket gets deleted,
+        the handler executes a routine to remove the deleted user. When the delete operation is
+        complete, all associated documents of the delete users get removed. </p>
+      <p dir="ltr">Proceed as follows:</p>
+    </section>
+    <section id="section_eqw_jwy_m2b">
+      <ol id="ol_fqw_jwy_m2b">
+        <li> From the <b>Couchbase Web Console</b> > <b>Eventing </b>page, click <b>ADD
+          FUNCTION</b>,to add a new Function. <p/>&lt;image></li>
+        <li>In the <b>ADD FUNCTION</b> dialog, for individual Function elements, provide the below
+          information: <p>
+            <ul>
+              <li>For the <b>Source Bucket</b> drop-down, select the <b><i>Users </i></b>that was
+                created for this purpose.</li>
+              <li>For the <b>Metadata Bucket</b> drop-down, select the <b>metadata</b> that was
+                created for this purpose.</li>
+              <li>Enter <b><i>delete_orphaned_txns </i></b>as the name of the Function you are
+                creating in the <b>Function</b><b>Name</b> text-box.</li>
+              <li>Enter <b>Delete Orphaned Transactions from the `transactions’ bucket when user_id
+                  is less than 10 </b>in the<b> Description</b> text-box.</li>
+              <li>For the <b>Settings</b> option, use the default values.</li>
+              <li>For the <b>Bindings</b> option, specify <b>users</b> as the <b>name</b> of the
+                bucket and specify <b>src</b>_<b>user</b> as the associated <b>value</b>. </li>
+            </ul>
+          </p></li>
+        <li>After providing all the required information in the <b>ADD FUNCTION </b>dialog, click
+            <b>Next</b>:<b> Add Code</b>. The <b><i>delete_orphaned_txns</i></b> dialog appears.
+          <p/>The <b><i>delete_orphaned_txns</i></b> dialog initially contains a placeholder code
+          block. You will substitute your actual <b><i>delete_orphaned_txns</i></b> code in this
+          block.<p/>&lt;image> </li>
+        <li>Copy the following Function, and paste it in the placeholder code block of the
+              <b><i>delete_orphaned_txns</i></b> screen:<p/><table id="table_xnf_nwy_m2b">
+            <tgroup cols="1">
+              <colspec colnum="1" colname="col1"/>
+              <tbody>
+                <row>
+                  <entry>
+                    <p dir="ltr">function OnUpdate(doc, meta) {</p>
+                    <p dir="ltr"> log('OnUpdate document:', meta.id);</p>
+                    <p dir="ltr">}</p>
+                    <p dir="ltr">function OnDelete(meta) {</p>
+                    <p dir="ltr"> log('Document Deleted:', meta.id);</p>
+                    <p dir="ltr"> if(meta.id &lt; 10)</p>
+                    <p dir="ltr"> { </p>
+                    <p dir="ltr"> try</p>
+                    <p dir="ltr"> {</p>
+                    <p dir="ltr"> var this_user_id = meta.id;</p>
+                    <p dir="ltr"> var del = delete from `transactions` where user_id =
+                      TONUMBER($this_user_id);</p>
+                    <p dir="ltr"> del.execQuery();</p>
+                    <p dir="ltr"> log('Deleted Orphaned Transactions for User:', this_user_id);</p>
+                    <p dir="ltr"> }</p>
+                    <p dir="ltr"> catch(e)</p>
+                    <p dir="ltr"> {</p>
+                    <p dir="ltr"> log('Exception:', e)</p>
+                    <p dir="ltr"> }</p>
+                    <p dir="ltr"> }</p>
+                    <p dir="ltr">}</p>
+                  </entry>
+                </row>
+              </tbody>
+            </tgroup>
+          </table><p dir="ltr">After pasting, the screen appears as displayed below:</p><p dir="ltr"
+            >&lt;image></p>The <b>OnDelete</b> handler is triggered for user delete transaction. The
+          handler checks if the <b><i>user_id</i></b> is less than 10. When this condition is
+          fulfilled, then an N1QL query is triggered to delete all user related information. The
+          handler is then configured to record this delete operation in a Function specific
+          application log file. . </li>
+        <li>To return to the Eventing screen, click <b>Eventing</b>. <p/>&lt;image><p/>The Function
+              <b><i>delete_orphaned_txns</i></b> is listed as a defined Function. Currently, it is
+          listed as <b>Undeployed</b> and <b>Paused</b>.</li>
+        <li>Click <b>Deploy</b>.</li>
+        <li>From the <b>Confirm Deploy Function</b> dialog, click <b>Deploy Function</b>. From this
+          point, the defined Function is executed on all existing documents and on subsequent
+          mutations. </li>
+        <li>Navigate to the <b>Couchbase Web Console</b> > <b>Query </b>page.  Before deleting a
+          user, a snapshot of <b>Query Result </b>from the <b>users </b>bucket is displayed:
+          &lt;image></li>
+        <li>The <b>Query Results </b>display users with <b><i>user_id</i></b>s from 1 to 10.</li>
+        <li>Navigate to the <b>Couchbase Web Console</b> > <b>Buckets </b>page. Delete two users
+          from the <b><i>Users</i></b> bucket: <p>
+            <ul>
+              <li>Select <b>User4</b> from the list and click the <b><i>delete</i></b> icon. </li>
+              <li>Select <b>User10</b> from the list and click the <b><i>delete</i></b> icon. </li>
+            </ul>
+          </p></li>
+        <li>From the <b>Query Editor</b>, execute an N1QL query to check that all related records
+          for the deleted users are removed from the cluster. <p/><b>N1QL Query</b>: <i>select
+            user_id, count(1) from `Users` group by user_id order by user_id asc;</i><p/>
+          &lt;image></li>
+        <li>In the <b>Query Results</b> pane notice that user_ids, <b><i>user_id4</i></b> and
+              <b><i>user_id 10</i></b> are removed as part of the cascade user delete operation.
+        </li>
+      </ol>
     </section>
 
   </body>

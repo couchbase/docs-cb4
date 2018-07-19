@@ -242,17 +242,30 @@
       </p><p id="curl-whitelisting"><b>Creating a Whitelist for CURL() Access</b></p><p>A whitelist
         allows a Full Administrator to list out the permitted REST endpoints and URLs for the
           <codeph>CURL()</codeph> function. To enable access based on the whitelist, a Full
-        Administrator must create the file containing the whitelist,
-          <filepath>curl_whitelist.json</filepath> with the <b>all_access</b> field set to false,
-        and save it in the same directory as that of the N1QL
-          certificates(<filepath>.../Couchbase/var/lib/couchbase/n1qlcerts</filepath>). Note that
-        this file is available to only someone with access to <filepath>localhost</filepath>, such
-        as the Full Administrator, and is not visible to the user. </p><p>Each query node in the
-        system needs to define a <filepath>curl_whitelist.json</filepath> file. </p><p>The CURL()
-        function can access URLs that satisfy a prefix match, which means only URLs on the list (or
-        prefixes) specified in the <filepath>curl_whitelist.json</filepath> file. </p><p>The
-        whitelist file is specified as a JSON object with the fields described in the following
-        table. <table frame="all" rowsep="1" colsep="1" id="table_mtx_zrz_31b">
+        Administrator must create the file containing the whitelist, which can be created two
+          ways:<ol id="ol_pyb_f2y_vdb">
+          <li>From the Query Workbench UI in the <b>Settings > Advanced Query Settings</b>
+            section.</li>
+          <li>From CBQ via a cURL command.</li>
+        </ol><b>1. From the Query Workbench</b></p><p>In the Query Workbench, navigate to the
+          <b>Settings > Advanced Query Settings</b> section as shown below:<image
+          href="images/CURL_Whitelist.png" id="image_clg_xzx_vdb" scale="70"/></p>After expanding
+      the Advanced Query Settings section, you can choose the Function Access:<ul
+        id="ul_irl_jby_vdb">
+        <li><b>Restricted</b> - Access applies only the sites explicitly listed.</li>
+        <li><b>Unrestricted</b> - Access applies to all sites within the explicitly listed
+          sites.</li>
+      </ul>Under the <b>Allowed CURL URLs</b> and <b>Disallowed CURL URLs</b> headings, enter your
+      allowed or disallowed URL in the appropriate textbox and press the <b>Enter</b> key or click
+      anywhere else on this screen to enter your URL.<p>Click <image
+          href="images/CURL_Add_button.png" id="image_wzl_rdy_vdb" scale="30"/> to add another URL
+        to the list.</p><p>Click <image href="images/CURL_Remove_button.png" scale="30"
+          id="image_ikk_wdy_vdb"/> to remove a URL from the list.</p><p><b>2. From
+        CBQ</b></p><p>From a CBQ prompt, you can send a CURL() command to allow or disallow specific
+        URLs, for
+        example:<codeblock>curl -X POST -u Administrator:password \ -d '{"all_access": true, "allowed_urls" : ["company1.com", "couchbase.com"], "disallowed_urls" : ["company2.com"] }' http://localhost:9000/settings/querySettings/curlWhitelist</codeblock></p><p>The
+        whitelist file command structure is described in the following table. <table frame="all"
+          rowsep="1" colsep="1" id="table_mtx_zrz_31b">
           <title>Structure of Whitelist for CURL()</title>
           <tgroup cols="4" align="left">
             <colspec colname="c1" colnum="1" colwidth="1.0*"/>
@@ -273,7 +286,7 @@
                 <entry>boolean</entry>
                 <entry>This field defines whether the user has access to all URLs or only URLs
                   specified in the <parmname>allowed_urls </parmname>array. <p>The
-                      <filepath>curl_whitelist.json</filepath> file must contain the
+                      <filepath>curl</filepath> command must contain the
                       <parmname>all_access</parmname> field set to false to enable whitelisting and
                     restrict access. </p><p>Setting this field to true enables access to all
                     endpoints. </p></entry>
@@ -305,118 +318,7 @@
               </row>
             </tbody>
           </tgroup>
-        </table></p>The following tables lists the <codeph>curl_whitelist.json</codeph> JSON object
-      for different scenarios and CURL whitelist is enabled and <p>
-        <table frame="all" rowsep="1" colsep="1" id="table_wwm_hr2_n1b">
-          <tgroup cols="2">
-            <colspec colname="c2" colnum="1" colwidth="1.0*"/>
-            <colspec colname="c3" colnum="2" colwidth="1.0*"/>
-            <thead>
-              <row>
-                <entry><codeph>curl_whitelist.json</codeph></entry>
-                <entry>Example</entry>
-              </row>
-            </thead>
-            <tbody>
-              <row>
-                <entry>CURL is disabled when  <codeph>curl_whitelist.json</codeph> does not
-                  exist.</entry>
-                <entry>CURL is disabled.</entry>
-              </row>
-              <row>
-                <entry>To allow access to all endpoints, the <parmname>all_access</parmname> field
-                  is set to
-                  true.<codeblock>{
-  "all_access":true,
-  "allowed_urls":[],
-  "disallowed_urls":[]
-}</codeblock><codeblock>{
-  "all_access":true,
-  "allowed_urls":["https://maps.googleapis.com/maps/api/geocode/json"]
-}
-</codeblock></entry>
-                <entry>All CURL queries can run.</entry>
-              </row>
-              <row>
-                <entry>To restrict access to values specified in <parmname>allowed_urls</parmname>,
-                  the <parmname>all_access</parmname> field is set to false and
-                    <parmname>allowed_urls</parmname> field contains the URLs that can be accessed
-                  by
-                    CURL.<codeblock>{
-  "all_access":false,
-  "allowed_urls":["https://maps.googleapis.com/maps/api/geocode/json"]
-}</codeblock><p>If
-                    the <parmname>allowed_urls</parmname> field is changed to contain
-                      <filepath>https://maps.googleapis.com</filepath>, all Google API queries and
-                    endpoints are accessible by CURL.
-                    <codeblock>{
-  "all_access":false,
-  "allowed_urls":["https://maps.googleapis.com"]
-}</codeblock></p></entry>
-                <entry>Only queries with the specified URL can be run. All other queried return an
-                  error with the message "<systemoutput>Cannot access &lt;url>. Access
-                    denied.</systemoutput>"<codeblock>SELECT 
-CURL("https://maps.googleapis.com/maps/api/geocode/json", 
-  {
-    "data":["address=santa+cruz","components=country:ES"],
-    "get":true
-  }
-)</codeblock></entry>
-              </row>
-              <row>
-                <entry>If both <parmname>allowed_urls</parmname> and
-                    <parmname>disallowed_urls</parmname> fields are populated,
-                    <parmname>disallowed_urls</parmname> takes precedence over
-                    <parmname>allowed_urls</parmname>.
-                  <codeblock>{
-  "All_access":false,
-  "allowed_urls":["https://maps.googleapis.com/maps/api/geocode/json"],
-  "disallowed_urls":["https://maps.googleapis.com"]
-}</codeblock></entry>
-                <entry>Since <parmname>disallowed_urls</parmname> takes precedence over
-                    <parmname>allowed_urls</parmname>, it means all Google API queries and endpoints
-                  are inaccessible.</entry>
-              </row>
-            </tbody>
-          </tgroup>
-        </table>
-      </p><p>
-        <table frame="all" rowsep="1" colsep="1" id="table_p5n_tm2_n1b">
-          <title>CURL Whitelisting Errors</title>
-          <tgroup cols="2">
-            <colspec colname="c1" colnum="1" colwidth="1.01*"/>
-            <colspec colname="c2" colnum="2" colwidth="1*"/>
-            <thead>
-              <row>
-                <entry>Error Condition</entry>
-                <entry>Error Message</entry>
-              </row>
-            </thead>
-            <tbody>
-              <row>
-                <entry><filepath>curl_whitelist.json</filepath> does not exist.</entry>
-                <entry><filepath>n1qlcerts</filepath> directory does not exist under
-                    <filepath>.../var/lib/couchbase/</filepath>
-                  <p/>CURL() functionality is disabled. File
-                    <filepath>curl_whitelist.json</filepath> does not exist under
-                    <filepath>../Couchbase/var/lib/couchbase/n1qlcerts/ </filepath>directory.
-                </entry>
-              </row>
-              <row>
-                <entry><filepath>curl_whitelist.json</filepath> is empty, or the fields are empty,
-                  or all_access field does not exist.</entry>
-                <entry>Access denied to CURL(). File <filepath>curl_whitelist.json</filepath> is
-                  empty.</entry>
-              </row>
-              <row>
-                <entry><filepath>curl_whitelist.json</filepath> is an invalid JSON object.</entry>
-                <entry>Access denied to CURL(). File <filepath>curl_whitelist.json</filepath>
-                  contains invalid JSON. Contents have to be a JSON object.</entry>
-              </row>
-            </tbody>
-          </tgroup>
-        </table>
-      </p></section>
+        </table></p></section>
     <section id="section_sjr_yk4_vz">
       <title>Design Considerations</title>
       <p>Here are some of the design considerations to keep in mind when using CURL:</p>
@@ -437,14 +339,43 @@ FROM bucket b;</codeblock>
               refers to the alias <codeph>b</codeph> and the attribute <codeph>url</codeph> in the
               document. In the second argument, the string concatenation operator (||) cannot be
               evaluated.</p></li>
-          <li>When using CURL whitelisting, the </li>
         </ul>
       </p>
     </section>
     <section id="section_l3z_kdw_1z">
       <title>Examples</title>
+      <ul id="ul_wvd_ggy_vdb">
+        <li><xref href="#topic_8_8/Ex1" format="dita">Ex 1: Use Google Maps API to convert static
+            address into coordinates.</xref></li>
+        <li><xref href="#topic_8_8/Ex2" format="dita">Ex 2: Use Google Maps API to extract geometry
+            (address and geographic location bounds) of a given street address.</xref></li>
+        <li><xref href="#topic_8_8/Ex3" format="dita">Ex 3: Join two buckets on different Couchbase
+            clusters.</xref></li>
+        <li><xref href="#topic_8_8/Ex4" format="dita">Ex 4: FTS Fuzzy Search in a N1QL
+          query.</xref></li>
+        <li><xref href="#topic_8_8/Ex5" format="dita">Ex 5: Use Yahoo Finance API in a WHERE clause
+            to find a stock's lowest value for the day.</xref></li>
+        <li><xref href="#topic_8_8/Ex6" format="dita">Ex 6: Use CURL() to allow two URLs and
+            disallow one URL.</xref></li>
+        <li><xref href="#topic_8_8/Ex7" format="dita">Ex 7: Use CURL() to allow all access to all
+            endpoints.</xref></li>
+        <li><xref href="#topic_8_8/Ex8" format="dita">Ex 8: Use CURL() to turn off access to all
+            endpoints and clear the Allowed and Disallowed lists.</xref></li>
+        <li><xref href="#topic_8_8/Ex9" format="dita">Ex 9: Use CURL() to turn off access to all
+            endpoints but make no changes to the Allowed and Disallowed lists.</xref></li>
+        <li><xref href="#topic_8_8/Ex10" format="dita">Ex 10: Use CURL() to turn off access to all
+            endpoints, allow one URL, and clear the Disallowed list.</xref></li>
+        <li><xref href="#topic_8_8/Ex11" format="dita">Ex 11: Use CURL() to turn off access to all
+            endpoints, disallow one URL, and clear the Allowed list.</xref></li>
+        <li><xref href="#topic_8_8/Ex12" format="dita">Ex 12: Use CURL() to allow an IP address and
+            port instead of a website name.</xref></li>
+        <li><xref href="#topic_8_8/Ex13" format="dita">Ex 13: Use CURL() to allow and disallow the
+            same URL--and get an error.</xref></li>
+        <li><xref href="#topic_8_8/Ex14" format="dita">Ex 14: Use CURL() with dynamic named
+            parameters</xref></li>
+      </ul>
       <p>The following examples are using CURL in the query projection list. </p>
-      <p><b>Example 1:</b> The following N1QL query fetches details about the address "Half Moon
+      <p><b id="Ex1">Example 1:</b> The following N1QL query fetches details about the address "Half Moon
         Bay" using the <xref href="https://developers.google.com/maps/" format="html"
           scope="external">Google maps API</xref>. The Geocoding API from Google Maps allows you to
         convert static addresses into coordinates. (For more information refer to <xref
@@ -538,7 +469,7 @@ Results:
   }
 ]</codeblock>
       </p>
-      <p><b>Example 2:</b> This is similar to Example 1, but following N1QL query fetches details
+      <p><b id="Ex2">Example 2:</b> This is similar to Example 1, but following N1QL query fetches details
         about Santa Cruz in Spain using <xref href="https://developers.google.com/maps/"
           format="html" scope="external">Google geocoding API</xref> and extracts the ‘geometry’
         field from the result. This query retrieves the address and geographic location bounds of
@@ -633,7 +564,7 @@ Results:
   }
 ]</codeblock>
       </p>
-      <p><b>Example 3:</b> This N1QL query shows how to JOIN two buckets on different Couchbase
+      <p><b id="Ex3">Example 3:</b> This N1QL query shows how to JOIN two buckets on different Couchbase
         clusters. It is same as explained in the <xref href="selectintro.dita#topic_xwp_r3k_dx">JOIN
           Clause</xref> example, but with the left and right side buckets for the JOIN are in two
         different Couchbase clusters. </p>
@@ -702,7 +633,7 @@ LIMIT 4;
   }, … 
 ]</codeblock>
       </p>
-      <p><b>Example 4:</b> The following example shows how to use fuzzy search from the FTS service
+      <p><b id="Ex4">Example 4:</b> The following example shows how to use fuzzy search from the FTS service
         in a N1QL query. Assuming the FTS index <codeph>fts_travel</codeph> is created on the bucket
           <codeph>`travel-sample`</codeph>, running the following N1QL query finds all documents
         that have "sanfrancisco" anywhere in the document, using the full-text searching
@@ -733,7 +664,7 @@ Results:
     ]
   }
 ]</codeblock>
-      <p><b>Example 5:</b> The following example uses the <codeph>CURL()</codeph> function with a
+      <p><b id="Ex5">Example 5:</b> The following example uses the <codeph>CURL()</codeph> function with a
         WHERE clause. It uses the Yahoo finance API to find the day’s low value (i.e
           <codeph>DaysLow</codeph>) of HDP stock and finds all the documents in the
           <codeph>default</codeph> bucket that have ‘min_threshold’ attribute value greater than the
@@ -766,21 +697,70 @@ Results:
   }
 ]</codeblock>
       </p>
-      <p><b>Example 6:</b> The following example uses CURL() whitelisting to allow access to all
-        Google Maps API and endpoints except
-          <filepath>https://maps.googleapis.com/maps/api/geocode/json</filepath>.
-        <codeblock spectitle="curl_whitelist.json">{
-  "All_access":false,
-  "allowed_urls":["https://maps.googleapis.com"],
-  "disallowed_urls":["https://maps.googleapis.com/maps/api/geocode/json"]
-}
-</codeblock></p>
-      <p>The following query will return an error: "<systemoutput>Cannot access &lt;url>. Access
-          denied</systemoutput>".<codeblock>SELECT CURL("https://maps.googleapis.com/maps/api/geocode/json", 
-  {  "data":["address=santa+cruz","components=country:ES"],
-     "get":true
-  }
-)</codeblock></p>
+      <p><b id="Ex6">Example 6:</b> Use CURL() to allow two URLs and disallow one URL.
+        <codeblock>curl -X POST -u Administrator:password \
+-d '{
+"all_access": true,
+"allowed_urls" : ["company1.com", "couchbase.com"],
+"disallowed_urls" : [“company2.com”]
+}' http://localhost:9000/settings/querySettings/curlWhitelist</codeblock></p>
+      <p><b id="Ex7">Example 7:</b> Use CURL() to allow access to all
+          endpoints.<codeblock>curl -X POST -u Administrator:password \
+-d '{
+"all_access": true
+}' http://localhost:9000/settings/querySettings/curlWhitelist</codeblock><b
+          id="Ex8">Example 8:</b> Use CURL() to turn off access to all endpoints and clear the
+        Allowed and Disallowed
+          lists.<codeblock>curl -X POST -u Administrator:password \
+-d '{
+"all_access": false,
+"allowed_urls" : [],
+"disallowed_urls" : []
+}' http://localhost:9000/settings/querySettings/curlWhitelist</codeblock><b
+          id="Ex9">Example 9:</b> Use CURL() to turn off access to all endpoints but make no changes
+        to the Allowed and Disallowed
+          lists.<codeblock>curl -X POST -u Administrator:password \
+-d '{
+"all_access": false
+}' http://localhost:9000/settings/querySettings/curlWhitelist</codeblock><b
+          id="Ex10">Example 10:</b> Use CURL() to turn off access to all endpoints, allow one URL,
+        and clear the Disallowed
+          list.<codeblock>curl -X POST -u Administrator:password \
+-d '{
+"all_access": false,
+"allowed_urls" : [“https://maps.googleapis.com/maps/api/geocode/json”],
+"disallowed_urls" : []
+}' http://localhost:9000/settings/querySettings/curlWhitelist</codeblock><b
+          id="Ex11">Example 11:</b> Use CURL() to turn off access to all endpoints, disallow one
+        URL, and clear the Allowed
+          list.<codeblock>curl -X POST -u Administrator:password \
+-d '{
+"all_access": false,
+"disallowed_urls" : [“https://maps.googleapis.com/maps/api/geocode/json”],
+"allowed_urls" : []
+}' http://localhost:9000/settings/querySettings/curlWhitelist</codeblock><b
+          id="Ex12">Example 12:</b> Use CURL() to allow an IP address and port instead of a website
+          name.<codeblock>curl -X POST -u Administrator:password \
+-d '{
+"all_access": false,
+“disallowed_urls" : [“https://maps.googleapis.com/maps/api/geocode/json”],
+"allowed_urls" : [“http://127.0.0.1:9499/query/service”]
+}' http://localhost:9000/settings/querySettings/curlWhitelist</codeblock><b
+          id="Ex13">Example 13:</b> Use CURL() to allow and disallow the same URL--and get an
+          error.<codeblock>curl -X POST -u Administrator:password \
+-d '{
+"all_access": false,
+“disallowed_urls" : [“https://maps.googleapis.com/maps/api/geocode/json”],
+"allowed_urls" : [“https://maps.googleapis.com/maps/api/geocode/json”]
+}' http://localhost:9000/settings/querySettings/curlWhitelist</codeblock><b
+          id="Ex14">Example 14:</b> Use CURL() with dynamic named
+        parameters.<codeblock>SELECT CURL(b.url, $params) FROM bucket b WHERE b.username = “joe”; </codeblock>If
+        we wanted to use Node.JS, we would
+          use:<codeblock>bucket.query(SELECT CURL(b.url, $params) FROM bucket b WHERE b.username = “joe”, { params: { data: "..." } },
+ (error, result) => {} );</codeblock><codeph>$params
+        </codeph>is a named parameter, so we name it in the parameters object when executing the
+        query. Then we populate the properties with the data that's in the documents since those
+        properties can be variables.</p>
     </section>
   </conbody>
 </concept>
