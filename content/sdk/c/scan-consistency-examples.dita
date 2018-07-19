@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="dot_net-at_plus">
+  <title>Scan Consistency Using the C SDK with Couchbase Server</title>
+  <titlealts><navtitle>Using Scan Consistency</navtitle></titlealts>
+  <shortdesc>You can balance performance against consistency in N1QL queries via the LCB client and the AtPlus option.</shortdesc>
+  <conbody>
+    <section id="consistency_request"><p></p>
+
+
+
+      <p>Using <codeph>CONSISTENCY_REQUEST</codeph> guarantees that the query will include newly-inserted documents:<codeblock>#include &lt;libcouchbase/couchbase.h>
+#include &lt;libcouchbase/api3.h>
+#include &lt;libcouchbase/n1ql.h>
+#include &lt;string>
+#include &lt;vector>
+
+static int RandomNumber_g;
+typedef std::vector&lt;std::string> RowList;
+
+static void query_callback(lcb_t, int, const lcb_RESPN1QL *resp)
+{
+    if (resp->rc != LCB_SUCCESS) {
+        fprintf(stderr, "N1QL query failed (%s)\n", lcb_strerror(NULL, resp->rc));
+    }
+
+    if (resp->rflags &amp; LCB_RESP_F_FINAL) {
+        // We're simply notified here that the last row has already been returned.
+        // no processing needed here.
+        return;
+    }
+
+    // Add rows to the vector, we'll process the results in the calling
+    // code.
+    RowList *rowlist = reinterpret_cast&lt;RowList*>(resp->cookie);
+    rowlist->push_back(std::string(resp->row, resp->nrow));
+}
+
+int
+main(int, char **)
+{
+    lcb_t instance;
+    lcb_create_st crst;
+    lcb_error_t rc;
+
+    memset(&amp;crst, 0, sizeof crst);
+    crst.version = 3;
+    crst.v.v3.connstr = "couchbase://10.0.0.31/default";
+
+    rc = lcb_create(&amp;instance, &amp;crst);
+    rc = lcb_connect(instance);
+    lcb_wait(instance);
+    rc = lcb_get_bootstrap_status(instance);
+
+    // Initialize random seed to get a "random" value in our documents
+    srand(time(NULL));
+    RandomNumber_g = rand() % 10000;
+
+    char key[256];
+    sprintf(key, "user:%d", RandomNumber_g);
+    char value[4096];
+    sprintf(value,
+        "{"
+            "\"name\":[\"Brass\",\"Doorknob\"],"
+            "\"email\":\"brass.doorknob@juno.com\","
+            "\"random\":%d"
+        "}", RandomNumber_g);
+
+    printf("Will insert new document with random number %d\n", RandomNumber_g);
+
+    lcb_CMDSTORE scmd = { 0 };
+    LCB_CMD_SET_KEY(&amp;scmd, key, strlen(key));
+    LCB_CMD_SET_VALUE(&amp;scmd, value, strlen(value));
+    scmd.operation = LCB_SET;
+
+    lcb_sched_enter(instance);
+    rc = lcb_store3(instance, NULL, &amp;scmd);
+    lcb_sched_leave(instance);
+    lcb_wait(instance);
+    // In real code, we'd also install a store callback so we can know if the
+    // actual storage operation was a success.
+
+    lcb_N1QLPARAMS *params = lcb_n1p_new();
+
+    lcb_CMDN1QL cmd = { 0 };
+    RowList rows;
+    cmd.callback = query_callback;
+
+    rc = lcb_n1p_setstmtz(params,
+        "SELECT name, email, random FROM default WHERE $1 IN name");
+    // -1 for length indicates nul-terminated string
+    rc = lcb_n1p_posparam(params, "\"Brass\"", -1);
+
+    // This guarantess that the query will include the newly-inserted document.
+    rc = lcb_n1p_setconsistency(params, LCB_N1P_CONSISTENCY_REQUEST);
+    rc = lcb_n1p_mkcmd(params, &amp;cmd);
+    rc = lcb_n1ql_query(instance, &amp;rows, &amp;cmd);
+    lcb_wait(instance);
+
+    // To demonstrate the CONSISTENCY_REQUEST feature, we check each row for the
+    // "random" value. Because the C standard library does not come with a JSON
+    // parser, we are limited in how we can inspect the row (which is JSON).
+    // For clarity, we print out only the row's "Random" field. When the
+    // CONSISTENCY_REQUEST feature is enabled, one of the results should contain
+    // the newest random number (the value of RandomNumber_g). When disabled, the
+    // row may or may not appear.
+    for (RowList::iterator ii = rows.begin(); ii != rows.end(); ++ii) {
+        std::string&amp; row = *ii;
+        size_t begin_pos = row.find("\"random\"");
+        size_t end_pos = row.find_first_of("},", begin_pos);
+        std::string row_number = row.substr(begin_pos, end_pos - begin_pos);
+        printf("Row has random number %s\n", row_number.c_str());
+    }
+
+    lcb_n1p_free(params);
+    lcb_destroy(instance);
+}</codeblock></p>
+    </section>
+
+    <section id="scan_consistency"><p>
+        Setting a <xref href="https://developer.couchbase.com/documentation/server/5.1/architecture/querying-data-with-n1ql.html#story-h2-2" 
+        format="html" scope="external">Scan Consistency</xref>, lets you choose between NotBounded (the default), for sharpest performance; RequestPlus, for strongest consistency; and AtPlus, for a good balance between increased performance and completeness of results:><codeblock>#include &lt;libcouchbase/couchbase.h>
+#include &lt;libcouchbase/n1ql.h>
+#include &lt;string>
+#include &lt;vector>
+#include &lt;sstream>
+
+static int RandomNumber_g;
+typedef std::vector&lt;std::string> RowList;
+
+static void query_callback(lcb_t, int, const lcb_RESPN1QL *resp)
+{
+    if (resp->rc != LCB_SUCCESS) {
+        fprintf(stderr, "N1QL query failed (%s)\n", lcb_strerror(NULL, resp->rc));
+    }
+
+    if (resp->rflags &amp; LCB_RESP_F_FINAL) {
+        // We're simply notified here that the last row has already been returned.
+        // no processing needed here.
+        return;
+    }
+
+    // Add rows to the vector, we'll process the results in the calling
+    // code.
+    RowList *rowlist = reinterpret_cast&lt;RowList*>(resp->cookie);
+    rowlist->push_back(std::string(resp->row, resp->nrow));
+}
+
+static void storage_callback(lcb_t, int cbtype, const lcb_RESPBASE *resp)
+{
+    if (resp->rc != LCB_SUCCESS) {
+        fprintf(stderr, "Failed to store document: %s\n", lcb_strerror(NULL, resp->rc));
+        exit(EXIT_FAILURE);
+    }
+
+    lcb_MUTATION_TOKEN *mt = reinterpret_cast&lt;lcb_MUTATION_TOKEN*>(resp->cookie);
+    *mt = *lcb_resp_get_mutation_token(cbtype, resp);
+}
+
+int
+main(int, char **)
+{
+    lcb_t instance;
+    lcb_create_st crst;
+    lcb_error_t rc;
+
+    memset(&amp;crst, 0, sizeof crst);
+    crst.version = 3;
+    crst.v.v3.connstr = "couchbase://localhost/default?fetch_mutation_tokens=true";
+
+    rc = lcb_create(&amp;instance, &amp;crst);
+    rc = lcb_connect(instance);
+    lcb_wait(instance);
+    rc = lcb_get_bootstrap_status(instance);
+
+    // Initialize random seed to get a "random" value in our documents
+    srand(time(NULL));
+    RandomNumber_g = rand() % 10000;
+
+    // Install the storage callback which will be used to retrieve the
+    // mutation token
+    lcb_install_callback3(instance, LCB_CALLBACK_STORE, storage_callback);
+
+    lcb_MUTATION_TOKEN mt;
+    memset(&amp;mt, 0, sizeof mt);
+
+    char key[256];
+    sprintf(key, "user:%d", RandomNumber_g);
+    char value[4096];
+    sprintf(value,
+        "{"
+            "\"name\":[\"Brass\",\"Doorknob\"],"
+            "\"email\":\"brass.doorknob@juno.com\","
+            "\"random\":%d"
+        "}", RandomNumber_g);
+
+    printf("Will insert new document with random number %d\n", RandomNumber_g);
+
+    lcb_CMDSTORE scmd = { 0 };
+    LCB_CMD_SET_KEY(&amp;scmd, key, strlen(key));
+    LCB_CMD_SET_VALUE(&amp;scmd, value, strlen(value));
+
+    rc = lcb_store3(instance, &amp;mt, &amp;scmd);
+    lcb_wait(instance);
+
+    lcb_CMDN1QL cmd = { 0 };
+    RowList rows;
+    cmd.callback = query_callback;
+
+    // At the time of writing, the lcb_N1QLPARAMS implementation has some
+    // bugs in it with respect to adding mutation tokens. For this reason, we're
+    // encoding the query manually. This would look a bit nicer if we were
+    // using a real JSON library:
+
+    const char *bucketname;
+    lcb_cntl(instance, LCB_CNTL_GET, LCB_CNTL_BUCKETNAME, &amp;bucketname);
+    std::stringstream stmt;
+
+    stmt &lt;&lt;
+            "{"
+            "\"statement\":\"SELECT name, email, random FROM default WHERE $1 in name\","
+            "\"args\":[\"Brass\"],"
+            "\"scan_consistency\":\"at_plus\",";
+
+    stmt &lt;&lt; "\"scan_vectors\":{"
+            &lt;&lt; "\"" &lt;&lt;  bucketname &lt;&lt; "\":{"
+                &lt;&lt; "\"" &lt;  LCB_MUTATION_TOKEN_VB(&amp;mt) &lt; "\":["
+                    &lt;&lt; LCB_MUTATION_TOKEN_SEQ(&amp;mt) &lt;&lt; ","
+                    &lt;&lt; "\"" &lt; LCB_MUTATION_TOKEN_ID(&amp;mt) &lt;&lt; "\""
+                &lt;&lt; "]"
+             &lt;&lt; "}"
+           &lt;&lt; "}"
+         &lt;&lt; "}";
+
+    /*
+    The above expands to something like this:
+    {
+        "statement": "SELECT name, email, random FROM default WHERE $1 in name",
+        "args": ["Brass"],
+        "scan_consistency": "at_plus",
+        "scan_vectors": {
+            "default": {
+                "29": [3, "88598346863273"]
+            }
+        }
+    }
+    */
+
+    std::string stmt_str = stmt.str();
+    cmd.query = stmt_str.c_str();
+    cmd.nquery = stmt_str.size();
+    rc = lcb_n1ql_query(instance, &amp;rows, &amp;cmd);
+    assert(rc==LCB_SUCCESS);
+    lcb_wait(instance);
+
+    // To demonstrate the at_plus feature,
+    // we check each row for the "random" value.
+    // Because the C standard library does not come with a JSON
+    // parser, we are limited in how we can inspect the row (which is JSON).
+    // For clarity, we print out only the row's "Random" field. When the
+    // at_plus feature is enabled, one of the results should contain
+    // the newest random number (the value of RandomNumber_g). When disabled, the
+    // row may or may not appear.
+    for (RowList::iterator ii = rows.begin(); ii != rows.end(); ++ii) {
+        std::string&amp; row = *ii;
+        size_t begin_pos = row.find("\"random\"");
+        size_t end_pos = row.find_first_of("},", begin_pos);
+        std::string row_number = row.substr(begin_pos, end_pos - begin_pos);
+        printf("Row has random number %s\n", row_number.c_str());
+    }
+
+    lcb_destroy(instance);
+}</codeblock></p>
+    </section>
+
+  </conbody>
+</concept>
