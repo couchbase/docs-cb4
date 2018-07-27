@@ -6,7 +6,10 @@
   <shortdesc>Using the Node.js SDK, you can use the Couchbase Full Text Search service (FTS) to create queryable full-text indexes in Couchbase Server.</shortdesc>
   <body>
     <p>Couchbase offers Full-text search support, allowing you to search for documents that contain
-      certain words or phrases. In the Node.js SDK you can search full-text indexes by using the
+      certain words or phrases. A general introduction to FTS, with pointers to detailed descriptions of its
+                principal features, is provided in
+                <xref href="../../fts/full-text-intro.dita" scope="local" format="dita">Full Text Search: Fundamentals</xref>. In 
+                the Node.js SDK you can search full-text indexes by using the
         <apiname>SearchQuery</apiname> object and executing it with the
         <apiname>Bucket.query()</apiname> API.</p>
     <p>The following example shows how to send a simple Search query:</p>
@@ -54,7 +57,418 @@ bucket.query(query, function(err, res, meta) {
 query.addFacet('countries', SearchFacet.term('country', 5));
 bucket.query(query, function(err, res, meta) {
   console.log('Total Countries:', meta.facets['countries'].total);
-});</codeblock>
+});</codeblock></section>
+    <section><title>Detailed Examples</title>
+      
+            <p>
+                The code example below demonstrates the Node.js SDK Full Text Search
+                API. The example assumes that Couchbase Server is running, and that 
+                the username <codeph>Administrator</codeph> and
+                the password <codeph>password</codeph> provide authorization for performing the searches. 
+                It also assumes that the <codeph>travel-sample</codeph> bucket
+                has been installed. 
+                For information on creating users and managing roles, see
+                <xref href="../../security/security-authorization.dita" scope="local" format="dita">Authorization</xref>.
+                For information on installing sample buckets, see
+                <xref href="../../settings/settings.dita" scope="local" format="dita">Settings</xref>. 
+            </p>
+            
+            <p>
+                The example also assumes the existence of three specific Full Text Indexes, defined on the
+                <codeph>travel-sample</codeph> bucket. These are:
+            </p>
+            
+            <ul>
+                <li>
+                    <codeph>travel-sample-index-unstored</codeph>: Uses only the default 
+                    settings.
+                </li>
+                
+                <li>
+                    <codeph>travel-sample-index-stored</codeph>: Uses default settings, with one exception: 
+                    dynamic fields are <i>stored</i>, for the whole index.
+                </li>
+                
+                <li>
+                    <codeph>travel-sample-index-hotel-description</codeph>: Indexes only the <codeph>description</codeph> 
+                    fields of <codeph>hotel</codeph>
+                    documents, and disables the <codeph>default</codeph> type mapping. The index 
+                    has a custom analyzer named <codeph>myUnicodeAnalyzer</codeph> defined on it: the analyzer's
+                    main characteristic is that it uses the <b>unicode</b> tokenizer. 
+                </li>
+            </ul>
+            
+            <p>
+                See
+                <xref href="../../fts/fts-creating-indexes.dita" scope="local" format="dita">Creating Indexes</xref>
+                for details on how to create these indexes: they can be created interactively, by 
+                means of the Couchbase Web Console; however, there may be greater efficiency 
+                in using the Couchbase REST 
+                API, as described 
+                in the section 
+                <xref href="../../fts/fts-creating-indexes.dita#topic_ksl_wwk_1v/index-creation-with-the-rest-api" scope="local" format="dita">Index Creation with the REST API</xref>.
+                The JSON objects that constitute index-definitions (for
+                inclusion as bodies to the index-creation REST calls), are provided in 
+                <xref href="../../fts/fts-demonstration-indexes.dita" scope="local" format="dita">Demonstration Indexes</xref>.
+            </p>
+            
+            <p>
+                The example features the following Full Text Searches on the 
+                <codeph>travel-sample</codeph> bucket, within Couchbase Server:
+            </p>
+            
+            <ul>
+                
+                <li>
+                    <i>Simple Text Query</i> on a single word, targeting an index with dynamic fields unstored.
+                </li>
+                
+                <li>
+                    <i>Simple Text Query on Non-Default Index</i>, specifying an index
+                    that consists only of content derived from a specific field from a
+                    specific document-type.
+                </li>
+                
+                <li>
+                    <i>Simple Text Query on Stored Field</i>, specifying the field to be searched; targeting an index with dynamic 
+                    fields stored, to ensure that field-content is included in the return object.
+                </li>
+                
+                <li>
+                    <i>Match Query with Facet</i>, showing how query-results can be displayed 
+                    either by row or by <i>hits</i>; 
+                    and demonstrating use of a <i>facet</i>, which provides aggregation-data.
+                </li>
+                
+                <li>
+                    <i>DocId Query</i>, showing results of a query on two document IDs.
+                </li>
+                
+                <li>
+                    <i>Unanalyzed Term Query with Fuzziness Level of 0</i>, demonstrating how to query on a term with no analysis. 
+                    <i>Zero fuzziness</i> is specified, to ensure
+                    that matches are exact.                     
+                </li>
+                
+                <li>
+                    <i>Unanalyzed Term Query with Fuzziness Level of 2</i>, which is almost identical to the immediately preceding query; but which this time
+                    specifies a <i>fuzziness</i> factor of 2, allowing partial matches
+                    to be made. The 
+                    output from this query can be compared to that of the one immediately preceding.
+                </li>
+                
+                <li>
+                    <i>Match Phrase Query, using Analysis</i>, for searching on a phrase.
+                </li>
+                
+                <li>
+                    <i>Phrase Query, without Analysis</i>, for searching on a phrase without analysis supported.
+                </li>
+                
+                <li>
+                    <i>Query String Query</i>, showing how a query string is specified as search-input. 
+                </li>
+                
+                <li>
+                    <i>Conjunction Query</i>, whereby two separate queries are defined and then run as part of the search,
+                    with only the matches returned by both included in the result-object. 
+                </li>
+               
+                
+                <li>
+                    <i>Wild Card Query</i>, whereby a wildcard is used in the string submitted for the search. 
+                </li>
+                
+                <li>
+                    <i>Numeric Range Query</i>, whereby minimum and maximum numbers are specified, and matches
+                    within the range returned. 
+                </li>
+                
+                <li>
+                    <i>Regexp Query</i>, whereby a <i>regular expression</i> is submitted, to generate the conditions for
+                    successful matches. 
+                </li>
+                
+            </ul>
+            <codeblock outputclass="language-nodejs">'use strict';
+
+var couchbase = require('couchbase');
+
+var cluster = new couchbase.Cluster('couchbase://10.111.181.101');
+cluster.authenticate('Administrator', 'password');
+var travelSample = cluster.openBucket('travel-sample');
+var SearchQuery = couchbase.SearchQuery;
+var SearchFacet = couchbase.SearchFacet;
+
+function simpleTextQuery(bucket, done) {
+    var indexName = 'travel-sample-index-unstored';
+    var match = SearchQuery.match('swanky');
+    var query = SearchQuery.new(indexName, match).limit(10);
+    bucket.query(query, function(err, res, meta) {
+        if (err) {
+            console.log();
+            console.log('Simple Text Query Error:', err);
+            done();
+            return;
+        }
+        printResult('Simple Text Query:', res);
+        done();
+    });
+}
+
+function simpleTextQueryOnStoredField(bucket, done) {
+    var indexName = 'travel-sample-index-stored';
+    var match = SearchQuery.match('MDG').field('destinationairport');
+    var query = SearchQuery.new(indexName, match).limit(10).highlight();
+    bucket.query(query, function(err, res, meta) {
+        if (err) {
+            console.log();
+            console.log('Simple Text Query on Stored Field Error:', err);
+            done();
+            return;
+        }
+        printResult('Simple Text Query on Stored Field:', res);
+        done();
+    });
+}
+
+function simpleTextQueryOnNonDefaultIndex(bucket, done) {
+    var indexName = 'travel-sample-index-hotel-description';
+    var match = SearchQuery.match('swanky');
+    var query = SearchQuery.new(indexName, match).limit(10);
+    bucket.query(query, function(err, res, meta) {
+        if (err) {
+            console.log();
+            console.log('Simple Text Query on Non-Default Index Error:', err);
+            done();
+            return;
+        }
+        printResult('Simple Text Query on Non-Default Index:', res);
+        done();
+    });
+}
+
+function textQueryOnStoredFieldWithFacet(bucket, done) {
+    var indexName = 'travel-sample-index-stored';
+    var match = SearchQuery.match('La Rue Saint Denis!!').field('reviews.content');
+    var query = SearchQuery.new(indexName, match).limit(10).highlight()
+        .addFacet('Countries Referenced', SearchFacet.term('country', 5));
+    bucket.query(query, function(err, res, meta) {
+        if (err) {
+            console.log();
+            console.log('Match Query with Facet Error:', err);
+            done();
+            return;
+        }
+        console.log();
+        console.log('Match Query with Facet, Result by hits:');
+        for (var i = 0; i &lt; res.length; ++i) {
+            console.log(JSON.stringify(res[i]));
+        }
+
+        console.log();
+        console.log('Match Query with Facet, Result by facets:');
+        for (var facet in meta.facets) {
+            console.log(facet, ':', JSON.stringify(meta.facets[facet]));
+        }
+        done();
+    });
+}
+
+function docIdQueryMethod(bucket, done) {
+    var indexName = 'travel-sample-index-unstored';
+    var query = SearchQuery.new(indexName, SearchQuery.docIds('hotel_26223', 'hotel_28960'));
+    bucket.query(query, function(err, res, meta) {
+        if (err) {
+            console.log();
+            console.log('DocId Query Error:', err);
+            done();
+            return;
+        }
+        printResult('DocId Query:', res);
+        done();
+    });
+}
+
+function unAnalyzedTermQuery(bucket, fuzzinessLevel, done) {
+    var indexName = 'travel-sample-index-stored';
+    var term = SearchQuery.term('sushi').field('reviews.content')
+        .fuzziness(fuzzinessLevel);
+    var query = SearchQuery.new(indexName, term).limit(50).highlight();
+    bucket.query(query, function(err, res, meta) {
+        if (err) {
+            console.log();
+            console.log('Unanalyzed Term Query with Fuzziness Level of', fuzzinessLevel, 'Error:', err);
+            done();
+            return;
+        }
+        printResult('Unanalyzed Term Query with Fuzziness Level of ' + fuzzinessLevel + ':', res);
+        done();
+    });
+}
+
+function matchPhraseQueryOnStoredField(bucket, done) {
+    var indexName = 'travel-sample-index-stored';
+    var match = SearchQuery.matchPhrase('Eiffel Tower')
+        .field('description');
+
+    var query = SearchQuery.new(indexName, match).limit(10).highlight();
+    bucket.query(query, function(err, res, meta) {
+        if (err) {
+            console.log();
+            console.log('Match Phrase Query, using Analysis Error:', err);
+            done();
+            return;
+        }
+        printResult('Match Phrase Query, using Analysis:', res);
+        done();
+    });
+}
+
+function unAnalyzedPhraseQuery(bucket, done) {
+    var indexName = 'travel-sample-index-stored';
+    var phrase = SearchQuery.phrase(['dorm', 'rooms'])
+        .field('description');
+
+    var query = SearchQuery.new(indexName, phrase).limit(10).highlight();
+    bucket.query(query, function(err, res, meta) {
+        if (err) {
+            console.log();
+            console.log('Phrase Query, without Analysis Error:', err);
+            done();
+            return;
+        }
+        printResult('Phrase Query, without Analysis:', res);
+        done();
+    });
+}
+
+function conjunctionQueryMethod(bucket, done) {
+    var indexName = 'travel-sample-index-stored';
+    var firstQuery = SearchQuery.match('La Rue Saint Denis!!')
+        .field('reviews.content');
+    var secondQuery = SearchQuery.match('boutique')
+        .field('description');
+
+    var conjunctionQuery = SearchQuery.conjuncts(firstQuery, secondQuery);
+
+    var query = SearchQuery.new(indexName, conjunctionQuery).limit(10).highlight();
+    bucket.query(query, function(err, res, meta) {
+        if (err) {
+            console.log();
+            console.log('Conjunction Query Error:', err);
+            done();
+            return;
+        }
+        printResult('Conjunction Query:', res);
+        done();
+    });
+}
+
+function queryStringMethod(bucket, done) {
+    var indexName = 'travel-sample-index-unstored';
+    var queryString = SearchQuery.queryString('description: Imperial');
+    var query = SearchQuery.new(indexName, queryString).limit(10);
+    bucket.query(query, function(err, res, meta) {
+        if (err) {
+            console.log();
+            console.log('Query String Query Error:', err);
+            done();
+            return;
+        }
+        printResult('Query String Query:', res);
+        done();
+    });
+}
+
+function wildCardQueryMethod(bucket, done) {
+    var indexName = 'travel-sample-index-stored';
+    var wildcard = SearchQuery.wildcard('bouti*ue').field('description');
+    var query = SearchQuery.new(indexName, wildcard).limit(10).highlight();
+    bucket.query(query, function(err, res, meta) {
+        if (err) {
+            console.log();
+            console.log('Wild Card Query Error:', err);
+            done();
+            return;
+        }
+        printResult('Wild Card Query:', res);
+        done();
+    });
+}
+
+function regexpQueryMethod(bucket, done) {
+    var indexName = 'travel-sample-index-stored';
+    var reg = SearchQuery.regexp('[a-z]').field('description');
+    var query = SearchQuery.new(indexName, reg).limit(10).highlight();
+    bucket.query(query, function(err, res, meta) {
+        if (err) {
+            console.log();
+            console.log('Regexp Query Error:', err);
+            done();
+            return;
+        }
+        printResult('Regexp Query:', res);
+        done();
+    });
+}
+
+function printResult(label, result) {
+    console.log();
+    console.log('= = = = = = = = = = = = = = = = = = = = = = =');
+    console.log('= = = = = = = = = = = = = = = = = = = = = = =');
+    console.log();
+    console.log(label);
+    console.log();
+
+    for (var i = 0; i &lt; result.length; ++i) {
+        console.log(JSON.stringify(result[i]));
+    }
+}
+
+function querySet1(bucket, done) {
+    simpleTextQuery(bucket, function() {
+        simpleTextQueryOnStoredField(bucket, function() {
+            simpleTextQueryOnNonDefaultIndex(bucket, function() {
+                textQueryOnStoredFieldWithFacet(bucket, done);
+            });
+        });
+    });
+}
+
+function querySet2(bucket, done) {
+    docIdQueryMethod(bucket, function() {
+        unAnalyzedTermQuery(bucket, 0, function() {
+            unAnalyzedTermQuery(bucket, 2, function() {
+                matchPhraseQueryOnStoredField(bucket, function() {
+                    unAnalyzedPhraseQuery(bucket, done);
+                });
+            });
+        });
+    });
+}
+
+function querySet3(bucket, done) {
+    conjunctionQueryMethod(bucket, function() {
+        queryStringMethod(bucket, function() {
+            wildCardQueryMethod(bucket, function() {
+                regexpQueryMethod(bucket, done);
+            });
+        });
+    });
+}
+
+querySet1(travelSample, function() {
+    querySet2(travelSample, function() {
+        querySet3(travelSample, function() {
+            travelSample.disconnect();
+            process.exit(0);
+        });
+    });
+              });</codeblock>
+
+
+            
     </section>
   </body>
 </topic>
