@@ -59,5 +59,400 @@ query.AddFacet("countries", cbft.NewTermFacet("country", 5))
 res, _ := bucket.ExecuteSearchQuery(query)
 fmt.Printf("Total Countries: %d", res.Facets()["countries"].Total)</codeblock>
     </section>
+    
+    
+    <section><title>Detailed Examples</title>
+      
+            <p>
+                The code example below demonstrates the Go SDK Full Text Search
+                API. The example assumes that Couchbase Server is running, and that 
+                the username <codeph>Administrator</codeph> and
+                the password <codeph>password</codeph> provide authorization for performing the searches. 
+                It also assumes that the <codeph>travel-sample</codeph> bucket
+                has been installed. 
+                For information on creating users and managing roles, see
+                <xref href="../../security/security-authorization.dita" scope="local" format="dita">Authorization</xref>.
+                For information on installing sample buckets, see
+                <xref href="../../settings/settings.dita" scope="local" format="dita">Settings</xref>. 
+            </p>
+            
+            <p>
+                The example also assumes the existence of three specific Full Text Indexes, defined on the
+                <codeph>travel-sample</codeph> bucket. These are:
+            </p>
+            
+            <ul>
+                <li>
+                    <codeph>travel-sample-index-unstored</codeph>: Uses only the default 
+                    settings.
+                </li>
+                
+                <li>
+                    <codeph>travel-sample-index-stored</codeph>: Uses default settings, with one exception: 
+                    dynamic fields are <i>stored</i>, for the whole index.
+                </li>
+                
+                <li>
+                    <codeph>travel-sample-index-hotel-description</codeph>: Indexes only the <codeph>description</codeph> 
+                    fields of <codeph>hotel</codeph>
+                    documents, and disables the <codeph>default</codeph> type mapping. The index 
+                    has a custom analyzer named <codeph>myUnicodeAnalyzer</codeph> defined on it: the analyzer's
+                    main characteristic is that it uses the <b>unicode</b> tokenizer. 
+                </li>
+            </ul>
+            
+            <p>
+                See
+                <xref href="../../fts/fts-creating-indexes.dita" scope="local" format="dita">Creating Indexes</xref>
+                for details on how to create these indexes: they can be created interactively, by 
+                means of the Couchbase Web Console; however, there may be greater efficiency 
+                in using the Couchbase REST 
+                API, as described 
+                in the section 
+                <xref href="../../fts/fts-creating-indexes.dita#topic_ksl_wwk_1v/index-creation-with-the-rest-api" scope="local" format="dita">Index Creation with the REST API</xref>.
+                The JSON objects that constitute index-definitions (for
+                inclusion as bodies to the index-creation REST calls), are provided in 
+                <xref href="../../fts/fts-demonstration-indexes.dita" scope="local" format="dita">Demonstration Indexes</xref>.
+            </p>
+            
+            <p>
+                The example features the following Full Text Searches on the 
+                <codeph>travel-sample</codeph> bucket, within Couchbase Server:
+            </p>
+            
+            <ul>
+                
+                <li>
+                    <i>Simple Text Query</i> on a single word, targeting an index with dynamic fields unstored.
+                </li>
+                
+                <li>
+                    <i>Simple Text Query on Non-Default Index</i>, specifying an index
+                    that consists only of content derived from a specific field from a
+                    specific document-type.
+                </li>
+                
+                <li>
+                    <i>Simple Text Query on Stored Field</i>, specifying the field to be searched; targeting an index with dynamic 
+                    fields stored, to ensure that field-content is included in the return object.
+                </li>
+                
+                <li>
+                    <i>Match Query with Facet</i>, showing how query-results can be displayed 
+                    either by row or by <i>hits</i>; 
+                    and demonstrating use of a <i>facet</i>, which provides aggregation-data.
+                </li>
+                
+                <li>
+                    <i>DocId Query</i>, showing results of a query on two document IDs.
+                </li>
+                
+                <li>
+                    <i>Unanalyzed Term Query with Fuzziness Level of 0</i>, demonstrating how to query on a term with no analysis. 
+                    <i>Zero fuzziness</i> is specified, to ensure
+                    that matches are exact.                     
+                </li>
+                
+                <li>
+                    <i>Unanalyzed Term Query with Fuzziness Level of 2</i>, which is almost identical to the immediately preceding query; but which this time
+                    specifies a <i>fuzziness</i> factor of 2, allowing partial matches
+                    to be made. The 
+                    output from this query can be compared to that of the one immediately preceding.
+                </li>
+                
+                <li>
+                    <i>Match Phrase Query, using Analysis</i>, for searching on a phrase.
+                </li>
+                
+                <li>
+                    <i>Phrase Query, without Analysis</i>, for searching on a phrase without analysis supported.
+                </li>
+                
+                <li>
+                    <i>Query String Query</i>, showing how a query string is specified as search-input. 
+                </li>
+                
+                <li>
+                    <i>Conjunction Query</i>, whereby two separate queries are defined and then run as part of the search,
+                    with only the matches returned by both included in the result-object. 
+                </li>
+               
+                
+                <li>
+                    <i>Wild Card Query</i>, whereby a wildcard is used in the string submitted for the search. 
+                </li>
+                
+                <li>
+                    <i>Numeric Range Query</i>, whereby minimum and maximum numbers are specified, and matches
+                    within the range returned. 
+                </li>
+                
+                <li>
+                    <i>Regexp Query</i>, whereby a <i>regular expression</i> is submitted, to generate the conditions for
+                    successful matches. 
+                </li>
+                
+            </ul>
+            <codeblock outputclass="language-go">package main
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/couchbase/gocb"
+	"github.com/couchbase/gocb/cbft"
+)
+
+func simpleTextQuery(b *gocb.Bucket) {
+	indexName := "travel-sample-index-unstored"
+	query := gocb.NewSearchQuery(indexName, cbft.NewMatchQuery("swanky")).
+		Limit(10)
+
+	result, err := b.ExecuteSearchQuery(query)
+	if err != nil {
+		fmt.Println()
+		fmt.Println("Simple Text Query Error:", err.Error())
+	}
+
+	printResult("Simple Text Query", result)
+}
+
+func simpleTextQueryOnStoredField(b *gocb.Bucket) {
+	indexName := "travel-sample-index-stored"
+	query := gocb.NewSearchQuery(indexName,
+		cbft.NewMatchQuery("MDG").Field("destinationairport")).
+		Limit(10).Highlight(gocb.DefaultHighlightStyle)
+
+	result, err := b.ExecuteSearchQuery(query)
+	if err != nil {
+		fmt.Println()
+		fmt.Println("Simple Text Query on Stored Field Error:", err.Error())
+	}
+
+	printResult("Simple Text Query on Stored Field", result)
+}
+
+func simpleTextQueryOnNonDefaultIndex(b *gocb.Bucket) {
+	indexName := "travel-sample-index-hotel-description"
+	query := gocb.NewSearchQuery(indexName, cbft.NewMatchQuery("swanky")).
+		Limit(10)
+
+	result, err := b.ExecuteSearchQuery(query)
+	if err != nil {
+		fmt.Println()
+		fmt.Println("Simple Text Query on Non-Default Index Error:", err.Error())
+	}
+
+	printResult("Simple Text Query on Non-Default Index", result)
+}
+
+func textQueryOnStoredFieldWithFacet(b *gocb.Bucket) {
+	indexName := "travel-sample-index-stored"
+	query := gocb.NewSearchQuery(indexName, cbft.NewMatchQuery("La Rue Saint Denis!!").
+		Field("reviews.content")).Limit(10).Highlight(gocb.DefaultHighlightStyle).
+		AddFacet("Countries Referenced", cbft.NewTermFacet("country", 5))
+
+	result, err := b.ExecuteSearchQuery(query)
+	if err != nil {
+		fmt.Println()
+		fmt.Println("Match Query with Facet, Result by Row Error:", err.Error())
+	}
+
+	printResult("Match Query with Facet, Result by hits:", result)
+
+	fmt.Println()
+	fmt.Println("Match Query with Facet, Result by facet:")
+	for _, row := range result.Facets() {
+		jRow, err := json.Marshal(row)
+		if err != nil {
+			fmt.Println("Print Error:", err.Error())
+		}
+		fmt.Println(string(jRow))
+	}
+}
+
+func docIdQueryMethod(b *gocb.Bucket) {
+	indexName := "travel-sample-index-unstored"
+	query := gocb.NewSearchQuery(indexName, cbft.NewDocIdQuery("hotel_26223", "hotel_28960"))
+
+	result, err := b.ExecuteSearchQuery(query)
+	if err != nil {
+		fmt.Println()
+		fmt.Println("DocId Query Error:", err.Error())
+	}
+
+	printResult("DocId Query", result)
+}
+
+func unAnalyzedTermQuery(b *gocb.Bucket, fuzzinessLevel int) {
+	indexName := "travel-sample-index-stored"
+	query := gocb.NewSearchQuery(indexName, cbft.NewTermQuery("sushi").Field("reviews.content").
+		Fuzziness(fuzzinessLevel)).Limit(50).Highlight(gocb.DefaultHighlightStyle)
+
+	result, err := b.ExecuteSearchQuery(query)
+	if err != nil {
+		fmt.Println()
+		fmt.Printf("Unanalyzed Term Query with Fuzziness Level of %d Error: %s\n", fuzzinessLevel, err.Error())
+	}
+
+	printResult(fmt.Sprintf("Unanalyzed Term Query with Fuzziness Level of %d", fuzzinessLevel), result)
+}
+
+func matchPhraseQueryOnStoredField(b *gocb.Bucket) {
+	indexName := "travel-sample-index-stored"
+	query := gocb.NewSearchQuery(indexName,
+		cbft.NewMatchPhraseQuery("Eiffel Tower").Field("description")).
+		Limit(10).Highlight(gocb.DefaultHighlightStyle)
+
+	result, err := b.ExecuteSearchQuery(query)
+	if err != nil {
+		fmt.Println()
+		fmt.Println("Match Phrase Query, using Analysis Error:", err.Error())
+	}
+
+	printResult("Match Phrase Query, using Analysis", result)
+}
+
+func unAnalyzedPhraseQuery(b *gocb.Bucket) {
+	indexName := "travel-sample-index-stored"
+	query := gocb.NewSearchQuery(indexName,
+		cbft.NewPhraseQuery("dorm", "rooms").Field("description")).
+		Limit(10).Highlight(gocb.DefaultHighlightStyle)
+
+	result, err := b.ExecuteSearchQuery(query)
+	if err != nil {
+		fmt.Println()
+		fmt.Println("Phrase Query, without Analysis Error:", err.Error())
+	}
+
+	printResult("Phrase Query, without Analysis", result)
+}
+
+func conjunctionQueryMethod(b *gocb.Bucket) {
+	indexName := "travel-sample-index-stored"
+	firstQuery := cbft.NewMatchQuery("La Rue Saint Denis!!").Field("reviews.content")
+	secondQuery := cbft.NewMatchQuery("boutique").Field("description")
+
+	conjunctionQuery := cbft.NewConjunctionQuery(firstQuery, secondQuery)
+
+	result, err := b.ExecuteSearchQuery(gocb.NewSearchQuery(indexName, conjunctionQuery).
+		Limit(10).Highlight(gocb.DefaultHighlightStyle))
+	if err != nil {
+		fmt.Println()
+		fmt.Println("Conjunction Query Error:", err.Error())
+	}
+
+	printResult("Conjunction Query", result)
+}
+
+func queryStringMethod(b *gocb.Bucket) {
+	indexName := "travel-sample-index-unstored"
+	query := gocb.NewSearchQuery(indexName, cbft.NewQueryStringQuery("description: Imperial")).
+		Limit(10)
+
+	result, err := b.ExecuteSearchQuery(query)
+	if err != nil {
+		fmt.Println()
+		fmt.Println("Query String Query Error:", err.Error())
+	}
+
+	printResult("Query String Query", result)
+}
+
+func wildCardQueryMethod(b *gocb.Bucket) {
+	indexName := "travel-sample-index-stored"
+	query := gocb.NewSearchQuery(indexName, cbft.NewWildcardQuery("bouti*ue").Field("description")).
+		Limit(10).Highlight(gocb.DefaultHighlightStyle)
+
+	result, err := b.ExecuteSearchQuery(query)
+	if err != nil {
+		fmt.Println()
+		fmt.Println("Wild Card Query Error:", err.Error())
+	}
+
+	printResult("Wild Card Query", result)
+}
+
+func numericRangeQueryMethod(b *gocb.Bucket) {
+	indexName := "travel-sample-index-unstored"
+	query := gocb.NewSearchQuery(indexName, cbft.NewNumericRangeQuery().
+		Min(10100, true).Max(10200, true).Field("id")).
+		Limit(10).Highlight(gocb.DefaultHighlightStyle)
+
+	result, err := b.ExecuteSearchQuery(query)
+	if err != nil {
+		fmt.Println()
+		fmt.Println("Wild Card Query Error:", err.Error())
+	}
+
+	printResult("Wild Card Query", result)
+}
+
+func regexpQueryMethod(b *gocb.Bucket) {
+	indexName := "travel-sample-index-stored"
+	query := gocb.NewSearchQuery(indexName, cbft.NewRegexpQuery("[a-z]").
+		Field("description")).Limit(10).Highlight(gocb.DefaultHighlightStyle)
+
+	result, err := b.ExecuteSearchQuery(query)
+	if err != nil {
+		fmt.Println()
+		fmt.Println("Regexp Query Error:", err.Error())
+	}
+
+	printResult("Regexp Query", result)
+}
+
+func printResult(label string, results gocb.SearchResults) {
+	fmt.Println()
+	fmt.Println("= = = = = = = = = = = = = = = = = = = = = = =")
+	fmt.Println("= = = = = = = = = = = = = = = = = = = = = = =")
+	fmt.Println()
+	fmt.Println(label)
+	fmt.Println()
+
+	for _, row := range results.Hits() {
+		jRow, err := json.Marshal(row)
+		if err != nil {
+			fmt.Println("Print Error:", err.Error())
+		}
+		fmt.Println(string(jRow))
+	}
+}
+
+func main() {
+	cluster, err := gocb.Connect("couchbase://10.111.180.101")
+	if err != nil {
+		panic("error conencting to cluster:" + err.Error())
+	}
+	cluster.Authenticate(gocb.PasswordAuthenticator{
+		Username: "Administrator",
+		Password: "password",
+	})
+	bucket, err := cluster.OpenBucket("travel-sample", "")
+	if err != nil {
+		panic("error opening bucket:" + err.Error())
+	}
+
+	simpleTextQuery(bucket)
+	simpleTextQueryOnStoredField(bucket)
+	simpleTextQueryOnNonDefaultIndex(bucket)
+	textQueryOnStoredFieldWithFacet(bucket)
+	docIdQueryMethod(bucket)
+	unAnalyzedTermQuery(bucket, 0)
+	unAnalyzedTermQuery(bucket, 2)
+	matchPhraseQueryOnStoredField(bucket)
+	unAnalyzedPhraseQuery(bucket)
+	conjunctionQueryMethod(bucket)
+	queryStringMethod(bucket)
+	wildCardQueryMethod(bucket)
+	numericRangeQueryMethod(bucket)
+	regexpQueryMethod(bucket)
+
+	cluster.Close()
+}
+</codeblock>
+
+    </section>
+    
   </body>
 </topic>
