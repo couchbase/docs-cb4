@@ -173,7 +173,35 @@ N1qlQuery query = N1qlQuery.simple("select count(*) from `mybucket`", params);</
             </p>
         </section>
 
+        <section><title>Long running Streaming Query</title>
+            <p>For a long-running N1QL query, you need a way of streaming the rows and correctly handling errors. Use this helper function:<codeblock outputclass="language-java">public static Observable&lt;AsyncN1qlQueryRow> query(final Bucket bucket, final N1qlQuery query) {
+    return bucket.async()
+        .query(query).flatMap(new Func1&lt;AsyncN1qlQueryResult, Observable&lt;AsyncN1qlQueryRow>>() {
+        @Override
+        public Observable&lt;AsyncN1qlQueryRow> call(AsyncN1qlQueryResult result) {
+            return Observable
+                .merge(result.rows(), result.errors())
+                .map(new Func1&lt;Object, AsyncN1qlQueryRow>() {
+                    @Override
+                    public AsyncN1qlQueryRow call(Object o) {
+                        if (o instanceof AsyncN1qlQueryRow) {
+                            return (AsyncN1qlQueryRow) o;
+                        } else {
+                            // The actual exception type and format could be improved further
+                            throw new CouchbaseException(o.toString());
+                        }
+                    }
+                });
+        }
+    });
+}</codeblock></p>
+            <p>To iterate over the rows, with blocking, call the helper function like this:<codeblock outputclass="language-java">Observable&lt;AsyncN1qlQueryRow> rows = query(bucket, N1qlQuery.simple("select count(*) as cnt from `travel-sample`"));
 
+for (AsyncN1qlQueryRow row : rows.toBlocking().toIterable()) {
+    System.err.println(row);
+}</codeblock></p>
+            <p>In this example, this will print <codeph>{"cnt":31591}</codeph> to the console.</p>
+       </section>
 
         <section id="case">
             <title>Conditionals, Case Expressions Mini DSL</title>
