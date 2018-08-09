@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="java-at_plus">
+  <title>N1QL Scan Consistency Using the Java SDK with Couchbase Server</title>
+  <titlealts><navtitle>Using Scan Consistency</navtitle></titlealts>
+  <shortdesc>You can balance performance against consistency in N1QL queries via the Couchbase Java client and the STATEMENT_PLUS (AtPlus) option.</shortdesc>
+  <conbody>
+    <section id="scan_consistency">
+<p>N1QL provides couple options for scan consistency, represented in java by the <codeph>ScanConsistency</codeph> enum:<codeblock>NOT_BOUNDED
+REQUEST_PLUS
+STATEMENT_PLUS</codeblock>
+Not bounded being the default, the query engine will grab and return what is in the index right now. It is the fastest option, but not suitable for "read your own writes" since they may not yet be indexed.</p>
+<p>At the other end of the scale there is "request plus" which will &#8212; when a query is performed &#8212; wait until all of the indexes have caught up to their highest interanal sequence numbers. This will make sure that you read your own writes, but it might take some time if there is a write-heavy workload. Also sometimes you are only interested in the last mutation(s) you performed, so waiting for everything else in the index to be updated can mean unnecessary latency.</p>
+<p>This is where "statement plus" comes in, also named "at plus". This option will send some information previously retrieved at mutation time to the query engine which will then make sure to only wait for (at least) those mutations have been indexed.</p>
+<p>Tokens need to be enabled on the environment mutation:<codeblock>CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+    .builder()
+    .mutationTokensEnabled(true)
+    .build();</codeblock></p>
+<p>There is a downside: from now on every mutation will return a couple more bytes of metadata, so there is slightly more overhead over the network. Note though that this mechanism is used for better handling of durability requirements (ReplicateTo/PersistTo), so the user might have it enabled already in their environment.
+Now when a mutation is performed the <codeph>MutationToken</codeph> is part of the response. I.e:<codeblock>JsonDocument written = bucket.upsert(JsonDocument.create("mydoc", JsonObject.empty()));
+System.err.println(written.mutationToken());</codeblock></p>
+<p>prints:<codeblock>mt{vbID=55, vbUUID=166779084590420, seqno=488, bucket=travel-sample}</codeblock></p>
+<p>This information can then be passed in at query time:<codeblock>bucket.query(
+	N1qlQuery.simple("select count(*) as cnt from `travel-sample`", 
+	N1qlParams.build().consistentWith(written))
+);</codeblock></p>
+<p>If you enable trace logging, you can see that on the wire the appropriate token vector is passed along to the query engine which will handle the rest:<codeblock>[cb-io-1-2] 2018-07-09 13:28:01 TRACE LoggingHandler:94 - [id: 0x439d3980, L:/127.0.0.1:53732 - R:localhost/127.0.0.1:8093] WRITE: 231B
+         +-------------------------------------------------+
+         |  0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f |
++--------+-------------------------------------------------+----------------+
+|00000000| 7b 22 73 74 61 74 65 6d 65 6e 74 22 3a 22 73 65 |{"statement":"se|
+|00000010| 6c 65 63 74 20 63 6f 75 6e 74 28 2a 29 20 61 73 |lect count(*) as|
+|00000020| 20 63 6e 74 20 66 72 6f 6d 20 60 74 72 61 76 65 | cnt from `trave|
+|00000030| 6c 2d 73 61 6d 70 6c 65 60 22 2c 22 63 6c 69 65 |l-sample`","clie|
+|00000040| 6e 74 5f 63 6f 6e 74 65 78 74 5f 69 64 22 3a 22 |nt_context_id":"|
+|00000050| 66 32 32 64 31 36 36 61 2d 35 38 30 35 2d 34 30 |f22d166a-5805-40|
+|00000060| 62 36 2d 62 31 65 63 2d 66 62 62 35 61 66 36 33 |b6-b1ec-fbb5af63|
+|00000070| 30 37 37 63 22 2c 22 73 63 61 6e 5f 76 65 63 74 |077c","scan_vect| &lt;----
+|00000080| 6f 72 73 22 3a 7b 22 74 72 61 76 65 6c 2d 73 61 |ors":{"travel-sa| &lt;----
+|00000090| 6d 70 6c 65 22 3a 7b 22 35 35 22 3a 5b 34 38 38 |mple":{"55":[488| &lt;----
+|000000a0| 2c 22 31 36 36 37 37 39 30 38 34 35 39 30 34 32 |,"16677908459042| &lt;----
+|000000b0| 30 22 5d 7d 7d 2c 22 74 69 6d 65 6f 75 74 22 3a |0"]}},"timeout":| &lt;----
+|000000c0| 22 37 35 30 30 30 6d 73 22 2c 22 73 63 61 6e 5f |"75000ms","scan_|
+|000000d0| 63 6f 6e 73 69 73 74 65 6e 63 79 22 3a 22 61 74 |consistency":"at|
+|000000e0| 5f 70 6c 75 73 22 7d                            |_plus"}         |
++--------+-------------------------------------------------+----------------+</codeblock></p>
+    </section>
+
+  </conbody>
+</concept>
