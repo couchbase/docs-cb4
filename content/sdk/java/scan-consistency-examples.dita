@@ -7,25 +7,29 @@
   <shortdesc>You can balance performance against consistency in N1QL queries via the Couchbase Java client and the STATEMENT_PLUS (AtPlus) option.</shortdesc>
   <conbody>
     <section id="scan_consistency">
-<p>N1QL provides a couple of options for scan consistency, represented in Java by the <codeph>ScanConsistency</codeph> enum:<codeblock>NOT_BOUNDED
+      <p>N1QL provides a couple of options for scan consistency, represented in Java by the <codeph>ScanConsistency</codeph> enum:<codeblock>NOT_BOUNDED
 REQUEST_PLUS
 STATEMENT_PLUS</codeblock>
-"Not bounded" being the default, the query engine will grab and return what is in the index right now. It is the fastest option, but not suitable for "read your own writes" since they may not yet be indexed.</p>
-<p>At the other end of the scale there is "request plus" which will &#8212; when a query is performed &#8212; wait until all of the indexes have caught up to their highest internal sequence numbers. This will make sure that you read your own writes, but it might take some time if there is a write-heavy workload. Also sometimes you are only interested in the last mutation(s) you performed, so waiting for everything else in the index to be updated can mean unnecessary latency.</p>
-<p>This is where "statement plus" comes in, also named "at plus". This option will send some information previously retrieved at mutation time to the query engine which will then make sure to only wait for (at least) those mutations have been indexed.</p>
-<p>Tokens need to be enabled on the environment mutation:<codeblock>CouchbaseEnvironment env = DefaultCouchbaseEnvironment
+      "Not bounded" being the default, the query engine will grab and return what is in the index right now. It is the fastest option, but not suitable for "read your own writes" since they may not yet be indexed.</p>
+<p>At the other end of the scale there is "request plus" which will &#8212; when a query is performed &#8212; wait until all of the indexes have caught up to their highest internal sequence numbers.
+      This will make sure that you read your own writes, but it might take some time if there is a write-heavy workload. Also sometimes you are only interested in the last mutation(s) you performed, so waiting for everything else in the index to be updated can mean unnecessary latency.</p>
+      <p>This is where "statement plus" comes in, also named "at plus". 
+      This option will send some information previously retrieved at mutation time to the query engine which will then make sure to only wait for (at least) those mutations to have been indexed.</p>
+      <p>Mutation tokens need to be enabled in the environment:<codeblock>CouchbaseEnvironment env = DefaultCouchbaseEnvironment
     .builder()
     .mutationTokensEnabled(true)
     .build();</codeblock></p>
-<p>There is a downside: from now on every mutation will return a couple more bytes of metadata, so there is slightly more overhead over the network. Note though that this mechanism is used for better handling of durability requirements (ReplicateTo/PersistTo), so the user might have it enabled already in their environment.
-Now when a mutation is performed the <codeph>MutationToken</codeph> is part of the response. I.e:<codeblock>JsonDocument written = bucket.upsert(JsonDocument.create("mydoc", JsonObject.empty()));
+      <p>There is a downside: from now on every mutation will return a couple more bytes of metadata, so there is slightly more overhead over the network. 
+      Note though that this mechanism is also used for better handling of durability requirements (<codeph>ReplicateTo</codeph>/<codeph>PersistTo</codeph>), so the user might have it already enabled in their environment.</p>
+      <p>Now when a mutation is performed the <codeph>MutationToken</codeph> is part of the response. 
+      Thus:<codeblock>JsonDocument written = bucket.upsert(JsonDocument.create("mydoc", JsonObject.empty()));
 System.err.println(written.mutationToken());</codeblock></p>
-<p>prints:<codeblock>mt{vbID=55, vbUUID=166779084590420, seqno=488, bucket=travel-sample}</codeblock></p>
-<p>This information can then be passed in at query time:<codeblock>bucket.query(
+      <p>Which will print:<codeblock>mt{vbID=55, vbUUID=166779084590420, seqno=488, bucket=travel-sample}</codeblock></p>
+      <p>This information can then be passed in at query time:<codeblock>bucket.query(
 	N1qlQuery.simple("select count(*) as cnt from `travel-sample`", 
 	N1qlParams.build().consistentWith(written))
 );</codeblock></p>
-<p>If you enable trace logging, you can see that on the wire the appropriate token vector is passed along to the query engine which will handle the rest:<codeblock>[cb-io-1-2] 2018-07-09 13:28:01 TRACE LoggingHandler:94 - [id: 0x439d3980, L:/127.0.0.1:53732 - R:localhost/127.0.0.1:8093] WRITE: 231B
+      <p>If you enable trace logging, you can see that on the wire the appropriate token vector is passed along to the query engine, which will handle the rest:<codeblock>[cb-io-1-2] 2018-07-09 13:28:01 TRACE LoggingHandler:94 - [id: 0x439d3980, L:/127.0.0.1:53732 - R:localhost/127.0.0.1:8093] WRITE: 231B
          +-------------------------------------------------+
          |  0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f |
 +--------+-------------------------------------------------+----------------+
