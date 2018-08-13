@@ -1,104 +1,215 @@
 <?xml version="1.0" encoding="UTF-8"?>
+
 <!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="topic_zzc_hws_zs">
-  <title>Recover Partitions from a Remote Cluster</title> <shortdesc>Data recovery from remote clusters requires XDCR and enough memory and disk
-    space.</shortdesc>
+  <title>
+    XDCR-Based Data Recovery
+  </title> 
+  
+  <shortdesc>
+    In the event of data-loss, the <b>cbrecovery</b> tool can be used to restore data: the tool
+    accesses remotely replicated buckets, previously created with XDCR, and copies appropriate subsets of their data back
+    onto the original source-cluster.
+  </shortdesc>
+  
   <body>
-    <p>If more nodes in a cluster catastrophically fail than the number of replicas, data partitions
-      in that cluster will no longer be available. For example, if you have a four-node cluster with
-      one replica and two nodes fail and are unrecoverable, some data shards will no longer be
-      available. </p>
-    <p>Data recovery from remote clusters requires an XDCR environment and adequate amount of memory and disk space to support the workload and recovered data.
-    </p>
-    <p>To recover the missing data partition in case of node failure and when vBuckets are unavailable, follow these steps.
-    </p>
-    <ol>
-      <li>For each failed node, click on <menucascade>
-          <uicontrol>Server Nodes</uicontrol>
-          <uicontrol>Fail Over</uicontrol>
-        </menucascade>. <p>You will see whether data is unavailable and which vBuckets are
-          unavailable. If you do not have enough replicas for the number of the failed-over nodes,
-          some vBuckets will no longer be available:</p><p><image
-            href="picts/xdcr-recover-partition-1.png" id="image_rzb_vk5_zs" align="left" xtrc=""
-            width="720"/></p></li>
-      <li>Add new functioning nodes to replace the failed nodes.<p>Do not rebalance after you add
-          new nodes to a cluster. Typically, you will rebalance after adding nodes to the cluster,
-          but in this scenario the rebalance will destroy the information about the missing vBuckets
-          and you cannot recover it.</p><p><image href="picts/xdcr-recover-partition-2.png"
-            id="image_ngh_bl5_zs" align="left" width="720"/></p><p>In this example, two nodes failed
-          in a three-node cluster and a new node at <codeph>10.3.3.61</codeph> was added. If you are
-          certain that your cluster can easily handle the workload and recovered data, you may
-          choose to skip this step. </p></li>
-      <li>Run <uicontrol>cbrecovery</uicontrol> to recover data from your backup cluster. In the
-          <wintitle>Server Panel</wintitle>, the <uicontrol>Stop Recovery</uicontrol> button
-        appears.  <p> After the recovery completes, this button disappears. </p></li>
-      <li>Rebalance your cluster. <p>Once the recovery is completed, you can rebalance your cluster.
-          Rebalancing will recreate replica vBuckets and redistribute them evenly across the
-          cluster. </p><p><image href="picts/xdcr-recover-partition-4.png" id="image_wwv_nl5_zs"
-            align="left" width="720"/></p>
-      </li>
-    </ol>
-    <section><title>Recovery Dry-Run</title>
-      <p>Preview a list of buckets that are no longer available in the cluster.</p>
-      <p>Before you recover vBuckets, you may want to preview a list of buckets that are no longer
-        available in the cluster. Use this command and options: </p>
-      <codeblock>shell> ./cbrecovery http://Administrator:password@10.3.3.72:8091 http://Administrator:password@10.3.3.61:8091 -n</codeblock>
-      <p>The administrative credentials are provided for the node in the cluster, as well as the
-        option <codeph>-n</codeph>. The command  returns a list of vBuckets in the remote secondary
-        cluster that are no longer in the first cluster. If there are any unavailable buckets in the
-        cluster with failed nodes, you will see output as follows: </p>
-      <codeblock>2013-04-29 18:16:54,384: MainThread Missing vbuckets to be recovered:[{"node": "ns_1@10.3.3.61",
-        "vbuckets": [513, 514, 515, 516, 517, 518, 519, 520, 521, 522, 523, 524, 525, 526,, 528, 529,
-        530, 531, 532, 533, 534, 535, 536, 537, 538, 539, 540, 541, 542, 543, 544, 545,, 547, 548,
-        549, 550, 551, 552, 553, 554, 555, 556, 557, 558, 559, 560, 561, 562, 563, 564, 565, 566, 567,
-        568, 569, 570, 571, 572,....</codeblock>
-      <p>In this case, the <codeph>vbuckets</codeph> array contains all the vBuckets that are no
-        longer available in the cluster. These are the buckets you can recover from the remotes
-        cluster using the following command: </p>
-      <codeblock>shell> ./cbrecovery http://Administrator:password@&lt;From_IP&gt;:8091 \
-        http://Administrator:password@&lt;To_IP&gt;:8091 -B bucket_name</codeblock>
-      <p>You can run the command either on the cluster with unavailable vBuckets, or on the remote
-        cluster. </p>
-      <p>Provide the hostname, port, and credentials for the remote cluster and the cluster with
-        missing vBuckets, in that order. If you do not provide the parameter <codeph>-B</codeph>, the
-        tool assumes you will recover unavailable vBuckets for the default bucket. </p></section>
-    <section><title>Monitor the Recovery Process</title>
-      <p>Full, Cluster, Read-only, and Replication Administrators can use the Couchbase Web
-        Console to monitor the recovery process.</p>
-      <p>To monitor the progress of recovery:
+    
+    <section>
+      <title>
+        Understanding XDCR-Based Data Recovery
+      </title>
+      
+      <p>
+        Couchbase Server allows one or more replicas to be created for each vBucket on the cluster. This helps
+        to ensure continued data-availability in the event of node-failure.
       </p>
+      
+      <p>
+        However, if multiple nodes within a single cluster fail simultaneously, data-loss is bound to occur when        
+        one or more active vBuckets and all their replicas have been affected.  
+      </p>
+      
+      <p>
+        In such cases,
+        provided that a bucket affected by such failure had already been established as a source bucket for XDCR, the
+        data lost from the local cluster may be retrieved from the bucket defined
+        on the remote server as the corresponding replication-target. This retrieval is achieved from the command-line, by means of
+        the Couchbase <b>cbrecovery</b> tool.     
+      </p>
+      
+    </section>
+    
+    <section>
+      <title>
+        Recovering Lost Data
+      </title>
+      
+      <p>
+        Prior to node-failure, a cluster is likely to contain one or more buckets, each with one or more replicas. The
+        illustration below shows a cluster of three nodes. The sample bucket <codeph>travel-sample</codeph> has been
+        established across this cluster, with a single replica.
+      </p>
+      
+        <p>
+          <image href="./picts/XdcrCbRecoveryLocalServersUp.png" id="three_node_local_cluster" align="left" width="780"/>
+        </p>
+      
+      <p>
+        An XDCR reference to a remote cluster has also been established; and a replication commenced, such that <codeph>travel-sample</codeph>
+        is replicated to the bucket <codeph>travelSampleBackup</codeph>, on the remote cluster <codeph>10.142.180.104</codeph>.
+      </p>
+      
+      <p>
+        <image href="./picts/XdcrCbRecoveryReplicationScreen.png" id="replication_in_progress" align="left" width="780"/>
+      </p>
+      
+      <p>
+        Should two of the three node in the local cluster go offline, the <b>Server</b> screen for the local cluster
+        provides notifications to that effect:
+      </p>
+      
+      <p>
+        <image href="./picts/XdcrCbRecoveryLocalServersDown.png" id="local_servers_down" align="left" width="580"/>
+      </p>
+      
+      <p>
+        To begin the data-recovery process, proceed as follows.
+      </p>
+      
       <ol>
-        <li>Click on the <uicontrol>Data Buckets</uicontrol> tab.</li>
-        <li>Select the data bucket you are recovering from the <wintitle>Data Buckets</wintitle> drop-down list.</li>
-        <li>Click on the <wintitle>Summary</wintitle> drop-down list to see more details about this
-          data bucket. You will see an increased number of items during recovery: <p><image
-            href="picts/xdcr-recovery-process-1.png" id="image_x1h_cq5_zs" align="left" width="450"
-          /></p></li>
-        <li>You can also see the number of active vBuckets increase as they are recovered until you
-          reach 1024 vBuckets. <p>Click on the <wintitle>vBucket Resources</wintitle> drop-down:</p>
-          <p><image href="picts/xdcr-recovery-process-2.png" id="image_hxy_hq5_zs" align="left"
-            width="500"/></p><p>Since this tool runs from the command line, you can stop it at any
-              time.</p></li>
-        <li>The <wintitle>Stop Recovery</wintitle> button appears in the <wintitle>Servers</wintitle>
-          panels. If you click this button, you will stop the recovery process between clusters. Once
-          the recovery process completes, this button will no longer appear, and you will need to
-          rebalance the cluster. You can also stop it in this panel: <p><image
-            href="picts/xdcr-recovery-process-3.png" id="image_z2p_pq5_zs" align="left" width="600"
-          /></p></li>
-        <li>After the recovery completes, click on the Server Nodes tab and then on Rebalance to
-          rebalance your cluster. When <codeph>cbrecovery</codeph> finishes, it will output a report
-          in the console:
-          <codeblock>  Recovery :                Total |    Per sec
-            batch    :                 0000 |       14.5
-            byte     :                 0000 |      156.0
-            msg      :                 0000 |       15.6
-            4 vbuckets recovered with elapsed time 10.90 seconds</codeblock>
+      
+        <li>
+          If the unavailable nodes cannot be retrieved, and their data is therefore completely lost, fail
+          each node over, by left-clicking the <b>Failover</b> button. Then, remove each from
+          the cluster, by left-clicking the <b>Remove</b> button.
+          
+          <p>
+          </p>
+        </li>
+        
+        <li>
+          Before any attempt is made to restore the lost data from the remote cluster, restore capacity to the local cluster,
+          as appropriate. The
+          illustration below shows the two lost nodes, cleansed of all data, powered up, running, and added back
+          into the cluster:
+        
+          <p>
+            <image href="./picts/XdcrCbRecoveryLocalServersBackUpAgain.png" id="local_servers_back_up_again" align="left" width="580"/>
+          </p>
+        
+          <p>
+            Note, however, that these servers should not yet be rebalanced back into the cluster, since the rebalance operation
+            affects local vBucket data, and thereby
+            prevents restoration of lost data from the remote cluster.<b>Rebalance</b> should be performed only after lost 
+            data has been restored.
+          </p>
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          Use the <b>cbrecovery</b> tool to restore data to the bucket <codeph>travel-sample</codeph>, from the bucket established
+          on the remote cluster, <codeph>travelSampleBackup</codeph>.
+          
+          <codeblock outputclass="language-bourne">$ cbrecovery http://10.142.180.104:8091 http://10.142.180.101:8091 \
+-b travelSampleBackup \
+-B travel-sample \
+-u Administrator \
+-p password \
+-U Administrator \
+-P password \
+-v</codeblock>
+          
+          <p>
+            Here used with the <i>verbose</i> option, the command provides extensive console output. The initial portion
+            appears as follows:
+          </p>
+          
+          <codeblock outputclass="language-bourne">Missing vbuckets to be recovered:[{"node": "ns_1@10.142.180.102", "vbuckets": [171, 172, 
+173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 
+191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 
+209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 
+227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 
+245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258, 259, 260, 261, 262, 
+263, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275, 276, 277, 278, 279, 280, 
+281, 282, 283, 284, 285, 286, 287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 
+299, 300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310, 311, 312, 313, 314, 315, 316, 
+317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 329, 330, 331, 332, 333, 334, 
+335, 336, 337, 338, 339, 340, 342, 343, 344, 345, 346, 347, 348, 349, 350, 351, 352, 353, 
+354, 355, 356, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367, 368, 369, 370, 371, 
+372, 373, 374, 375, 376, 377, 378, 379, 380, 381, 382, 383, 384, 385, 386, 387, 388, 389, 
+390, 391, 392, 393, 394, 395, 396, 397, 398, 399, 400, 401, 402, 403, 404, 405, 406, 407, 
+408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 419, 420, 421, 422, 423, 424, 425, 
+426, 427, 428, 429, 430, 431, 432, 433, 434, 435, 436, 437, 438, 439, 440, 441, 442, 443, 
+444, 445, 446, 447, 448, 449, 450, 451, 452, 453, 454, 455, 456, 457, 458, 459, 460, 461, 
+462, 463, 464, 465, 466, 467, 468, 469, 470, 471, 472, 473, 474, 475, 476, 477, 478, 479, 
+480, 481, 482, 483, 484, 485, 486, 487, 488, 489, 490, 491, 492, 493, 494, 495, 496, 497, 
+498, 499, 500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511]}]
+2018-08-13 12:28:07,898: mt cbrecovery...
+2018-08-13 12:28:07,898: mt  source : http://10.142.180.104:8091
+2018-08-13 12:28:07,898: mt  sink   : http://10.142.180.101:8091
+2018-08-13 12:28:07,898: mt  opts   : {'username': '&lt;xxx&gt;', 'username_destination': 
+'Administrator', 'verbose': 1, 'extra': {'max_retry': 10.0, 'rehash': 0.0, 
+'dcp_consumer_queue_length': 1000.0, 'data_only': 1.0, 'uncompress': 0.0, 
+'nmv_retry': 1.0, 'conflict_resolve': 0.0, 'cbb_max_mb': 100000.0, 'report': 5.0, 
+'mcd_compatible': 1.0, 'try_xwm': 1.0, 'backoff_cap': 10.0, 'batch_max_bytes': 400000.0, 
+'report_full': 2000.0, 'flow_control': 1.0, 'batch_max_size': 1000.0, 'seqno': 0.0, 
+'design_doc_only': 0.0, 'allow_recovery_vb_remap': 1.0, 'recv_min_bytes': 4096.0}, 
+'collection': None, 'ssl': False, 'threads': 4, 'key': None, 'password': '&lt;xxx&gt;', 
+  'id': None, 'silent': False, 'dry_run': False, 'password_destination': 'password', 
+  'bucket_destination': 'travel-sample', 'vbucket_list': '{"ns_1@10.142.180.102": [171]}', 
+  'separator': '::', 'bucket_source': 'travelSampleBackup'}
+2018-08-13 12:28:07,939: mt Starting new HTTP connection (1): 10.142.180.104
+2018-08-13 12:28:07,992: mt Starting new HTTP connection (1): 10.142.180.101
+2018-08-13 12:28:08,010: mt bucket: travelSampleBackup
+2018-08-13 12:28:08,229: w0   source : http://10.142.180.104:8091(travelSampleBackup@10.142.180.104:8091)
+2018-08-13 12:28:08,229: w0   sink   : http://10.142.180.101:8091(travelSampleBackup@10.142.180.104:8091)
+2018-08-13 12:28:08,229: w0          :                total |       last |    per sec
+2018-08-13 12:28:08,229: w0    batch :                    1 |          1 |        4.6
+2018-08-13 12:28:08,230: w0    byte  :                21650 |      21650 |    99915.5
+2018-08-13 12:28:08,230: w0    msg   :                   23 |         23 |      106.1
+[                    ] 0.1% (23/estimated 17018 msgs)
+bucket: travelSampleBackup, msgs transferred...
+:                total |       last |    per sec
+batch :                    1 |          1 |        3.3
+byte  :                21650 |      21650 |    71898.7
+msg   :                   23 |         23 |       76.4
+transfer data only. bucket design docs and index meta will be skipped.
+done</codeblock>
+          
+        <p>
+          Optionally, monitor the recovery process within Couchbase Web Console; by accessing the <b>Statistics</b> panel 
+          for the <codeph>travel-sample</codeph>
+          bucket, on the local cluster; and inspecting the contents of the <b>Incoming XDCR Operations</b> panel.
+        </p>
+
+        <p>
+          When <b>cbrecovery</b> has concluded, a message similar to the following is displayed on the console:
+        </p>
+        
+          <codeblock outputclass="language-bourne"> Recovery :                Total |    Per sec
+batch    :                  340 |        1.8
+byte     :              9708874 |    51930.7
+msg      :                 8509 |       45.5
+340 vbuckets recovered with elapsed time 186.96 seconds</codeblock>
+          
+        </li>
+        
+        <li>
+          To conclude the data-restoration process, rebalance the nodes on the local cluster, by left-clicking the <b>Rebalance</b>
+          button.
+          <p>
+            
+          </p>
+        
         </li>
         
       </ol>
-      <p>In this report:  <term>batch</term> is a group of internal operations performed by
-        cbrecovery, <term>byte</term> indicates the total number of bytes recovered, and
-        <term>msg</term> is the number of documents recovered. </p>
+ 
     </section>
+    
+    
   </body>
 </topic>
