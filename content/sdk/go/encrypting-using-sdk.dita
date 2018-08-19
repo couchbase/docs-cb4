@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="go-fle">
+  <title>Field Level Encryption from the Go SDK</title>
+  <shortdesc>Field Level Encryption is available in Couchbase Data Platform 5.5.</shortdesc>
+  <conbody>
+        <section id="package">
+          <title>Packaging</title>
+            <p>The Couchbase Go SDK uses the <codeph>gocbencryption</codeph> library to provide functionality for encryption and decryption.<codeblock outputclass="language-go">go get github.com/couchbase/gocbencryption</codeblock></p>
+
+    <p>The Couchbase Go Field Level Encryption (FLE) library uses struct tags to specify which field(s) to apply encryption to and which algorithm to use. The struct tag key is <codeph>cbcrypt</codeph> and the value is of the form <codeph>"provider"</codeph>. Here’s an example struct definition:<codeblock outputclass="language-go">type PersonAddress struct {
+    HouseName    string `json:"houseName"`
+    StreetName   string `json:"streetName"`
+}
+ 
+type Person struct {
+    FirstName string        `json:"firstName"`
+    LastName  string        `json:"lastName"`
+    Password  string        `json:"password" cbcrypt:"myAESProvider"`
+    Address   PersonAddress `json:"address" cbcrypt:"myAESProvider"`
+}</codeblock></p>
+        </section>
+
+
+        <section id="encryption_configuration">
+          <title>Configuration</title>
+    <p>You need to create a Key Store, a Provider, and a Transcoder. The provider is used to perform encyption/decryption and the transcoder is responsible for using the provider during operations. You can register multiple (uniquely aliased) providers with a transcoder. After installing the dependency you need to set up your Key Store, Provider, and Transcoder (note that the alias name of the provider matches the struct tags):<codeblock outputclass="language-go">keyStore := &amp;gocbfieldcrypt.InsecureKeystore{
+    Keys: map[string][]byte{
+       "mypublickey": []byte("!mysecretkey#9^5usdk39d&amp;dlf)03sL"),
+       "myhmackey":   []byte("myauthpassword"),
+    },
+}
+
+aesProvider := &amp;gocbfieldcrypt.AesCryptoProvider{
+	Alias:    "myAESProvider",
+	KeyStore: keyStore,
+	Key:      "mypublickey",
+	HmacKey:  "myhmackey",
+}
+
+coder := gocbfieldcrypt.Transcoder{}
+coder.Register("myAESProvider", aesProvider)</codeblock></p>
+
+    <p>Next you need to create a configuration to connect to your cluster and set your transcoder on the bucket:<codeblock outputclass="language-go">cluster, _ := gocb.Connect("…")
+cluster.Authenticate(…)
+bucket, _ := cluster.openBucket("…", "")
+bucket.SetTranscoder(&amp;coder)</codeblock></p>
+        </section>
+
+        <section id="encryption">
+          <title>Transparent operation</title>
+    <p>You can then perform KV operations as usual and your data will be encrypted/decrypted automatically:<codeblock outputclass="language-go">person := Person{
+    FirstName: "Barry",
+    LastName:  "Sheen",
+    Password:  "bang!",
+    Address: PersonAddress{
+        HouseName:  "my house",
+        StreetName: "my street",
+    },
+}
+
+bucket.Upsert("p1", person, 0)</codeblock></p>
+        </section>
+
+  </conbody>
+</concept>

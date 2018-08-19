@@ -1,0 +1,571 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="untitled1">
+    <title>Index Partitioning</title>
+    <shortdesc>Index Partitioning enables you to increase aggregate query performance by dividing and spreading a large index of documents across multiple nodes, horizontally scaling out an index as needed. The system partitions the index across a number of index nodes using a hash partitioning strategy in a way that is transparent to queries. </shortdesc>
+    <body>
+        <p><i>(Introduced in Couchbase Server 5.5 Enterprise Edition)</i></p>
+        <section id="idx-partition-intro">
+        <p>Benefits of a partitioned index include:<ul id="ul_sfz_3lt_mdb">
+        <li>The ability to scale out horizontally as the index size increases.</li>
+        <li>Transparency to queries, requiring no change to existing queries.</li>
+        <li>Reduction of query latency for large aggregated queries since each partition can be scanned in parallel.</li>
+         <li>Provides a low-latency range query while allowing indexes to be scaled out as needed. </li>
+                </ul></p>
+        </section>
+        <section id="section_ebq_xlt_mdb">
+            <title>Create Partitioned Index</title>
+            <p><b>Syntax</b><image href="images/create-partitioned-index-syntax.png"
+                    id="image_yg3_swf_ndb" width="600" placement="break"
+                /><codeblock>CREATE INDEX idx_name ON bucket_name ( field_name [ , field_name2 ] * )
+    PARTITION BY HASH partition_key_expr
+    [ WITH { with_expr [ , with_expr2 ] * } ];</codeblock></p>
+        </section>
+        <section id="section_wsw_ccg_ndb">
+            <title>Arguments</title>
+            <p>
+                <dl>
+                    <dlentry>
+                        <dt>idx_name</dt>
+                        <dd><xref href="identifiers.dita#topic_6">Identifier</xref> representing the
+                            name of your index. The partitioned index name must unique within a
+                            bucket.</dd>
+                    </dlentry>
+                </dl>
+                <dl>
+                    <dlentry>
+                        <dt>bucket_name</dt>
+                        <dd>String representing the bucket to be indexed.</dd>
+                        <dd>
+                            <note>If there is a hyphen (-) inside the bucket name, backticks (` `)
+                                are needed around the bucket name.</note>
+                        </dd>
+                    </dlentry>
+                </dl>
+                <dl>
+                    <dlentry>
+                        <dt>( field_name )</dt>
+                        <dd>String of one or more field names (comma-separated) to be included in
+                            the index.</dd>
+                        <dd>
+                            <note>The field name(s) must be enclosed inside parentheses.</note>
+                        </dd>
+                    </dlentry>
+                </dl>
+                <dl>
+                    <dlentry>
+                        <dt>( partition_key_expr )</dt>
+                        <dd>One or more fields or an expression of one or more fields representing
+                            the partition keys.<note>This expression must be enclosed inside
+                                parentheses.</note></dd>
+                    </dlentry>
+                </dl>
+                <dl>
+                    <dlentry>
+                        <dt><codeph>WITH { }</codeph></dt>
+                        <dd>[Optional] The reserved word to be used with one or more of the
+                            following arguments.</dd>
+                        </dlentry>
+                    </dl>
+                <dl>
+                    <dlentry>
+                        <dt><codeph>with_expr</codeph></dt>
+                        <dd>Required if WITH {} is present. The with_expr must contain at least one of the following arguments.</dd>
+                        <dd>
+                            <dl>
+                                <dlentry>
+                                    <dt><codeph>"num_parition":</codeph> partition_int</dt>
+                                    <dd>The integer <b>partition_int</b> defines the number of
+                                        partitions to divide into. The default value is 8. For
+                                        details and examples, see <xref
+                                            href="#untitled1/section_iny_skg_ndb" format="dita"
+                                            >Number of Index Partitions</xref>.</dd>
+                                </dlentry>
+                            </dl>
+                            <dl>
+                                <dlentry>
+                                    <dt><codeph>"nodes": ["</codeph>###.###.###.###:####", ...]</dt>
+                                    <dd>The node list to restrict the set of nodes available for
+                                        placement, separated by commas. For details and examples,
+                                        see <xref href="#untitled1/section_grk_dpg_ndb"
+                                            format="dita">Node Placement</xref>.</dd>
+                                </dlentry>
+                                <dlentry>
+                                    <dt>"defer_build": true | false</dt>
+                                    <dd>When <codeph>defer_build</codeph> is set to true, the index
+                                        creation operation queues the task for building the index
+                                        but immediately pauses the building of the index of type
+                                        GSI. Index building requires an expensive scan operation and
+                                        deferring building of an index with multiple indexes can
+                                        optimize the expensive scan operation. Administrators can
+                                        defer building multiple indexes and use the BUILD INDEX
+                                        statement to build multiple indexes efficiently with one
+                                        efficient scan of the bucket data. When
+                                            <codeph>defer_build</codeph> is set to false, the CREATE
+                                        INDEX operation queues the task for building the index and
+                                        immediately kicks off the building of the index of type
+                                        GSI.</dd>
+                                </dlentry>
+                                <dlentry>
+                                    <dt>"num_replica": num_replica_num</dt>
+                                    <dd>The number of replicas of the partitioned index to create.
+                                        The index service will automatically distribute these
+                                        indexes amongst the index nodes in the cluster for load
+                                        balancing and high availability purposes. When creating an
+                                        index with replicas in this manner, the index service
+                                        attempts to distribute the replicas based on the server
+                                        groups in use in the cluster where possible. If
+                                            <codeph>num_replica_num</codeph> is not less than the
+                                        number of index nodes in the cluster, then the index
+                                        creation will fail.</dd>
+                                </dlentry>
+                                <dlentry>
+                                    <dt><codeph>secKeySize: sec_int</codeph></dt>
+                                    <dd>The average length of the combined index keys. For details
+                                        and examples, see Sizing Hint.</dd>
+                                </dlentry>
+                                <dlentry>
+                                    <dt><codeph>docKeySize: doc_int</codeph></dt>
+                                    <dd>The average length of the document key. For details and
+                                        examples, see Sizing Hint. </dd>
+                                </dlentry>
+                                <dlentry>
+                                    <dt><codeph>arrSize: arr_int</codeph></dt>
+                                    <dd>The average length of the aray fields. For details and
+                                        examples, see Sizing Hint.</dd>
+                                </dlentry>
+                            </dl>
+                        </dd>
+                    </dlentry>
+                </dl>
+            </p>
+        </section>
+        
+        <section id="section_fcg_ldg_ndb">
+            <title>Partition Keys</title>
+            <p>Partition keys are made up of one or more terms, with each term being the document
+                key, a document field, or an expression of document key or field. The partition keys
+                are hashed to generate a partition ID for each document. The partition ID is then
+                used to identify the partition in which the document's index keys would reside. </p>
+            <p>The partition keys should be immutable, that is, its values shouldn't change once the
+                document is created. For example, the 'travel-sample' field type almost never
+                changes and is therefore a good candidate for partition key. If the partition keys
+                have changed, then the corresponding document should be deleted and recreated with
+                the new partition keys. </p>
+            <p>Each term in the partition keys can be any JSON data type: number, string, boolean,
+                array, object, or NULL. If a term in the partition keys is missing in the document,
+                the term will have a N1QL MISSING value. Partition keys do not support N1QL array
+                expressions (for e.g.,<codeph>ARRAY</codeph> ... <codeph>FOR</codeph> ...
+                    <codeph>IN</codeph>).</p>
+            <p>The following table lists some examples of partition keys.</p>
+            <p>
+                <table frame="all" rowsep="1" colsep="1" id="table_kgw_vs4_ndb">
+                    <tgroup cols="2" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="2*"/>
+                        <thead>
+                            <row>
+                                <entry>Partition Type</entry>
+                                <entry>Example</entry>
+                            </row>
+                        </thead>
+                        <tbody>
+                            <row>
+                                <entry>The document key.</entry>
+                                <entry>
+                                    <codeblock>CREATE INDEX idx ON `travel-sample`(country, airline, id)
+ PARTITION BY HASH(<b>META().id</b>);</codeblock>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry>Any single or multiple immutable field in the defined
+                                    index.</entry>
+                                <entry>
+                                    <codeblock>CREATE INDEX idx ON `travel-sample`(<b>sourceairport</b>,<b>destinationairport</b>, stops, airline, id)
+ PARTITION BY HASH(<b>sourceairport</b>,<b>destinationairport</b>);</codeblock>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry>Any single or multiple immutable non-leading field in the
+                                    defined index.</entry>
+                                <entry>
+                                    <codeblock>CREATE INDEX idx ON `travel-sample`(airline, <b>sourceairport</b>, <b>destinationairport</b>, stops, id)
+ PARTITION BY HASH(<b>sourceairport</b>, <b>destinationairport</b>);</codeblock>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry>Any single or multiple immutable document field not defined
+                                    in the index.</entry>
+                                <entry>
+                                    <codeblock>CREATE INDEX idx ON `travel-sample` (sourceairport, stops, airline, id)
+ PARTITION BY HASH (sourceairport, <b>destinationairport</b>)</codeblock>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry>A function on the index fields, such as <codeph>LOWER(),
+                                        LEAST(), GREATEST(), SUBSTR()</codeph>, etc.</entry>
+                                <entry>
+                                    <codeblock>CREATE INDEX idx ON `travel-sample`(<b>LOWER(sourceairport)</b>, <b>LOWER(destinationairport)</b>, stops, airline, id)
+ PARTITION BY HASH(<b>LOWER(sourceairport)</b>, <b>LOWER(destinationairport)</b>);</codeblock>
+                                </entry>
+                            </row>
+                            <row>
+                                <entry>A complex expression on the index fields combining functions
+                                    and operators.</entry>
+                                <entry>
+                                    <codeblock>CREATE INDEX idx ON `travel-sample`(<b>POSITION(meta().id,'__')+2</b>, destinationairport, sourceairport, stops, airline, id)
+ PARTITION BY HASH(<b>POSITION(meta().id,'__')+2)</b>);</codeblock>
+                                </entry>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table>
+            </p>
+            <!--<p>Each partition key can have a different data type:<ul id="ul_ewd_ydg_ndb">
+                    <li>Scalar</li>
+                    <li>Array (whole array as a partition key, not as individual elements within an
+                        array)</li>
+                    <li>JSON Object (whole JSON object as partition key, not as individual elements
+                        within the object)</li>
+                    <li>MISSING value<ul id="ul_yrx_lhg_ndb">
+                            <li>If the partition key is the leading index key, the document will not
+                                be indexed;</li>
+                            <li>Otherwise, a MISSING value is used as the partition value.</li>
+                        </ul></li>
+                    <li>NULL value</li>
+                </ul></p>-->
+        </section>
+        <section id="doc-keys-as-partition-key"> <title>Using Document Keys as Partition Key</title>
+            <p>The simplest way to create a partitioned index is to use the document key as the
+                partition key.</p>
+            <p><b>Example 1: Create a partitioned index with partition key being the document key</b></p>
+            <codeblock>CREATE INDEX idx_pe1 ON `travel-sample`(country, airline, id) 
+ PARTITION BY HASH(META().id);
+
+SELECT airline, id
+FROM `travel-sample`
+WHERE country="United States"
+ORDER BY airline;</codeblock>
+            <p>With <cmdname>meta().id</cmdname> as the partition key, the index keys are evenly
+                distributed among all the partitions. Every query will gather the qualifying index
+                keys from all the partitions. </p>
+        </section>
+        <section id="partition-keys-range-query">
+            <title>Choosing Partition Keys for Range Query</title>
+            <p>An application has the option to choose the partition key that can minimize latency
+                on a range query for a partitioned index. For example, let's say a query has an
+                equality predicate based on the field <codeph>sourceairport</codeph> and
+                    <codeph>destinationairport</codeph>. If the index is also partitioned by the
+                index keys on <codeph>sourceairport</codeph> and
+                <codeph>destinationairport</codeph>, then the query will only need to read a single
+                partition for the given pair of <codeph>sourceairport</codeph> and
+                    <codeph>destinationairport</codeph>. In this case, the application can maintain
+                a low query latency while allowing the partitioned index to scale out as needed. </p>
+            <p><b>Example 2: Create a partitioned index with partition keys matching query equality
+                    predicate</b></p>
+            <codeblock># Lookup all airlines with non-stop flights from SFO to JFK
+CREATE INDEX idx_pe2 ON `travel-sample` (sourceairport, destinationairport, stops, airline, id)
+ PARTITION BY HASH (sourceairport, destinationairport);
+
+SELECT airline, id
+FROM `travel-sample` 
+WHERE sourceairport=”SFO” AND
+destinationairport=”JFK” AND
+stops == 0
+ORDER BY airline;</codeblock>
+            <p>The partition keys do not have to be the leading index keys in order to select
+                qualifying partitions As long as the leading index keys are provided along with the
+                partition keys in the predicate, the query engine can still select the qualifying
+                partitions for index scan. The following example scans a single partition with a
+                given pair of <codeph>sourceairport</codeph> and
+                <codeph>destinationairport</codeph>. </p>
+            <p>Example 3: Create a partitioned index with partition keys being non-leading index
+                keys</p>
+            <codeblock># Lookup all non-stop flights from SFO to JFK for the given airlines
+CREATE INDEX idx_pe3 ON `travel-sample` (airline, sourceairport, destinationairport, stops, id)
+ PARTITION BY HASH (sourceairport, destinationairport);
+
+SELECT airline, id
+FROM `travel-sample` 
+WHERE airline in [“UA”, “AA”] AND
+sourceairport=”SFO” AND
+destinationairport=”JFK” AND
+stops == 0
+ORDER BY airline;</codeblock>
+            <p>If the partition keys are basedon a N1QL expression, then the query predicate should
+                use the same expression for selecting qualifying partitions.</p>
+            <p><b>Example 4: Create a partitioned index with partition keys as expressions</b></p>
+            <codeblock># Case-insensitive lookup for all airlines with non-stop flights from SFO to JFK
+CREATE INDEX idx_pe4 ON `travel-sample` (LOWER(sourceairport), LOWER(destinationairport), stops, airline, id)
+ PARTITION BY HASH (LOWER(sourceairport), LOWER(destinationairport))
+
+SELECT airline, id
+FROM `travel-sample` 
+WHERE LOWER(sourceairport)=”sfo” AND
+LOWER(destinationairport)=”jfk” AND
+stops == 0
+ORDER BY airline</codeblock>
+            <p>As with equality predicate in the previous examples, the query engine can select
+                qualifying partitions using an IN clause with matching partitioned keys. The
+                following example scans at most three partitions with <codeph>sourceairport
+                    "SFO"</codeph>, <codeph>"SJC"</codeph>, or <codeph>"OAK"</codeph>.</p>
+            <p><b>Example 5: Create a partitioned index with partition keys matching query IN
+                    clause</b></p>
+            <codeblock># Lookup for all airlines with non-stop flights from SFO, SJC, or OAK to JFK
+CREATE INDEX idx_pe5 ON `travel-sample` (sourceairport, destinationairport, stops, airline, id)
+ PARTITION BY HASH (sourceairport, destinationairport);
+
+SELECT airline, id
+FROM `travel-sample` 
+WHERE sourceairport in [”SFO”, “SJC”, “OAK”] AND
+destinationairport=”JFK” AND
+stops == 0
+ORDER BY airline;</codeblock>
+            <p>As shown in the previous examples, in order to allow the query engine to select
+                qualifying partitions, the partition keys must be present as an equality predicate
+                in the query. The following query only has an equality predicate on
+                    <codeph>sourceairport</codeph> and hence will not be able to select the
+                qualifying partitions without <codeph>destinationairport</codeph>. Consequently,
+                this query will gather qualifying index keys from all partitions.</p>
+            <p><b>Example 6: Create a partitioned index with non-matching query equality
+                    predicate</b></p>
+            <codeblock># Lookup all airlines with non-stop flights from SFO
+CREATE INDEX idx_pe6 ON `travel-sample` (sourceairport, destinationairport, stops, airline, id)
+ PARTITION BY HASH (sourceairport, destinationairport);
+
+SELECT airline, id
+FROM `travel-sample` 
+WHERE sourceairport=”SFO” AND
+stops == 0
+ORDER BY airline;</codeblock>
+            <p>Similarly, the following query gathers qualifying index keys from all partitions as
+                    <codeph>destinationairport IS NOT MISSING</codeph> is not an equality
+                predicate.</p>
+            <p><b>Example 7: Create a partitioned index with query non-equality predicate</b></p>
+            <codeblock># Lookup all airlines with non-stop flights from SFO
+CREATE INDEX idx_pe7 ON `travel-sample` (sourceairport, destinationairport, stops, airline, id)
+ PARTITION BY HASH (sourceairport, destinationairport);
+
+SELECT airline, id
+FROM `travel-sample` 
+WHERE sourceairport=”SFO” AND
+destinationport is not missing AND
+stops == 0
+ORDER BY airline;</codeblock>
+            <p>For the query engine to select qualifying partitions, the partition keys must also be
+                a part of the index keys. The following index always gathers keys from all
+                partitions as <codeph>destinationairport</codeph> is not an index key.</p>
+            <p><b>Example 8: Create a partitioned index with partition keys not being index
+                keys</b></p>
+            <codeblock># Lookup all airlines with flights from SFO to JFK
+CREATE INDEX idx_pe8 ON `travel-sample` (sourceairport, stops, airline, id)
+ PARTITION BY HASH (sourceairport, destinationairport);
+
+SELECT airline, id
+FROM `travel-sample` 
+WHERE sourceairport=”SFO” AND
+destinationairport=”JFK”
+ORDER BY airline;</codeblock>
+            <p>When choosing partition keys other than the document key, the size of each partition
+                can potentially be subjected to data skew of the chosen partition keys. For example,
+                for the index in the following example, the partitions containing the major airlines
+                would have more entries since more index keys would end up hashing into the same
+                partition.</p>
+            <codeblock>CREATE INDEX idx ON `travel-sample`(airline, destinationairport, sourceairport) 
+ PARTITION BY HASH(airline);</codeblock>
+            <p>During index rebalaning, the rebalancer takes into account the data skew among the
+                partitions using runtime statistics. It tries to even out resource utilization
+                across the index service nodes by moving the partitions across the nodes when
+                possible.</p>
+        </section>
+        <section><title>Choosing Partition Keys for Aggregate Query</title><p>As with a range query,
+                when an index is partitioned by document key, an aggregate query can gather the
+                qualifying index keys from all the partitions before performing aggregation in the
+                query engine. Whenever aggregate pushdown optimization is allowed, the query engine
+                will push down "partitial aggregate" calculation to each partition. The query engine
+                then computes the final aggregate result from the partial aggregates across all the
+                partitions. For more details on aggregate query optimization, see .</p><p><b>Example
+                    9: Create a partitioned index with partition key being document
+                key</b><codeblock># Find number of fights out of SFO for every destination across all airlines
+CREATE INDEX idx_pe9 ON `travel-sample` (sourceairport, destinationairport, stops, airline, id, ARRAY_COUNT(schedule))
+ PARTITION BY HASH (meta().id) where type="route";
+
+SELECT sourceairport, destinationairport, SUM(ARRAY_COUNT(schedule))
+FROM `travel-sample`
+WHERE sourceairport = "SFO"
+AND type = "route"
+GROUP BY sourceairport, destinationairport;</codeblock></p><p>The
+                choice of partition keys can also improve aggregate query performance when the query
+                engine can push down the "full aggregate" calculation to the index node. In this
+                case, the query engine does not have to recompute the final aggregate result from
+                the index nodes. In addition, certain pushdown optimizations can only be enabled
+                when a full aggregate result is expected from the index node. To enable a full
+                aggregate computation, the index must be created with the following requirements:
+                    <ol id="ol_szq_pyd_42b">
+                    <li>The expressions in the GROUP BY clause must match the partition keys.</li>
+                    <li>The expressions in the GROUP BY clause must match the leading index
+                        keys.</li>
+                    <li>The partition keys must match the leading index keys.</li>
+                </ol></p><b>Example 10: Create a partitioned index with the partition keys for full
+                aggregate pushdown</b></section>
+        <codeblock># Find number of fights out of SFO for every destination across all airlines
+CREATE INDEX idx_pe10 ON `travel-sample` (sourceairport, destinationairport, stops, airline, id, ARRAY_COUNT(schedule))
+ PARTITION BY HASH (sourceairport, destinationairport) where type="route";
+
+SELECT sourceairport, destinationairport, SUM(ARRAY_COUNT(schedule))
+FROM `travel-sample`
+WHERE sourceairport = "SFO"
+AND type = "route"
+GROUP BY sourceairport, destinationairport;</codeblock>
+        <section>
+            <title>Number of Partitions</title>
+            <p>The number of index partitions is fixed when the index is created. By default, each
+                index will have 8 partitions. The Administrator can override the number of
+                partitions at index creation time.</p>
+            <p><b>Example 11: Create a partitioned index with 16 partitions</b></p>
+            <codeblock>CREATE INDEX idx_pe11 ON `travel-sample`(airline, sourceairport, destinationairport)
+ PARTITION BY HASH(airline) WITH {"num_partition":16};</codeblock>
+        </section>
+        <section>
+            <title>Partition Placement</title>
+            <p>When a partitioned index is created, the partitions across are across available index
+                nodes. During placement of the new index, the index service assumes that each
+                partition has an equal size and places the partitions according to the availability
+                of resources on each node. For example, if an index node has more available free
+                memory than the other nodes, it will assign more partitions to this index node. If
+                the index has a replica, then the replica partition will not be placed onto the same
+                node.</p>
+            <p>Alternatively, you can specify the node list to restrict the set of nodes available
+                for placement by using a command similar to the following example.</p>
+            <p><b>Example 12: Create a partitioned index on specific ports of a
+                node</b><codeblock>CREATE INDEX idx_pe12 ON `travel-sample`(airline, sourceairport, destinationairport)
+ PARTITION BY KEY(airline) <b>WITH {"nodes":["127.0.0.1:9001", "127.0.0.1:9002"]}</b>;</codeblock></p>
+            <p>You can optionally provide sizing hints too. Given the sizing hints, the planner uses
+                a formula  to estimate the memory and CPU usage of the index. Based on the estimated
+                memory and CPU usage, the planner tries to place the partitions according to the
+                free resources available to each index node.</p>
+            <table frame="all" rowsep="1" colsep="1" id="table_lpd_mxh_42b">
+                <title>Sizing Hints</title>
+                <tgroup cols="3">
+                    <colspec colname="c1" colnum="1" colwidth="1.0*"/>
+                    <colspec colname="c2" colnum="2" colwidth="2.5*"/>
+                    <colspec colname="c3" colnum="3" colwidth="1.0*"/>
+                    <thead>
+                        <row>
+                            <entry>Optional Sizing Hint</entry>
+                            <entry>Description</entry>
+                            <entry>Example</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry>secKeySize</entry>
+                            <entry>The average length of the combined index keys</entry>
+                            <entry>20</entry>
+                        </row>
+                        <row>
+                            <entry>docKeySize</entry>
+                            <entry>The average length of the document key meta().id</entry>
+                            <entry>20</entry>
+                        </row>
+                        <row>
+                            <entry>arrSize</entry>
+                            <entry>The average length of the array field. Non-array fields will be
+                                ignored.</entry>
+                            <entry>10</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+            <p>To provide sizing estimation, you can use a command similar to the following
+                examples.</p>
+            <p><b>Example 13: Create a partitioned index with specific key
+                sizes</b><codeblock>CREATE INDEX idx_pe13 ON `travel-sample`(airline, sourceairport, destinationairport) 
+ PARTITION BY HASH (airline) <b>WITH {"secKeySize":20, "docKeySize":20}</b>;</codeblock></p>
+            <p><b>Example 14: Create a partitioned index with specific key and array
+                sizes</b><codeblock>CREATE INDEX idx_pe14 ON `travel-sample`(airline, sourceairport, schedule) 
+ PARTITION BY HASH (airline) <b>WITH {"secKeySize":20, "docKeySize":20, "arrSize": 100}</b>;</codeblock></p>
+        </section>
+        <section>
+            <title>Partition Replica</title>
+            <p>A partitioned index can be created with multiple replicas to ensure indexes are
+                online despite node failure. if there are multiple server groups in a cluster,
+                replica partitions will be spread out to each server group whenever possible. If one
+                of the server groups is offline, the remaining replica partitions will be available
+                to serve all queries. Every index replica is available to serve queries. Therefore,
+                index replicas can also be used to load rebalancing of query requests.</p>
+            <p><b>Example 15: Create an index with
+                replica</b><codeblock>CREATE INDEX idx_pe15 ON `travel-sample`(airline, sourceairport, schedule) 
+ PARTITION BY HASH (airline) <b>WITH {"num_replica":2}</b>;</codeblock></p>
+            <p>When an index node fails, any in-flight query requests (serviced by the failed node)
+                will fail since the partial results are already being processed. Any new query
+                requests requiring the lost partition are then serviced by the partitions in the
+                replica.</p>
+        </section>
+        <section>
+            <title>Rebalancing</title>
+            <p>When new index nodes are added or removed from the cluster, the rebalance operation
+                attempts to move the index partitions across available index nodes in order to
+                balance resource consumptions. At the time of rebalancing, the rebalance operation
+                gathers statistics from each index. These statistics are fed to an optimization
+                algorithm to  determine the possible placement of each partition in order to
+                minimize the variation of resource consumption across index nodes.</p>
+            <p>The  rebalancer will only attempt to balance resource consumption on a best try
+                basis. There are situations where the resource consumption cannot be fully balanced.
+                For example:<ul id="ul_t1m_513_42b">
+                    <li>The index service will not try to move the index if the cost to move an
+                        index across nodes is too high.</li>
+                    <li>A cluster has a mix of non-partitioned indexes and partitioned indexes.</li>
+                    <li>There is data skew in the partitions.</li>
+                </ul></p>
+        </section>
+        <section>
+            <title>Repairing Failed Partitions</title>
+            <p>When an index node fails, the index partitions on that node will be lost. The lost
+                partitions can be recovered or repaired when: <ol id="ol_ujr_2b3_42b">
+                    <li>The failed node is delta-recovered.</li>
+                    <li>The failed node is rebalanced out of the cluster. The lost partitions on
+                        that node can be repaired/rebuilt in other index nodes whenever possible.
+                        The lost partitions cannot be repaired when the number of remaining nodes is
+                        less than or equal to the number of index replicas.</li>
+                </ol></p>
+        </section>
+        <section id="section_zyh_vdh_ndb">
+            <title>Performance Considerations</title>
+            <p><b>Max_parallelism</b></p>
+            <p>Along with aggregate pushdown optimization, an application can further enhance the
+                aggregate query performance by computing aggregation in parallel for each partition
+                in the index service. This can be achieved by specifying the parameter
+                    <codeph>max_parallelism</codeph> when issuing a query. The value for
+                    <codeph>max_parallelism</codeph> should match the number of partitions of the
+                index Note than when this is enabled, the index service uses more CPU and memory
+                since the query traffic is increased according to the value set in the parameter
+                    <codeph>max_parallelism</codeph>.</p>
+            <p><b>OFFSET Pushdown</b></p>
+            <p>When there are more than one qualifying partitions involved in a range query, the
+                query engine will not push down the OFFSET clause to the index service. Without
+                partition elimination, a partitioned index will have higher overhead for queries
+                with a large OFFSET value. Alternatively, applications can use
+                    <codeph>keyset</codeph> based pagination with partitioned index to achieve good
+                pagination query performance, detailed in this blog <xref
+                    href="https://blog.couchbase.com/offset-keyset-pagination-n1ql-query-couchbase/"
+                    format="html" scope="external">Database Pagination: Using OFFSET and Keyset in
+                    N1QL.</xref>.</p>
+            <p>For aggregate queries, the query engine will pushdown the OFFSET clause whenever full
+                aggregate result is expected and there is only 1 qualifying partition involved in
+                the query.</p>
+            <p><b>LIMIT Pushdown</b></p>
+            <p>When there are more than one qualifying partitions involved in a range query, the
+                query engine will pushdown the LIMIT clause by rewriting it to be the sum of values
+                in the LIMIT clause and OFFSET clause.</p>
+            <p>For aggregate queries, the query engine will pushdown the LIMIT clause whenever a
+                full aggregate result is expected. When there are more than one qualifying
+                partitions involved in an aggregate query, the query engine will pushdown the LIMIT
+                clause by rewriting it to be the sum of values in the LIMIT clause and OFFSET
+                clause.</p>
+            <p><b>DISTINCT Aggregate Pushdown</b></p>
+            <p>The query engine will not pushdown distinct aggregate calculation to the index node
+                unless full aggregate result is expected.</p>
+        </section>
+    </body>
+</topic>

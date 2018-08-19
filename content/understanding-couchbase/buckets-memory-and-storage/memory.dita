@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic
+  PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="memory">
+ 
+ <title>
+  Memory
+ </title>
+ 
+ <shortdesc>
+  Couchbase Server memory-management ensures high performance and scalability.
+ </shortdesc>
+ 
+ <body>
+  
+  <section id="service-memory-quotas">
+   
+   <title>Service Memory Quotas</title>
+   
+   <p>
+    Memory-quota allocation on Couchbase Server occurs <i>per service</i> (except in the case
+    of the
+    <xref href="./../services-and-indexes/services/query-service.dita" scope="local" format="dita">Query Service</xref>, 
+    which does not require a specific allocation). This allows
+    the availability of memory-resources to be tuned according to the assignment of services,
+    node by node. Note that the 
+    <xref href="./../services-and-indexes/services/data-service.dita" scope="local" format="dita">Data Service</xref> 
+    must run on at least one node; and that on each of those nodes, quotas for buckets,
+    specified at the time of bucket-creation, are subtracted 
+    from the quota allocated to the Data Service.
+   </p>
+   
+   <p>
+    The memory-quota allocation specified for a given service applies to every instance of that
+    service across the cluster. For example, if 2048 MB is specified for the 
+    <xref href="./../services-and-indexes/services/analytics-service.dita" scope="local" format="dita">Analytics Service</xref>,
+    and the Analytics Service is run on three of a cluster's five nodes, each of the three
+    instances of the service is duly allocated 2048 MB. Note that it is not possible to have
+    different memory allocations across multiple instances of the same service within a single cluster.
+   </p>
+   
+   <p>
+    By default, Couchbase Server allows 80% of a node's total available memory to be allocated to 
+    the server and its services.
+    Consequently, if a node's total available memory is 100 GB, any attempt to allocate memory beyond 80 GB produces
+    an error. 
+   </p>
+   
+   <p>
+    Instructions on how to allocate memory quotas to services when initializing a new cluster can be
+    found in the section
+    <xref href="../../install/init-setup.dita#topic12527/configure-couchbase-server" scope="local" format="dita">Configure Couchbase Server</xref>,
+    on the page
+    <xref href="../../install/init-setup.dita" scope="local" format="dita">Initializing the Cluster</xref>.
+   </p>
+   
+   <p>
+    When a node is added to a cluster, the <i>Default Configuration</i>, as established by the set-up of
+    the first node in the cluster, is available: this covers all configurable elements, including memory
+    quotas. However, if insufficient memory for the default configuration is available on the new node,  
+    the default configuration is prohibited: in such cases, settings
+    for the new node can be custom-configured, allowing an appropriate subset of services to be specified. 
+   </p>
+   
+   <p>
+    If, when the initial node of a cluster is set up, only a subset of services is assigned, additional
+    nodes can subsequently be added, in order to host additional services: in which case, each new service can be given
+    its initial memory allocation as its node is added.
+   </p>
+   
+   <p>
+    Instructions on how to add a new node to a cluster, determine which services be can be retained, and
+    add new services, can
+    be found in the section 
+    <xref href="../../install/init-setup.dita#topic12527/join-an-existing-cluster" scope="local" format="dita">Join an Existing Cluster</xref>,
+    on the page
+    <xref href="../../install/init-setup.dita" scope="local" format="dita">Initializing the Cluster</xref>.
+   </p>
+   
+   <p>
+    The <b>Service Memory Quotas</b> panel on the <b>Settings</b> screen of Couchbase Web Console lists all 
+    services running on the cluster, and specifies
+    the memory allocation for each.
+    The panel is interactive, and allows the memory allocations to be changed and saved. If a modification
+    attemptedly exceeds a permitted maximum or minimum,
+    a notification 
+    of the error is displayed, and the modification is disallowed. See 
+    <xref href="../../settings/cluster-settings.dita" scope="local" format="dita">Configure Cluster Settings</xref> 
+    for further information.
+   </p>
+   
+   <p>
+    Minimum-required memory-quotas are:
+   </p>
+   
+   <table frame="all" rowsep="1" colsep="1" id="memory_quota_mimumums">
+
+    <tgroup cols="2" align="left">
+     <colspec colname="c1" colnum="1" colwidth="0.6*"/>
+     <colspec colname="c2" colnum="2" colwidth="1.0*"/>
+     <thead>
+      <row>
+       <entry>Service</entry>
+       <entry>Minimum Memory Quota (in MB)</entry>
+      </row>
+     </thead>
+     <tbody>
+      
+      <row>
+       <entry>Data</entry>
+       <entry>256</entry>
+      </row>
+      
+      <row>
+       <entry>Index</entry>
+       <entry>256</entry>
+      </row>
+      
+      <row>
+       <entry>Search</entry>
+       <entry>256</entry>
+      </row>
+      
+      <row>
+       <entry>Analytics</entry>
+       <entry>1024</entry>
+      </row>
+      
+      <row>
+       <entry>Eventing</entry>
+       <entry>256</entry>
+      </row>
+      
+     </tbody>
+    </tgroup>
+   </table>
+   
+   
+  </section>
+
+  
+  <section id="initialization-and-warmup">
+   
+   <title>
+    Initialization and Warmup
+   </title>
+   
+   <p>
+    When Couchbase Server is restarted on a node, the node goes through a <i>warmup process</i> 
+    before it restarts the handling of data requests. During this warmup process, data 
+    on disk is sequentially reloaded into memory. The time required for the reload
+    depends on the size and configuration of the system, the amount of data persisted on
+    the node, and the ejection policy configured for the buckets. 
+   </p>
+    
+   <p>
+    Frequently used items are
+    identified via a scanner process, which examines an <i>access log</i>, and obtains the 
+    appropriate keys. Corresponding items are then loaded with the highest priority. The scanner
+    process is configurable, via the CLI utility <codeph>cbepctl</codeph>, with the <codeph>flush_param</codeph>
+    parameter.
+    This utility also provides the parameters <codeph>warmup_min_memory_threshold</codeph> and 
+    <codeph>warmup_min_item_threshold</codeph>, which can be used to schedule the resumption of traffic
+    before all items have been reloaded into memory. See
+    <xref href="../../cli/cbepctl/set-flush_param.dita" scope="local" format="dita">set flush_param</xref>.
+   </p>
+   
+  </section>
+  
+  <section id="ejection">
+   
+   <title>
+    Ejection
+   </title>
+   
+   <p>
+    If a bucket's memory quota is exceeded, items may be <i>ejected</i> from the bucket by the
+    Data Service. Different
+    <i>ejection methods</i> are available, and are configured per bucket. Note that in
+    some cases, ejection is configured <i>not</i> to occur.
+    For detailed information, see
+    <xref href="./buckets.dita" scope="local" format="dita">Buckets</xref>.
+   </p>
+   
+   <p>
+    For each bucket, available memory is managed according to two <i>watermarks</i>, which are
+    <codeph>mem_low_wat</codeph> and <codeph>mem_high_wat</codeph>.
+    If data is continuously loaded into the bucket, its quantity eventually 
+    increases to the value indicated by the
+    <codeph>mem_low_wat</codeph> watermark. At this point, <i>paging</i> is triggered, so
+    that
+    memory-availability is continuously optimized. Then, as still more data is
+    loaded, the data's quantity 
+    increases to the value indicated by the <codeph>mem_high_wat</codeph> watermark. 
+    If, based on the bucket's configuration, items can be ejected from the bucket, 
+    the Data Service 
+    ejects items from the bucket until
+    the quantity of data has decreased to the <codeph>mem_low_wat</codeph> watermark. 
+    If the rate at which data continues to be loaded is greater than that at which it is being ejected, or
+    if ejection cannot be performed, the system displays an <i>insufficient memory</i>
+    notification until
+    sufficient memory is available.
+   </p> 
+   
+   <p>
+    Items are selected for ejection based on metadata that each contains, indicating
+    whether the item can be classified as <i>Not Recently Used</i> (NRU). If an item has not been recently used, 
+    it is a candidate for ejection. 
+   </p>
+   
+   <p>
+    The relationship of <codeph>mem_low_wat</codeph> and <codeph>mem_high_wat</codeph> to the 
+    bucket's overall memory quota is illustrated as follows:
+   </p>
+    
+    <p>
+     <image href="./images/tunableMemory.png" width="416" id="tunable_memory"/>
+    </p>
+   
+    <p>
+     The default setting for <codeph>mem_low_wat</codeph> is 75%. The default setting for
+     <codeph>mem_high_wat</codeph> is 85%. These settings give items from <i>active</i>
+     vBuckets a 40% chance of ejection; and give items from <i>replica</i> vBuckets a
+     60% chance of ejection. The default settings can be changed by means of the
+     <codeph>cbepctl</codeph> utility. See
+     <xref href="../../cli/cbepctl/set-flush_param.dita" scope="local" format="dita">set flush_param</xref>.
+     
+    </p>
+   
+  </section>
+   
+  
+  <section id="expiry-pager">
+   
+   <title>
+    Expiry Pager
+   </title>
+   <p>
+    Scans for items that have expired, and erases them from memory and disk; after
+    which, a <i>tombstone</i> remains for a default period of 3 days. The expiry pager runs
+    every 60 minutes by default: for information on changing the interval, see <codeph>cbepctl</codeph>
+    <xref href="../../cli/cbepctl/set-flush_param.dita" scope="local" format="dita">set flush_param</xref>.
+    For more information on item-deletion and tombstones, see 
+    <xref href="../buckets-memory-and-storage/expiration.dita" scope="local" format="dita">Expiration</xref>.
+   </p>
+  </section>  
+  
+  <section id="active-memory-defragmenter">
+   
+   <title>
+    Active Memory Defragmenter
+   </title>
+   
+   <p>
+    Over time, Couchbase Server-memory can become 
+    fragmented.
+    Each page in memory is typically responsible for holding documents of a specific 
+    size-range. Over time, if memory pages assigned to a specific size-range become sparsely populated 
+    (due to documents of that size being ejected, or to items changing in size), the unused space in 
+    those pages cannot be used for documents of other sizes, until a complete page is free, and that page 
+    is re-assigned to a new size. Such effects, which are highly workload-dependent, may result in memory 
+    that cannot be used efficiently. 
+   </p> 
+   
+   <p>
+    Couchbase Server provides an <i>Active Memory Defragmenter</i>, which periodically scans the 
+    cache, to identify pages that are sparsely used. It then repacks the items on those pages, to 
+    free up space.
+   </p>
+   
+  </section>
+  
+  
+ </body>
+</topic>

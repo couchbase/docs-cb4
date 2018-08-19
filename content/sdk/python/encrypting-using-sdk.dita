@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="python-fle">
+  <title>Field Level Encryption from the Python SDK</title>
+  <shortdesc>Field Level Encryption is available in Couchbase Data Platform 5.5, from Python SDK version 2.4.0.</shortdesc>
+  <conbody>
+    <p>Having <xref href="../encryption.dita" scope="local">examined the concepts behind Field Level Encryption</xref>, let's follow through how we encrypt some data with the Python SDK.</p>
+
+
+        <section id="keystore_provider">
+          <title>Keystore</title>
+            <p>The following example starts with importing the <codeph>InMemoryKeyStore</codeph> module, and creating the insecure keystore (only use this one in testing!). Then registering the provider:<codeblock outputclass="language-python">from cbencryption import AES256CryptoProvider
+from couchbase.bucket import Bucket
+from couchbase.crypto import InMemoryKeyStore
+# create insecure key store and register both public and private keys
+keystore = InMemoryKeyStore()
+keystore.set_key('mypublickey', b'!mysecretkey#9^5usdk39d&amp;dlf)03sL')
+keystore.set_key('myprivatekey', b'myauthpassword')
+
+# create and register provider
+provider = AES256CryptoProvider.AES256CryptoProvider(keystore, 'mypublickey', 'myprivatekey')
+bucket = Bucket("couchbase://10.143.180.101:8091/default",password='password')
+bucket.register_crypto_provider('AES-256-HMAC-SHA256', provider)</codeblock></p></section>
+
+
+        <section id="document_encryption">
+          <title>Encryption</title>
+    <p>To encrypt a document, the <codeph>alg</codeph> name must match the provider name, and the <codeph>kid</codeph> (key ID) must match a key in the keystore:<codeblock outputclass="language-python">prefix = '__crypt_'
+document = {'message': 'The old grey goose jumped over the wrickety gate.'}
+fieldspec = [{'alg': 'AES-256-HMAC-SHA256', 'name': 'message'}]
+encrypted_document = bucket.encrypt_fields(document,
+                                           fieldspec,
+                                           prefix)
+expected = {
+    "__crypt_message": {"alg": "AES-256-HMAC-SHA256",
+                        "kid": "mypublickey",
+                        "ciphertext": "sR6AFEIGWS5Fy9QObNOhbCgfg3vXH4NHVRK1qkhKLQqjkByg2n69lot89qFEJuBsVNTXR77PZR6RjN4h4M9evg=="
+                        }
+}</codeblock></p></section>
+
+
+        <section id="document_decryption">
+          <title>Decryption &amp; Checking</title>
+    <p>We can filter the signature/iv-independent fields, for comparison, to check that the original and the decrypted values are the same:<codeblock outputclass="language-python">def filter_encrypted(encrypted_dict):
+    return {k:v for k,v in encrypted_dict.items() if k in {"alg","kid","ciphertext"}}
+
+subset_expected = filter_encrypted(expected)
+subset_actual = filter_encrypted(encrypted_document)
+assert subset_expected == subset_actual
+# decrypt document using registered provider
+decrypted_document = bucket.decrypt_fields(encrypted_document, fieldspec, prefix)
+assert decrypted_document==document</codeblock>The complete 
+            code sample is available <xref href="https://github.com/couchbaselabs/devguide-examples/blob/master/python/encryption/field-encryption.py" scope="external" format="html">in our devguide examples</xref>.</p>
+        </section>
+
+  </conbody>
+</concept>
