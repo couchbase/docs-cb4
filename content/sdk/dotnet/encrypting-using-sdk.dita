@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE concept
+  PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="dotnet-fle">
+  <title>Field Level Encryption from the .NET SDK</title>
+  <shortdesc>Field Level Encryption is available in Couchbase Data Platform 5.5, from .NET SDK version 2.6.0.</shortdesc>
+  <conbody>
+        <section id="package">
+          <title>Packaging</title>
+            <p>The Couchbase .NET SDK uses .NET Attributes to declaratively define which fields will be encrypted on a POCO (Plain Old CSharp Object) that matches the structure of your JSON document.</p>
+            <p>Field Level Encryption (FLE) for .NET is available as a <xref href="https://www.nuget.org/packages/Couchbase.Extensions.Encryption/" format="html" scope="external">NuGet package</xref> for download. The name of the package is <codeph>Couchbase.Extensions.Encryption</codeph>. Using the NuGet Package Manager, it can be installed using the following command:<codeblock>Install-Package Couchbase.Extensions.Encryption -Version 1.0.0-dp1</codeblock></p>
+
+            <p>If you are using the .NET CLI, then it can be installed using this command:<codeblock>dotnet add package Couchbase.Extensions.Encryption --version 1.0.0-dp1</codeblock></p>
+
+            <p>If you are using Visual Studio, just type <codeph>Couchbase.Extensions.Encryption</codeph> into the NuGet Package Manager search box; locate the package, and install it.
+              <fig id="field_level_encryption--nuget.png">
+                <title>Installing Couchbase.Extensions.Encryption via NuGET</title>
+                <image placement="break" href="../shared/images/field_level_encryption--nuget.png" />
+              </fig>
+              This will also include the dependency on the Couchbase .NET SDK, which is required by the Field Level Encryption extension.</p>
+        </section>
+
+
+        <section id="configuration">
+          <title>Configuring Field Level Encryption</title>
+            <p>Once you have included the FLE package in your Visual Studio or CodeVS project, you’ll need to configure the SDK to use it. FLE 
+              currently doesn’t allow for config file configuration; this has to be done programmatically using the <codeph>ClientConfiguration</codeph> 
+              found in the <codeph>Couchbase.Configuration.Client</codeph> namespace. Note that all of code snippets below can be found in full in 
+              our <xref href="https://github.com/couchbaselabs/devguide-examples/tree/master/dotnet" format="html" scope="external">devguide-examples repo</xref> 
+              in GitHub.</p>
+
+            <p>First, add the following namespaces to your code file:<codeblock>using System.Collections.Generic;
+using Couchbase.Configuration.Client;
+using Couchbase.Extensions.Encryption;
+using Couchbase.Extensions.Encryption.Providers;
+using Couchbase.Extensions.Encryption.Stores;</codeblock></p>
+
+            <p>Then, add the configuration required to enable FLE to use the SDK:<codeblock>const string publicKey = "!mysecretkey#9^5usdk39d&amp;dlf)03sL";
+const string publicKeyName = "publickey";
+ 
+const string signingKey = "myauthpassword";
+const string signingKeyName = "mysecret";
+ 
+var keystore = new InsecureKeyStore(
+      new KeyValuePair&lt;string, string>(publicKeyName, publicKey),
+      new KeyValuePair&lt;string, string>(signingKeyName, signingKey));
+ 
+var cryptoProvider = new AesCryptoProvider(keystore)
+{
+      PublicKeyName = publicKeyName,
+      SigningKeyName = signingKeyName
+};
+ 
+var config = new ClientConfiguration();
+config.EnableFieldEncryption(cryptoProvider); 
+var cluster = new Cluster(config);</codeblock></p>
+
+            <p>First the keystore is created with a public key and a signing key; the signing key is required for ensuring that the encrypted data or any part 
+              of the message is not tampered with. Then an <codeph>AesCryptoProvider</codeph> instance is created which takes the keystore as a constructor parameter. Finally 
+              the configuration is created and the extension method <codeph>EnableFieldEncryption</codeph> is called passing in the <codeph>ICryptoProvider</codeph> instance. Once this is done, 
+              configuration is complete!
+            </p>
+
+            <p>Note, that this example uses the <codeph>InsecureKeyStore</codeph> class which is an in-memory keystore that stores the keys unprotected; this is fine for testing and examples, but for real world applications the <codeph>FileSystemKeyStore</codeph>, which uses the DAPI, is a better choice.</p>
+
+            <p>Once we have setup our configuration, we’ll open a cluster and bucket object. Note that for a real-world application, you’ll want to tie the scope of both the cluster and the bucket to the lifespan of the application - see the <xref href="https://developer.couchbase.com/documentation/server/current/sdk/dotnet/managing-connections.html" format="html" scope="external">Managing Connections documentation</xref> for more information.</p>
+        </section>
+
+
+        <section id="fields">
+          <title>Specifying what to Encrypt</title>
+            <p>In order to specify which field to encrypt, a special .NET attribute is used to annotate a property on a POCO (Plain Old Csharp Object) For cross-sdk support, although any property on a POCO can be encrypted, this must be a root-level property.<codeblock>public class Person
+{
+      [EncryptedField(Provider = "AES-256-HMAC-SHA256")]
+      public string Password { get; set; }
+      public string FirstName { get; set; }
+      public string LastName { get; set; }
+      public string UserName { get; set; }
+      public int Age { get; set; }
+}</codeblock></p>
+
+            <p>In the POCO above, we have a field which we wish to encrypt called <codeph>Password</codeph> which represents a person’s password. This 
+               property is annotated with <codeph>EncryptedFieldAttribute</codeph> and the <codeph>ICryptoProvider.Provider</codeph> name we are using. 
+               Note, this must match the type of <codeph>ICryptoProvider</codeph> we supplied in our configuration (“AES-256-HMAC-SHA256").
+            </p>
+        </section>
+
+
+        <section id="storing-and-retrieving">
+          <title>Storing and Retrieving Documents with Encrypted Fields</title>
+            <p>Once this is done, it's simply a matter of using the basic CRUD operations that Couchbase supports to insert or fetch the document from the database. 
+              For example, assuming a Person class annotated with the <codeph>EncryptedField</codeph> attribute on a Password property:<codeblock>var teddy = new Person
+{
+     Age = 33,
+     FirstName = "Ted",
+     LastName = "DeBloss",
+     Password = "ssloBeD12345"
+};
+
+var bucket = cluster.OpenBucket();
+var insert = bucket.Upsert("person::1", teddy);</codeblock></p>
+
+<p>Retrieving a document with an encrypted field is no different than any other get assuming you use an annotated POCO:<codeblock>var get = bucket.Get&lt;Person>("person::2");
+if (get.Success)
+{
+       Console.WriteLine("Fetched person...");
+}</codeblock></p>
+
+            <p>It's important to note that the data is encrypted for transport and storage only. When you retrieve the document the value for Password 
+              will be in its unencrypted format.</p>
+        </section>
+
+
+
+  </conbody>
+</concept>
