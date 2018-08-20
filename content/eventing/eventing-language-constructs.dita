@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="eventing_language_constructs">
+  <title> Language Constructs</title>
+  <shortdesc>The language constructs are fundamental units of a language. This topic discusses the JavaScript constructs that have been removed and new constructs that have been added in order to support the requirements of Couchbase Functions. </shortdesc>
+  <body>
+   
+      <p> Using JavaScript, you can write your custom Functions. Couchbase Functions inherit support for most ECMAScript constructs by using Google v8 as the execution container. However, to support the ability to shard and scale Function-execution automatically, some capabilities have been removed.
+        Additionally, to optimize language-utilization of the server environment, some new constructs have been added.</p>
+    
+    <section id="removed-lang-features">
+      <title> Removed Language Features </title><p> The following JavaScript features have been
+        removed: <ul id="ul_ptx_cv5_42b">
+          <li>Global State</li>
+          <li>Asynchrony</li>
+          <li>Browser and other Extensions</li>
+        </ul></p><p>
+        <i><b>Global State</b></i>: </p><p>Functions do not allow global variables. All state must
+        be saved and retrieved from persistence providers. In Couchbase Server 5.5, the Data Service
+        provider is used as a persistence provider. Therefore, all global states are contained in
+        the Data Service bucket(s) made available to the Function through bindings. This restriction
+        is mandatory for the Function-logic to remain agnostic of the rebalance
+            operation.</p><codeblock outputclass="language-javascript">var count = 0;                         // Not allowed - global variable.
+function OnUpdate(doc, meta) {
+  count++;
+}</codeblock><p><i><b>Asynchrony</b></i>:
+        </p><p>Asynchrony, particularly asynchronous callback, to be Functional needs to retain
+        access to parent scope. This forms a node-specific, long-running state that prevents the
+        capture of entire long-running state in persistence providers. Therefore, Function handlers
+        are restricted to running as short-running, straight-line code, without sleep and wakeups.
+        Limited asynchrony is added back through time observers. Time observers are designed not to
+        make the state
+            node-specific</p><codeblock outputclass="language-javascript">function OnUpdate(doc, meta) {
+  setTimeout(function(){}, 300);     // Not allowed - asynchronous flow.
+}</codeblock><p><i><b>Browser
+            and other Extensions</b></i>: </p><p>.A Function executes on Couchbase Server similar to
+        the code that is visible in the browser. </p>As a Developer, you need to understand that the
+      code displayed in the below example runs in the browser. The ‘window’ term in the code
+          <b><i>window.XMLHttpRequest()</i></b>, is not a server-side construct but is in the
+      context of a
+      browser.<codeblock outputclass="language-javascript">function OnUpdate(doc, meta) {
+  var rpc = window.XMLHttpRequest();  // Not allowed - browser extension.
+}</codeblock></section>
+    <section id="added-lang-features">
+      <title> Added Language Features </title>
+      <p> The following constructs have been added: <ul>
+        <li>Bucket Accessors</li>
+        <li>Top level N1QL keywords such as SELECT, UPDATE, and INSERT</li>
+      </ul></p>
+      
+          <p> <i><b>Bucket Accessors</b></i>: </p>
+          <p>Couchbase buckets, when bound to a Function, appear as a global JavaScript map. The map
+            operations such as get, set and delete are mapped to the Data Service providers get,
+            set, and delete operations respectively. Other advanced Data Service operations are
+            available as member Functions on the map object. </p>
+          <codeblock outputclass="language-javascript">function OnUpdate(doc, meta) {
+  // Assuming 'dest' is a bucket alias binding
+  var val = dest[meta.id];         // this is a bucket GET operation.
+  dest[meta.id] = {"status":3};    // this is a bucket SET operation.
+  delete dest[meta.id];            // this is a bucket DEL operation.
+}</codeblock>
+        
+          <p>
+            <i><b>N1QL</b></i>: </p>
+          <p>Top level N1QL keywords, such as SELECT, UPDATE, and INSERT, are available as keywords
+            in Functions. Operations that return values are accessible through a special iterator on
+            which the <b>for (var &lt;row> of &lt;iterator>)</b> looping-construct has been defined.
+            This restricted looping-construct allows support of query-result streaming, and
+            automatic query-cancellation when the iterator goes out of scope. Any variable that is
+            reachable from the scope of the N1QL query can be referred to using
+              <b>$&lt;variable></b> syntax in the N1QL statement, where parameters get substituted
+            according to the rules of the named-parameter substitution in the N1QL grammar
+            specification. </p>
+          <p>
+            <note type="important">The N1QL construct is still in development and may have some
+          rough edges and bugs, and may change significantly before the final GA release. This
+          release version of Couchbase Server 5.5 is intended for development purposes only.</note>
+          </p>
+          <p>The iterator is an input iterator (elements are read-only). The keyword <i>this</i>
+            cannot be used in the body of the iterator. The variables created inside the iterator
+            are local to the iterator. </p>
+          <codeblock outputclass="language-javascript">function OnUpdate(doc, meta) {
+  var strong = 70;
+  var stmt =
+    SELECT *                  // N1QL queries are embedded directly.
+    FROM `beer-samples`       // Token escaping is standard N1QL style.
+    WHERE abv > $strong;      // Local variable reference using $ syntax.
+  for (var beer of stmt) {  // Stream results using 'for' iterator.
+    break;                   // Cancel streaming query by breaking out.
+  }
+}</codeblock>
+     
+    </section>
+    <section id="handler-signatures">
+      <title> Handler Signatures </title><p> The Eventing Service supports two event-handlers: <ul>
+          <li>OnUpdate Handler</li>
+          <li>OnDelete Handler</li>
+        </ul></p><p>
+        <i><b>OnUpdate Handler</b></i>: This handler gets called when a document is created or
+        modified. The handler listens to data changes from the associated source vBucket. A sample
+        OnUpdate handler is displayed
+        below:</p><codeblock outputclass="language-javascript">function OnUpdate(doc, meta) {
+  if (doc.type === 'order' &amp;&amp; doc.value > 5000) {
+    //‘phonverify’ is a bucket alias that is specified as a binding.
+    phoneverify[meta.id] = doc.customer;
+  }
+}</codeblock><p>In
+        this handler following limitations exist:</p><ul>
+        <li>
+          <p>If a document is modified several times in a short duration, the calls at times get
+            coalesced into a single event, due to deduplication.</p>
+        </li>
+        <li>
+          <p>It is not possible to distinguish a Create from an Update operation.</p>
+        </li>
+      </ul>
+      <i><b>OnDelete Handler</b></i>: <p>This handler gets called when a document is deleted. The
+        handler listens to data changes from the associated source vBucket. This handler also gets
+        invoked during the expiry of a document.</p><p dir="ltr">A sample OnDelete handler is
+        displayed
+        below:</p><codeblock outputclass="language-javascript">function OnDelete(meta) {
+  var stmt = SELECT id from orders WHERE shipaddr = $meta.id;
+    for (var id of stmt) {
+      log("Address invalidated for pending order: " + id);
+    }
+  } </codeblock><p>In
+        this handler the following limitations exist:</p><ul id="ul_kml_jcp_m2b">
+        <li dir="ltr">
+          <p dir="ltr">It is not possible to distinguish a delete as a result of expiration from a
+            user-triggered delete operation.</p>
+        </li>
+        <li dir="ltr">
+          <p dir="ltr">It is not possible to get the value of the document that was just deleted or
+            the one that just got expired. </p>
+        </li>
+      </ul></section>
+    <section id="section_qtb_tcp_m2b">
+      <title>Reserved Words</title>
+      <p>Reserved words are words that cannot be used as a variable name, function name,
+        or as a property in the Function handler code. The following table lists the reserved words
+        that you must refrain from using as they are used by Couchbase's query language, N1QL. </p>
+        <table frame="all" rowsep="1" colsep="1" id="table_vxz_5cp_m2b">
+          
+          <tgroup cols="4">
+            <colspec colname="c1" colnum="1" colwidth="1*" align="left"/>
+            <colspec colname="c2" colnum="2" colwidth="1*"/>
+            <colspec colname="newCol3" colnum="3" colwidth="1*"/>
+            <colspec colname="newCol4" colnum="4" colwidth="1*" align="left"/>
+            <thead>
+              <row>
+                <entry nameend="newCol4" namest="c1">N1QL Keywords</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry dir="ltr">ALTER</entry>
+                <entry dir="ltr">EXECUTE</entry>
+                <entry dir="ltr">MERGE</entry>
+                <entry dir="ltr">UPDATE</entry>
+              </row>
+              <row>
+                <entry dir="ltr">BUILD</entry>
+                <entry dir="ltr">EXPLAIN</entry>
+                <entry dir="ltr">PREPARE</entry>
+                <entry dir="ltr">UPSERT</entry>
+              </row>
+              <row>
+                <entry dir="ltr">CREATE</entry>
+                <entry dir="ltr">GRANT</entry>
+                <entry dir="ltr">RENAME</entry>
+                <entry/>
+              </row>
+              <row>
+                <entry dir="ltr">DELETE</entry>
+                <entry dir="ltr">INFER</entry>
+                <entry dir="ltr">REVOKE</entry>
+                <entry/>
+              </row>
+              <row>
+                <entry dir="ltr">DROP</entry>
+                <entry dir="ltr">INSERT</entry>
+                <entry dir="ltr">SELECT</entry>
+                <entry/>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+    
+      <p><b>What Happens If You Use a Reserved Word?</b></p>
+      <p>Let's say you try to create a new Function handler code using a reserved word for variable
+        names, for function names, and as a property bindings value. All three cases generate a
+        deployment error. </p>
+      <p>Reserved words as a variable name:
+        <codeblock outputclass="language-javascript">function get_numip_first_3_octets(ip)
+{
+  var grant = 0;
+  if (ip)
+  {
+	var parts = ip.split('.');
+  }
+}</codeblock></p>
+      <p>Reserved words as a function name:
+        <codeblock outputclass="language-javascript">function grant(ip)
+{
+  var return_val = 0;
+  if (ip)
+  {
+    var parts = ip.split('.');
+  }
+}</codeblock></p>
+      <p>During the Function deployment step, when the system validates the handler code, it
+        displays an error message such as the following: <systemoutput>Sample Error Message -
+          Deployment failed: Syntax error (&lt;line and column numbers>) - grant is a reserved name
+          in N1QLJs</systemoutput></p>
+      <p dir="ltr">Reserved words as a property bindings value</p>
+      <p><image href="images/reserved-words.png" id="image_b2j_gvq_42b" width="300"/></p>
+    </section>
+    <section id="section_ykb_qhw_m2b">
+      <title><b>Support for N1QL in Function Handlers</b></title>
+      <p>
+        <note type="important">The N1QL queries in events are a BETA feature and may have some rough
+          edges and bugs, and may change significantly before the final GA release. This
+          Beta-release version of Couchbase Server 5.5 is intended for development purposes only; no
+          Enterprise Support is provided for Beta features.</note>
+      </p>
+      <p dir="ltr">The Function handler code supports N1QL queries. Top level N1QL keywords, such as
+        SELECT, UPDATE, and INSERT, are available as keywords in Functions. </p>
+      <p dir="ltr">During deployment, if a handler code includes an N1QL query, then the system
+        generates a warning message. <systemoutput>Warning Message: "Handler &lt;function_name> uses Beta features. Do not
+          use in production environments."</systemoutput>However, the warning message does not prevent
+        the Function deployment.</p>
+      
+      <p dir="ltr">You must use <varname>$&lt;variable></varname>, as per N1QL specification, to use
+        a JavaScript variable in the query statement. The object expressions for substitution are
+        not supported and therefore you cannot use the <parmname>meta.id</parmname> expression in
+        the query statement. </p>
+      <p dir="ltr">Instead of <parmname>meta.id</parmname> expression, you can use <codeph>var id =
+          meta.id</codeph> in an N1QL query. </p>
+      <p>
+        <ul id="ul_qtd_yhw_m2b">
+          <li>Invalid N1QL query
+            <codeblock>DELETE FROM `transactions` WHERE username = $meta.id;  </codeblock></li>
+          <li>Valid N1QL query
+            <codeblock>var id = meta.id; 
+DELETE FROM `transactions` WHERE username = $id;</codeblock></li>
+        </ul>
+      </p>
+      <p dir="ltr">When you use a N1QL query inside a Function handler, remember to use an escaped
+        identifier for bucket names with special characters (`<varname>bucket-name</varname>`).
+        Escaped identifiers are surrounded by backticks and support all identifiers in JSON</p>
+      <p dir="ltr">For example:</p>
+      <ul id="ul_o3k_rhw_m2b">
+        <li dir="ltr">
+          <p dir="ltr">If the bucket name is <parmname>beer-sample</parmname>, then use the N1QL
+            query such as: <codeblock>SELECT * FROM `beer-sample` WHERE type...</codeblock></p>
+        </li>
+        <li dir="ltr">
+          <p dir="ltr">If bucket name is <parmname>beersample</parmname>, then use the N1QL query
+            such as: <codeblock>SELECT * FROM beersample WHERE type ...</codeblock></p>
+        </li>
+      </ul>
+    </section>
+  </body>
+</topic>

@@ -55,30 +55,82 @@
         following HTTP method and URI:</p>
       <p><b>HTTP method and URI</b></p>
       
-      <codeblock>GET /pools/default/certificate</codeblock>
+      <codeblock outputclass="language-bash">GET /pools/default/certificate</codeblock>
       
       <p><b>Syntax</b></p>
-      <codeblock>curl http://[remoteHost]:[port]/pools/default/certificate</codeblock>
+      <codeblock outputclass="language-bash">curl http://[remoteHost]:[port]/pools/default/certificate</codeblock>
       
       <p><b>Example</b></p>
-      <codeblock>curl http://remoteHost:8091/pools/default/certificate &gt; ./remoteCert.pem</codeblock>
+      <codeblock outputclass="language-bash">curl http://remoteHost:8091/pools/default/certificate &gt; ./remoteCert.pem</codeblock>
     </section>
     
     
     <section><title>Regenerating certificates</title>
       <p>To regenerate a certificate on a destination cluster, use the following HTTP method and URI:</p>
       <p><b>HTTP method and URI</b></p>
-      <codeblock>POST /controller/regenerateCertificate</codeblock>
+      <codeblock outputclass="language-bash">POST /controller/regenerateCertificate</codeblock>
       
       <p><b>Example</b></p>
-      <codeblock>curl -X POST http://Administrator:asdasd@remoteHost:8091/controller/regenerateCertificate</codeblock>
+      <codeblock outputclass="language-bash">curl -X POST http://Administrator:asdasd@remoteHost:8091/controller/regenerateCertificate</codeblock>
     </section>
 
 
-    <section><title>Configuring XDCR with data encryption</title>
-      <p>A POST to <codeph>/pools/default/remoteClusters</codeph> creates the XDCR cluster reference from the
-        source cluster to the destination cluster. Setting the <codeph>demandEncryption</codeph> parameter to
-        one (1) and providing the certificate name and location enables data encryption.</p>
+    <section>
+      
+      <title>
+        Configuring XDCR with data encryption
+      </title>
+      
+      <p>
+        A POST to <codeph>/pools/default/remoteClusters</codeph> creates the XDCR cluster reference from the
+        source cluster to the destination cluster. The <codeph>secureType</codeph> parameter can be:
+      </p>
+      
+      <ul>
+        <li>
+          <codeph>none</codeph>: The connection is not secured.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          <codeph>half</codeph>: Only the password is encrypted. If the destination cluster is running Couchbase
+          Enterprise Server verion 5.5 or later, SCRAM-SHA is used, and no certificate is required. If the
+          destination cluster is running a pre-5.5 version of Couchbase Enterprise Server, TLS is used, and
+          the root certificate of the destination cluster must be provided. In both cases, the username and
+          password of the destination cluster's Full, Cluster, or XDCR Administrator must be provided. If
+          specified, the root certificate of the destination cluster is ignored if the destination cluster is
+          running a pre-5.5 version of Couchbase Enterprise Edition.
+          
+          <p>
+            
+          </p>
+        </li>
+        
+        <li>
+          <codeph>full</codeph>: Both password and data are encrypted. TLS is used. This requires either:
+          
+          <ul>
+            <li>The username and password of the destination cluster's Full, Cluster, or XDCR Administrator;
+              plus the root certificate of the destination cluster.
+              
+              <p>
+                
+              </p>
+            </li>
+            
+            <li>
+              The root certificate of the destination cluster; plus the client certificate and client private
+              key of the local cluster.
+              <p>
+                
+              </p>
+            </li>
+          </ul>
+        </li>
+      </ul>
       
       <p><b>HTTP method and URI</b></p>
         <p>The following HTTP method and URI modifies the destination cluster reference.</p>
@@ -87,24 +139,80 @@
             
       <p><b>Syntax</b></p>
             
-            <codeblock>curl -X POST  -u Admin:myPassword
+      <codeblock outputclass="language-bash">curl -X POST  -u Admin:myPassword
   http://localHost:port/pools/default/remoteClusters 
   -d name=&lt;clusterName&gt;             // Remote cluster name
   -d hostname=&lt;host&gt;:&lt;port&gt;       // FQDN of the remote host.
   -d username=&lt;adminName&gt;           // Remote cluster Admin name
   -d password=&lt;adminPassword&gt;       // Remote cluster Admin password
-  -d demandEncryption=[0|1] --data-urlencode "certificate=$(cat remoteCert.pem)"
-  -d encryptionType=["half"|"full"] // set to "half" to just encrypt log-in details</codeblock>
+  -d encryptionType=["half"|"full"] --data-urlencode "certificate=$(cat remoteCert.pem)"
+ // set to "half" to just encrypt log-in details</codeblock>
             
-            <p><b>Example</b></p>
+            <p><b>Example 1</b></p>
+      
+      <p>
+        This secures password and data, by means of TLS.
+      </p>
             
-            <codeblock>curl -X POST 
- -d &apos;name=remoteName&apos; \  
- -d &apos;hostname=10.3.4.187:8091&apos; \
- -d &apos;username=remoteAdmin&apos; -d &apos;password=remotePassword&apos; \
- -d &apos;demandEncryption=1 --data-urlencode "certificate=$(cat remoteCert.pem)"&apos; \
- -d &apos;encryptionType="full"&apos; \
- http://Administrator:asdasd@192.168.0.1:8091/pools/default/remoteClusters/</codeblock></section>
+      <codeblock outputclass="language-bash">curl -u Administrator:password -v -X POST http://10.142.180.1:8091/pools/default/remoteClusters 
+-d 'name=remoteName' \
+-d 'hostname=10.142.180.101:8091' \
+-d 'username=remoteAdministrator' \
+-d 'password=remotePassword' \
+-d 'encryptionType=full' \
+--data-urlencode "certificate=$(cat ./cert/remoteClusterRootCert.pem)"</codeblock>
+      
+      <p>
+        <b>Example 2</b>
+      </p>
+      
+      <p>
+        This secures both authentication and data, by means of TLS; using root and client certificates, and
+        client private key.
+      </p>
+      
+      <codeblock outputclass="language-bash">curl -X POST -u Administrator:welcome \
+http://127.0.0.1:9000/pools/default/remoteClusters \
+-d name=rem \
+-d hostname=127.0.0.1:9001 \
+-d secureType=full \
+--data-urlencode "certificate=$(cat /Users/yu/cert/root/ca.pem)" \
+--data-urlencode "clientCertificate=$(cat /Users/yu/pem/chain.pem)" \
+--data-urlencode "clientKey=$(cat /Users/yu/cert/client/client/client.key)"</codeblock>
+      
+      <p>
+        <b>Example 3</b>
+      </p>
+      
+      <p>
+        This secures password only, by means of SCRAM-SHA.
+      </p>
+      
+      <codeblock outputclass="language-bash">curl -u Administrator:password -v -X POST http://10.142.180.1:8091/pools/default/remoteClusters \
+-d 'name=remoteName' \
+-d 'hostname=10.142.180.101:8091' \
+-d 'username=remoteAdministrator' \
+-d 'password=remotePassword' \
+-d 'secureType=half'</codeblock>
+      
+      <p>
+        The response obtained from successfully securing the password with SCRAM-SHA is as follows:
+      </p>
+      
+      <codeblock outputclass="language-bash">{
+"deleted": false,
+"demandEncryption": true,
+"encryptionType": "half",
+"hostname": "10.142.180.101:8091",
+"name": "remoteName",
+"secureType": "half",
+"uri": "/pools/default/remoteClusters/remoteName",
+"username": "remoteAdministrator",
+"uuid": "9b323738eb48104a72d15e7230911358",
+"validateURI": "/pools/default/remoteClusters/remoteName?just_validate=1"
+}</codeblock>
+    
+    </section>
     
     
     <section><title>Disabling data encryption</title>
@@ -117,7 +225,7 @@
       <codeblock>PUT /pools/default/remoteClusters</codeblock>
       
       <p><b>Example</b></p>
-      <codeblock>curl -X PUT  -u myAdmin:myPassword
+      <codeblock outputclass="language-bash">curl -X PUT  -u myAdmin:myPassword
   http://192.168.0.1:8091/pools/default/remoteClusters/ \
   -d &apos;name=remoteName&apos; \ 
   -d &apos;hostname=10.3.4.187:8091&apos;\

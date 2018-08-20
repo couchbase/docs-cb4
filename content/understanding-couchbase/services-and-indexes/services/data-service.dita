@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="concept_tcf_byn_vs2">
+ 
+ <title>
+  Data Service
+ </title>
+ 
+ <shortdesc>
+  The Data Service provides access to data. 
+ </shortdesc>
+ 
+ <body>
+ 
+ <section>
+  <title>
+   Understanding the Data Service
+  </title>
+  
+  <p>
+   The <i>Data Service</i> is the most fundamental of all Couchbase services, providing access
+   to data in memory and on disk. The memory allocation for the Data Service is configurable. The
+   Data Service must run on at least one node of every cluster.
+  </p>
+  
+  <p>
+   The architecture of the Data Service is illustrated as follows:
+  </p>
+  
+  <p>
+   <image href="./images/dataServiceArchitecture.png" id="data_service_architecture" align="left" width="780"/>
+  </p>
+  
+  <p>
+   The principal components are:
+  </p>
+  
+  <p>
+   
+  </p>
+  
+  <ul>
+   <li>
+    <b>Dispatcher</b>: Manages networking, by handling each <b>Request</b> for data, and providing the
+    <b>Response</b>. Also streams data to other nodes within the cluster, and to other clusters, by means
+    of the <b>DCP</b> protocol; and handles <b>Authentication</b>.
+    
+    <p>
+     For information on <b>DCP Streaming</b>, see
+     <xref href="../../clusters-and-availability/clusters-and-availability.dita" scope="local" format="dita">Clusters and Availability</xref>.
+     For information on <b>Authentication</b>, see
+     <xref href="../../../security/security-authentication.dita" scope="local" format="dita">Authentication</xref>.
+     For information on ports used by the dispatcher, see
+     <xref href="../../../install/install-ports.dita" scope="local" format="dita">Network Configuration</xref>.
+    </p>
+    
+    <p>
+    </p>
+   </li>
+   
+   <li>
+    <b>KV Engine</b>: A collection of facilities that is provided for each bucket on the cluster. These are:
+    
+    <p>
+    </p>
+    
+    <ul>
+     <li>
+      <b>Managed Cache</b>: The memory allocated for the bucket, according to an established quota. 
+      This contains <i>Partition Hash Tables</i>, whereby
+      the location of bucket-items, in memory and on disk, on different nodes across the cluster, is recorded. When
+      written, items enter the cache, and subsequently are placed onto a replication queue, so as to be replicated
+      to one or more other nodes; and (in the case of items for Couchbase buckets) onto a disk queue, so as to
+      be written to disk. 
+      
+      <p>
+       For information on memory quotas, see
+       <xref href="../../buckets-memory-and-storage/memory.dita" scope="local" format="dita">Memory</xref>. 
+       For information on how items from a bucket are assigned to <i>vBuckets</i> across a cluster, see
+       <xref href="../../buckets-memory-and-storage/vbuckets.dita" scope="local" format="dita">vBuckets</xref>.
+       For illustrations of how items are written and updated for Couchbase buckets, see
+       <xref href="../../buckets-memory-and-storage/memory-and-storage.dita" scope="local" format="dita">Memory and Storage</xref>.
+      </p>
+      <p>
+       
+      </p>
+     </li>
+     
+     <li>
+      <b>Checkpoint Manager</b>: Keeps track of item-changes, using data structures named <i>checkpoints</i>. Changes
+      already made to items in memory, but not yet placed on the replication and disk queues, are recorded.
+      <p>
+       
+      </p>
+     </li>
+     
+     <li>
+      <b>Item Pager</b>: Ejects from memory items that have not recently been used, in order to free up space, as required.
+      For further information, see
+      <xref href="../../buckets-memory-and-storage/memory.dita" scope="local" format="dita">Memory</xref>. 
+      <p>
+       
+      </p>
+     </li>
+     
+     <li>
+      <b>Flusher</b>: Deletes every item in the bucket. For information on how to activate, see
+      <xref href="../../../clustersetup/bucket-flush.dita" scope="local" format="dita">Flush a Bucket</xref>.
+      <p>
+       
+      </p>
+     </li>
+     
+     <li>
+      <b>Expiry Pager</b>: Scans for items that have expired, and erases them from memory and disk; after
+      which, a <i>tombstone</i> remains for a default period of 3 days. The expiry pager runs
+      every 60 minutes by default: for information on changing the interval, see <codeph>cbepctl</codeph>
+      <xref href="../../../cli/cbepctl/set-flush_param.dita" scope="local" format="dita">set flush_param</xref>.
+      For more information on item-deletion and tombstones, see 
+      <xref href="../../buckets-memory-and-storage/expiration.dita" scope="local" format="dita">Expiration</xref>.
+      <p>
+       
+      </p>
+     </li>
+     
+     <li>
+      <b>Batch Reader</b>: Enhances performance by combining changes made to multiple items into <i>batches</i>, 
+      which are placed on the disk queue, to be written to disk.
+      <p>
+       
+      </p>
+     </li>
+    </ul>
+    
+    <p>
+     
+    </p>
+   </li>
+   
+   <li>
+    <b>Scheduler</b>: A pool of threads, mainly purposes for handling I/O. The threads are divided into four kinds, which
+    run independently of and without effect on one another:
+
+    <p>
+    </p>
+    
+    <ul>
+     <li>
+      <b>Non IO</b>: Tasks private to the scheduler that do not require disk-access; including
+      connection-notification, checkpoint removal, and hash-table resizing.
+      
+      <p>
+      </p>
+     </li>
+     
+     <li>
+      <b>Aux IO</b>: Fetch, scan, and backfill tasks.
+      
+      <p>
+      </p>
+     </li>
+     
+     <li>
+      <b>Reader IO</b>: Threads that read information from disk.
+      
+      <p>
+      </p>
+     </li>
+     
+     <li>
+      <b>Writer IO</b>: Threads that write information to disk.
+      
+      <p>
+      </p>
+     </li>
+     
+    </ul>
+    
+    <p>
+     For more information on the Data Service' threading model, see
+     <xref href="../../buckets-memory-and-storage/storage.dita" scope="local" format="dita">Storage</xref>.
+    </p>
+   
+   </li>
+   
+  </ul>
+  
+ </section>
+ 
+
+  
+  
+ </body>
+ 
+</topic>
