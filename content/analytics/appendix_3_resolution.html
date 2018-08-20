@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta description="A description of variable bindings and name resolution.">
+  </head>
+  <body>
+    <main role="main"><article role="article" aria-labelledby="ariaid-title1">
+    <div class="body">
+      <!-- 1st <h1> removed -->
+<!--
+ ! Licensed to the Apache Software Foundation (ASF) under one
+ ! or more contributor license agreements.  See the NOTICE file
+ ! distributed with this work for additional information
+ ! regarding copyright ownership.  The ASF licenses this file
+ ! to you under the Apache License, Version 2.0 (the
+ ! "License"); you may not use this file except in compliance
+ ! with the License.  You may obtain a copy of the License at
+ !
+ !   http://www.apache.org/licenses/LICENSE-2.0
+ !
+ ! Unless required by applicable law or agreed to in writing,
+ ! software distributed under the License is distributed on an
+ ! "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ ! KIND, either express or implied.  See the License for the
+ ! specific language governing permissions and limitations
+ ! under the License.
+ !-->
+
+<p>In this Appendix, we'll look at how variables are bound and how names are resolved.
+Names can appear in every clause of a query.
+Sometimes a name consists of just a single identifier, e.g., <code class="highlighter-rouge">region</code> or <code class="highlighter-rouge">revenue</code>.
+More often a name will consist of two identifiers separated by a dot, e.g., <code class="highlighter-rouge">customer.address</code>.
+Occasionally a name may have more than two identifiers, e.g., <code class="highlighter-rouge">policy.owner.address.zipcode</code>.
+<em>Resolving</em> a name means determining exactly what the (possibly multi-part) name refers to.
+It is necessary to have well-defined rules for how to resolve a name in cases of ambiguity.
+(In the absence of schemas, such cases arise more commonly, and also differently, than they do in SQL.)</p>
+
+<p>The basic job of each clause in a query block is to bind variables.
+Each clause sees the variables bound by previous clauses and may bind additional variables.
+Names are always resolved with respect to the variables that are bound ("in scope") at the place where the name use in question occurs.
+It is possible that the name resolution process will fail, which may lead to an empty result or an error message.</p>
+
+<p>One important bit of background: When the system is reading a query and resolving its names, it has a list of all the available dataverses and datasets.
+As a result, it knows whether <code class="highlighter-rouge">a.b</code> is a valid name for dataset <code class="highlighter-rouge">b</code> in dataverse <code class="highlighter-rouge">a</code>.
+However, the system does not in general have knowledge of the schemas of the data inside the datasets; remember that this is a much more open world.
+As a result, in general the system cannot know whether any object in a particular dataset will have a field named <code class="highlighter-rouge">c</code>.
+These assumptions affect how errors are handled.
+If you try to access dataset <code class="highlighter-rouge">a.b</code> and no dataset by that name exists, you will get an error and your query will not run.
+However, if you try to access a field <code class="highlighter-rouge">c</code> in a collection of objects, your query will run and return <code class="highlighter-rouge">missing</code> for each object that doesn't have a field named <code class="highlighter-rouge">c</code> – this is because it’s possible that some object (someday) could have such a field.</p>
+
+<h2 id="binding-variables"><a id="Binding_variables">Binding Variables</a></h2>
+
+<p>Variables can be bound in the following ways:</p>
+
+<ol>
+  <li>
+    <p>WITH and LET clauses bind a variable to the result of an expression in a straightforward way</p>
+
+    <p>Examples:</p>
+
+    <p><code class="highlighter-rouge">WITH cheap_parts AS (SELECT partno FROM parts WHERE price &lt; 100)</code>
+binds the variable <code class="highlighter-rouge">cheap_parts</code> to the result of the subquery.</p>
+
+    <p><code class="highlighter-rouge">LET pay = salary + bonus</code>
+binds the variable <code class="highlighter-rouge">pay</code> to the result of evaluating the expression <code class="highlighter-rouge">salary + bonus</code>.</p>
+  </li>
+  <li>
+    <p>FROM, GROUP BY, and SELECT clauses have optional AS subclauses that contain an expression and a name (called an <em>iteration variable</em> in a FROM clause, or an alias in GROUP BY or SELECT.)</p>
+
+    <p>Examples:</p>
+
+    <p><code class="highlighter-rouge">FROM customer AS c, order AS o</code></p>
+
+    <p><code class="highlighter-rouge">GROUP BY salary + bonus AS total_pay</code></p>
+
+    <p><code class="highlighter-rouge">SELECT MAX(price) AS highest_price</code></p>
+
+    <p>An AS subclause always binds the name (as a variable) to the result of the expression (or, in the case of a FROM clause, to the <em>individual members</em> of the collection identified by the expression.)</p>
+
+    <p>It's always a good practice to use the keyword AS when defining an alias or iteration variable.
+However, as in SQL, the syntax allows the keyword AS to be omitted.
+For example, the FROM clause above could have been written like this:</p>
+
+    <p><code class="highlighter-rouge">FROM customer c, order o</code></p>
+
+    <p>Omitting the keyword AS does not affect the binding of variables.
+The FROM clause in this example binds variables c and o whether the keyword AS is used or not.</p>
+
+    <p>In certain cases, a variable is automatically bound even if no alias or variable-name is specified.
+Whenever an expression could have been followed by an AS subclause, if the expression consists of a simple name or a path expression, that expression binds a variable whose name is the same as the simple name or the last step in the path expression.
+Here are some examples:</p>
+
+    <p><code class="highlighter-rouge">FROM customer, order</code> binds iteration variables named <code class="highlighter-rouge">customer</code> and <code class="highlighter-rouge">order</code></p>
+
+    <p><code class="highlighter-rouge">GROUP BY address.zipcode</code> binds a variable named <code class="highlighter-rouge">zipcode</code></p>
+
+    <p><code class="highlighter-rouge">SELECT item[0].price</code> binds a variable named <code class="highlighter-rouge">price</code></p>
+
+    <p>Note that a FROM clause iterates over a collection (usually a dataset), binding a variable to each member of the collection in turn.
+The name of the collection remains in scope, but it is not a variable.
+For example, consider this FROM clause used in a self-join:</p>
+
+    <p><code class="highlighter-rouge">FROM customer AS c1, customer AS c2</code></p>
+
+    <p>This FROM clause joins the customer dataset to itself, binding the iteration variables c1 and c2 to objects in the left-hand-side and right-hand-side of the join, respectively.
+After the FROM clause, c1 and c2 are in scope as variables, and customer remains accessible as a dataset name but not as a variable.</p>
+  </li>
+  <li>
+    <p>Special rules for GROUP BY:</p>
+
+    <ol>
+      <li>
+        <p>If a GROUP BY clause specifies an expression that has no explicit alias, it binds a pseudo-variable that is lexicographically identical to the expression itself.
+For example:</p>
+
+        <p><code class="highlighter-rouge">GROUP BY salary + bonus</code> binds a pseudo-variable named <code class="highlighter-rouge">salary + bonus</code>.</p>
+
+        <p>This rule allows subsequent clauses to refer to the grouping expression (salary + bonus) even though its constituent variables (salary and bonus) are no longer in scope.
+For example, the following query is valid:</p>
+
+        <div class="highlighter-rouge"><pre class="highlight"><code>FROM employee
+GROUP BY salary + bonus
+HAVING salary + bonus &gt; 1000
+SELECT salary + bonus, COUNT(*) AS how_many
+</code></pre>
+        </div>
+
+        <p>While it might have been more elegant to explicitly require an alias in cases like this, the pseudo-variable rule is retained for SQL compatibility.
+Note that the expression <code class="highlighter-rouge">salary + bonus</code> is not <em>actually</em> evaluated in the HAVING and SELECT clauses (and could not be since <code class="highlighter-rouge">salary</code> and <code class="highlighter-rouge">bonus</code> are no longer individually in scope).
+Instead, the expression <code class="highlighter-rouge">salary + bonus</code> is treated as a reference to the pseudo-variable defined in the GROUP BY clause.</p>
+      </li>
+      <li>
+        <p>A GROUP BY clause may be followed by a GROUP AS clause that binds a variable to the group.
+The purpose of this variable is to make the individual objects inside the group visible to subqueries that may need to iterate over them.</p>
+
+        <p>The GROUP AS variable is bound to a multiset of objects.
+Each object represents one of the members of the group.
+Since the group may have been formed from a join, each of the member-objects contains a nested object for each variable bound by the nearest FROM clause (and its LET subclause, if any).
+These nested objects, in turn, contain the actual fields of the group-member.
+To understand this process, consider the following query fragment:</p>
+
+        <div class="highlighter-rouge"><pre class="highlight"><code>FROM parts AS p, suppliers AS s
+WHERE p.suppno = s.suppno
+GROUP BY p.color GROUP AS g
+</code></pre>
+        </div>
+
+        <p>Suppose that the objects in <code class="highlighter-rouge">parts</code> have fields <code class="highlighter-rouge">partno</code>, <code class="highlighter-rouge">color</code>, and <code class="highlighter-rouge">suppno</code>.
+Suppose that the objects in suppliers have fields <code class="highlighter-rouge">suppno</code> and <code class="highlighter-rouge">location</code>.</p>
+
+        <p>Then, for each group formed by the GROUP BY, the variable g will be bound to a multiset with the following structure:</p>
+
+        <div class="highlighter-rouge"><pre class="highlight"><code>[ { "p": { "partno": "p1", "color": "red", "suppno": "s1" },
+    "s": { "suppno": "s1", "location": "Denver" } },
+  { "p": { "partno": "p2", "color": "red", "suppno": "s2" },
+    "s": { "suppno": "s2", "location": "Atlanta" } },
+  ...
+]
+</code></pre>
+        </div>
+      </li>
+    </ol>
+  </li>
+</ol>
+
+<h2 id="scoping"><a id="Scoping">Scoping</a></h2>
+
+<p>In general, the variables that are in scope at a particular position are those variables that were bound earlier in the current query block, in outer (enclosing) query blocks, or in a WITH clause at the beginning of the query.
+More specific rules follow.</p>
+
+<p>The clauses in a query block are conceptually processed in the following order:</p>
+
+<ul>
+  <li>FROM (followed by LET subclause, if any)</li>
+  <li>WHERE</li>
+  <li>GROUP BY (followed by LET subclause, if any)</li>
+  <li>HAVING</li>
+  <li>SELECT or SELECT VALUE</li>
+  <li>ORDER BY</li>
+  <li>OFFSET</li>
+  <li>LIMIT</li>
+</ul>
+
+<p>During processing of each clause, the variables that are in scope are those variables that are bound in the following places:</p>
+
+<ol>
+  <li>
+    <p>In earlier clauses of the same query block (as defined by the ordering given above).</p>
+
+    <p>Example: <code class="highlighter-rouge">FROM orders AS o SELECT o.date</code>
+The variable <code class="highlighter-rouge">o</code> in the SELECT clause is bound, in turn, to each object in the dataset <code class="highlighter-rouge">orders</code>.</p>
+  </li>
+  <li>
+    <p>In outer query blocks in which the current query block is nested.
+In case of duplication, the innermost binding wins.</p>
+  </li>
+  <li>
+    <p>In the WITH clause (if any) at the beginning of the query.</p>
+  </li>
+</ol>
+
+<p>However, in a query block where a GROUP BY clause is present:</p>
+
+<ol>
+  <li>
+    <p>In clauses processed before GROUP BY, scoping rules are the same as though no GROUP BY were present.</p>
+  </li>
+  <li>
+    <p>In clauses processed after GROUP BY, the variables bound in the nearest FROM-clause (and its LET subclause, if any) are removed from scope and replaced by the variables bound in the GROUP BY clause (and its LET subclause, if any).
+However, this replacement does not apply inside the arguments of the five SQL special aggregating functions (MIN, MAX, AVG, SUM, and COUNT).
+These functions still need to see the individual data items over which they are computing an aggregation.
+For example, after <code class="highlighter-rouge">FROM employee AS e GROUP BY deptno</code>, it would not be valid to reference <code class="highlighter-rouge">e.salary</code>, but <code class="highlighter-rouge">AVG(e.salary)</code> would be valid.</p>
+  </li>
+</ol>
+
+<p>Special case: In an expression inside a FROM clause, a variable is in scope if it was bound in an earlier expression in the same FROM clause.
+Example:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>FROM orders AS o, o.items AS i
+</code></pre>
+</div>
+
+<p>The reason for this special case is to support iteration over nested collections.</p>
+
+<p>Note that, since the SELECT clause comes <em>after</em> the WHERE and GROUP BY clauses in conceptual processing order, any variables defined in SELECT are not visible in WHERE or GROUP BY.
+Therefore the following query will not return what might be the expected result (since in the WHERE clause, <code class="highlighter-rouge">pay</code> will be interpreted as a field in the <code class="highlighter-rouge">emp</code> object rather than as the computed value <code class="highlighter-rouge">salary + bonus</code>):</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>SELECT name, salary + bonus AS pay
+FROM emp
+WHERE pay &gt; 1000
+ORDER BY pay
+</code></pre>
+</div>
+
+<p>The likely intent of the query above can be accomplished as follows:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>FROM emp AS e
+LET pay = e.salary + e.bonus
+WHERE pay &gt; 1000
+SELECT e.name, pay
+ORDER BY pay
+</code></pre>
+</div>
+
+<h2 id="resolving-names"><a id="Resolving_names">Resolving Names</a></h2>
+
+<p>The process of name resolution begins with the leftmost identifier in the name.
+The rules for resolving the leftmost identifier are:</p>
+
+<ol>
+  <li>
+    <p><em>In a FROM clause</em>: Names in a FROM clause identify the collections over which the query block will iterate.
+These collections may be stored datasets or may be the results of nested query blocks.
+A stored dataset may be in a named dataverse or in the default dataverse.
+Thus, if the two-part name <code class="highlighter-rouge">a.b</code> is in a FROM clause, a might represent a dataverse and <code class="highlighter-rouge">b</code> might represent a dataset in that dataverse.
+Another example of a two-part name in a FROM clause is <code class="highlighter-rouge">FROM orders AS o, o.items AS i</code>.
+In <code class="highlighter-rouge">o.items</code>, <code class="highlighter-rouge">o</code> represents an order object bound earlier in the FROM clause, and items represents the items object inside that order.</p>
+
+    <p>The rules for resolving the leftmost identifier in a FROM clause (including a JOIN subclause), or in the expression following IN in a quantified predicate, are as follows:</p>
+
+    <ol>
+      <li>
+        <p>If the identifier matches a variable-name that is in scope, it resolves to the binding of that variable.
+(Note that in the case of a subquery, an in-scope variable might have been bound in an outer query block; this is called a correlated subquery.)</p>
+      </li>
+      <li>
+        <p>Otherwise, if the identifier is the first part of a two-part name like <code class="highlighter-rouge">a.b</code>, the name is treated as dataverse.dataset.
+If the identifier stands alone as a one-part name, it is treated as the name of a dataset in the default dataverse.
+An error will result if the designated dataverse or dataset does not exist.</p>
+      </li>
+    </ol>
+  </li>
+  <li>
+    <p><em>Elsewhere in a query block</em>: In clauses other than FROM, a name typically identifies a field of some object.
+For example, if the expression <code class="highlighter-rouge">a.b</code> is in a SELECT or WHERE clause, it's likely that <code class="highlighter-rouge">a</code> represents an object and <code class="highlighter-rouge">b</code> represents a field in that object.</p>
+
+    <p>The rules for resolving the leftmost identifier in clauses other than the ones listed in Rule 1 are:</p>
+
+    <ol>
+      <li>
+        <p>If the identifier matches a variable-name that is in scope, it resolves to the binding of that variable.
+(In the case of a correlated subquery, the in-scope variable might have been bound in an outer query block.)</p>
+      </li>
+      <li>
+        <p>(The "Single Variable Rule"): Otherwise, if the FROM clause (or a LET clause if there is no FROM clause) in the current query block binds exactly one variable, the identifier is treated as a field access on the object bound to that variable.
+For example, in the query <code class="highlighter-rouge">FROM customer SELECT address</code>, the identifier address is treated as a field in the object bound to the variable customer.
+At runtime, if the object bound to customer has no <code class="highlighter-rouge">address</code> field, the <code class="highlighter-rouge">address</code> expression will return <code class="highlighter-rouge">missing</code>.
+If the FROM clause (and its LET subclause, if any) in the current query block binds multiple variables, name resolution fails with an "ambiguous name" error.
+Note that the Single Variable Rule searches for bound variables only in the current query block, not in outer (containing) blocks.
+The purpose of this rule is to permit the compiler to resolve field-references unambiguously without relying on any schema information.</p>
+
+        <p>Exception: In a query that has a GROUP BY clause, the Single Variable Rule does not apply in any clauses that occur after the GROUP BY because, in these clauses, the variables bound by the FROM clause are no longer in scope.
+In clauses after GROUP BY, only Rule 2.1 applies.</p>
+      </li>
+    </ol>
+  </li>
+  <li>
+    <p>In an ORDER BY clause following a UNION ALL expression:</p>
+
+    <p>The leftmost identifier is treated as a field-access on the objects that are generated by the UNION ALL.
+For example:</p>
+
+    <div class="highlighter-rouge"><pre class="highlight"><code>query-block-1
+UNION ALL
+query-block-2
+ORDER BY salary
+</code></pre>
+    </div>
+
+    <p>In the result of this query, objects that have a foo field will be ordered by the value of this field; objects that have no foo field will appear at at the beginning of the query result (in ascending order) or at the end (in descending order.)</p>
+  </li>
+  <li>
+    <p>Once the leftmost identifier has been resolved, the following dots and identifiers in the name (if any) are treated as a path expression that navigates to a field nested inside that object.
+The name resolves to the field at the end of the path.
+If this field does not exist, the value <code class="highlighter-rouge">missing</code> is returned.</p>
+  </li>
+</ol>
+
+    </div>
+    </article>
+    </main>
+  </body>
+</html>

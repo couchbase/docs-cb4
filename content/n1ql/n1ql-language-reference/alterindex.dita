@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="untitled1">
+    <title>ALTER INDEX</title>
+    <shortdesc>The ALTER INDEX statement moves the placement of an existing index or replica among
+        different GSI nodes.</shortdesc>
+    <body>
+        <p><i>(Introduced in Couchbase Server 5.5 Enterprise Edition)</i></p>
+        <section id="section_rqx_3p4_2cb">
+            <title>Purpose</title>
+            <p>Use the <codeph>ALTER INDEX</codeph> statement to change the placement of an existing
+                index or replica among different GSI nodes when you encounter any of the following
+                    situations:<ul id="ul_xql_qwn_scb">
+                    <li>An imbalance occurs due to a particular index growing faster than expected
+                        and is needed on a different node.</li>
+                    <li>An imbalance occurs due to a cluster of indexes being dropped on a single
+                        node.</li>
+                    <li>A machine is scheduled for removal, so its indexes need to move off its
+                        current node.</li>
+                    <li>The automated process of rebalancing does not give the expected
+                        results.</li>
+                    <li>Other types of scaling up or scaling down are needed.</li>
+                </ul>For example, if a node fails and you need to move it from node 172.23.130.<b>24
+                </b>to node 172.23.130.<b>25</b>, then you can simply execute the following code
+                with your own index names and
+                    addresses:<codeblock>CREATE INDEX <i>idx1</i> ON `travel-sample`(id, airline) WHERE type="route";
+
+ALTER INDEX `travel-sample`.<i>idx1</i> 
+WITH {"action":"move","nodes": ["<i>172.23.120.<b>25</b>:8091</i>"]}</codeblock><note>The
+                    ALTER INDEX move operation is asynchronous. As soon as the move alter index
+                    command is executed, the command returns. If there is no error in the input, the
+                    move operation can be tracked through the console UI and any error can be found
+                    in the Console logs and Indexer logs.</note>If a node goes down while an ALTER
+                INDEX operation is in progress, then the index would rollback to its original node
+                (not affecting queries) and a notification would appear.</p>
+        </section>
+        <section id="section_y2w_kp4_2cb">
+            <title>Prerequisites</title>
+            <p>Only users with the suitable RBAC role of <codeph>Administrator</codeph> are allowed
+                to run the <codeph>ALTER INDEX</codeph> directive.</p>
+            <p>This directive is applicable only for Standard GSI (Plasma) and MOI Indexes; and
+                hence supported only for Enterprise Edition nodes. (Not Applicable for Forest
+                DB).</p>
+            <p>This statement is supported only from 5.5 onwards; if the cluster is in mix-mode (a
+                mix of 5.5 and previous versions), then this directive will not work.</p>
+            <p><codeph>ALTER INDEX</codeph> will not work while the cluster is undergoing a
+                Rebalance.</p>
+        </section>
+        <section id="section_kgg_sp4_2cb">
+            <title>Syntax</title>
+            <p><image href="images/alter-index-clause.png" id="image_z3k_gd4_scb" width="850"/></p>
+            <p><image href="images/alter-index_action-clause.png" id="image_cxg_qd4_scb" scale="50"
+                /></p>
+            <p><image href="images/alter-index_node-clause.png" id="image_dvw_vd4_scb" scale="50"
+                /><codeblock>ALTER INDEX <varname>key_expr</varname>
+[ USING GSI ]
+WITH {"action":"<varname>action_name</varname>", "nodes": [ "<varname>node_expr</varname>" [, "<varname>node_expr2</varname>"]* }</codeblock></p>
+        </section>
+        <section id="section_xz5_gt4_2cb">
+            <title>Arguments</title>
+            <p>
+                <dl>
+                    <dlentry>
+                        <dt>key_expr</dt>
+                        <dd>[Required] String representing the corresponding named keyspace
+                            reference, with an optional index name for example
+                                <codeph>named_keyspace_ref.index_name</codeph>.</dd>
+                    </dlentry>
+                </dl>
+            </p>
+            <dl>
+                <dlentry>
+                    <dt><codeph>USING GSI </codeph></dt>
+                    <dd>[Optional. Default is "<codeph>USING GSI</codeph>"]</dd>
+                    <dd>Uses the Global Secondary Index.</dd>
+                </dlentry>
+            </dl>
+            <dl>
+                <dlentry>
+                    <dt><codeph>WITH</codeph></dt>
+                    <dd>[Required] Specifies the alter operation that needs to be performed.</dd>
+                    <dd>
+                        <dl>
+                            <dlentry>
+                                <dt><codeph>action</codeph></dt>
+                                <dd>[Required] Reserved word for denoting the single
+                                        <varname>action_name</varname> operation to be
+                                    performed.</dd>
+                            </dlentry>
+                        </dl>
+                        <dl>
+                            <dlentry>
+                                <dt>action_name</dt>
+                                <dd>
+                                    <dl>
+                                        <dlentry>
+                                            <dt>move</dt>
+                                            <dd>[Required] Moves only 1 index (or its replica) at a
+                                                time to a different node while not making any
+                                                changes to the index topology, for example, the
+                                                number of replicas remain the same.<note>The length
+                                                  of the nodes array must be equal to the number of
+                                                  index replicas.</note></dd>
+                                        </dlentry>
+                                    </dl>
+                                </dd>
+                            </dlentry>
+                        </dl>
+                        <dl>
+                            <dlentry>
+                                <dt><codeph>nodes</codeph></dt>
+                                <dd>[Required] Reserved word for denoting the node list that
+                                    specifies the new destination nodes for the index and its
+                                        replicas.<note>The full node list needs to be specified even
+                                        if only 1 replica needs to be moved.</note></dd>
+                            </dlentry>
+                        </dl>
+                        <dl>
+                            <dlentry>
+                                <dt>node_expr</dt>
+                                <dd>[Required] String of the destination node address or
+                                    addresses.</dd>
+                            </dlentry>
+                        </dl>
+                    </dd>
+                </dlentry>
+            </dl>
+        </section>
+        <section id="section_lff_jw4_2cb">
+            <title>Return Value</title>
+            <p>If the <codeph>ALTER INDEX</codeph> succeeds, then:<ul id="ul_nhl_5w4_2cb">
+                    <li>The Query Workbench will show <codeph> {  Results: []  }</codeph></li>
+                    <li>The index progress will be visible on the UI.</li>
+                    <li>After the movement is complete, the new indexes will begin to service query
+                        scans.</li>
+                    <li>The command line will display the new index nodes.</li>
+                </ul>If the <codeph>ALTER INDEX</codeph> fails, then:<ul id="ul_egx_nw4_2cb">
+                    <li>The original indexes will continue to service query scans.</li>
+                    <li>The UI Log and Query Workbench will have the appropriate error message.</li>
+                    <li>Some common errors include:<table frame="all" rowsep="1" colsep="1"
+                            id="table_bqb_vf4_scb">
+                            <tgroup cols="2" align="left">
+                                <colspec colname="c1" colnum="1" colwidth="1*"/>
+                                <colspec colname="c2" colnum="2" colwidth="1*"/>
+                                <thead>
+                                    <row>
+                                        <entry>Error Message</entry>
+                                        <entry>Possible Cause</entry>
+                                    </row>
+                                </thead>
+                                <tbody>
+                                    <row>
+                                        <entry><codeph>GSI index xxxxxxxx not found</codeph></entry>
+                                        <entry>
+                                            <ul id="ul_cl3_lh4_scb">
+                                                <li>Mistyped an index name</li>
+                                            </ul>
+                                        </entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>Missing Node Information For Move
+                                                Index</codeph></entry>
+                                        <entry>
+                                            <ul id="ul_igl_mh4_scb">
+                                                <li>Mistyped <codeph>"node"</codeph> instead of
+                                                  <codeph>"nodes"</codeph></li>
+                                                <li>Mistyped punctuation or other item</li>
+                                            </ul>
+                                        </entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>No Index Movement Required for Specified
+                                                Destination List</codeph></entry>
+                                        <entry>
+                                            <ul id="ul_t24_4h4_scb">
+                                                <li>Entered the current node instead of the target
+                                                  node</li>
+                                            </ul>
+                                        </entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>syntax error - at \",\"</codeph></entry>
+                                        <entry>
+                                            <ul id="ul_rn1_qh4_scb">
+                                                <li>Missed a double-quote mark
+                                                  (<codeph>"</codeph>)</li>
+                                            </ul>
+                                        </entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>Unable to find Index service for destination
+                                                xxx.xxx.xxx.xxx:8091 or destination is not part of
+                                                the cluster</codeph></entry>
+                                        <entry>
+                                            <ul id="ul_arn_qh4_scb">
+                                                <li>Address doesn't exist or was mistyped</li>
+                                                <li>Node isn't running</li>
+                                                <li>Node not properly added to the cluster</li>
+                                            </ul>
+                                        </entry>
+                                    </row>
+                                    <row>
+                                        <entry><codeph>Unsupported action value</codeph></entry>
+                                        <entry>
+                                            <ul id="ul_mvj_th4_scb">
+                                                <li>Mistyped the <codeph>"action"</codeph></li>
+                                            </ul>
+                                        </entry>
+                                    </row>
+                                </tbody>
+                            </tgroup>
+                        </table></li>
+                </ul></p>
+        </section>
+        <section id="section_izg_dx4_2cb"><title>Examples</title><p>When using the below examples,
+                make sure Couchbase Server 5.5 Enterprise Edition is already running on the named
+                nodes.</p><p><b>Example 1: Move the <codeph>def_faa</codeph> index from one node to
+                    another.</b></p><p>Create a cluster of 3 nodes and then go to <b>Settings >
+                    Sample buckets</b> to install the <codeph>travel-sample</codeph> bucket. The
+                indexes will then be installed in a round-robin fashion and distributed over the 3
+                nodes. Then move the <codeph>def_faa</codeph> index from the first node
+                    (192.168.10.<b>10</b> in the screenshot) to the second node
+                    (192.168.10.<b>11</b> in the screenshot).</p><p><image
+                    href="images/alter-index_servers_step1.png" id="image_y3g_n34_scb" scale="70"
+                /><codeblock>ALTER INDEX `travel-sample`.def_faa
+WITH {"action":"move","nodes": ["192.168.10.11:8091"]}</codeblock>You
+                should see:<codeblock>{
+  "results": []
+}</codeblock><image
+                    href="images/alter-index_servers_step2.png" id="image_w41_v34_scb" scale="70"
+                /></p><p><b>Example 2: Create and move an index replica from one node to
+                    another.</b></p><p>Create an index on node 192.168.10.10 with a replica on node
+                192.168.10.11, then move its replica from node 192.168.10.<b>11</b> to
+                    192.168.10.<b>12</b>.<codeblock>CREATE INDEX country_idx ON `travel-sample`(country, city) 
+       WHERE type="route" USING GSI 
+       WITH {"nodes":["192.168.10.10:8091", "192.168.10.11:8091"]};
+
+
+ALTER INDEX `travel-sample`.country_idx
+WITH {"action":"move","nodes": ["192.168.10.10:8091", "172.23.120.12:8091"]}</codeblock></p><b>Example
+                3: Moving multiple replicas.</b><p>Create an index on node 192.168.10.10 with
+                replicas on nodes 192.168.10.<b>11</b> and 192.168.10.<b>12</b>, then move the
+                replicas to nodes 192.168.10.<b>13</b> and
+                192.168.10.<b>14</b>.<codeblock>CREATE INDEX country_idx ON `travel-sample`(country, city) 
+WITH {"nodes": ["192.168.10.10:8091", "192.168.10.11:8091", "192.168.10.12:8091"]}
+
+ALTER INDEX `travel-sample`.country_idx
+WITH {"action":"move","nodes": 
+      ["192.168.10.10:8091", "192.168.10.13:8091", "192.168.10.14:8091"]}</codeblock></p></section>
+        <section id="section_gdh_3j4_scb"><b>Example 4: Removing an extra
+                    replica.</b><p><note>To avoid any downtime, before removing a replica (or index), first create an equivalent
+                    index for your queries to continue using.</note>If you created an index on node
+                192.168.10.10 with replicas on nodes 192.168.10.11 and 192.168.10.12 and later
+                decided you didn't want the 2nd replica, then you'll need to remove the index (which
+                removes all replicas) and then re-create the index with only one
+                replica.<codeblock>CREATE INDEX <b>country_idx</b> ON `travel-sample`(country, city) 
+WHERE type="route" USING GSI 
+WITH {"nodes":["192.168.10.10:8091", "192.168.10.11:8091", "192.168.10.12:8091"]};
+
+
+DROP INDEX `travel-sample`.<b>country_idx</b>;
+
+CREATE INDEX <b>country_idx</b> ON `travel-sample`(country, city) 
+WHERE type="route" USING GSI 
+WITH {"nodes":["192.168.10.10:8091", "192.168.10.11:8091"]};
+</codeblock></p></section>
+        <p/>
+        <section id="section_zng_vvk_1cb">
+            <p/>
+            <p><!--
+                ### TBD ###  <b>Example 5: Creating new replicas.</b></p><p>Create an index
+                on<codeblock>CREATE INDEX</codeblock></p><p>
+                ### TBD ###  <b>Example 6: Deleting replicas.</b></p><p>Create an index on node
+                51<codeblock>CREATE INDEX</codeblock></p>
+</p></section>
+        <section id="section_v4d_4vj_1cb">
+            <title>Related Links</title>
+            <p>
+                <table frame="none" rowsep="0" colsep="0" id="table_bgr_lwr_1cb">
+                    <tgroup cols="2" align="left">
+                        <colspec colname="c1" colnum="1" colwidth="1*"/>
+                        <colspec colname="c2" colnum="2" colwidth="4*"/>
+                        <tbody>
+                            <row>
+                                <entry/>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry/>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry/>
+                                <entry/>
+                            </row>
+                            <row>
+                                <entry/>
+                                <entry/>
+                            </row>
+                        </tbody>
+                    </tgroup>
+                </table>
+--></p>
+        </section>
+
+        
+    </body>
+</topic>

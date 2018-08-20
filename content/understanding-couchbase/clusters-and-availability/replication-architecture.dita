@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="availability">
+ 
+ <title>
+  Availability
+ </title>
+ 
+ <shortdesc>
+  Couchbase Server ensures the availability of data across the nodes of a cluster; across
+  groups of nodes within the cluster; and
+  across separate clusters, potentially located in different data-centers.
+ </shortdesc>
+ 
+ <body>
+  <section id="intra-cluster-replication">
+   
+   <title>
+    Intra-cluster Replication
+   </title>
+   
+   <p>
+    Intra-cluster replication involves replicating data across the node of a cluster.
+   </p>
+   
+   <p>
+    Couchbase
+    <xref href="../data/data.dita" scope="local" format="dita">Data</xref> is defined logically to
+    reside in
+    <xref href="../buckets-memory-and-storage/buckets.dita" scope="local" format="dita">Buckets</xref>.
+    Each bucket, when defined, is implemented by Couchbase Server as
+    <xref href="../buckets-memory-and-storage/vbuckets.dita" scope="local" format="dita">vBuckets</xref>,
+    up to 1024 of which thereby exist in memory (and, in the case of Couchbase Buckets, on disk); the
+    exact number at any given time depending on the number of items to be stored. Items are associated with
+    vBuckets by means of a hashing algorithm, and buckets are assigned to nodes according to a fixed
+    mapping, determined and updated by the <i>Master Services</i> of the
+    <xref href="../clusters-and-availability/cluster-manager.dita#cluster-manager/ns-server" scope="local" format="dita">ns-server</xref>
+    component of the <i>Cluster Manager</i>.
+   </p>
+   
+   <p>
+    Up to three <i>replica</i> buckets can be defined for every bucket. Each replica itself is also implemented
+    as 1024 vBuckets. A vBucket that is part of the original implementation of the defined bucket is referred
+    to as an <i>active</i> vBucket. Therefore, a bucket defined with two replicas has 1024 active vBuckets
+    and 2048 replica vBuckets. Typically, only active vBuckets are accessed for read and write operations:
+    although vBuckets <i>are</i> able to support <i>read</i> requests. Nevertheless,
+    vBuckets receive a continuous stream of mutations from the active vBucket by means of the <i>Database
+    Change Protocol</i> (DCP), and are thereby kept constantly up to date. 
+    To ensure maximum availability of data in case of node-failures, the <i>Master Services</i> for the cluster
+    calculate and implement the optimal
+    <xref href="../clusters-and-availability/cluster-manager.dita#cluster-manager/vbucket-distribution" scope="local" format="dita">vBucket Distribution</xref>
+    across available nodes: consequently, the chance
+    of data-loss through the failure of an individual node is minimized, since
+    replicas are available on the nodes that remain. This is shown by the following illustration:
+   </p>
+   
+     <image href="./images/vBucketReplication.png" width="780" align="left" id="vbucket_replication"/>
+   
+   <p>
+    The illustration shows active and replica vBuckets that correspond to a single, user-defined bucket, for
+    which a single replication-instance has been specified. The first nine active vBuckets are shown, along
+    with their nine corresponding, replica vBuckets; distributed across three server-nodes. The distribution of
+    vBuckets indicates a likely distribution calculated by Couchbase Server: no replica resides on the same
+    node as its active equivalent: therefore, should any one of the three nodes fail, its data remains
+    available.
+   </p>
+   
+   <p>
+    When a node becomes unavailable, 
+    <xref href="../../clustersetup/failover.dita" scope="local" format="dita">failover</xref>
+    can be performed: meaning that the Cluster Manager is instructed to
+    read and write data only on those cluster-nodes that are still
+    available. Failover can be performed by manual intervention, or automatically: 
+    as part of this process, where required,
+    replica vBuckets are promoted to active status. Automatic failover can be performed only
+    for one node at a time, and only up to a configurable number of times, the maximum being three.
+   </p>
+   
+   <p>
+    Note that the Cluster Manager never performs automatic failover where data-loss might result. The
+    number of times failover can be safely performed depends on how many nodes and replicas exist. For
+    example, in a five node cluster with one replica, a single node can be failed over without danger:
+    if a second node fails, failover might result in data-loss, due to required replicas no longer
+    being available. Similarly, in a five node cluster with two replicas, two nodes can be failed over
+    without danger: a third cannot. In such cases, a slower, manual recovery-process is required. See
+    <xref href="../../clustersetup/failover.dita" scope="local" format="dita">Failing over a Node</xref> for more
+    information.
+   </p>
+   
+   <p>
+    For information on configuring replicas, see
+    <xref href="../../clustersetup/create-bucket.dita" scope="local" format="dita">Create a Bucket</xref>. 
+    As a rule, configure one replica for a cluster of up to five nodes; one or two replicas for
+    from five to ten nodes; and one, two, or three replicas for over ten nodes.
+   </p>
+   
+   <p>
+    Note that intra-cluster availability can further be optimized by defining
+    <xref href="./groups.dita" scope="local" format="dita">Groups</xref>.
+   </p>
+  </section>
+  
+  <section id="cross-datacenter-replication">
+   
+   <title>
+    Cross Data-Center Replication
+   </title>
+   
+   <p>
+    <i>Cross Data-Center Replication</i> (XDCR) replicates data between 
+    clusters: this provides protection against data-center failure, and also provides
+    high-performance data-access for globally distributed, mission-critical applications.
+   </p>
+   
+   <p>
+    XDCR replicates data from a specific bucket on the source-cluster to a specific bucket on
+    the target-cluster. Data from the source-bucket is pushed
+    to the target-bucket by means of an XDCR agent, running on the source cluster, using the
+    <xref href="./replication-architecture.dita#availability/database-change-protocol">Database Change Protocol</xref>. 
+    Any bucket (Couchbase or Ephemeral) on any cluster can be specified as a source or a target 
+    for one or more XDCR-definitions. 
+   </p>
+   
+   <p>
+    The XDCR agent on the source node propagates
+    mutations from the source to the target vBucket. Since there
+    are equal numbers of vBuckets (default is 1024) on both the source and the destination clusters,
+    there is a one-to-one match for each source and target vBucket. Source and target clusters do not require
+    identical topology; since XDCR agents are topology aware. Complex cross-cluster topologies are 
+    supported: including <i>bidirectional</i>,
+    <i>ring</i> <i>tree</i>, and <i>structured</i>.
+   </p>
+   
+   <p>
+    For more information, see
+    <xref href="../../xdcr/xdcr-create.dita" scope="local" format="dita">Managing XDCR</xref>.
+   </p>
+   
+  </section>
+  
+  <section id="xdcr-conflict-resolution">
+   
+   <title>
+    XDCR Conflict Resolution
+   </title>
+   
+   <p>
+    XDCR replication is asynchronous and does not preclude updates
+    from occurring independently on source and target clusters: this means that data-updates
+    must be coordinated, to prevent conflicts.
+   </p>
+   
+   <p>
+    Conflict is determined to occur when two or more copies of the same document differ, due
+    to being at different stages of update at a given time.
+    Two methods of <i>conflict resolution</i> are supported:
+   </p>
+   
+   <p>
+   </p>
+   
+   <ul>
+    <li>
+     <i>Sequence number</i>: Compares the values in the documents' <i>Revision ID</i> meta-data fields to resolve
+     conflicts. This field tracks the number of mutations made to a document: the document-copy
+     with the most mutations is chosen to be the correct one, and others are updated to be identical
+     to it.
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>Timestamp</i>: Compares the documents' timestamps to resolve
+     conflicts. This field shows how recently update occurred. The document-copy with
+     the highest (most recent) timestamp is chosen to be the correct one, and other are updated
+     to be identical to it.
+     <p>
+      
+     </p>
+    </li>
+    
+   </ul>
+   
+   <p>
+    See <xref href="../../xdcr/xdcr-conflict-resolution.dita#conflict-resolution"/> for more details.
+   </p>
+   
+  </section>
+  
+  <section id="database-change-protocol"> 
+   <title>
+    Database Change Protocol (DCP) 
+   </title>
+   
+   <p>
+    <i>Database Change Protocol</i> (DCP) is the protocol used to stream bucket-level mutations. 
+    DCP is used for high-speed replication of mutations; to maintain replica vBuckets,
+    incremental MapReduce and spatial views, Global Secondary Indexes (GSIs), XDCR, backups, 
+    and external connections.
+   </p>
+   
+   <p>
+    DCP is a memory-based replication protocol that is <i>ordering</i>, <i>resumable</i>, and 
+    <i>consistent</i>. DCP  
+    streams changes made in memory to items, by means of a <i>replication queue</i>. 
+   </p>
+   
+   <p>
+    DCP involves the following concepts:
+   </p>
+   
+   <p>
+   </p>
+   
+   <ul>
+    
+    <li>
+     <i>Application client</i>: A client external to the cluster. Transmits <i>read</i>, <i>write</i>, 
+     <i>update</i>, <i>delete</i>, and <i>query</i> requests to the server-cluster.
+     See
+     <xref href="../buckets-memory-and-storage/compression.dita" scope="local" format="dita">Compression</xref>,
+     for an illustration.
+
+     <p>
+      
+     </p>
+    </li>
+    
+     
+     <li>
+      <i>DCP client</i>: A Couchbase client that is either internal or external 
+       to the cluster. Streams data from one or more Couchbase Server-nodes, 
+       in support of intra-cluster replication, indexing, XDCR, services,
+       incremental backup, connectors, and mobile synchronicity. See
+       <xref href="../buckets-memory-and-storage/compression.dita" scope="local" format="dita">Compression</xref>,
+       for an illustration.
+      
+      <p>
+       
+      </p>
+     </li>
+     
+      <li>
+       <i>Failover log</i>: A list of previously known vBucket-versions, for a vBucket. If a client connects 
+       to a server, and was previously connected to a vBucket-version other than the current one,
+       the failure log is used to find a rollback point.
+
+       <p>
+        
+       </p>
+      </li>
+ 
+       <li>
+        <i>History branch</i>: If a replica vBucket does not contain the latest changes, but becomes active,
+        its record of changes (referred to as a <i>history branch</i>) is recognized by DCP clients; 
+        and the vBucket duly re-versioned and
+        updated. Such action, if required, must occur before any further major operation (such as a node addition 
+        or removal, or a swap-rebalance) can be performed.
+        
+        <p>
+         
+        </p>
+       </li>
+    
+    <li>
+     <i>Mutation</i>: An event that deletes a key, or changes the value to which a key points. Mutations 
+     occur when transactions such as <i>create</i>, <i>update</i>, <i>delete</i>, or <i>expire</i> are executed.
+
+     
+     
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>Rollback point</i>: The commencement of a recognized history branch, indicating
+     the point in the mutation-sequence from which a vBucket must be brought up to date.
+     
+     
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>Sequence number</i>: Given to each mutation to a vBucket, so that the sequence of mutations
+     is recorded, and can be referenced by interested processes. The later the mutation, the higher
+     the number. The sequence is strictly relevant to the vBucket, and does not provide a cluster-wide
+     ordering of events.
+     
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>Snapshot</i>: A representation of the exact state of mutations on either a write queue or
+     in storage, provided by Couchbase Server to an interested client.
+    
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>vBucket stream</i>: A grouping of messages related to receiving mutations for a specific vBucket. 
+     This includes mutation, deletion, expiration, and snapshot-marker messages. 
+     
+     
+     <p>
+      
+     </p>
+    </li>
+    
+    <li>
+     <i>vBucket version</i>: A <i>Universally unique identifier</i> (UUID) and sequence-number pair associated 
+     with a vBucket. A new version is assigned to a vBucket by the new master-node whenever
+     a history branch is recognized. The UUID is a randomly generated number; and the sequence number is the
+     one last processed by the vBucket, at the time the version was created. 
+     
+     <p>
+      
+     </p>
+    </li>
+    
+    
+   </ul>
+    
+   
+  </section>
+ </body>
+ <related-links>
+  <link href="../../xdcr/xdcr-intro.dita"/>
+ </related-links>
+</topic>
