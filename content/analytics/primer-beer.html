@@ -24,15 +24,9 @@
 
 <h2 id="welcome-to-the-analytics-dp"><a id="Welcome_to_the_analytics_dp">Welcome to the Analytics DP!</a></h2>
 
-<p>Since few things in life are more important than choosing the right beer to pair with one's main dish,
-this tutorial explores the pairing of Analytics and beers.
-You'll create a set of Analytics datasets based on the Couchbase beer-sample bucket and then explore a set of
-illustrative queries as a quick way to get familiar with the new Analytics user experience.
-The complete set of steps to create and connect the sample datasets are included, along with a collection of runnable
-SQL++ queries and their expected results.</p>
+      <p>Since few things in life are more important than choosing the right beer to pair with one's main dish, this tutorial explores the pairing of Analytics and beers. You'll create a set of Analytics datasets based on the Couchbase beer-sample bucket and then explore a set of illustrative queries as a quick way to get familiar with the new Analytics user experience. The complete set of steps to create and connect the sample datasets are included, along with a collection of runnable N1QL for Analytics queries and their expected results. (N1QL for Analytics is a Couchbase implementation, focused on parallel data analysis, of an emerging SQL-for-JSON query language specification called SQL++.)</p>
 
-<p>As you read through this document, you should try each step for yourself on your own Analytics instance.
-You can use your favorite Analytics interface to do this: the Analytics Workbench, the <a href="../tools/cbq-shell.html">cbq shell</a>,
+      <p>As you read through this document, you should try each step for yourself on your own Analytics instance. You can use your favorite Analytics interface to do this: the Analytics Workbench, the <a href="../tools/cbq-shell.html">cbq shell</a>,
 or the REST API. For details, see <a href="run-query.html">Runninq Queries</a>.</p>
 
 <p>You can verify that everything's working by issuing a simple SQL++ test query as shown below:</p>
@@ -85,12 +79,12 @@ dataverse as shown below:</p>
 
 <p>The output will look as follows on a freshly installed system:</p>
 
-<div class="highlighter-rouge"><pre class="highlight"><code>[
+<div class="highlighter-rouge"><pre class="highlight"> <code>[
   {
     "Dataverse": {
       "DataverseName": "Default",
       "DataFormat": "org.apache.asterix.runtime.formats.NonTaggedDataFormat",
-      "Timestamp": "Fri Jul 07 17:22:27 PDT 2017",
+      "Timestamp": "Fri Aug 17 09:47:38 BST 2018",
       "PendingOp": 0
     }
   },
@@ -98,12 +92,13 @@ dataverse as shown below:</p>
     "Dataverse": {
       "DataverseName": "Metadata",
       "DataFormat": "org.apache.asterix.runtime.formats.NonTaggedDataFormat",
-      "Timestamp": "Fri Jul 07 17:22:27 PDT 2017",
+      "Timestamp": "Fri Aug 17 09:47:38 BST 2018",
       "PendingOp": 0
     }
   }
 ]
-</code></pre>
+  </code>
+</pre>
 </div>
 
 <p>The output above shows that a fresh Analytics instance starts out with two dataverses, one called <em>Metadata</em>
@@ -115,38 +110,30 @@ That means your first task is to tell Analytics about the Couchbase Server data 
 datasets where you want it to live.
 The following Analytics DDL statements show you how to tell Analytics about the
 <code class="highlighter-rouge">beer-sample</code> bucket in Couchbase Server,
-where all of the beer and brewery information resides, and ask Analytics to shadow the data using two datasets,
+  where all of the beer and brewery information resides; they direct Analytics to shadow the data using two datasets,
 <code class="highlighter-rouge">breweries</code> and <code class="highlighter-rouge">beers</code>.</p>
 
-<div class="highlighter-rouge"><pre class="highlight"><code>CREATE BUCKET beerBucket WITH {"name":"beer-sample"};
-CREATE DATASET breweries ON beerBucket WHERE `type` = "brewery";
-CREATE DATASET beers ON beerBucket WHERE `type` = "beer";
+<div class="highlighter-rouge"><pre class="highlight"><code>CREATE DATASET breweries ON `beer-sample` WHERE `type` = "brewery";
+  
+CREATE DATASET beers ON `beer-sample` WHERE `type` = "beer";
 </code></pre>
 </div>
 
-<p>The first statement (<em>CREATE BUCKET</em>) gives Analytics the information needed to access the data of interest from
-Couchbase Server.
-The next two statements (<em>CREATE DATASET</em>) create the target datasets in Analytics for the information of interest.
-Notice how <em>WHERE</em> clauses are utilized to direct beer-related data into separate, type-specific datasets for easier
-querying.
-Each of these datasets will be hash-partitioned (sharded) across all of the nodes running instances of the Analytics
-service.
-Hash partitioning sets the stage for the parallel processing that Analytics employs when processing analytical queries.</p>
+      <p>These two CREATE DATASET statements create the target datasets in Analytics for the information of interest. Notice how WHERE clauses are utilized to direct beer-related data into separate, type-specific datasets for easier querying. Each of these datasets will be hash-partitioned (sharded) across all of the nodes running instances of the Analytics service. Hash partitioning sets the stage for the parallel processing that Analytics employs when processing analytical queries.</p>
 
 <p>To actually initiate the shadowing relationship of these datasets to the data in Couchbase Server, one more step is
 needed, namely:</p>
 
-<div class="highlighter-rouge"><pre class="highlight"><code>CONNECT BUCKET beerBucket;
+<div class="highlighter-rouge"><pre class="highlight"><code>CONNECT LINK Local;
 </code></pre>
 </div>
 
-<p>Once you run this statement, Analytics begins making its copy of the Couchbase Server documents and continuously
-monitors it for changes.</p>
+      <p>Once you run this statement, Analytics begins making its copy of the Couchbase Server documents and continuously monitors it for changes. The CONNECT LINK statement activates the connectivity between Analytics and a Couchbase Server cluster instance. In this case, the data of interest is in the local server (i.e., it is managed by the Data service in the same cluster).</p>
 
 <h3 id="whats-lurking-in-the-shadows"><a id="What's lurking in the shadows">What's Lurking in the Shadows?</a></h3>
 
 <p>Next, verify that your datasets are really there and being populated.
-The following SQL++ <em>SELECT</em> statements are one good way to accomplish that:</p>
+The following <em>SELECT</em> statements are one good way to accomplish that:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>SELECT ds.BucketName, ds.DatasetName, ds.`Filter`
 FROM Metadata.`Dataset` ds
@@ -157,15 +144,18 @@ WHERE ds.DataverseName = "Default";
 <p>The query looks in the Analytics system catalogs for datasets that have been created in the <em>Default</em> dataverse.
 At this point, assuming that you are just getting started, you will see only your two new datasets:</p>
 
-<div class="highlighter-rouge"><pre class="highlight"><code>[ {
-    "DatasetName" : "beers",
-    "BucketName" : "beerBucket",
-    "Filter" : "`type` = \"beer\""
-}, {
-    "DatasetName" : "breweries",
-    "BucketName" : "beerBucket",
-    "Filter" : "`type` = \"brewery\""
-} ]
+<div class="highlighter-rouge"><pre class="highlight"><code>[
+  {
+    "DatasetName": "beers",
+    "BucketName": "beer-sample",
+    "Filter": "`type` = \"beer\""
+  },
+  {
+    "DatasetName": "breweries",
+    "BucketName": "beer-sample",
+    "Filter": "`type` = \"brewery\""
+  }
+]
 </code></pre>
 </div>
 
@@ -260,38 +250,27 @@ At this point, assuming that you are just getting started, you will see only you
 </code></pre>
 </div>
 
-<h2 id="sql-querying-your-analytics-data"><a id="SQL++_querying_your_analytics_data">SQL++: Querying Your Analytics Data</a></h2>
+<h2 id="sql-querying-your-analytics-data"><a id="SQL++_querying_your_analytics_data">N1QL for Analytics: Querying Your Analytics Data</a></h2>
 
 <p>Congratulations! You now have your Couchbase Server beer-related data being shadowed in Analytics.
 You're ready to start running ad hoc queries against your breweries and beers datasets.</p>
 
-<p>To do this, you'll program Analytics using the SQL++ query language, a SQL-inspired language
-designed for working with semistructured data.
-SQL++ has much in common with SQL, but there are differences due to the data model that SQL++ is designed to serve.
-SQL was designed in the 1970's to interact with the flat, schema-ified world of relational databases.
-SQL++ is designed for the nested, schema-less (or schema-optional, in Analytics) world of NoSQL systems.
-SQL++ offers a mostly familiar paradigm for experienced SQL users to use to query and manipulate data
-in Analytics.
-SQL++ is also related to N1QL, the current query language used in Couchbase Server.
-SQL++ is really a functional superset of N1QL that is a bit closer to SQL,
-and the differences between N1QL and SQL++ will eventually disappear in the future releases.</p>
+      <p>To do this, you'll query Analytics using N1QL for Analytics, a SQL-inspired language designed for working with semistructured data. This language has much in common with SQL, but there are differences due to the data model that N1QL for Analytics is designed to serve. SQL was designed in the 1970s to interact with the flat, schematic world of relational databases. N1QL for Analytics is designed for the nested, schemaless world of NoSQL systems. N1QL for Analytics offers a mostly familiar paradigm for experienced SQL users to use to query and manipulate data in Analytics. N1QL for Analytics is also related to N1QL for Query, the current query language used in Couchbase Server. N1QL for Analytics is mostly a functional superset of N1QL for Query that is a bit closer to SQL, and the differences between the two N1QL variants will shrink (and should eventually disappear) in future releases.</p>
 
-<p>In this section, we introduce SQL++ via a set of example queries with their expected results,
-based on the data above, to help you get started. Many of the most important features of SQL++ are
-presented in this set of representative queries.</p>
+      <p>In this section, we introduce N1QL for Analytics via a set of example queries with their expected results, based on the data above, to help you get started. Many of the most important features of N1QL for Analytics are presented in this set of representative queries.</p>
 
-<p>For more information on the query language, see <a href="1_intro.html">SQL++ Language Reference</a>
+<p>For more information on the query language, see <a href="1_intro.html">N1QL for Analytics Language Reference</a>
 and the list of built-in functions in the <a href="8_builtin.html">Function Reference</a>.
-As you will learn, SQL++ is a highly composable expression language.
-Even the very simple expression <code class="highlighter-rouge">1 + 1</code> is a valid SQL++ query that evaluates to
+As you will learn, N1QL for Analytics is a highly composable expression language.
+Even the very simple expression <code class="highlighter-rouge">1 + 1</code> is a valid query that evaluates to
 <code class="highlighter-rouge">2</code>.
 Try it for yourself!</p>
 
-<p>It's worth noting that each time you execute a SQL++ query, the Analytics query engine employs state-of-the-art
+<p>It's worth noting that each time you execute a query, the Analytics query engine employs state-of-the-art
 parallel processing algorithms similar to those used by the parallel relational DBMSs that power many
 enterprise data warehouses. Unlike those systems, Analytics also works on rich, flexible schema data.</p>
 
-<p>Let's go ahead and write some queries and start learning SQL++ through examples.</p>
+<p>Let's go ahead and write some queries and start learning N1QL for Analytics through examples.</p>
 
 <h3 id="query-0---key-based-lookup"><a id="Query_0_key_based_lookup">Query 0 - Key-Based Lookup</a></h3>
 
@@ -313,37 +292,33 @@ case) for each binding that satisfies the predicate.</p>
 
 <p>The expected result for this query is as follows:</p>
 
-<div class="highlighter-rouge"><pre class="highlight"><code>[
-  {
-    "meta": {
-      "id": "kona_brewing",
-      "vbid": 862,
-      "seq": 5,
-      "cas": 1499958777027625000,
-      "flags": 33554432
+<div class="highlighter-rouge"><pre class="highlight"><code>[{
+  "meta": {
+    "id": "kona_brewing",
+    "vbid": 30,
+    "seq": 56,
+    "cas": 1534495667008110592,
+    "flags": 33554432
+  },
+  "data": {
+    "address": ["75-5629 Kuakini Highway"],
+    "city": "Kailua-Kona",
+    "code": "96740",
+    "country": "United States",
+    "description": "",
+    "geo": {
+      "accuracy": "RANGE_INTERPOLATED",
+      "lat": 19.642,
+      "lon": -155.996
     },
-    "data": {
-      "address": [
-        "75-5629 Kuakini Highway"
-      ],
-      "city": "Kailua-Kona",
-      "code": "96740",
-      "country": "United States",
-      "description": "",
-      "geo": {
-        "accuracy": "RANGE_INTERPOLATED",
-        "lat": 19.642,
-        "lon": -155.996
-      },
-      "name": "Kona Brewing",
-      "phone": "1-808-334-1133",
-      "state": "Hawaii",
-      "type": "brewery",
-      "updated": "2010-07-22 20:00:20",
-      "website": "http://www.konabrewingco.com"
-    }
+    "name": "Kona Brewing",
+    "phone": "1-808-334-1133",
+    "state": "Hawaii",
+    "type": "brewery",
+    "updated": "2010-07-22 20:00:20",
+    "website": "http://www.konabrewingco.com"
   }
-]
+}]
 </code></pre>
 </div>
 
@@ -351,7 +326,7 @@ case) for each binding that satisfies the predicate.</p>
 
 <h3 id="query-1---exact-match-lookup"><a id="Query_1_exact_match">Query 1 - Exact-Match Lookup</a></h3>
 
-<p>The SQL++ language, like SQL, supports a variety of different predicates.
+<p>The N1QL for Analytics language, like SQL, supports a variety of different predicates.
 For the next query, let's find the same brewery information but in a slightly simpler or cleaner way based only on
 the data:</p>
 
@@ -388,9 +363,9 @@ WHERE bw.name = 'Kona Brewing';
 </code></pre>
 </div>
 
-<p>In SQL++, you can select a single value (whether it be an atomic or scalar value or a object value or an array value)
+<p>In N1QL for Analytics, you can select a single value (whether it be an atomic or scalar value or a object value or an array value)
 by using a <em>SELECT VALUE</em> clause as shown above.
-If you instead use the more SQL-familier <em>SELECT</em> clause, SQL++ will return objects instead of values, and since a
+If you instead use the more SQL-familier <em>SELECT</em> clause, N1QL for Analytics will return objects instead of values, and since a
 given query may <em>SELECT</em> multiple values in its result (like our first query did), you get a slightly differently
 shaped result using <code class="highlighter-rouge">SELECT bw</code> instead of
 <code class="highlighter-rouge">SELECT VALUE bw</code>:</p>
@@ -424,7 +399,7 @@ shaped result using <code class="highlighter-rouge">SELECT bw</code> instead of
 
 <h3 id="query-2---other-query-filters"><a id="Query_2_other_query_filters">Query 2 - Other Query Filters</a></h3>
 
-<p>SQL++ can apply ranges and other conditions on any data type that supports the appropriate set of comparators.
+<p>N1QL for Analytics can apply ranges and other conditions on any data type that supports the appropriate set of comparators.
 As an example, the next query applies a range condition together with a string condition to select breweries:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>SELECT VALUE bw
@@ -542,12 +517,12 @@ ORDER BY bw.name;
 
 <h3 id="query-3-and-friends---equijoin"><a id="Query_3">Query 3 (and friends) - Equijoin</a></h3>
 
-<p>In addition to simply binding variables to data instances and returning them <em>whole</em>, a SQL++ query can construct new
+<p>In addition to simply binding variables to data instances and returning them <em>whole</em>, a N1QL for Analytics query can construct new
 objects to return based on combinations of variable bindings.
-This gives SQL++ the power to do projections and joins much like those done using multi-table <em>FROM</em> clauses in SQL.
+This gives N1QL for Analytics the power to do projections and joins much like those done using multi-table <em>FROM</em> clauses in SQL.
 For example, suppose that you wanted a list of all breweries paired with their associated beers, with the list
 enumerating the brewery name and the beer name for each such pair.
-You can do this as follows in SQL++, while also limiting the answer set size to at most 3 results:</p>
+You can do this as follows in N1QL for Analytics, while also limiting the answer set size to at most 3 results:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>SELECT bw.name AS brewer, br.name AS beer
 FROM breweries bw, beers br
@@ -560,10 +535,10 @@ LIMIT 3;
 <p>The result of this query is a sequence of new objects, one for each brewery/beer pair.
 Each instance in the result will be a object containing two fields, "brewer" and "beer", containing the brewery's
 name and the beer's name, respectively, for each brewery/beer pair.
-Notice how the use of a SQL-style <em>SELECT</em> clause, as opposed to the new SQL++ <em>SELECT VALUE</em> clause, automatically
+Notice how the use of a SQL-style <em>SELECT</em> clause, as opposed to the new N1QL for Analytics <em>SELECT VALUE</em> clause, automatically
 results in the construction of a new object value for each result.</p>
 
-<p>The expected result of this example SQL++ join query is:</p>
+<p>The expected result of this example join query is:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>[
   {
@@ -582,7 +557,7 @@ results in the construction of a new object value for each result.</p>
 </code></pre>
 </div>
 
-<p>If we were feeling lazy, e.g., while browsing our data casually, we might use <em>SELECT *</em> in SQL++ to
+      <p>If we were feeling lazy, e.g., while browsing our data casually, we might use <em>SELECT *</em> in N1QL for Analytics to
 return all of the matching beer/brewery data:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>SELECT *
@@ -593,13 +568,13 @@ LIMIT 3;
 </code></pre>
 </div>
 
-<p>In SQL++, this SELECT * query will produce a new nested object for each brewery/beer pair. Each result object contains
+      <p>In N1QL for Analytics this SELECT * query will produce a new nested object for each brewery/beer pair. Each result object contains
 one field (named after the "breweries" variable) to hold the brewery object and another field (named after the "beers"
-variable) to hold the matching beer object. Note that the nested nature of this SQL++ <em>SELECT</em> * result is different
+variable) to hold the matching beer object. Note that the nested nature of this <em>SELECT</em> * result is different
 than traditional SQL, as SQL was not designed to handle the richer, nested data model that underlies the design
-of SQL++.</p>
+of N1QL for Analytics.</p>
 
-<p>The expected result of this version of the SQL++ join query for our sample data set is as follows:</p>
+<p>The expected result of this version of the join query for our sample data set is as follows:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>[
   {
@@ -711,7 +686,7 @@ of SQL++.</p>
 </code></pre>
 </div>
 
-<p>Die-hard SQL <em>JOIN</em> clause syntax fans will be happy to know that SQL++ hasn't forgotten them, so a result identical
+      <p>Die-hard fans of SQL <em>JOIN</em> clause syntax, now also available in N1QL for Query as "ANSI JOINS", will be happy to know that N1QL for Analytics hasn't forgotten them. A result identical
 to the one immediately above can also be produced as follows:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>SELECT *
@@ -721,7 +696,7 @@ LIMIT 3;
 </code></pre>
 </div>
 
-<p>Finally (for now :-)), another more explicit SQL++ way of achieving the very same result as above is:</p>
+      <p>Finally (for now :-)), another more explicit N1QL for Analytics way of achieving the very same result as above is:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>SELECT VALUE {"bw": bw, "br": br}
 FROM breweries bw, beers br
@@ -734,7 +709,7 @@ LIMIT 3;
 <p>This version of the query uses an explicit object constructor to build each result object.
 Note that the string field names "bw" and "br" in the object constructor above are both simple SQL++ expressions
 themselves, so in the most general case, even the resulting field names can be computed as part of the query, making
-SQL++ a very powerful tool for slicing and dicing semistructured data.</p>
+N1QL for Analytics a very powerful tool for slicing and dicing semistructured data.</p>
 
 <p>(It is worth knowing, with respect to influencing Analytics' query evaluation, that <em>FROM</em> and <em>JOIN</em> clauses -
 also known as joins - are currently evaluated in order, with the <em>left</em> clause probing the data of the <em>right</em> clause.)</p>
@@ -743,17 +718,17 @@ also known as joins - are currently evaluated in order, with the <em>left</em> c
 
 <p>In order to support joins between tables with missing or dangling join tuples, the designers of SQL ended up
 shoe-horning a subset of the relational algebra into SQL's <em>FROM</em> clause syntax and providing a variety of join types
-there for users to choose from (which SQL++ supports for SQL compatibility).
+  there for users to choose from (which N1QL for Analytics supports for SQL compatibility).
 Left outer joins are particularly important in SQL, for example, to print a summary of customers and orders, grouped
 by customer, without omitting those customers who haven't placed any orders yet.</p>
 
-<p>The SQL++ language supports nesting, both of queries and of query results, and the combination allows for a cleaner
+      <p>The N1QL for Analytics language supports nesting, both of queries and of query results, and the combination allows for a cleaner
 and more natural approach to such queries.
 As an example, suppose you wanted for each brewery to produce an object that contains the brewery name along with a
 list of all of the brewery's offered beer names and alcohol percentages.
 In the flat (also known as 1NF) world of SQL, approximating this query would involve a left outer join between
 breweries and beers, ordered by brewery, with the brewery name being repeated along side each beer's information.
-In the richer (NoSQL) world of SQL++, this use case can be handled more naturally as follows:</p>
+In the richer (NoSQL) world of N1QL for Analytics, this use case can be handled more naturally as follows:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>SELECT bw.name AS brewer,
   (SELECT br.name, br.abv FROM beers br
@@ -765,14 +740,14 @@ LIMIT 2;
 </code></pre>
 </div>
 
-<p>This SQL++ query binds the variable <code class="highlighter-rouge">bw</code> to the objects in breweries; for each
+      <p>This N1QL for Analytics query binds the variable <code class="highlighter-rouge">bw</code> to the objects in breweries; for each
 brewery, it constructs a result object containing a "brewer" field with the brewery's name plus a "beers" field with
 a nested collection of objects containing the beer name and alcohol percentage for each of the brewery's beers.
 The nested collection field for each brewery is created using a correlated subquery.</p>
 
 <blockquote>
 <strong>Note:</strong> While it looks like nested loops could be involved in computing the result, Analytics
-recognizes the equivalence of such a query to an outerjoin, so it will use an efficient parallel join strategy when
+recognizes the equivalence of such a query to an outer join, so it will use an efficient parallel join strategy when
 actually computing the query's result.
 </blockquote>
 
@@ -782,20 +757,12 @@ actually computing the query's result.
   {
     "beers": [
       {
-        "name": "(512) Bruin",
-        "abv": 7.6
-      },
-      {
-        "name": "(512) Pecan Porter",
-        "abv": 6.8
-      },
-      {
-        "name": "(512) Whiskey Barrel Aged Double Pecan Porter",
-        "abv": 8.2
-      },
-      {
         "name": "(512) ALT",
         "abv": 6
+      },
+      {
+        "name": "(512) Bruin",
+        "abv": 7.6
       },
       {
         "name": "(512) IPA",
@@ -804,6 +771,14 @@ actually computing the query's result.
       {
         "name": "(512) Pale",
         "abv": 5.8
+      },
+      {
+        "name": "(512) Pecan Porter",
+        "abv": 6.8
+      },
+      {
+        "name": "(512) Whiskey Barrel Aged Double Pecan Porter",
+        "abv": 8.2
       },
       {
         "name": "(512) Wit",
@@ -823,12 +798,20 @@ actually computing the query's result.
         "abv": 7.2
       },
       {
+        "name": "563 Stout",
+        "abv": 5
+      },
+      {
         "name": "Amendment Pale Ale",
         "abv": 5.2
       },
       {
         "name": "Bitter American",
         "abv": 3.6
+      },
+      {
+        "name": "Double Trouble IPA",
+        "abv": 9.8
       },
       {
         "name": "General Pippo's Porter",
@@ -843,20 +826,12 @@ actually computing the query's result.
         "abv": 5.9
       },
       {
-        "name": "South Park Blonde",
-        "abv": 5
-      },
-      {
-        "name": "563 Stout",
-        "abv": 5
-      },
-      {
-        "name": "Double Trouble IPA",
-        "abv": 9.8
-      },
-      {
         "name": "Potrero ESB",
         "abv": 5.2
+      },
+      {
+        "name": "South Park Blonde",
+        "abv": 5
       },
       {
         "name": "Watermelon Wheat",
@@ -879,7 +854,7 @@ parallel case).</p>
 <p>As an example of such a use case, suppose that you wanted for each Arizona brewery to get the brewery's name,
 location, and a list of competitors' names – where competitors are other breweries that are geographically close to
 their location.
-In SQL++, this can be accomplished in a manner similar to the previous query, but with locality plus name inequality
+In N1QL for Analytics, this can be accomplished in a manner similar to the previous query, but with locality plus name inequality
 instead of a simple key equality condition in the correlated query's <em>WHERE</em> clause:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>SELECT bw1.name AS brewer, bw1.geo AS location,
@@ -937,15 +912,15 @@ LIMIT 3;
 
 <h3 id="query-6---existential-quantification"><a id="Query_6">Query 6 - Existential Quantification</a></h3>
 
-<p>The expressive power of SQL++ includes support for queries involving <em>some</em> (existentially quantified)
+      <p>The expressive power of N1QL for Analytics includes support for queries involving <em>some</em> (existentially quantified)
 and <em>all</em> (universally quantified) query semantics.
 Quantified predicates are especially useful for querying datasets involving nested collections of objects, in order
 to find objects where some or all of their nested sets' objects satisfy a condition of interest.
-To illustrate their use in such situations, we start here by using another (orthogonal) feature of SQL++, its <em>WITH</em>
-clause, to create a temporarily nested view of breweries and their beers.
+To illustrate their use in such situations, we start here by using N1QL for Analytics's <em>WITH</em>
+        clause(another orthogonal feature of the query language) to create a temporarily nested view of breweries and their beers.
 We then use an existential (<em>SOME</em>) predicate to find those breweries whose beers include at least one IPA and return
 the brewery's name, phone number, and complete list of beer names and associated alcohol levels.
-Here is the resulting SQL++ query:</p>
+Here is the resulting N1QL for Analytics query:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>WITH nested_breweries AS
  (
@@ -1061,7 +1036,7 @@ LIMIT 2;
 
 <h3 id="query-7---universal-quantification"><a id="Query_7">Query 7 - Universal Quantification</a></h3>
 
-<p>As an example of a universally quantified SQL++ query, we can find those breweries that only have seriously strong
+      <p>As an example of a universally quantified N1QL for Analytics query, we can find those breweries that only have seriously strong
 beers:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>WITH nested_breweries AS
@@ -1083,7 +1058,7 @@ LIMIT 5;
 
 <p>Notice how the brewery predicate also makes sure that the set of beers for each qualifying brewery is non-empty;
 this is needed if we want our results to exclude breweries that currently offer no beers, as an empty set trivially
-satifies a universal predicate.
+satisfies a universal predicate.
 The expected result in this case is:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>[
@@ -1159,8 +1134,8 @@ The expected result in this case is:</p>
 
 <h3 id="query-8---simple-aggregation"><a id="Query_8">Query 8 - Simple Aggregation</a></h3>
 
-<p>Like SQL, the SQL++ language of Analytics provides support for computing aggregates over large amounts of data.
-As a very simple example, the following SQL++ query computes the total number of beers in a SQL-like way:</p>
+      <p>Like SQL, the N1QL for Analytics language provides support for computing aggregates over large amounts of data.
+As a very simple example, the following query computes the total number of beers in a SQL-like way:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>SELECT COUNT(*) AS num_beers FROM beers;
 </code></pre>
@@ -1174,7 +1149,7 @@ As a very simple example, the following SQL++ query computes the total number of
 </code></pre>
 </div>
 
-<p>If an <em>unwrapped</em> value is preferred, the following variant could be used instead:</p>
+<p>If you prefer an <em>unwrapped</em> value, you could use the following variant instead:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>SELECT VALUE COUNT(b) FROM beers b;
 </code></pre>
@@ -1188,22 +1163,22 @@ As a very simple example, the following SQL++ query computes the total number of
 </code></pre>
 </div>
 
-<p>In SQL++, aggregate functions can be applied to arbitrary collections, including subquery results.
+      <p>In N1QL for Analytics, aggregate functions can be applied to arbitrary collections, including subquery results.
 To illustrate, here is a less SQL-like, and also more explicit, way to express the query above:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>SELECT VALUE ARRAY_COUNT((SELECT b FROM beers b));
 </code></pre>
 </div>
 
-<p>For each traditional SQL aggregate function <em>F</em>, SQL++ has a corresponding function <em>ARRAY_F</em> that
+      <p>For each traditional SQL aggregate function <em>F</em>, N1QL for Analytics has a corresponding function <em>ARRAY_F</em> that
 can be used to perform the desired aggregate calculation.
 Each such function is a regular function that takes a collection-valued argument to aggregate over.
 Thus, the query above counts the results produced by the beer selection subquery, and the previous, more SQL-like
-versions are just syntactic sugar for SQL++ queries that logically use <em>ARRAY_COUNT</em>.</p>
+versions are just syntactic sugar for N1QL for Analytics queries that logically use <em>ARRAY_COUNT</em>.</p>
 
 <h3 id="query-9-and-friends---grouping-and-aggregation"><a id="Query_9">Query 9 (and friends) - Grouping and Aggregation</a></h3>
 
-<p>Also like SQL, SQL++ supports grouped aggregation.
+      <p>Also like SQL, N1QL for Analytics supports grouped aggregation.
 For each brewery that offers more than 30 beers, the following group-by or aggregate query reports the number of
 beers that it offers.</p>
 
@@ -1217,7 +1192,7 @@ ORDER BY COUNT(*) DESC;
 
 <p>The <em>FROM</em> clause incrementally binds the variable <code class="highlighter-rouge">br</code> to beers, and the <em>GROUP
 BY</em> clause groups the beers by their associated brewery id.
-Unlike SQL, where data is tabular (flat), the data model underlying SQL++ allows for nesting.
+  Unlike SQL, where data is tabular (flat), the data model underlying N1QL for Analytics allows for nesting.
 Thus, due to the <em>GROUP BY</em> clause, the <em>SELECT</em> clause in this query sees a sequence of <em>br</em> groups, with each such
 group having an associated <code class="highlighter-rouge">brewery_id</code> variable value (that is the producing
 brewery's id).
@@ -1282,7 +1257,7 @@ The query result will contain one such object per brewery id.</p>
 <p>Analytics has multiple evaluation strategies available for processing grouped aggregate queries.
 For grouped aggregation, the system knows how to employ both sort-based and hash-based parallel aggregation methods,
 with sort-based methods being used by default and a hint being available to suggest that a different approach
-(hashing) be used in processing a particular SQL++ query.</p>
+(hashing) be used in processing a particular query.</p>
 
 <p>The following query is nearly identical to the previous one, but adds a hash-based aggregation hint
 (though that's not necessarily the more efficient approach here):</p>
@@ -1351,11 +1326,11 @@ ORDER BY COUNT(*) DESC;
 
 <p>In some use cases it is not necessary to compute the entire answer to a query.
 In some cases, just having the first <em>N</em> or top <em>N</em> results are sufficient.
-This is expressible in SQL++ using the <em>LIMIT</em> clause combined with the <em>ORDER BY</em> clause.
+  This is expressible in N1QL for Analytics using the <em>LIMIT</em> clause combined with the <em>ORDER BY</em> clause.
 (You may have noticed that we have used the <em>LIMIT</em> clause all along to keep the result set sizes in this document
 manageable.)</p>
 
-<p>The following SQL++ query returns the top three breweries based on their numbers of offered beers.
+<p>The following query returns the top three breweries based on their numbers of offered beers.
 It also illustrates the use of multiple aggregate functions to compute various alcohol content statistics for their
 beers:</p>
 
@@ -1402,14 +1377,14 @@ LIMIT 3;
 
 <h3 id="everything-must-change"><a id="Everything_must_change">Everything Must Change</a></h3>
 
-<p>So far you have been walking through the SQL++ query capabilities of Analytics.
+<p>So far you have been walking through the read-only query capabilities of Analytics.
 What really makes Analytics interesting, however, is that it brings this query power to bear on your nearly-current
 Couchbase Server data, enabling you to harness the power of parallelism in Analytics to analyze what's going on with
 your data "up front" in essentially real time, without perturbing your Couchbase Server applications' performance (or
 the resulting end user experience).
 Before closing this tutorial, let's take a very quick look at that aspect of Analytics.</p>
 
-<p>To start, the following SQL++ query lists all of the Kona Brewery's current beer offerings:</p>
+      <p>To start, the following N1QL for Analytics query lists all of the Kona Brewery's current beer offerings:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>SELECT meta(b).id, b as beer FROM beers b
 WHERE b.brewery_id = "kona_brewing"
@@ -1551,7 +1526,7 @@ RETURNING META().id as docid, *;
 </div>
 
 <p>Analytics will shadow this change, updating the beers dataset as a result.
-Go ahead and rerun the Analytics SQL++ query that lists the Kona Brewery's beer offerings:</p>
+Go ahead and rerun the query that lists the Kona Brewery's beer offerings:</p>
 
 <div class="highlighter-rouge"><pre class="highlight"><code>SELECT meta(b).id, b as beer FROM beers b
 WHERE b.brewery_id = "kona_brewing"
@@ -1702,7 +1677,7 @@ You can use your favorite N1QL interface again to modify the Couchbase Server's 
 </code></pre>
 </div>
 
-<p>Finally, if you run the SQL++ Kona beer list query on Analytics once again, you will find that the Kona CEO's
+<p>Finally, if you run the Kona beer list query on Analytics once again, you will find that the Kona CEO's
 wishes have been shadowed in Analytics as well.</p>
 
 <h2 id="and-of-course-indexing"><a id="Indexing">And of Course, Indexing</a></h2>
@@ -1720,28 +1695,27 @@ WHERE br.brewery_id = 'kona_brewing';
 
 <p>The following DDL statements could be used to accelerate its execution for a large collection of beers:</p>
 
-<div class="highlighter-rouge"><pre class="highlight"><code>DISCONNECT BUCKET beerBucket;
+<div class="highlighter-rouge"><pre class="highlight"><code>DISCONNECT LINK Local;
 CREATE INDEX brewerIndex ON beers (brewery_id: STRING);
-CONNECT BUCKET beerBucket;
+CONNECT LINK Local;
 </code></pre>
 </div>
 
 <p>Note that index creation requires temporary suspension of the shadowing process, although queries on the accumulated
 data can continue to be run while shadowing is on hold and the index is being built.
 Note also that a CREATE INDEX statement needs to specify the type as well as the name of the field to be indexed; the
-above brewerIndex will be used to speed queries that have string-based brewery_id predicates.</p>
+above brewerIndex will be used to speed queries that have string-based brewery_id predicates. For the curious, you can verify the use of the new index by comparing the query plans that are produced (by using the Plan tab in the Analytics Query Editor) both with and without the existence of the index.</p>
 
 <h2 id="further-help"><a id="Further_help">Further Help</a></h2>
 
-<p>That's it! You are now armed and dangerous with respect to semistructured data management using Analytics via SQL++.
-For more information, see <a href="1_intro.html">SQL++ Language Reference</a>, or consult the complete list of built-in
+<p>That's it! You are now armed and dangerous with respect to semistructured data management using Analytics via N1QL for Analytics.
+  For more information, see <a href="1_intro.html">N1QL for Analytics Language Reference</a>, or consult the complete list of built-in
 functions in the <a href="8_builtin.html">Function Reference</a>.</p>
 
 <p>Couchbase Analytics lets you bring a powerful new NoSQL parallel query engine to bear on your data, using the latest
 state of the art parallel query processing techniques under the hood.
 We hope you find it useful in exploring and analyzing your Couchbase Server data - without having to worry about end
-user performance impact or doing ETL grunt work to make your analyses possible.
-(Note that the DP demo set up does not effectively demonstrate the performance aspect of Analytics.)</p>
+user performance impact or doing ETL grunt work to make your analyses possible.</p>
 
 <p>Use it wisely, and remember: "With great power comes great responsibility…" :-)</p>
 
